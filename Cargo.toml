@@ -1,0 +1,65 @@
+[package]
+name = "cc-render-plugin"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone workspace — fully decoupled from any parent so the plugin's
+# bevy / wgpu / bevy_rapier3d deps don't unify against the host's, and
+# heavy renderer stack compiles in isolation.
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+debug = 0
+
+[profile.dev]
+opt-level = 1
+debug = 1
+incremental = true
+
+[lib]
+name = "cc_render_plugin"
+crate-type = ["cdylib"]
+
+# Path-3 hand-rolled plugin: depends ONLY on the skinny
+# `remotemedia-plugin-sdk` umbrella plus the heavy Bevy / Rapier /
+# wgpu stack pinned directly. Does NOT link `remotemedia-core` — that
+# decoupling is what lets CcRenderNode + the full Bevy app + physics
+# stack be removed from the host's core crate without changing the
+# plugin's surface.
+[dependencies]
+remotemedia-plugin-sdk = { git = "https://github.com/RemoteMedia-SDK/remotemedia-sdk.git", branch = "main" }
+abi_stable = "0.11"
+
+async-trait = "0.1"
+parking_lot = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "time"] }
+tracing = "0.1"
+
+# Heavy renderer stack — pinned to match the host workspace's
+# `bevy = { version = "0.15", features = ["jpeg", "tonemapping_luts",
+# "ktx2", "zstd"] }` (which inherits Bevy's default feature set). We
+# explicitly carry that default set here so the standalone-workspace
+# build doesn't drop `x11`, `multi_threaded`, etc. and break under
+# winit / wgpu.
+bevy = { version = "0.15", features = ["jpeg", "tonemapping_luts", "ktx2", "zstd"] }
+# bevy_rapier3d shipped unconditionally — no nested cargo features.
+bevy_rapier3d = { version = "=0.28.0", default-features = false, features = ["dim3", "async-collider"] }
+# wgpu pinned to the version Bevy 0.15.3 bundles. Aliased to `wgpu_pin`
+# in `gpu_select::build_render_creation` to keep the dep-table name
+# stable across host + plugin (the host crate uses the same alias to
+# avoid colliding with `wgpu` brought in transitively by Bevy).
+wgpu_pin = { package = "wgpu", version = "=23.0.1", default-features = false, features = ["dx12", "metal", "wgsl", "naga-ir"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+pollster = "0.4"
+crossbeam-channel = "0.5"
+
+# `physics::secondary::auto_detect_chains` parses CC5 joint names with
+# a few regexes — bring in `regex` directly.
+regex = "1"

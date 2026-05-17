@@ -1,0 +1,29 @@
+# CcRenderNode as a standalone Path 3 cdylib plugin.
+#
+# Bevy 0.15 based avatar renderer that consumes ARKit-52 blendshape
+# envelopes + optional SMPL-22 skeletal poses + audio (paired with
+# rendered video) and emits `RuntimeData::Video` frames (Rgba32) at a
+# fixed framerate. Pacing-domain: `ClockedToOutboundMedia` with a wall
+# fallback at `framerate` Hz.
+#
+# Consumer manifest reference:
+#
+#   "plugins": ["cc-render@v0.1.0"]
+#       (canonical-org shorthand → github.com/RemoteMedia-SDK/cc-render)
+#
+#   "plugins": ["./plugins/libcc_render_plugin.so"]
+#       (local path)
+#
+# Input assets: a CC5-exported `.alphabaked.glb` + matching
+# `.arkit_map.resolved.json`. See `avatars/README.md` upstream for the
+# `FBX2glTF → prune_morphs → bake_alpha` pipeline that produces them.
+
+[plugin]
+name        = "cc-render"
+version     = "0.1.0"
+language    = "rust"
+description = "CC5 / glTF avatar renderer (Bevy 0.15) — standalone Rust cdylib plugin"
+
+[rust]
+node_types    = ["CcRenderNode"]
+asset_pattern = "lib{name}-{arch}-{os}.{ext}"
