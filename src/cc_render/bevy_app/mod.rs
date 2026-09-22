@@ -508,6 +508,7 @@ pub(super) fn run(
         PostUpdate,
         apply_skeletal_pose
             .after(AnimationSet)
+            .before(bevy_rapier3d::plugin::PhysicsSet::SyncBackend)
             .before(TransformSystem::TransformPropagate),
     )
     // Face bones (jaw + eyes) — same scheduling slot as
@@ -544,7 +545,13 @@ pub(super) fn run(
         (draw_joint_skeleton, update_joint_labels).after(TransformSystem::TransformPropagate),
     );
 
-    if let Some(phys) = config.physics.clone() {
+    app.init_resource::<super::office::timeline::PoseTimeline>();
+    if let Some(mut phys) = config.physics.clone() {
+        let office_enabled = std::env::var("CC_OFFICE").as_deref() == Ok("1");
+        if office_enabled {
+            phys.ground_y = Some(0.0);
+        }
+
         physics::install(&mut app, phys, config.glb_path.clone());
         // mpsc::UnboundedReceiver is !Sync; Bevy `Resource` requires
         // Sync, so wrap in Mutex. The polling system locks once per
@@ -559,6 +566,9 @@ pub(super) fn run(
             grab_cmd_rx,
         )));
         app.insert_resource(physics::props::SceneStateTx(scene_state_tx));
+        if office_enabled {
+            super::office::systems::install(&mut app);
+        }
     } else {
         // Physics disabled (e.g. CC_PHYSICS_DISABLE=1) — drop the
         // channels so the renderer's `Sender`s don't block expecting a

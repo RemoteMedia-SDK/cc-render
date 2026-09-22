@@ -703,6 +703,7 @@ pub(crate) fn apply_arkit_pose(
     scene_assets: Res<Assets<Scene>>,
     mut diag: Local<ApplyArkitDiag>,
     avatar_q: Query<Entity, With<AvatarRoot>>,
+    office: Option<Res<crate::cc_render::office::controller::OfficeController>>,
 ) {
     diag.tick += 1;
     let tick_val = diag.tick;
@@ -852,6 +853,7 @@ pub(crate) fn apply_arkit_pose(
 
     // Snapshot the latest pose without blocking.
     let mut pose = pose_rx.0.borrow_and_update().clone();
+    crate::cc_render::office::compose_expression(&mut pose.weights, office.as_deref());
     let max_w = pose.weights.values().copied().fold(0.0_f32, f32::max);
     tracing::debug!(
         target: "timing",
@@ -1422,26 +1424,14 @@ pub(crate) fn apply_skeletal_pose(
     mut last_pose: Local<Option<SkeletalPose>>,
     mut idle_ticks: Local<u64>,
     mut total_streams: Local<u64>,
+    mut world_motion: crate::cc_render::office::timeline::WorldMotion,
 ) {
     if !bind.captured {
         return;
     }
 
     *tick += 1;
-
-    // Queue drain: pull at most ONE pose this frame so paced motion
-    // plays through in order (FIFO). If the producer is briefly faster
-    // than us the surplus stays in the queue; if it's slower we re-use
-    // `last_pose` to keep the avatar held at its most recent pose
-    // rather than snapping back to baked animation between updates.
-    let mut cleared = false;
-    let mut new_pose: Option<SkeletalPose> = None;
-    match rx.0.try_recv() {
-        Ok(Some(p)) => new_pose = Some(p),
-        Ok(None) => cleared = true,
-        Err(crossbeam_channel::TryRecvError::Empty) => {}
-        Err(crossbeam_channel::TryRecvError::Disconnected) => {}
-    }
+    let (new_pose, cleared) = world_motion.receive(&rx.0);
 
     // Burst-edge logging at INFO so we can correlate pipeline events to
     // actual avatar driving without enabling firehose `timing=debug`.
@@ -1820,7 +1810,13 @@ pub(crate) fn apply_skeletal_pose(
     let delta_local = bind.parent_chain_rest[0].inverse() * delta_world;
     if let Some(pelvis_entity) = bind.entities[0] {
         if let Ok(mut t) = transforms.get_mut(pelvis_entity) {
-            t.translation = bind.pelvis_rest_translation + delta_local;
+            if pose.stream.is_some() {
+                if let Some(local) = world_motion.root_translation(pelvis_entity, &pose) {
+                    t.translation = local;
+                }
+            } else {
+                t.translation = bind.pelvis_rest_translation + delta_local;
+            }
         }
     }
 }

@@ -259,6 +259,11 @@ impl CcRenderNode {
                 }
                 parsed.map(RendererInput::Skeletal)
             }
+            "perform_action" | "cancel_action" | "edit_motion_timeline" | "motion_error" => {
+                serde_json::from_value(v.clone())
+                    .ok()
+                    .map(RendererInput::Office)
+            }
             "barge_in" => Some(RendererInput::BargeIn),
             // Audio clock + emotion silently ignored — see TODO above.
             _ => None,
@@ -270,46 +275,23 @@ impl CcRenderNode {
     /// any structural problem so the streaming loop just drops the
     /// frame instead of stalling — matches `BlendshapeFrame::from_json`'s
     /// fail-safe behavior.
-    fn skeletal_pose_from_json(v: &serde_json::Value) -> Option<SkeletalPose> {
-        let arr = v.get("joint_quats_xyzw")?.as_array()?;
-        if arr.len() != 22 {
-            tracing::debug!(
-                target: "cc_render",
-                "skeletal_pose: expected 22 joints, got {}; dropping",
-                arr.len()
-            );
-            return None;
-        }
-        let mut joint_quats = [[0.0_f32; 4]; 22];
-        for (i, joint) in arr.iter().enumerate() {
-            let q = joint.as_array()?;
-            if q.len() != 4 {
-                return None;
-            }
-            for k in 0..4 {
-                joint_quats[i][k] = q[k].as_f64()? as f32;
-            }
-        }
-        let pts_ms = v.get("pts_ms").and_then(|p| p.as_u64()).unwrap_or(0);
-        let root_pos = v
+    pub fn skeletal_pose_from_json(v: &serde_json::Value) -> Option<SkeletalPose> {
+        let stream = super::office::timeline::StreamIdentity::from_envelope(v)?;
+        let root = v
             .get("root_pos")
-            .and_then(|r| r.as_array())
-            .and_then(|a| {
-                if a.len() != 3 {
-                    return None;
-                }
-                Some([
-                    a[0].as_f64()? as f32,
-                    a[1].as_f64()? as f32,
-                    a[2].as_f64()? as f32,
-                ])
-            })
-            .unwrap_or([0.0, 0.0, 0.0]);
-        Some(SkeletalPose {
-            joint_quats,
+            .and_then(|r| serde_json::from_value(r.clone()).ok());
+        let root_pos = if stream.is_some() {
+            root?
+        } else {
+            root.unwrap_or([0.; 3])
+        };
+        SkeletalPose {
+            joint_quats: serde_json::from_value(v.get("joint_quats_xyzw")?.clone()).ok()?,
             root_pos,
-            pts_ms,
-        })
+            stream,
+            pts_ms: v.get("pts_ms").and_then(|p| p.as_u64()).unwrap_or(0),
+        }
+        .normalized()
     }
 }
 
@@ -318,6 +300,7 @@ enum RendererInput {
     Blendshape(BlendshapeFrame),
     Skeletal(SkeletalPose),
     BargeIn,
+    Office(super::office::controller::OfficeCommand),
 }
 
 #[async_trait]
@@ -340,11 +323,18 @@ impl AsyncStreamingNode for CcRenderNode {
         &self,
         data: RuntimeData,
         _session_id: Option<String>,
-        _callback: F,
+        mut _callback: F,
     ) -> Result<usize>
     where
         F: FnMut(RuntimeData) -> Result<()> + Send,
     {
+        if matches!(&data,RuntimeData::Json(v) if v.get("kind").and_then(|k|k.as_str())==Some("get_scene_state"))
+        {
+            _callback(RuntimeData::Json(
+                serde_json::json!({"kind":"scene_state","state":self.renderer.scene_state(),"request_id":match &data {RuntimeData::Json(v)=>v.get("request_id"),_=>None}}),
+            ))?;
+            return Ok(1);
+        }
         // Audio inputs: buffer for `tick()` to emit paired with Video
         // frames at content time. This is what makes
         // [[TTS → Audio2Face], Kimodo Motion] → CC Render emit mouth
@@ -484,9 +474,12 @@ impl AsyncStreamingNode for CcRenderNode {
                 *self.last_skel_recv_at.lock() = Some(std::time::Instant::now());
                 self.renderer.push_skeletal_pose(Some(s));
             }
+            Some(RendererInput::Office(cmd)) => self.renderer.office_command(cmd),
             Some(RendererInput::BargeIn) => {
                 self.renderer.push_pose(ArkitPose::default());
-                self.renderer.push_skeletal_pose(None);
+                if self.renderer.scene_state().office.is_none() {
+                    self.renderer.push_skeletal_pose(None);
+                }
                 let mut anchor = self.anchor_pts_ms.lock().await;
                 *anchor = None;
                 // Drop buffered audio too so we don't replay stale TTS.
@@ -508,7 +501,9 @@ impl AsyncStreamingNode for CcRenderNode {
             self.renderer.push_pose(ArkitPose::default());
             // Also drop any active skeletal stream so the avatar
             // snaps back to baked rest on barge-in.
-            self.renderer.push_skeletal_pose(None);
+            if self.renderer.scene_state().office.is_none() {
+                self.renderer.push_skeletal_pose(None);
+            }
             let mut anchor = self.anchor_pts_ms.lock().await;
             *anchor = None;
             return Ok(true);
@@ -580,6 +575,16 @@ impl AsyncStreamingNode for CcRenderNode {
             callback(envelope)?;
         }
 
+        let office_state = self.renderer.scene_state();
+        if let Some(office) = &office_state.office {
+            callback(RuntimeData::Json(
+                serde_json::json!({"kind":"scene_state","state":office_state}),
+            ))?;
+            let mut motion = office.motion.clone();
+            motion.pts_ms = office.avatar.displayed_pts_ms;
+            motion.observed_root = office.avatar.pelvis;
+            callback(RuntimeData::Json(serde_json::to_value(&motion).unwrap()))?;
+        }
         let mut frames = Vec::new();
         self.renderer.drain_frames(&mut frames);
         let buf_samples = self.audio_buf.lock().samples.len() as u64;

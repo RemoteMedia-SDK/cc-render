@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use super::body_colliders::{BodyBoneCollider, LoadedSidecar};
-use super::props::{GrabCmdRx, Prop, PropRegistry};
+use super::props::{Prop, PropRegistry};
 use crate::cc_render::renderer::{GrabFailure, GrabOrRelease, Hand, PropId};
 
 #[derive(Debug, Clone, Default)]
@@ -73,6 +73,11 @@ pub(crate) fn step_fsm(
         }
         _ => {}
     }
+    if matches!(new_cmd,Some(GrabOrRelease::CancelPursuit(h)) if *h==hand)
+        && matches!(state, GrabState::Pursuing { .. })
+    {
+        return FsmTransition::DetachIdle;
+    }
     match state {
         GrabState::Idle => FsmTransition::NoChange,
         GrabState::Pursuing {
@@ -104,7 +109,7 @@ pub(crate) fn step_fsm(
 pub(crate) fn handle_grab_cmds(
     mut commands: Commands,
     time: Res<Time>,
-    grab_rx: Option<Res<GrabCmdRx>>,
+    mut inbox: crate::cc_render::office::systems::OfficeCommandInbox,
     mut fsms: ResMut<GrabFsms>,
     mut prop_registry: ResMut<PropRegistry>,
     body_colliders: Query<(Entity, &BodyBoneCollider, &GlobalTransform)>,
@@ -116,14 +121,7 @@ pub(crate) fn handle_grab_cmds(
     let proximity_m = stored_cfg.0.grab.proximity_m;
     let timeout_secs = stored_cfg.0.grab.timeout_secs;
 
-    // Drain inbound commands (no-op when channel not wired in tests).
-    let mut cmds: Vec<GrabOrRelease> = Vec::new();
-    if let Some(grab_rx) = grab_rx.as_ref() {
-        let mut rx = grab_rx.0.lock().unwrap();
-        while let Ok(c) = rx.try_recv() {
-            cmds.push(c);
-        }
-    }
+    let cmds = inbox.drain();
 
     // Wrist world positions + entities (SMPL idx 20 = L_Wrist, 21 = R_Wrist).
     let mut wrist_pos: HashMap<Hand, Vec3> = HashMap::new();
@@ -161,6 +159,8 @@ pub(crate) fn handle_grab_cmds(
         let cmd = cmds.iter().rfind(|c| match c {
             GrabOrRelease::Grab(g) => g.hand == hand,
             GrabOrRelease::Release(h) => *h == hand,
+            GrabOrRelease::Office(_) => false,
+            GrabOrRelease::CancelPursuit(h) => *h == hand,
         });
         let wrist = wrist_pos.get(&hand).copied().unwrap_or(Vec3::ZERO);
         let grasp = match state {
@@ -169,7 +169,7 @@ pub(crate) fn handle_grab_cmds(
                 .get(target)
                 .copied()
                 .and_then(|e| props.get(e).ok())
-                .map(|(_p, gt)| gt.translation()),
+                .map(|(p, gt)| p.grasp_world(gt)),
             _ => None,
         };
         let trans = step_fsm(
@@ -248,9 +248,13 @@ pub(crate) fn handle_grab_cmds(
                     palm_offset_default
                 };
                 let palm = Vec3::from(palm_arr);
-                let joint = FixedJointBuilder::new()
-                    .local_anchor1(palm)
-                    .local_anchor2(Vec3::ZERO);
+                let joint = FixedJointBuilder::new().local_anchor1(palm).local_anchor2(
+                    props
+                        .get(prop_e)
+                        .ok()
+                        .map(|(p, _)| p.grasp_offset())
+                        .unwrap_or(Vec3::ZERO),
+                );
                 commands
                     .entity(prop_e)
                     .insert(ImpulseJoint::new(wrist_e, joint));

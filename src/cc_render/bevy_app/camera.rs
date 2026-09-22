@@ -82,10 +82,24 @@ fn env_vec3_opt(key: &str) -> Option<Vec3> {
 /// the const default. Read by both `setup_scene` and
 /// `auto_orient_avatar` so they stay in sync.
 pub(crate) fn camera_pos() -> Vec3 {
-    env_vec3("CC_AVATAR_CAMERA_POS", CAMERA_POS)
+    env_vec3(
+        "CC_AVATAR_CAMERA_POS",
+        if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
+            Vec3::new(5., 3.2, 5.)
+        } else {
+            CAMERA_POS
+        },
+    )
 }
 pub(crate) fn camera_look_at() -> Vec3 {
-    env_vec3("CC_AVATAR_CAMERA_LOOK_AT", CAMERA_LOOK_AT)
+    env_vec3(
+        "CC_AVATAR_CAMERA_LOOK_AT",
+        if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
+            Vec3::new(0., 0.8, -1.)
+        } else {
+            CAMERA_LOOK_AT
+        },
+    )
 }
 pub(crate) fn camera_fov_deg() -> f32 {
     env_f32("CC_AVATAR_CAMERA_FOV_DEG", CAMERA_FOV_DEG)
@@ -560,7 +574,9 @@ pub(crate) fn auto_orient_avatar(
     if *done || !bind.captured {
         return;
     }
-    if std::env::var("CC_AVATAR_AUTO_FACE_CAMERA").ok().as_deref() == Some("0") {
+    if std::env::var("CC_AVATAR_AUTO_FACE_CAMERA").ok().as_deref() == Some("0")
+        || std::env::var("CC_OFFICE").as_deref() == Ok("1")
+    {
         *done = true;
         tracing::info!(
             target: "cc_render",
@@ -882,7 +898,14 @@ pub(crate) fn setup_scene(
     ));
     commands.insert_resource(AmbientLight {
         color: Color::srgb(1.00, 0.88, 0.83),
-        brightness: env_f32("CC_AVATAR_AMBIENT", 50.0),
+        brightness: env_f32(
+            "CC_AVATAR_AMBIENT",
+            if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
+                500.0
+            } else {
+                50.0
+            },
+        ),
     });
 
     // ─── Avatar scene ──────────────────────────────────────────────────

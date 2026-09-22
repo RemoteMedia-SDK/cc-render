@@ -35,3 +35,5 @@ pub use renderer::{
     GrabCmd, GrabConfig, GrabFailure, GrabOrRelease, GrabSnapshot, GraspAnchor, Hand,
     PhysicsConfig, PlayVolume, PropCmd, PropId, PropShape, PropSnapshot, SceneState,
 };
+
+pub mod office;

@@ -36,7 +36,7 @@
 //!                  bound media clock rate (default 30 fps).
 
 mod arkit;
-mod cc_render;
+pub mod cc_render;
 mod session_control;
 
 use std::path::PathBuf;

@@ -1,0 +1,80 @@
+//! Test client: submit each action only when observed state permits it.
+//! The controller/ARDY runtime never receives the rest of this script in advance.
+use cc_render_plugin::cc_render::office::controller::{
+    OfficeCommand, OfficeSnapshot, Status, Verb,
+};
+use cc_render_plugin::cc_render::renderer::Hand;
+
+pub struct Choreography {
+    step: usize,
+    sent: bool,
+    hold_until: Option<u64>,
+    hold_ms: u64,
+    walkthrough: bool,
+}
+impl Choreography {
+    pub fn new() -> Self {
+        Self {
+            step: 0,
+            sent: false,
+            hold_until: None,
+            hold_ms: std::env::var("OFFICE_ACCEPTANCE_HOLD_SEC")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(3)
+                .clamp(3, 120)
+                * 1000,
+            walkthrough: std::env::var("OFFICE_ACCEPTANCE_WALKTHROUGH").as_deref() == Ok("1"),
+        }
+    }
+    pub fn tick(&mut self, state: &OfficeSnapshot) -> (Option<OfficeCommand>, bool) {
+        // Wait on the playback clock, including when inference stalls.
+        if (!self.walkthrough && self.step == 1) || (self.walkthrough && self.step == 6) {
+            let end = *self
+                .hold_until
+                .get_or_insert(state.avatar.displayed_pts_ms + self.hold_ms);
+            if state.avatar.displayed_pts_ms < end {
+                return (None, false);
+            }
+            self.step += 1;
+        }
+        let action = if self.walkthrough {
+            match self.step {
+                0 => ("tour-shelf", Verb::Walk, Some("shelf"), None),
+                1 => ("tour-sofa", Verb::Walk, Some("sofa"), None),
+                2 => ("tour-desk", Verb::Walk, Some("desk"), None),
+                3 => ("mug-grab", Verb::Grab, Some("mug"), Some(Hand::Right)),
+                4 => ("carry-to-chair", Verb::Walk, Some("chair"), None),
+                5 => ("sit-with-mug", Verb::Sit, Some("chair"), None),
+                _ => return (None, true),
+            }
+        } else {
+            match self.step {
+                0 => ("initial-sit", Verb::Sit, Some("chair"), None),
+                2 => ("seated-wave", Verb::Wave, None, Some(Hand::Right)),
+                3 => ("stand", Verb::StandUp, None, None),
+                4 => ("table", Verb::Walk, Some("desk"), None),
+                5 => ("bend-return", Verb::BendAndReturn, Some("desk"), None),
+                6 => ("chair", Verb::Walk, Some("chair"), None),
+                7 => ("final-sit", Verb::Sit, Some("chair"), None),
+                _ => return (None, true),
+            }
+        };
+        if !self.sent {
+            self.sent = true;
+            return (
+                Some(super::action(action.0, action.1, action.2, action.3)),
+                false,
+            );
+        }
+        if state
+            .events
+            .iter()
+            .any(|e| e.action_id == action.0 && e.status == Status::Completed)
+        {
+            self.step += 1;
+            self.sent = false;
+        }
+        (None, false)
+    }
+}

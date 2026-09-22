@@ -37,6 +37,7 @@ pub struct ArkitPose {
 /// rotations alone produce visually correct wave/sit/point/dance.
 #[derive(Debug, Clone)]
 pub struct SkeletalPose {
+    pub stream: Option<super::office::timeline::StreamIdentity>,
     /// 22 parent-local quaternions in SMPL_22_NAMES order.
     pub joint_quats: [[f32; 4]; 22],
     /// World-space pelvis position (Y-up, meters), as emitted by Kimodo.
@@ -50,11 +51,29 @@ pub struct SkeletalPose {
 }
 
 impl SkeletalPose {
+    /// Validate and normalize an external motion envelope before retargeting.
+    pub(crate) fn normalized(mut self) -> Option<Self> {
+        if self.root_pos.iter().any(|x| !x.is_finite()) {
+            return None;
+        }
+        for q in &mut self.joint_quats {
+            let norm = q.iter().map(|x| x * x).sum::<f32>().sqrt();
+            if !norm.is_finite() || norm < 1e-4 {
+                return None;
+            }
+            for value in q {
+                *value /= norm;
+            }
+        }
+        Some(self)
+    }
+
     /// Identity-rotation pose (T-pose). Used as the watch channel's
     /// initial value before any real pose arrives.
     pub fn rest() -> Self {
         Self {
             joint_quats: [[0.0, 0.0, 0.0, 1.0]; 22],
+            stream: None,
             root_pos: [0.0, 0.0, 0.0],
             pts_ms: 0,
         }
@@ -153,6 +172,7 @@ pub trait Renderer: Send + Sync {
     fn skeletal_queue_depth(&self) -> usize {
         0
     }
+    fn office_command(&self, _cmd: super::office::controller::OfficeCommand) {}
     fn spawn_prop(&self, _cmd: PropCmd) {}
     fn despawn_prop(&self, _id: PropId) {}
     fn grab(&self, _cmd: GrabCmd) {}
@@ -181,10 +201,8 @@ pub struct CcRenderer {
     /// driving binary gate "start writing the MP4" on actual scene
     /// readiness instead of a wall-clock warmup timer.
     ready: Arc<AtomicBool>,
-    /// Held only so the JoinHandle isn't dropped immediately; the
-    /// thread is detached on drop (the Bevy app exits when its
-    /// shutdown signal triggers, see [`Self::shutdown`]).
-    _join: JoinHandle<()>,
+    /// Explicit shutdown joins before a standalone process unloads GPU libraries.
+    join: Option<JoinHandle<()>>,
     shutdown_tx: crossbeam_channel::Sender<()>,
     prop_cmd_tx: tokio::sync::mpsc::UnboundedSender<PropCmd>,
     despawn_cmd_tx: tokio::sync::mpsc::UnboundedSender<PropId>,
@@ -209,6 +227,9 @@ impl Renderer for CcRenderer {
         // crossbeam_channel::Sender::len = number of enqueued items
         // Bevy hasn't pulled yet via try_recv.
         self.skeletal_pose_tx.len()
+    }
+    fn office_command(&self, cmd: super::office::controller::OfficeCommand) {
+        let _ = self.grab_cmd_tx.send(GrabOrRelease::Office(cmd));
     }
     fn spawn_prop(&self, cmd: PropCmd) {
         let _ = self.prop_cmd_tx.send(cmd);
@@ -296,7 +317,7 @@ impl CcRenderer {
             frame_rx,
             config,
             ready,
-            _join: join,
+            join: Some(join),
             shutdown_tx,
             prop_cmd_tx,
             despawn_cmd_tx,
@@ -312,6 +333,18 @@ impl CcRenderer {
     /// signal.
     pub fn is_ready(&self) -> bool {
         self.ready.load(Ordering::Acquire)
+    }
+
+    /// Finish GPU teardown before the host exits. Ordinary Drop remains
+    /// nonblocking for pipeline owners that are not terminating the process.
+    pub fn shutdown(mut self) -> anyhow::Result<()> {
+        let _ = self.shutdown_tx.try_send(());
+        if let Some(thread) = self.join.take() {
+            thread
+                .join()
+                .map_err(|_| anyhow::anyhow!("renderer thread panicked during shutdown"))?;
+        }
+        Ok(())
     }
 
     /// Push the latest ARKit pose. Older un-rendered poses are
@@ -484,7 +517,8 @@ mod physics_types {
         pub local_rotation: [f32; 4],
     }
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "snake_case")]
     pub enum Hand {
         Left,
         Right,
@@ -497,15 +531,16 @@ mod physics_types {
         pub palm_offset_override: Option<[f32; 3]>,
     }
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug, Default, serde::Serialize)]
     pub struct SceneState {
+        pub office: Option<crate::cc_render::office::controller::OfficeSnapshot>,
         pub props: Vec<PropSnapshot>,
         pub grabs: Vec<GrabSnapshot>,
         pub failed_grabs: Vec<GrabFailure>,
         pub pts_ms: u64,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, serde::Serialize)]
     pub struct PropSnapshot {
         pub id: PropId,
         pub transform: [[f32; 4]; 4],
@@ -515,13 +550,13 @@ mod physics_types {
         pub loading: bool,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, serde::Serialize)]
     pub struct GrabSnapshot {
         pub hand: Hand,
         pub prop: PropId,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, serde::Serialize)]
     pub struct GrabFailure {
         pub hand: Hand,
         pub target: PropId,
@@ -533,8 +568,10 @@ mod physics_types {
     /// `mpsc::UnboundedReceiver` can drive the FSM in `physics::grab`.
     #[derive(Debug, Clone)]
     pub enum GrabOrRelease {
+        Office(crate::cc_render::office::controller::OfficeCommand),
         Grab(GrabCmd),
         Release(Hand),
+        CancelPursuit(Hand),
     }
 }
 
@@ -559,16 +596,10 @@ fn run_bevy_app(
     frame_tx: crossbeam_channel::Sender<RenderedFrame>,
     shutdown_rx: crossbeam_channel::Receiver<()>,
     ready: Arc<AtomicBool>,
-    prop_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<
-        PropCmd,
-    >,
+    prop_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<PropCmd>,
     despawn_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<PropId>,
-    grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<
-        GrabOrRelease,
-    >,
-    scene_state_tx: tokio::sync::watch::Sender<
-        SceneState,
-    >,
+    grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
+    scene_state_tx: tokio::sync::watch::Sender<SceneState>,
 ) {
     super::bevy_app::run(
         config,

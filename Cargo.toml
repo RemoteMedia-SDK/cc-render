@@ -21,7 +21,7 @@ incremental = true
 
 [lib]
 name = "cc_render_plugin"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 # Path-3 hand-rolled plugin: depends ONLY on the skinny
 # `remotemedia-plugin-sdk` umbrella plus the heavy Bevy / Rapier /

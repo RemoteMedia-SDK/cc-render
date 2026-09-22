@@ -32,6 +32,18 @@ pub(crate) struct Prop {
     #[allow(dead_code)]
     pub grasp_local: Option<[[f32; 4]; 4]>,
 }
+impl Prop {
+    pub fn grasp_offset(&self) -> Vec3 {
+        self.grasp_local
+            .map(|m| Vec3::new(m[3][0], m[3][1], m[3][2]))
+            .unwrap_or(Vec3::ZERO)
+    }
+    pub fn grasp_world(&self, transform: &GlobalTransform) -> Vec3 {
+        transform
+            .compute_matrix()
+            .transform_point3(self.grasp_offset())
+    }
+}
 
 /// Tag on a Prop whose visual GLB is still loading. Holds the scene
 /// `Handle<Scene>` so `finalize_meshglb_collider` can poll
@@ -398,6 +410,7 @@ pub(crate) fn publish_scene_state(
     let failed = std::mem::take(&mut registry.pending_failures);
     let pts_ms = last_pts.as_ref().map(|p| p.0).unwrap_or(0);
     let state = SceneState {
+        office: tx.0.borrow().office.clone(),
         props: snapshots,
         grabs,
         failed_grabs: failed,
