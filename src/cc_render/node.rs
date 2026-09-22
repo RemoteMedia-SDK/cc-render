@@ -230,6 +230,14 @@ impl CcRenderNode {
         }
     }
 
+    /// Convert a timed ARKit-52 envelope using the same channel mapping as
+    /// streaming node input. Useful for direct-renderer recording clients.
+    pub fn arkit_pose_from_json(v: &serde_json::Value) -> Option<ArkitPose> {
+        BlendshapeFrame::from_json(v)
+            .ok()
+            .map(|f| Self::frame_to_pose(&f))
+    }
+
     /// Decode an envelope. Same shape as `Live2DRenderNode::decode_envelope`
     /// but we also handle skeletal-pose JSON shipped by `KimodoMotionNode`.
     fn decode_envelope(data: &RuntimeData) -> Option<RendererInput> {

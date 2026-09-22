@@ -3,7 +3,7 @@
 //! Optional OFFICE_FACE_JSONL supplies prerecorded Audio2Face blendshape envelopes.
 use cc_render_plugin::cc_render::office::controller::{ActionRequest, OfficeCommand, Verb};
 use cc_render_plugin::cc_render::renderer::{Hand, PhysicsConfig};
-use cc_render_plugin::cc_render::{ArkitPose, CcRenderNode, CcRenderer, Renderer, RendererConfig};
+use cc_render_plugin::cc_render::{CcRenderNode, CcRenderer, Renderer, RendererConfig};
 use std::{
     io::{BufRead, BufReader, Write},
     process::{Command, Stdio},
@@ -12,6 +12,8 @@ use std::{
 };
 #[path = "support/office_choreography.rs"]
 mod office_choreography;
+#[path = "support/office_speech.rs"]
+mod office_speech;
 fn action(id: &str, verb: Verb, target: Option<&str>, hand: Option<Hand>) -> OfficeCommand {
     OfficeCommand::PerformAction {
         request: ActionRequest {
@@ -80,26 +82,49 @@ fn main() -> anyhow::Result<()> {
             }
         }
     });
-    let mut ffmpeg = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-loglevel",
-            "error",
+    let mut encoder = Command::new("ffmpeg");
+    encoder.args([
+        "-y",
+        "-loglevel",
+        "error",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgba",
+        "-s",
+        "640x480",
+        "-r",
+        "30",
+        "-i",
+        "-",
+    ]);
+    if let Ok(audio) = std::env::var("OFFICE_FACE_AUDIO") {
+        encoder.args([
             "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "rgba",
-            "-s",
-            "640x480",
-            "-r",
-            "30",
+            "f32le",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
             "-i",
-            "-",
-            "-an",
+            &audio,
+            "-af",
+            "apad",
+            "-c:a",
+            "aac",
+            "-shortest",
+        ]);
+    } else {
+        encoder.arg("-an");
+    }
+    let mut ffmpeg = encoder
+        .args([
             "-c:v",
             "libx264",
             "-pix_fmt",
             "yuv420p",
+            "-movflags",
+            "+faststart",
             &args[3],
         ])
         .stdin(Stdio::piped())
@@ -123,33 +148,10 @@ fn main() -> anyhow::Result<()> {
     let mut frames = vec![];
     let mut saved = false;
     let mut failed = false;
-    let (face_tx, face_rx) = mpsc::sync_channel(64);
-    // Optional live JSONL producer: ready line, then waits for a start line on
-    // stdin before emitting paced blendshape envelopes. Keep speech independent
-    // of the body clock so a motion underrun never pauses articulation.
-    let mut face_child = if let Ok(program) = std::env::var("OFFICE_FACE_PROGRAM") {
-        let mut child = Command::new(program)
-            .args([
-                std::env::var("OFFICE_FACE_BUNDLE")?,
-                std::env::var("OFFICE_FACE_AUDIO")?,
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
-        let stdout = child.stdout.take().unwrap();
-        std::thread::spawn(move || {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if face_tx.send(v).is_err() {
-                        break;
-                    }
-                }
-            }
-        });
-        Some(child)
-    } else {
-        None
-    };
+    let mut live_speech = office_speech::Speech::spawn()?;
+    let mut video_frames = 0_u64;
+    let mut last_pixels = None;
+    let mut last_face_pts = 0;
     let speech: Vec<serde_json::Value> = std::env::var("OFFICE_FACE_JSONL")
         .ok()
         .and_then(|p| std::fs::read_to_string(p).ok())
@@ -162,19 +164,9 @@ fn main() -> anyhow::Result<()> {
     while started.elapsed() < Duration::from_secs(600)
         && actions_started.map_or(true, |t| t.elapsed() < Duration::from_secs(180))
     {
-        for v in face_rx.try_iter() {
-            if let Some(weights) = v
-                .get("arkit_52")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-            {
-                let pts_ms = v["pts_ms"].as_u64().unwrap_or(0);
-                renderer.push_pose(ArkitPose { weights, pts_ms });
-                writeln!(
-                    report,
-                    "{}",
-                    serde_json::json!({"kind":"speech_frame","pts_ms":pts_ms,"wall_ms":actions_started.map(|t| t.elapsed().as_millis())})
-                )?;
-            }
+        live_speech.poll()?;
+        if let Some(start) = actions_started {
+            live_speech.present(start.elapsed(), &renderer, &mut report)?;
         }
         for reply in output_rx.try_iter() {
             if let Some(error) = reply.get("error") {
@@ -243,12 +235,12 @@ fn main() -> anyhow::Result<()> {
                 failed = true;
                 break;
             }
-            if let Some(script) = choreography.as_mut().filter(|_| office.avatar.ready) {
+            if let Some(script) = choreography
+                .as_mut()
+                .filter(|_| office.avatar.ready && live_speech.ready())
+            {
                 if actions_started.is_none() {
                     actions_started = Some(Instant::now());
-                    if let Some(input) = face_child.as_mut().and_then(|c| c.stdin.as_mut()) {
-                        writeln!(input, "start")?;
-                    }
                 }
                 let (command, done) = script.tick(office);
                 if let Some(command) = command {
@@ -269,11 +261,8 @@ fn main() -> anyhow::Result<()> {
                 }
             } else if choreography.is_none() {
                 match stage {
-                    0 if office.avatar.ready => {
+                    0 if office.avatar.ready && live_speech.ready() => {
                         actions_started = Some(Instant::now());
-                        if let Some(input) = face_child.as_mut().and_then(|c| c.stdin.as_mut()) {
-                            writeln!(input, "start")?;
-                        }
                         if std::env::var("OFFICE_ACCEPTANCE_SIT_ONLY").as_deref() == Ok("1") {
                             renderer.office_command(action("sit", Verb::Sit, Some("chair"), None));
                             stage = 10;
@@ -369,44 +358,50 @@ fn main() -> anyhow::Result<()> {
                 v["pts_ms"].as_u64().unwrap_or(0)
                     <= actions_started.map_or(0, |t| t.elapsed().as_millis() as u64)
             }) {
-                if let Some(weights) = v
-                    .get("arkit_52")
-                    .and_then(|v| serde_json::from_value(v.clone()).ok())
-                {
-                    renderer.push_pose(ArkitPose {
-                        weights,
-                        pts_ms: office.avatar.displayed_pts_ms,
-                    });
+                if let Some(pose) = CcRenderNode::arkit_pose_from_json(v) {
+                    renderer.push_pose(pose);
                 }
             }
         }
         renderer.drain_frames(&mut frames);
-        for f in frames.drain(..) {
-            if actions_started.is_some() {
-                video.write_all(&f.pixels)?;
-                if !saved {
-                    image::save_buffer(
-                        format!("{}.png", args[3]),
-                        &f.pixels,
-                        640,
-                        480,
-                        image::ColorType::Rgba8,
-                    )?;
-                    saved = true;
-                }
+        if let Some(f) = frames.pop() {
+            last_face_pts = f.pts_ms;
+            last_pixels = Some(f.pixels);
+        }
+        frames.clear();
+        if let (Some(start), Some(pixels)) = (actions_started, last_pixels.as_ref()) {
+            // CFR export follows elapsed playback time, repeating the last frame
+            // through a render stall instead of shortening video relative to audio.
+            let due = (start.elapsed().as_secs_f64() * 30.0).floor() as u64 + 1;
+            while video_frames < due {
+                video.write_all(pixels)?;
+                writeln!(
+                    report,
+                    "{}",
+                    serde_json::json!({"kind":"video_frame", "frame":video_frames, "video_ms":video_frames * 1000 / 30, "face_pts_ms":last_face_pts})
+                )?;
+                video_frames += 1;
+            }
+            if !saved {
+                image::save_buffer(
+                    format!("{}.png", args[3]),
+                    pixels,
+                    640,
+                    480,
+                    image::ColorType::Rgba8,
+                )?;
+                saved = true;
             }
         }
         std::thread::sleep(Duration::from_millis(10));
     }
     drop(video);
-    let _ = ffmpeg.wait();
+    let encoded = ffmpeg.wait()?;
     let _ = child.kill();
     let _ = child.wait();
-    if let Some(mut child) = face_child {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    drop(live_speech);
     renderer.shutdown()?;
+    anyhow::ensure!(encoded.success(), "ffmpeg failed: {encoded}");
     anyhow::ensure!(
         !failed && stage == 8,
         "acceptance incomplete: stage {stage}; inspect {}.jsonl",

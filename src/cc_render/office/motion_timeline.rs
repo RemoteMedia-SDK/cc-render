@@ -13,6 +13,9 @@ pub struct RootTrack {
     pub interpolation: String,
     pub constrain_height: bool,
     pub heading: Option<f32>,
+    /// Follow the XZ route tangent unless an explicit heading overrides it.
+    #[serde(default)]
+    pub face_path: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PromptSpan {
@@ -61,6 +64,7 @@ impl MotionTimeline {
                 interpolation: if motion.ease_root { "smooth" } else { "linear" }.into(),
                 constrain_height: motion.constrain_root_height,
                 heading: motion.heading,
+                face_path: false,
             },
             prompts: vec![PromptSpan {
                 start_ms: motion.pts_ms,
