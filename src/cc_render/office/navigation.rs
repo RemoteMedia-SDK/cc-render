@@ -81,7 +81,13 @@ impl SceneState {
             .ok_or(NavigationError::SceneUnavailable)?;
         let from = from.into();
         let start = resolve_target(office, &from)?;
-        let goal = resolve_target(office, &to.into())?;
+        let to = to.into();
+        let goal = resolve_target(office, &to)?;
+        let facing = match &to {
+            NavigationTarget::Name(id) => office.objects.iter().find(|o| &o.id == id)
+                .map(super::locomotion::target_direction),
+            NavigationTarget::Position(_) => None,
+        };
         let objects: Vec<_> = office
             .objects
             .iter()
@@ -89,9 +95,8 @@ impl SceneState {
             .cloned()
             .collect();
         let scene = scene_metadata(&objects);
-        let mut path = pathfinder::find_path(&scene, start, goal, None)?;
+        let mut path = super::locomotion::approach_path(&scene, start, goal, facing, super::locomotion::arrival_angle())?;
         path.dedup_by(|a, b| a.xz == b.xz);
-        let distance_m: f32 = path.windows(2).map(|p| p[0].xz.distance(p[1].xz)).sum();
         // An explicit origin does not specify an orientation. Assume it already
         // faces the first segment; only "avatar" includes an observed turn.
         let heading = if matches!(from, NavigationTarget::Name(ref name) if name == "avatar") {
@@ -100,7 +105,11 @@ impl SceneState {
             let direction = path.get(1).map_or(Vec2::ZERO, |p| p.xz - start);
             direction.x.atan2(direction.y)
         };
-        let root_waypoints = walking_waypoints(&path, 0., heading);
+        let root_waypoints = if std::env::var("OFFICE_NATURAL_NAVIGATION").as_deref() == Ok("0") {
+            walking_waypoints(&path, 0., heading)
+        } else { super::locomotion::walking(&scene, &path, 0.) };
+        let distance_m = root_waypoints.windows(2).map(|p|
+            Vec2::new(p[1][0] - p[0][0], p[1][2] - p[0][2]).length()).sum();
         Ok(WaypointPath {
             waypoints: path
                 .iter()
@@ -224,7 +233,7 @@ mod tests {
     }
 
     #[test]
-    fn object_to_object_and_world_locations_share_the_same_route() {
+    fn object_and_coordinate_destinations_share_endpoints_but_only_objects_specify_facing() {
         let state = scene();
         let objects = &state.office.as_ref().unwrap().objects;
         let chair = objects
@@ -239,8 +248,13 @@ mod tests {
             .approach_position();
         let by_id = state.generate_waypoint("chair", "bed").unwrap();
         let by_xyz = state.generate_waypoint(chair, bed).unwrap();
-        assert_eq!(by_id.waypoints, by_xyz.waypoints);
-        assert_eq!(by_id.root_waypoints, by_xyz.root_waypoints);
+        assert_eq!(by_id.waypoints.first(), by_xyz.waypoints.first());
+        assert_eq!(by_id.waypoints.last(), by_xyz.waypoints.last());
+        let last = &by_id.root_waypoints[by_id.root_waypoints.len()-2..];
+        let bed_object = objects.iter().find(|o| o.id == "bed").unwrap();
+        assert!(super::super::locomotion::within_arrival_cone(
+            Vec2::new(last[1][0]-last[0][0], last[1][2]-last[0][2]),
+            super::super::locomotion::target_direction(bed_object), super::super::locomotion::arrival_angle() + 1e-5));
         assert!(
             by_id.waypoints.len() > 2,
             "must detour through bedroom door"

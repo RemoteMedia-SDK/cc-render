@@ -24,6 +24,9 @@ pub struct RootTrack {
     /// Follow the XZ route tangent unless an explicit heading overrides it.
     #[serde(default)]
     pub face_path: bool,
+    /// Zero keeps legacy dense guidance; positive intervals guide facing sparsely.
+    #[serde(default)]
+    pub heading_interval_ms: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PromptSpan {
@@ -74,6 +77,7 @@ impl MotionTimeline {
                 heading: motion.heading,
                 heading_transition: None,
                 face_path: false,
+                heading_interval_ms: 0,
             },
             prompts: vec![PromptSpan {
                 start_ms: motion.pts_ms,
@@ -115,6 +119,7 @@ impl TimelineLayer {
                     .keyframes
                     .windows(2)
                     .any(|w| w[0].pts_ms >= w[1].pts_ms)
+                || (root.heading_interval_ms != 0 && !(50..=10000).contains(&root.heading_interval_ms))
                 || root.heading.is_some_and(|h| !h.is_finite())
                 || root.heading_transition.as_ref().is_some_and(|t| {
                     (root.heading.is_none() && !root.face_path) || !t.from.is_finite() || t.duration_ms == 0

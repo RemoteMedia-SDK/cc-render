@@ -167,6 +167,9 @@ pub struct OfficeController {
     pub motion_error: Option<String>,
     pub future_root: Option<(u64, [f32; 3])>,
     pub future_handoffs: bool,
+    /// Diagnostic comparison switch; natural navigation uses sparse facing guidance.
+    pub natural_navigation: bool,
+    pub natural_heading_interval_ms: u64,
     committed_motion: Option<MotionRequest>,
     timeline_layers: std::collections::BTreeMap<String, super::motion_timeline::TimelineLayer>,
     pub objects: Vec<OfficeObject>,
@@ -205,6 +208,10 @@ impl Default for OfficeController {
             motion_error: None,
             future_root: None,
             future_handoffs: std::env::var("OFFICE_FUTURE_HANDOFFS").as_deref() == Ok("1"),
+            natural_navigation: std::env::var("OFFICE_NATURAL_NAVIGATION").as_deref() != Ok("0"),
+            natural_heading_interval_ms: std::env::var("OFFICE_NAVIGATION_HEADING_INTERVAL_MS")
+                .ok().and_then(|value| value.parse().ok())
+                .filter(|value| *value == 0 || (50..=10000).contains(value)).unwrap_or(800),
             committed_motion: None,
             timeline_layers: Default::default(),
             motion_ready: false,
@@ -635,24 +642,16 @@ impl OfficeController {
                 if let Some(goal) = goal {
                     let start = Vec2::new(self.observed.pelvis[0], self.observed.pelvis[2]);
                     let end = Vec2::new(goal[0], goal[2]);
-                    let tolerance = if matches!(r.verb, Verb::Grab | Verb::Release) {
-                        0.04
-                    } else {
-                        0.12
-                    };
-                    if start.distance(end) < tolerance {
-                        a.stage = if matches!(r.verb, Verb::Sit | Verb::Grab) {
-                            Stage::Align
-                        } else {
-                            Stage::Execute
-                        };
+                    if let Some(stage) = self.approach_stage(r, goal) {
+                        a.stage = stage;
                         a.execute_pts_ms = self.motion_start().0;
                         a.execute_origin = self.motion_start().1;
                         a.execute_heading = self.observed.heading;
                         changed = true;
                         done = r.verb == Verb::Walk;
                     } else if let Err(e) =
-                        pathfinder::find_path(&self.navigation_scene(), start, end, None)
+                        super::locomotion::approach_path(&self.navigation_scene(), start, end,
+                            obj.map(super::locomotion::target_direction), super::locomotion::arrival_angle())
                     {
                         self.event(&r.action_id, Status::Failed, e.to_string());
                         changed = true;
@@ -747,7 +746,9 @@ impl OfficeController {
                     }
                     Verb::Grab => {
                         if !a.sent
-                            && self.observed.displayed_pts_ms >= a.execute_pts_ms + 800
+                            && self.observed.displayed_pts_ms >= self.motion.joints.iter()
+                                .find(|j| j.joint == if hand_index(r.hand) == 0 { "LeftHand" } else { "RightHand" })
+                                .map_or(a.execute_pts_ms + 800, |j| j.contact_pts_ms)
                             && obj
                                 .and_then(|o| o.grasp_transform().map(|p| p.translation.to_array()))
                                 .is_some_and(|p| {
@@ -864,6 +865,33 @@ impl OfficeController {
             self.rebuild(world);
         }
     }
+    fn approach_stage(&self, request: &ActionRequest, goal: [f32; 3]) -> Option<Stage> {
+        let delta = Vec2::new(self.observed.pelvis[0] - goal[0], self.observed.pelvis[2] - goal[2]);
+        if self.natural_navigation && request.verb == Verb::Grab {
+            let facing = self.objects.iter().find(|o| Some(&o.id) == request.target.as_ref())
+                .map(super::locomotion::target_direction).unwrap_or(Vec2::ZERO);
+            return (delta.length() < 0.65 && self.permits_root(Vec3::from(goal))
+                && super::locomotion::within_arrival_cone(-delta, facing, super::locomotion::arrival_angle()))
+                .then_some(Stage::Execute);
+        }
+        let tolerance = if matches!(request.verb, Verb::Grab | Verb::Release) { 0.04 } else { 0.12 };
+        (delta.length() < tolerance).then_some(if matches!(request.verb, Verb::Sit | Verb::Grab) {
+            Stage::Align
+        } else { Stage::Execute })
+    }
+
+    fn grab_reach_path(&self, action: &Active, object: Option<&OfficeObject>) -> (Vec<[f32; 4]>, Option<f32>, u64) {
+        if self.natural_navigation {
+            let goal = object.map_or(action.execute_origin, OfficeObject::approach_position);
+            let elapsed = (self.observed.displayed_pts_ms as f64 - action.execute_pts_ms as f64) as f32 / 1000.;
+            let duration = super::locomotion::reach_duration(action.execute_origin, goal);
+            (super::locomotion::reaching(action.execute_origin, goal, elapsed), None, (duration * 1000.).round() as u64)
+        } else {
+            (vec![[self.observed.pelvis[0], 0.78, self.observed.pelvis[2], 0.8]],
+                object.map(|o| action_heading(action, o)), 800)
+        }
+    }
+
     fn motion_start(&self) -> (u64, [f32; 3]) {
         self.future_root
             .filter(|(pts, _)| self.future_handoffs && *pts >= self.observed.displayed_pts_ms + 150)
@@ -976,11 +1004,12 @@ impl OfficeController {
             if a.stage == Stage::Approach {
                 let goal = r.position.or_else(|| object.map(|o| o.approach_position()));
                 if let Some(goal) = goal {
-                    if let Ok(path) = pathfinder::find_path(
+                    if let Ok(path) = super::locomotion::approach_path(
                         &self.navigation_scene(),
                         Vec2::new(self.motion_start().1[0], self.motion_start().1[2]),
                         Vec2::new(goal[0], goal[2]),
-                        None,
+                        object.map(super::locomotion::target_direction),
+                        super::locomotion::arrival_angle(),
                     ) {
                         let t = self
                             .motion_start()
@@ -988,7 +1017,11 @@ impl OfficeController {
                             .saturating_sub(self.observed.displayed_pts_ms)
                             as f32
                             / 1000.;
-                        roots = walking_waypoints(&path, t, self.observed.heading);
+                        roots = if self.natural_navigation {
+                            super::locomotion::walking(&self.navigation_scene(), &path, t)
+                        } else {
+                            walking_waypoints(&path, t, self.observed.heading)
+                        };
                     }
                 }
                 prompt.push("turns toward the path and walks forward naturally, facing the direction of travel and turning smoothly around corners".into());
@@ -1073,11 +1106,12 @@ impl OfficeController {
                             prompt.push("straightens upright and brings the held object close in front of the body with a comfortably bent elbow".into());
                             continue;
                         }
-                        // A slight crouch brings a desktop grasp within this
-                        // avatar's arm length; the wrist remains collision/FSM
-                        // verified before ownership changes.
-                        heading = object.map(|o| action_heading(a, o));
-                        roots.push([self.observed.pelvis[0], 0.78, self.observed.pelvis[2], 0.8]);
+                        // Blend the natural approach into reaching; legacy mode
+                        // retains its crouch. Wrist proximity and the grab FSM
+                        // still verify ownership changes.
+                        let (path, facing, contact_delay) = self.grab_reach_path(a, object);
+                        roots = path;
+                        heading = facing;
                         prompt.push(format!(
                             "leans forward and reaches with the {} hand to grasp the object",
                             if hand_index(r.hand) == 0 {
@@ -1104,7 +1138,7 @@ impl OfficeController {
                                 root_relative: false,
                                 rotation_only: false,
                                 heading_reference: None,
-                                contact_pts_ms: a.execute_pts_ms + 800,
+                                contact_pts_ms: a.execute_pts_ms + contact_delay,
                             });
                         }
                     }
@@ -1243,7 +1277,8 @@ impl OfficeController {
                 .join(" and ")
                 .replacen("An elegant woman and ", "An elegant woman ", 1),
             constrain_root_height: self.seated.is_some()
-                || self.active.iter().any(action_constrains_height),
+                || self.active.iter().any(|a| action_constrains_height(a)
+                    && !(self.natural_navigation && a.request.verb == Verb::Grab && a.stage == Stage::Execute)),
             ease_root: self.active.iter().any(|a| {
                 a.request.verb == Verb::BendAndReturn
                     || (a.request.verb == Verb::Grab && a.stage == Stage::Returning)
@@ -1277,6 +1312,7 @@ impl OfficeController {
             }
         }
         timeline.root.face_path = self.active.iter().any(|a| a.stage == Stage::Approach);
+        self.guide_natural_heading(&mut timeline);
         if timeline.root.face_path && timeline.root.keyframes.len() >= 2 {
             let first = &timeline.root.keyframes[0];
             let second = &timeline.root.keyframes[1];
@@ -1288,7 +1324,7 @@ impl OfficeController {
                 });
             }
         }
-        if timeline.root.face_path && self.timeline_layers.is_empty() {
+        if !self.natural_navigation && timeline.root.face_path && self.timeline_layers.is_empty() {
             if let Some(end) = timeline.root.keyframes.last() {
                 if let Some(previous) = timeline.root.keyframes.iter().rev().find(|key| {
                     Vec2::new(key.position[0] - end.position[0], key.position[2] - end.position[2]).length() > 0.001
@@ -1519,6 +1555,25 @@ impl OfficeController {
         }
         self.motion.timeline = Some(timeline);
         self.committed_motion = self.motion.handoff_pts_ms.map(|_| committed);
+    }
+
+    fn guide_natural_heading(&self, timeline: &mut super::motion_timeline::MotionTimeline) {
+        if !self.natural_navigation { return; }
+        let interval = self.natural_heading_interval_ms;
+        if interval == 0 { timeline.root.face_path = false; return; }
+        let (start, duration, origin) = if timeline.root.face_path {
+            (self.motion_start().0, 800, self.observed.heading)
+        } else if let Some(action) = self.active.iter().find(|a| a.request.verb == Verb::Grab && a.stage == Stage::Execute) {
+            let Some(object) = self.objects.iter().find(|o| Some(&o.id) == action.request.target.as_ref()) else { return; };
+            timeline.root.heading = Some(action_heading(action, object));
+            (action.execute_pts_ms,
+                (super::locomotion::reach_duration(action.execute_origin, object.approach_position()) * 1000.) as u64,
+                action.execute_heading)
+        } else { return; };
+        timeline.root.heading_interval_ms = interval;
+        timeline.root.heading_transition = Some(super::motion_timeline::HeadingTransition {
+            start_ms: start, duration_ms: duration, from: origin,
+        });
     }
 
     /// Condition the generator on a stable stance while waiting for a task.
@@ -1756,6 +1811,9 @@ mod tests {
     }
     fn ready() -> OfficeController {
         let mut c = OfficeController::default();
+        // Retain legacy choreography tests for the explicit A/B mode.
+        // Natural navigation has separate trajectory and handoff regressions.
+        c.natural_navigation = false;
         c.observed.ready = true;
         c.observed.pelvis = [0., 0.97, 0.2];
         c
@@ -2135,6 +2193,51 @@ mod tests {
         assert!(Quat::from_array(target.rotation_xyzw).angle_between(grasp.rotation).abs() < 1e-5);
         assert!(c.grab_commands.is_empty());
         assert!(!c.events.iter().any(|e| e.status == Status::Completed));
+    }
+
+    #[test]
+    fn natural_grab_does_not_shortcut_a_sideways_final_approach() {
+        let mut c = ready();
+        c.natural_navigation = true;
+        let plate = c.objects.iter().find(|o| o.id == "plate").unwrap();
+        let goal = plate.approach_position();
+        let facing = super::super::locomotion::target_direction(plate);
+        let side = Vec2::new(-facing.y, facing.x);
+        let request = action("plate", Verb::Grab, Some(Hand::Right), Some("plate"));
+        c.observed.pelvis = [goal[0] - side.x * 0.4, 0.95, goal[2] - side.y * 0.4];
+        assert!(c.approach_stage(&request, goal).is_none());
+        c.observed.pelvis = [goal[0] - facing.x * 0.4, 0.95, goal[2] - facing.y * 0.4];
+        assert_eq!(c.approach_stage(&request, goal), Some(Stage::Execute));
+    }
+
+    #[test]
+    fn natural_grab_blends_final_approach_without_a_pose_or_facing_gate() {
+        let mut c = ready();
+        c.natural_navigation = true;
+        let w = SceneState::default();
+        submit(&mut c, action("plate", Verb::Grab, Some(Hand::Right), Some("plate")), &w);
+        let walk = c.motion.timeline.as_ref().unwrap();
+        assert!(walk.root.face_path);
+        assert_eq!(walk.root.heading_interval_ms, 800);
+        assert!(walk.root.heading.is_none());
+        assert!(walk.pose_keyframes.is_empty());
+        assert!(walk.root.keyframes.windows(2).all(|pair| pair[0].position != pair[1].position));
+        let goal = c.objects.iter().find(|o| o.id == "plate").unwrap().approach_position();
+        c.observed.pelvis = [goal[0], 0.95, goal[2] + 0.5];
+        c.observed.heading = 0.8; // Not aligned to the counter.
+        c.observed.displayed_pts_ms = 10000;
+        c.advance(&w);
+        assert_eq!(c.active[0].stage, Stage::Execute);
+        let reach = c.motion.timeline.as_ref().unwrap();
+        assert_eq!(reach.root.heading_interval_ms, 800);
+        assert!(reach.root.heading_transition.is_some());
+        assert!(!reach.root.constrain_height);
+        assert!(reach.pose_keyframes.iter().all(|k| k["kind"] == "end_effectors"));
+        assert!(reach.root.keyframes[1].position[2] < reach.root.keyframes[0].position[2]);
+        assert!(c.motion.joints[0].contact_pts_ms > c.observed.displayed_pts_ms + 800);
+        c.observed.wrists[1] = c.motion.joints[0].position;
+        c.advance(&w);
+        assert!(c.grab_commands.is_empty(), "a nearby wrist cannot attach before the planned contact");
     }
 
     #[test]
