@@ -134,6 +134,9 @@ fn main() -> anyhow::Result<()> {
     let started = Instant::now();
     let mut actions_started: Option<Instant> = None;
     let mut last_request = Instant::now();
+    let mut last_request_revision = None;
+    let mut command_revision = None;
+    let mut last_pose_sample_pts = None;
     let idle_hold = std::env::var("OFFICE_ACCEPTANCE_HOLD_SEC")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
@@ -188,7 +191,10 @@ fn main() -> anyhow::Result<()> {
                 writeln!(
                     report,
                     "{}",
-                    serde_json::json!({"kind":"motion_metrics","metrics":metrics})
+                    serde_json::json!({"kind":"motion_metrics","metrics":metrics,
+                        "received_wall_ms":started.elapsed().as_millis(),
+                        "generation_revision":reply.get("frames").and_then(|v| v.as_array())
+                            .and_then(|frames| frames.first()).and_then(|p| p.get("generation_revision"))})
                 )?;
             }
         }
@@ -197,30 +203,20 @@ fn main() -> anyhow::Result<()> {
         }
         let state = renderer.scene_state();
         if let Some(office) = &state.office {
-            if renderer.is_ready() && last_request.elapsed() > Duration::from_millis(100) {
-                let mut request = office.motion.clone();
-                request.pts_ms = office.avatar.displayed_pts_ms;
-                request.observed_root = office.avatar.pelvis;
-                writeln!(
-                    report,
-                    "{}",
-                    serde_json::json!({"kind":"observation","avatar":office.avatar,"motion":request,
-                        "posture":office.posture,"occupied_hands":office.occupied_hands,
-                        "props":state.props,"grabs":state.grabs})
-                )?;
-                let mut request = serde_json::to_value(request)?;
-                if std::env::var("OFFICE_DEBUG_MOTION").as_deref() == Ok("1") {
-                    request["debug_source_pose"] = true.into();
-                }
-                let _ = request_tx.try_send(request);
-                last_request = Instant::now();
-            }
             for e in office.events.iter().filter(|e| e.sequence > last_event) {
                 writeln!(report, "{}", serde_json::to_value(e)?)?;
                 eprintln!("{} {:?}: {}", e.action_id, e.status, e.detail);
             }
             if let Some(e) = office.events.last() {
                 last_event = e.sequence;
+            }
+            if last_pose_sample_pts != Some(office.avatar.displayed_pts_ms) {
+                writeln!(report, "{}", serde_json::json!({
+                    "kind":"pose_sample", "avatar":office.avatar,
+                    "generation_revision":office.motion.generation_revision,
+                    "wall_ms":started.elapsed().as_millis()
+                }))?;
+                last_pose_sample_pts = Some(office.avatar.displayed_pts_ms);
             }
             let complete = |id: &str| {
                 office.events.iter().any(|e| {
@@ -245,6 +241,7 @@ fn main() -> anyhow::Result<()> {
                 let (command, done) = script.tick(office);
                 if let Some(command) = command {
                     renderer.office_command(command);
+                    command_revision = Some(office.motion.generation_revision);
                 }
                 if done {
                     if std::env::var("OFFICE_ACCEPTANCE_WALKTHROUGH").as_deref() == Ok("1") {
@@ -352,6 +349,39 @@ fn main() -> anyhow::Result<()> {
                         break;
                     }
                     _ => {}
+                }
+            }
+            if renderer.is_ready() && command_revision != Some(office.motion.generation_revision)
+                && (last_request_revision != Some(office.motion.generation_revision)
+                || last_request.elapsed() > Duration::from_millis(100)) {
+                let mut request = office.motion.clone();
+                request.pts_ms = office.avatar.displayed_pts_ms;
+                request.observed_root = office.avatar.pelvis;
+                writeln!(
+                    report,
+                    "{}",
+                    serde_json::json!({"kind":"observation","avatar":office.avatar,"motion":request,
+                        "posture":office.posture,"occupied_hands":office.occupied_hands,
+                        "props":state.props,"grabs":state.grabs})
+                )?;
+                let mut request = serde_json::to_value(request)?;
+                if std::env::var("OFFICE_DEBUG_MOTION").as_deref() == Ok("1") {
+                    request["debug_source_pose"] = true.into();
+                }
+                if let Ok(seed) = std::env::var("OFFICE_ACCEPTANCE_SEED") {
+                    request["seed"] = seed.parse::<u64>()?.into();
+                }
+                match request_tx.try_send(request) {
+                    Ok(()) => {
+                        last_request = Instant::now();
+                        last_request_revision = Some(office.motion.generation_revision);
+                        writeln!(report, "{}", serde_json::json!({
+                            "kind":"motion_request_sent", "generation_revision":office.motion.generation_revision,
+                            "pts_ms":office.avatar.displayed_pts_ms, "wall_ms":started.elapsed().as_millis()
+                        }))?;
+                    }
+                    Err(mpsc::TrySendError::Full(_)) => {}, // Retry on the next tick; don't lose the revision.
+                    Err(mpsc::TrySendError::Disconnected(_)) => anyhow::bail!("motion worker disconnected"),
                 }
             }
             if let Some(v) = speech.iter().rev().find(|v| {

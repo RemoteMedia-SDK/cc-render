@@ -100,10 +100,10 @@ pub struct Cc5BreastTuning {
     /// Linear motor stiffness (k). f_natural ≈ sqrt(k/m) / (2π).
     #[serde(rename = "Linear Stiffness", default)]
     pub linear_stiffness: Option<f32>,
-    /// World-frame velocity drag (Rapier `Damping.linear_damping`).
+    /// Relative spring damping rate (1/s), with a stability floor.
     #[serde(rename = "Linear Damping", default)]
     pub linear_damping: Option<f32>,
-    /// Half-width of the per-axis translation cube (meters).
+    /// Maximum radial displacement (meters), capped at 5 cm for skin stability.
     #[serde(rename = "Translation Limit", default)]
     pub translation_limit: Option<f32>,
 }

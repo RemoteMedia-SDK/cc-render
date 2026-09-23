@@ -8,11 +8,19 @@ pub struct RootKeyframe {
     pub position: [f32; 3],
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HeadingTransition {
+    pub start_ms: u64,
+    pub duration_ms: u64,
+    pub from: f32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RootTrack {
     pub keyframes: Vec<RootKeyframe>,
     pub interpolation: String,
     pub constrain_height: bool,
     pub heading: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heading_transition: Option<HeadingTransition>,
     /// Follow the XZ route tangent unless an explicit heading overrides it.
     #[serde(default)]
     pub face_path: bool,
@@ -64,6 +72,7 @@ impl MotionTimeline {
                 interpolation: if motion.ease_root { "smooth" } else { "linear" }.into(),
                 constrain_height: motion.constrain_root_height,
                 heading: motion.heading,
+                heading_transition: None,
                 face_path: false,
             },
             prompts: vec![PromptSpan {
@@ -107,6 +116,9 @@ impl TimelineLayer {
                     .windows(2)
                     .any(|w| w[0].pts_ms >= w[1].pts_ms)
                 || root.heading.is_some_and(|h| !h.is_finite())
+                || root.heading_transition.as_ref().is_some_and(|t| {
+                    (root.heading.is_none() && !root.face_path) || !t.from.is_finite() || t.duration_ms == 0
+                })
             {
                 return Err("invalid root track".into());
             }
@@ -143,6 +155,9 @@ impl TimelineLayer {
                 .chain(contact.rotation_xyzw.iter())
                 .all(|v| v.is_finite())
                 || contact.rotation_xyzw.iter().map(|v| v * v).sum::<f32>() < 1e-6
+                || contact
+                    .heading_reference
+                    .is_some_and(|h| !h.is_finite() || !contact.rotation_only)
             {
                 return Err("invalid contact target".into());
             }

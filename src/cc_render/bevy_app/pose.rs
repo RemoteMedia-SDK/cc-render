@@ -196,6 +196,10 @@ pub(crate) fn signed_twist_angle(twist: Quat, axis: Vec3) -> f32 {
 /// out[i]               = parent_world_for_local⁻¹ · w_cc5[i]
 /// ```
 ///
+/// The pelvis uses its full SMPL world rotation applied to the CC bind frame.
+/// Its Hip -> Waist offset describes anatomy, not a canonical bone axis.
+/// Direction matching above applies only to descendants.
+///
 /// `freeze_leaves` keeps the wrist/foot/head bones at their bind
 /// orientation relative to parent (their bone-axis basis on most CC5
 /// rigs doesn't match SMPL's twist convention, which produces wrong
@@ -245,15 +249,17 @@ pub(crate) fn fk_retarget_smpl_to_cc5_axis_match_chained(
         };
 
         let is_leaf = SMPL_PRIMARY_CHILD[i].is_none();
-        if freeze_leaves && is_leaf && parent >= 0 {
+        if parent < 0 {
+            // The pelvis is an orientation frame shared by both legs and the
+            // spine. Hip -> Waist includes anatomical forward lean; aligning
+            // that offset to +Y incorrectly tucks the entire pelvis under.
+            w_cc5[i] = w_smpl[i] * cc5_rest_world[i];
+        } else if freeze_leaves && is_leaf {
             let parent_anim_world = w_cc5[parent as usize] * inter_rest[i];
             w_cc5[i] = parent_anim_world * own_rest_local[i];
         } else {
-            let parent_anim_delta = if parent < 0 {
-                Quat::IDENTITY
-            } else {
-                w_cc5[parent as usize] * cc5_rest_world[parent as usize].inverse()
-            };
+            let parent_anim_delta =
+                w_cc5[parent as usize] * cc5_rest_world[parent as usize].inverse();
 
             let smpl_axis = Vec3::from_array(SMPL_BONE_AXES[i]);
             let cc5_dir_now = (parent_anim_delta * cc5_bone_axis_world[i]).normalize_or_zero();
@@ -293,6 +299,109 @@ pub(crate) fn fk_retarget_smpl_to_cc5_axis_match_chained(
     out
 }
 
+/// Calibrate a fixed target world frame for each canonical source bone.
+/// Direction matching runs only on the neutral pose. Applying complete source
+/// world rotations to these frames preserves roll as well as bone direction.
+/// Leaves inherit the neutral parent frame here, but retain their own animated
+/// source rotation during playback. The pelvis keeps its anatomical bind frame.
+fn calibrated_cc5_world_frames(
+    rest: &[Quat; 22],
+    axes: &[Vec3; 22],
+    inter: &[Quat; 22],
+    own: &[Quat; 22],
+    pelvis_parent: Quat,
+) -> [Quat; 22] {
+    let neutral = fk_retarget_smpl_to_cc5_axis_match_chained(
+        &[[0., 0., 0., 1.]; 22],
+        rest,
+        axes,
+        inter,
+        own,
+        pelvis_parent,
+        Quat::IDENTITY,
+        true,
+    );
+    let mut world = [Quat::IDENTITY; 22];
+    for &i in SMPL_TOPO.iter() {
+        let parent = SMPL_PARENTS[i];
+        let parent_world = if parent < 0 {
+            pelvis_parent
+        } else {
+            world[parent as usize] * inter[i]
+        };
+        world[i] = (parent_world * neutral[i]).normalize();
+    }
+    world
+}
+
+/// Limit the root frame's (pelvis) inclination — pitch/roll — relative
+/// to the SMPL rest frame, leaving its heading (yaw) untouched.
+///
+/// In the SMPL rest frame the pelvis has identity orientation: spine
+/// along +Y, facing +Z. So the animated pelvis world rotation
+/// `world0 = r_align * q0` decomposes as
+///
+///     world0 = yaw * residual
+///
+/// where `yaw` is the world-Y rotation carrying the rest forward (+Z)
+/// to the animated forward projected onto the horizontal plane, and
+/// `residual` is the remaining pitch/roll. When `residual`'s angle
+/// exceeds `max_inclination` (radians) it is clamped to exactly
+/// `max_inclination` around the same axis, and the compensation
+/// `delta = new_world0.inverse() * world0` is pre-multiplied into the
+/// pelvis's direct children (L_Hip, R_Hip, Spine1) so that EVERY
+/// descendant joint keeps its exact SMPL world orientation.
+///
+/// Optional diagnostic override, disabled by default. The compensation
+/// preserves descendant orientations, not positions or skinned geometry:
+/// changing the pelvis still moves its child joint offsets. Poses already
+/// within the bound pass through unchanged. A nonpositive bound disables it.
+pub(crate) fn limit_pelvis_inclination(
+    quats: &mut [[f32; 4]; 22],
+    r_align: Quat,
+    max_inclination: f32,
+) {
+    if max_inclination <= 0.0 {
+        return;
+    }
+    let root = Quat::from_array(quats[0]);
+    let root = if root.length_squared() > 1e-8 {
+        root.normalize()
+    } else {
+        Quat::IDENTITY
+    };
+    let world0 = r_align * root;
+    let fwd = world0 * Vec3::Z;
+    let flat = Vec3::new(fwd.x, 0.0, fwd.z);
+    if flat.length_squared() < 1e-10 {
+        // Pelvis facing straight up or down: no stable heading to
+        // preserve — leave the pose untouched.
+        return;
+    }
+    let yaw = Quat::from_rotation_y(flat.x.atan2(flat.z));
+    let residual = yaw.inverse() * world0;
+    let (axis, angle) = residual.to_axis_angle();
+    if angle <= max_inclination {
+        return;
+    }
+    if axis.length_squared() < 1e-12 {
+        return;
+    }
+    let clamped = Quat::from_axis_angle(axis.normalize(), max_inclination);
+    let new_world0 = yaw * clamped;
+    let delta = new_world0.inverse() * world0;
+    for i in 1..22 {
+        if SMPL_PARENTS[i] == 0 {
+            quats[i] = (delta * Quat::from_array(quats[i])).to_array();
+        }
+    }
+    quats[0] = (r_align.inverse() * new_world0).to_array();
+}
+
+#[cfg(test)]
+#[path = "pose/calibrated_tests.rs"]
+mod calibrated_tests;
+
 #[cfg(test)]
 mod fk_tests {
     use super::*;
@@ -312,6 +421,124 @@ mod fk_tests {
         for q in out.iter() {
             assert!(q.abs_diff_eq(Quat::IDENTITY, 1e-5));
         }
+    }
+
+    fn smpl_fk_world(qs: &[[f32; 4]; 22]) -> [Quat; 22] {
+        let mut w = [Quat::IDENTITY; 22];
+        for i in 0..22 {
+            let local = Quat::from_array(qs[i]);
+            w[i] = if SMPL_PARENTS[i] < 0 {
+                local
+            } else {
+                w[SMPL_PARENTS[i] as usize] * local
+            };
+        }
+        w
+    }
+
+    fn smpl_heading(world0: Quat) -> f32 {
+        let fwd = world0 * Vec3::Z;
+        fwd.x.atan2(fwd.z)
+    }
+
+    /// A pelvis pitched far beyond the root inclination bound — the
+    /// measured seated case: ~75° forward pitch with the spine
+    /// counter-rotated so the torso stays upright — must be re-seated
+    /// to the bound with the pelvis's heading preserved and every
+    /// descendant joint's SMPL world orientation kept exactly.
+    #[test]
+    fn root_inclination_clamped_preserves_descendant_worlds() {
+        let pitch = |deg: f32| Quat::from_axis_angle(Vec3::X, deg.to_radians());
+        let mut q = ident_local();
+        // Pelvis: 75° forward pitch. Spine1 (joint 3) counter-rotates
+        // so the torso stays upright; L_Hip (joint 1) flexes 30°.
+        q[0] = pitch(75.0).to_array();
+        q[3] = pitch(-75.0).to_array();
+        q[1] = pitch(30.0).to_array();
+        let before = smpl_fk_world(&q);
+
+        limit_pelvis_inclination(&mut q, Quat::IDENTITY, 30.0_f32.to_radians());
+        let after = smpl_fk_world(&q);
+
+        // (1) Heading preserved.
+        assert!((smpl_heading(before[0]) - smpl_heading(after[0])).abs() < 1e-5);
+        // (2) Inclination clamped to exactly 30°.
+        let residual =
+            Quat::from_rotation_y(smpl_heading(after[0])).inverse() * after[0];
+        assert!((residual.to_axis_angle().1 - 30.0_f32.to_radians()).abs() < 1e-5);
+        // (3) Every joint below the pelvis keeps its exact SMPL world
+        // orientation (torso/head/hands untouched; legs stay seated).
+        // Tolerance 1e-3 rad (~0.06°) is fp drift from the axis-angle
+        // round-trip, inflated by acos_approx noise at near-zero angles.
+        for i in 1..22 {
+            let d = after[i].angle_between(before[i]);
+            assert!(d < 1e-3, "joint {i} world changed by {d} rad");
+        }
+    }
+
+    /// The bound must not disturb the pelvis heading: a combined
+    /// yaw + over-pitch keeps its yaw and only the pitch component is
+    /// clamped.
+    #[test]
+    fn root_inclination_keeps_heading_with_combined_yaw_and_pitch() {
+        let mut q = ident_local();
+        q[0] = (Quat::from_rotation_y(40.0_f32.to_radians())
+            * Quat::from_axis_angle(Vec3::X, 75.0_f32.to_radians()))
+            .to_array();
+        q[3] = Quat::from_axis_angle(Vec3::X, -75.0_f32.to_radians()).to_array();
+        let before = smpl_fk_world(&q);
+
+        limit_pelvis_inclination(&mut q, Quat::IDENTITY, 30.0_f32.to_radians());
+        let after = smpl_fk_world(&q);
+
+        assert!((smpl_heading(after[0]) - 40.0_f32.to_radians()).abs() < 1e-5);
+        let residual =
+            Quat::from_rotation_y(40.0_f32.to_radians()).inverse() * after[0];
+        assert!((residual.to_axis_angle().1 - 30.0_f32.to_radians()).abs() < 1e-5);
+        assert!(after[3].angle_between(before[3]) < 1e-3);
+    }
+
+    /// Roots already within the bound pass through byte-identical —
+    /// the correction is a no-op for normal standing/walking/leaning.
+    #[test]
+    fn root_inclination_noop_below_bound() {
+        let mut q = ident_local();
+        q[0] = Quat::from_axis_angle(Vec3::X, 10.0_f32.to_radians()).to_array();
+        q[16] = Quat::from_axis_angle(Vec3::Z, -80.0_f32.to_radians()).to_array();
+        let before = q;
+        limit_pelvis_inclination(&mut q, Quat::IDENTITY, 30.0_f32.to_radians());
+        assert_eq!(q, before);
+    }
+
+    /// A bound of 0 disables the correction entirely (legacy
+    /// behavior), even for wildly over-inclined roots.
+    #[test]
+    fn root_inclination_disabled_at_zero() {
+        let mut q = ident_local();
+        q[0] = Quat::from_axis_angle(Vec3::X, 75.0_f32.to_radians()).to_array();
+        let before = q;
+        limit_pelvis_inclination(&mut q, Quat::IDENTITY, 0.0);
+        assert_eq!(q, before);
+    }
+
+    /// The bound is measured in the r_align-rotated world frame: the
+    /// same 75° pitch expressed through a 90° r_align is clamped the
+    /// same way, with the aligned-frame heading preserved.
+    #[test]
+    fn root_inclination_uses_aligned_world_frame() {
+        let r_align = Quat::from_rotation_y(90.0_f32.to_radians());
+        let mut q = ident_local();
+        // Streamed value; the function prepends r_align, so the
+        // effective world frame is r_align * pitch(75°).
+        q[0] = Quat::from_axis_angle(Vec3::X, 75.0_f32.to_radians()).to_array();
+        limit_pelvis_inclination(&mut q, r_align, 30.0_f32.to_radians());
+        let world0 = r_align * Quat::from_array(q[0]);
+        let heading = smpl_heading(world0);
+        // Heading in the aligned frame is 90° (from r_align) and must
+        // survive the clamp.
+        assert!((heading - 90.0_f32.to_radians()).abs() < 1e-5);
+        let residual = Quat::from_rotation_y(heading).inverse() * world0;
+        assert!((residual.to_axis_angle().1 - 30.0_f32.to_radians()).abs() < 1e-5);
     }
 
     /// Identity SMPL against a non-identity CC5 rest pose must
@@ -471,6 +698,42 @@ mod fk_tests {
             out[0],
         );
     }
+
+    #[test]
+    fn axis_match_preserves_pelvis_orientation_with_oblique_waist_offset() {
+        // Hip -> Waist is tilted forward in CC rigs (14 degrees in
+        // beautiful_assistant), but that is anatomy, not a root rotation.
+        let parent = Quat::from_rotation_z(0.2);
+        let rest = [Quat::from_rotation_y(0.3); 22];
+        let mut axes = SMPL_BONE_AXES.map(Vec3::from_array);
+        axes[0] = Vec3::new(0., 0.970155, 0.242487).normalize();
+        for motion in [
+            Quat::IDENTITY,
+            Quat::from_euler(EulerRot::YXZ, 1.2, -0.4, 0.15),
+        ] {
+            let mut input = ident_local();
+            input[0] = motion.to_array();
+            let align = Quat::from_rotation_y(-0.5);
+            let out = fk_retarget_smpl_to_cc5_axis_match_chained(
+                &input,
+                &rest,
+                &axes,
+                &[Quat::IDENTITY; 22],
+                &[Quat::IDENTITY; 22],
+                parent,
+                align,
+                true,
+            );
+            let expected = align * motion * rest[0];
+            assert!((parent * out[0]).abs_diff_eq(expected, 1e-5));
+            // Correcting the pelvis must not change requested thigh/spine directions.
+            for i in [1, 2, 3] {
+                let world = parent * out[0] * out[i];
+                let direction = world * rest[i].inverse() * axes[i];
+                assert!(direction.abs_diff_eq(align * motion * axes[i], 1e-5));
+            }
+        }
+    }
 }
 
 /// SMPL-22 → CC5 bone-name table. Order MATCHES `SkeletalPose::joint_quats`
@@ -610,6 +873,8 @@ pub(crate) struct CC5BindRotations {
     pub parent_chain_rest: [Quat; 22],
     /// Bone's own world rest rotation = parent_chain_rest * own_rest_local.
     pub cc5_rest_world: [Quat; 22],
+    /// Fixed canonical target frames, including calibrated hand orientations.
+    pub calibrated_world: [Quat; 22],
     /// Per-bone inter-bone rest correction (see struct docs). Identity
     /// for the pelvis (no SMPL parent).
     pub inter_rest: [Quat; 22],
@@ -1352,6 +1617,13 @@ pub(crate) fn capture_cc5_bind_rotations(
         cc5_bone_axis_world[i] = dir;
     }
 
+    bind.calibrated_world = calibrated_cc5_world_frames(
+        &cc5_rest_world,
+        &cc5_bone_axis_world,
+        &inter_rest,
+        &own_rest_local,
+        parent_chain_rest[0],
+    );
     bind.own_rest_local = own_rest_local;
     bind.parent_chain_rest = parent_chain_rest;
     bind.cc5_rest_world = cc5_rest_world;
@@ -1405,11 +1677,13 @@ pub(crate) fn capture_cc5_bind_rotations(
 /// the channel resumes it AND clears the root anchor.
 ///
 /// **Runtime defaults (env-overridable):**
-/// - `CC_AVATAR_RETARGET_MODE=axis_match_chained` — bind-tilt-invariant
-///   retargeter; corrects accumulated chain error per-bone. Modes:
-///   `world` / `local` / `axis_match` available for A/B testing.
-/// - `CC_AVATAR_FREEZE_LEAF_BONES=1` — leaf bones (wrists, feet, head)
-///   keep their bind orientation; set `0` to opt out.
+/// - `CC_AVATAR_RETARGET_MODE=calibrated` — complete world orientation
+///   transfer through fixed neutral target frames, including hands.
+///   `axis_match_chained`, `world`, `local`, `axis_match` remain for A/B tests.
+/// - `CC_AVATAR_ROOT_INCLINATION_MAX_DEG` (default 0, disabled) — optional
+///   pelvis-inclination cap for comparisons. Positive values preserve
+///   descendant world orientations but can alter positions and skinning.
+/// - `CC_AVATAR_FREEZE_LEAF_BONES` affects only the legacy axis-match modes.
 /// - `CC_RENDER_DISABLE_BAKED_ANIM=1` — embedded FBX animations
 ///   (TempMotion etc.) are disabled by default to avoid frame-0
 ///   bone-overdrive artifacts; set `0` to re-enable.
@@ -1545,25 +1819,40 @@ pub(crate) fn apply_skeletal_pose(
         .unwrap_or(0.0);
     let r_align = Quat::from_rotation_y(align_y_deg.to_radians());
 
-    // CC_AVATAR_RETARGET_MODE: default `axis_match_chained` (the chain-aware
-    // retargeter — bind-tilt-invariant, works on any rig regardless of
-    // A-pose vs T-pose authoring). Other modes available for A/B testing:
-    //   - "world"        full-FK (legacy default)
-    //   - "local"        per-bone local composition (no axis match)
-    //   - "axis_match"   non-chained R_corr conjugation
+    // ─── Root inclination bound (pure, unit-tested) ──────────────
+    //
+    // Preserve generated pelvis motion by default. The old 30-degree cap
+    // remains opt-in for A/B comparisons; its child compensation preserves
+    // world orientations but does not preserve positions or mesh deformation.
+    let max_inclination_deg: f32 =
+        std::env::var("CC_AVATAR_ROOT_INCLINATION_MAX_DEG")
+            .ok()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(0.0);
+    let mut quats = pose.joint_quats;
+    limit_pelvis_inclination(&mut quats, r_align, max_inclination_deg.to_radians());
+
+    // Keep legacy modes available for recorded-pose comparisons.
     let mode = std::env::var("CC_AVATAR_RETARGET_MODE")
         .ok()
-        .unwrap_or_else(|| "axis_match_chained".to_string());
+        .unwrap_or_else(|| "calibrated".to_string());
 
     let cc5_local: [Quat; 22] = match mode.as_str() {
+        "calibrated" => fk_retarget_smpl_to_cc5_with_align(
+            &quats,
+            &bind.calibrated_world,
+            &bind.inter_rest,
+            bind.parent_chain_rest[0],
+            r_align,
+        ),
         "local" => {
             let mut out: [Quat; 22] = [Quat::IDENTITY; 22];
             for i in 0..22 {
                 let raw = Quat::from_xyzw(
-                    pose.joint_quats[i][0],
-                    pose.joint_quats[i][1],
-                    pose.joint_quats[i][2],
-                    pose.joint_quats[i][3],
+                    quats[i][0],
+                    quats[i][1],
+                    quats[i][2],
+                    quats[i][3],
                 );
                 let dq_smpl = if raw.length_squared() > 1e-8 {
                     raw.normalize()
@@ -1616,10 +1905,10 @@ pub(crate) fn apply_skeletal_pose(
             for &i in SMPL_TOPO.iter() {
                 let parent = SMPL_PARENTS[i];
                 let raw = Quat::from_xyzw(
-                    pose.joint_quats[i][0],
-                    pose.joint_quats[i][1],
-                    pose.joint_quats[i][2],
-                    pose.joint_quats[i][3],
+                    quats[i][0],
+                    quats[i][1],
+                    quats[i][2],
+                    quats[i][3],
                 );
                 let dq_smpl = if raw.length_squared() > 1e-8 {
                     raw.normalize()
@@ -1693,7 +1982,7 @@ pub(crate) fn apply_skeletal_pose(
                 std::env::var("CC_AVATAR_FREEZE_LEAF_BONES").ok().as_deref() != Some("0");
 
             fk_retarget_smpl_to_cc5_axis_match_chained(
-                &pose.joint_quats,
+                &quats,
                 &bind.cc5_rest_world,
                 &bind.cc5_bone_axis_world,
                 &bind.inter_rest,
@@ -1704,7 +1993,7 @@ pub(crate) fn apply_skeletal_pose(
             )
         }
         _ => fk_retarget_smpl_to_cc5_with_align(
-            &pose.joint_quats,
+            &quats,
             &bind.cc5_rest_world,
             &bind.inter_rest,
             bind.parent_chain_rest[0],

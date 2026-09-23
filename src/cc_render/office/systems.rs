@@ -43,6 +43,12 @@ impl OfficeCommandInbox<'_> {
 }
 
 pub fn install(app: &mut App) {
+    // Diagnostic A/B switch: disable only post-retarget hand/foot contact IK.
+    // Source constraints, seat support, idle damping and grips remain active.
+    let contact_corrections = std::env::var("CC_OFFICE_CONTACT_CORRECTIONS").as_deref() != Ok("0");
+    if !contact_corrections {
+        tracing::warn!("CC_OFFICE_CONTACT_CORRECTIONS=0: renderer contact IK disabled");
+    }
     let mut controller = OfficeController::default();
     if let Ok(path) = std::env::var("CC_OFFICE_SCENE") {
         match std::fs::read_to_string(path)
@@ -61,7 +67,7 @@ pub fn install(app: &mut App) {
             PostUpdate,
             (
                 super::contact::damp_seated_idle,
-                super::contact::correct_contacts,
+                super::contact::correct_contacts.run_if(move || contact_corrections),
                 super::contact::grasp_fingers,
             )
                 .chain()

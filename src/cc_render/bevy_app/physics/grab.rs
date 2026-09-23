@@ -116,6 +116,7 @@ pub(crate) fn handle_grab_cmds(
     props: Query<(&Prop, &GlobalTransform)>,
     sidecar: Option<Res<LoadedSidecar>>,
     stored_cfg: Res<super::StoredPhysicsConfig>,
+    bind: Res<super::super::pose::CC5BindRotations>,
 ) {
     let dt = time.delta_secs();
     let proximity_m = stored_cfg.0.grab.proximity_m;
@@ -125,7 +126,7 @@ pub(crate) fn handle_grab_cmds(
 
     // Wrist world positions + entities (SMPL idx 20 = L_Wrist, 21 = R_Wrist).
     let mut wrist_pos: HashMap<Hand, Vec3> = HashMap::new();
-    let mut wrist_entity: HashMap<Hand, Entity> = HashMap::new();
+    let mut wrist_bodies: HashMap<Hand, (Entity, Quat)> = HashMap::new();
     for (e, bc, gt) in body_colliders.iter() {
         let h = match bc.smpl_idx {
             20 => Some(Hand::Left),
@@ -134,7 +135,7 @@ pub(crate) fn handle_grab_cmds(
         };
         if let Some(hand) = h {
             wrist_pos.insert(hand, gt.translation());
-            wrist_entity.insert(hand, e);
+            wrist_bodies.insert(hand, (e, bind.calibrated_world[bc.smpl_idx]));
         }
     }
 
@@ -232,7 +233,7 @@ pub(crate) fn handle_grab_cmds(
                     });
                     continue;
                 };
-                let Some(wrist_e) = wrist_entity.get(&hand).copied() else {
+                let Some((wrist_e, calibration)) = wrist_bodies.get(&hand).copied() else {
                     *state = GrabState::Idle;
                     prop_registry.pending_failures.push(GrabFailure {
                         hand,
@@ -248,13 +249,7 @@ pub(crate) fn handle_grab_cmds(
                     palm_offset_default
                 };
                 let palm = Vec3::from(palm_arr);
-                let joint = FixedJointBuilder::new().local_anchor1(palm).local_anchor2(
-                    props
-                        .get(prop_e)
-                        .ok()
-                        .map(|(p, _)| p.grasp_offset())
-                        .unwrap_or(Vec3::ZERO),
-                );
+                let joint = grasp_joint(palm, calibration, props.get(prop_e).ok().map(|(p, _)| p));
                 commands
                     .entity(prop_e)
                     .insert(ImpulseJoint::new(wrist_e, joint));
@@ -295,10 +290,86 @@ pub(crate) fn handle_grab_cmds(
     }
 }
 
+/// Wrist bodies have identity transforms beneath the retargeted CC5 hand bone.
+fn grasp_joint(palm: Vec3, calibration: Quat, prop: Option<&Prop>) -> FixedJoint {
+    let grasp_rotation = prop
+        .and_then(|p| p.grasp_local)
+        .map_or(Quat::IDENTITY, |m| {
+            Mat4::from_cols_array_2d(&m)
+                .to_scale_rotation_translation()
+                .1
+        });
+    // Both joint frames meet in canonical grasp space, matching contact IK:
+    // wrist_world * calibration^-1 == prop_world * grasp_local_rotation.
+    FixedJointBuilder::new()
+        .local_basis1(calibration.inverse())
+        .local_basis2(grasp_rotation)
+        .local_anchor1(palm)
+        .local_anchor2(prop.map_or(Vec3::ZERO, Prop::grasp_offset))
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cc_render::renderer::{GrabCmd, Hand};
+
+    #[test]
+    fn physics_grip_preserves_canonical_frame_during_carry() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, TransformPlugin, HierarchyPlugin));
+        app.init_resource::<Assets<Mesh>>();
+        app.init_resource::<SceneSpawner>();
+        app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f32(1.0 / 60.0),
+        ));
+        let calibration = Quat::from_euler(EulerRot::XYZ, 0.4, -0.8, 1.2);
+        let grip = Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+        let offset = Vec3::new(0.075, 0., 0.);
+        let prop = Prop {
+            id: "mug".into(),
+            loading: false,
+            grasp_local: Some(Mat4::from_rotation_translation(grip, offset).to_cols_array_2d()),
+        };
+        let origin = Vec3::Y;
+        let wrist = app
+            .world_mut()
+            .spawn((
+                Transform::from_translation(origin).with_rotation(grip * calibration),
+                RigidBody::KinematicPositionBased,
+            ))
+            .id();
+        let mug = app
+            .world_mut()
+            .spawn((
+                Transform::from_translation(origin - offset),
+                RigidBody::Dynamic,
+                Collider::ball(0.02),
+                ImpulseJoint::new(wrist, grasp_joint(Vec3::ZERO, calibration, Some(&prop))),
+            ))
+            .id();
+        // Begin aligned, then turn through 90 degrees and settle. A raw CC5
+        // wrist basis must never become the prop's world orientation.
+        for frame in 0..180 {
+            let yaw = (frame as f32 / 120.0).min(1.0) * std::f32::consts::FRAC_PI_2;
+            let desired = Quat::from_rotation_y(yaw);
+            app.world_mut()
+                .get_mut::<Transform>(wrist)
+                .unwrap()
+                .rotation = desired * grip * calibration;
+            app.update();
+            if frame > 120 {
+                let actual = app.world().get::<Transform>(mug).unwrap();
+                assert!(
+                    actual.rotation.angle_between(desired) < 0.005,
+                    "prop rotated out of canonical grip: {:?}",
+                    actual.rotation
+                );
+                assert!((actual.translation + actual.rotation * offset).distance(origin) < 0.001);
+            }
+        }
+    }
 
     #[test]
     fn fsm_idle_to_pursuing_on_grab_cmd() {

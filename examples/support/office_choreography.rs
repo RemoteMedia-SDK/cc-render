@@ -29,7 +29,8 @@ impl Choreography {
     }
     pub fn tick(&mut self, state: &OfficeSnapshot) -> (Option<OfficeCommand>, bool) {
         // Wait on the playback clock, including when inference stalls.
-        if (!self.walkthrough && self.step == 1) || (self.walkthrough && self.step == 6) {
+        if (!self.walkthrough && matches!(self.step, 1 | 9)) || (self.walkthrough && self.step == 6)
+        {
             let end = *self
                 .hold_until
                 .get_or_insert(state.avatar.displayed_pts_ms + self.hold_ms);
@@ -37,6 +38,7 @@ impl Choreography {
                 return (None, false);
             }
             self.step += 1;
+            self.hold_until = None;
         }
         let action = if self.walkthrough {
             match self.step {
@@ -55,8 +57,9 @@ impl Choreography {
                 3 => ("stand", Verb::StandUp, None, None),
                 4 => ("table", Verb::Walk, Some("desk"), None),
                 5 => ("bend-return", Verb::BendAndReturn, Some("desk"), None),
-                6 => ("chair", Verb::Walk, Some("chair"), None),
-                7 => ("final-sit", Verb::Sit, Some("chair"), None),
+                6 => ("mug-grab", Verb::Grab, Some("mug"), Some(Hand::Right)),
+                7 => ("carry-to-chair", Verb::Walk, Some("chair"), None),
+                8 => ("sit-with-mug", Verb::Sit, Some("chair"), None),
                 _ => return (None, true),
             }
         };
@@ -74,7 +77,32 @@ impl Choreography {
         {
             self.step += 1;
             self.sent = false;
+            // Dispatch the newly eligible action now. Waiting another client
+            // tick would submit a transient idle motion request between actions.
+            return self.tick(state);
         }
         (None, false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cc_render_plugin::cc_render::office::controller::{OfficeController, ActionEvent};
+
+    #[test]
+    fn completed_wave_dispatches_next_action_without_an_idle_tick() {
+        let mut script = Choreography::new();
+        script.step = 2;
+        script.sent = true;
+        script.walkthrough = false;
+        let mut state = OfficeController::default().snapshot();
+        state.events.push(ActionEvent {
+            sequence: 1, action_id: "seated-wave".into(), status: Status::Completed, detail: String::new(),
+        });
+        let (command, done) = script.tick(&state);
+        assert!(!done);
+        assert!(matches!(command, Some(OfficeCommand::PerformAction { request }) if request.verb == Verb::StandUp));
+        assert!(script.tick(&state).0.is_none(), "do not duplicate the submitted action");
     }
 }

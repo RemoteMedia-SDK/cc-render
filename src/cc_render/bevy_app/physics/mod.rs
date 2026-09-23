@@ -261,17 +261,6 @@ pub(crate) fn install(app: &mut App, config: PhysicsConfig, glb_path: PathBuf) {
             .after(bevy_rapier3d::plugin::PhysicsSet::Writeback)
             .before(bevy::transform::TransformSystem::TransformPropagate),
     );
-    // Inertia injection: compute parent angular velocity → centrifugal
-    // pseudo-force on translation-mode bodies. Must run BEFORE
-    // PhysicsSet::SyncBackend so the force is in place when Rapier
-    // integrates this frame's step. Reads stale GlobalTransforms
-    // (TransformPropagate hasn't run yet for this frame's pose); the
-    // 1-frame lag is imperceptible at 30+ fps.
-    app.add_systems(
-        bevy::app::PostUpdate,
-        secondary::apply_jiggle_inertia.before(bevy_rapier3d::plugin::PhysicsSet::SyncBackend),
-    );
-
     // Prop lifecycle + scene_state publisher.
     app.init_resource::<props::PropRegistry>();
     app.init_resource::<grab::GrabFsms>();

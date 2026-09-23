@@ -288,8 +288,7 @@ impl WorldMotion<'_, '_> {
             let Some(office) = self.office.as_mut() else {
                 return true;
             };
-            let position = office.supported_root(Vec3::from(pose.root_pos));
-            if office.permits_root(position) {
+            if office.resolve_root(Vec3::from(pose.root_pos)).is_some() {
                 return true;
             }
             office.blocked = true;
@@ -297,23 +296,19 @@ impl WorldMotion<'_, '_> {
             false
         });
         if let Some(office) = self.office.as_mut() {
-            office.future_root = self
-                .timeline
-                .future_root()
-                .filter(|(_, root)| !office.blocked && office.permits_root(Vec3::from(*root)));
+            office.future_root = self.timeline.future_root().filter(|(_, root)| {
+                office.future_handoffs && !office.blocked && office.permits_root(Vec3::from(*root))
+            });
         }
         (pose, false)
     }
     pub fn root_translation(&mut self, pelvis: Entity, pose: &SkeletalPose) -> Option<Vec3> {
         let proposed = Vec3::from(pose.root_pos);
-        let position = self
+        let resolved = self
             .office
             .as_mut()
-            .map_or(proposed, |o| o.supported_root(proposed));
-        let allowed = self
-            .office
-            .as_ref()
-            .map_or(true, |o| o.permits_root(position));
+            .map_or(Some(proposed), |o| o.resolve_root(proposed));
+        let allowed = resolved.is_some();
         if let Some(o) = self.office.as_mut() {
             o.observed.stale_frames = self.timeline.stale_frames;
             o.observed.underrun_frames = self.timeline.underruns;
@@ -323,9 +318,7 @@ impl WorldMotion<'_, '_> {
                 o.blocked = true;
             }
         }
-        if !allowed {
-            return None;
-        }
+        let position = resolved?;
         let parent = self.parents.get(pelvis).ok()?;
         Some(
             self.globals

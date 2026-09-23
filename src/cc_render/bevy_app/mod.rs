@@ -2,12 +2,13 @@
 
 pub(super) mod assets;
 pub(super) mod camera;
-mod visibility;
 pub(super) mod capture;
 pub(super) mod gpu_select;
 pub(super) mod joint_debug;
 pub(super) mod overrides;
 pub(super) mod pose;
+mod skinning;
+mod visibility;
 
 pub(super) mod physics;
 
@@ -477,6 +478,7 @@ pub(super) fn run(
             apply_arkit_pose,
             overrides::override_hair_alpha,
             visibility::keep_avatar_skins_visible,
+            skinning::normalize_avatar_skin_weights,
             start_pose_animation,
             capture_cc5_bind_rotations,
             // Face-bone capture: cache jaw + eye bone entities + their

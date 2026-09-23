@@ -1,17 +1,9 @@
 //! Secondary-motion bones (hair, cloth, breast, tongue jiggle).
 //!
 //! Auto-detect by regex over bone names; sidecar `chains_override` wins.
-//! Each detected bone becomes a dynamic Rapier body with a small sphere
-//! collider, joined to its parent bone with a `SphericalJoint` that has
-//! per-angular-axis spring motors targeting zero rotation (= bind pose).
-//! After `PhysicsSet::Writeback`, we copy the dynamic body's rotation
-//! back onto the bone's `Transform` so the skinned mesh follows.
-//!
-//! Spring tuning: `stiffness` (default 30.0) controls how aggressively
-//! each axis pulls back to rest; `damping` (default 2.5) controls
-//! oscillation decay. Sidecar `chains_override` per-bone overrides
-//! both. Higher stiffness = stiffer hair (less drift), higher damping
-//! = less wobble.
+//! Breast translation bodies live in world space and follow kinematic anchors
+//! with damped springs. Other chains retain their angular pendulum joints.
+//! Writeback bounds breast displacement in meters before converting to rig space.
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -19,13 +11,14 @@ use regex::Regex;
 
 use super::sidecar::JiggleChainRaw;
 
-/// Per-bone marker for the dynamic jiggle body. The dynamic body and
-/// its kinematic anchor are spawned as SIBLINGS of the bone (children
-/// of the bone's parent), not children of the bone itself — see the
-/// "feedback loop" comment in `auto_detect_chains` for why.
+/// The anchor follows the animated parent, independently of the driven bone.
+/// Translation bodies are unparented: inheriting animation would teleport a
+/// dynamic body on every Rapier sync and defeat its inertial response.
 #[derive(Component)]
 pub(crate) struct JiggleBone {
     pub bone_entity: Entity,
+    pub parent_entity: Entity,
+    pub translation_limit: f32,
     /// Kept so diagnostics + future per-bone retuning can read the
     /// anchor's authored bind pose without re-querying the hierarchy.
     pub anchor_entity: Entity,
@@ -41,16 +34,8 @@ pub(crate) struct JiggleBone {
     /// translation-mode bones (breast) to write `bind + delta` rather
     /// than overwriting with the dynamic body's local translation.
     pub bone_bind_translation: Vec3,
-    /// Drive mode for `write_jiggle_bones`:
-    /// - `Rotation`: write the dynamic body's local rotation onto the
-    ///   bone (cone-around-pivot — natural for hair, glute, skirt).
-    /// - `Translation`: write `bind_translation + (body.t - anchor.t)`
-    ///   onto the bone, leaving rotation at bind. The LBS skinning
-    ///   distributes the translation across the weight gradient as a
-    ///   soft volumetric squish — the only way to get realistic breast
-    ///   bounce out of a single bone (a pivoted cone rotation around
-    ///   one bone always reads as a "stiff cone wobble" no matter how
-    ///   the weights are tuned).
+    /// Rotation chains copy sibling-local rotation; translation chains convert
+    /// their bounded world-space offset into the bone parent's local frame.
     pub mode: JiggleMode,
 }
 
@@ -73,6 +58,58 @@ pub(crate) fn detect_chains<'a>(
         .filter(|(_, n)| patterns.iter().any(|p| p.is_match(n)))
         .map(|(e, n)| (e, n.to_string()))
         .collect()
+}
+
+#[derive(Debug)]
+struct BreastTuning {
+    mass: f32,
+    stiffness: f32,
+    damping: f32,
+    limit: f32,
+}
+
+/// Authored CC5 tuning takes precedence; invalid values use stable defaults.
+fn breast_tuning(cc5_physics: Option<&super::cc5_json::Cc5Physics>) -> BreastTuning {
+    let cc5_breast_override = cc5_physics
+        .and_then(|p| p.breast_tuning.clone())
+        .unwrap_or_default();
+    let cc5_body_soft = cc5_physics.and_then(|p| p.body_soft_physics().cloned());
+    let cc5_breast_radius = cc5_physics.and_then(|p| p.breast_capsule_radius_m());
+
+    // A 4 Hz spring with moderate relative damping settles after each step.
+    // The mesh already contains its resting shape; no extra gravitational sag.
+    let mass = cc5_breast_override
+        .mass
+        .or_else(|| cc5_body_soft.as_ref().map(|s| s.mass))
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(2.0);
+    let stiffness = cc5_breast_override
+        .linear_stiffness
+        .or_else(|| {
+            cc5_body_soft.as_ref().map(|s| {
+                let omega = 2.0 * std::f32::consts::PI * s.stiffness_freq_hz;
+                omega * omega * mass
+            })
+        })
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(1260.0);
+    let damping = cc5_breast_override
+        .linear_damping
+        .or_else(|| cc5_body_soft.as_ref().map(|s| s.damping))
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .unwrap_or(30.0);
+    let limit = cc5_breast_override
+        .translation_limit
+        .or_else(|| cc5_breast_radius.map(|r| 0.6 * r))
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(0.03)
+        .min(0.05);
+    BreastTuning {
+        mass,
+        stiffness,
+        damping,
+        limit,
+    }
 }
 
 pub(crate) fn auto_detect_chains(
@@ -119,9 +156,7 @@ pub(crate) fn auto_detect_chains(
         .collect();
 
     // Collect (entity, name, full bind transform, parent_entity).
-    // Parent is required: jiggle anchor + dynamic body must spawn as
-    // siblings of the bone (under bone's parent), not children of
-    // the bone itself, to break the rapier-bone feedback loop.
+    // The anchor follows the parent, not the driven bone.
     let entries: Vec<(Entity, String, Transform, Option<Entity>)> = bones
         .iter()
         .map(|(e, n, t, p)| (e, n.to_string(), *t, p.map(|x| x.get())))
@@ -153,101 +188,8 @@ pub(crate) fn auto_detect_chains(
         .as_ref()
         .and_then(|p| p.0.hair_soft_physics().cloned());
 
-    // Per-avatar breast (translation-mode) tuning. Resolution priority,
-    // per-knob, picks the first authored source:
-    //   1. Custom `Physics."Breast Tuning"` block in the CC5 JSON
-    //      (artist hand-authored — overrides everything).
-    //   2. CC5 native data when present:
-    //        - mass               ← Soft Physics body-mesh `Mass`
-    //        - linear_stiffness   ← (2π·`Stiffness Frequency`)²·mass
-    //        - linear_damping     ← Soft Physics body-mesh `Damping`
-    //        - translation_limit  ← 0.6·`CC_Base_L_Breast` capsule radius
-    //   3. Hardcoded "large bust" defaults (back-compat with avatars
-    //      that ship neither block).
-    //
-    // The custom block is the authoritative knob set: artists who
-    // skipped iClone soft-physics authoring (common on this and
-    // similar Kimodo / SMPL-aligned exports) just hand-edit one
-    // small block per avatar. Fully-authored CC5 rigs with `Soft
-    // Physics > Meshes` and breast collision capsules get sane
-    // tuning automatically.
-    let cc5_breast_override = cc5_physics
-        .as_ref()
-        .and_then(|p| p.0.breast_tuning.clone())
-        .unwrap_or_default();
-    let cc5_body_soft = cc5_physics
-        .as_ref()
-        .and_then(|p| p.0.body_soft_physics().cloned());
-    let cc5_breast_radius = cc5_physics
-        .as_ref()
-        .and_then(|p| p.0.breast_capsule_radius_m());
-
-    // Default fallbacks tuned for a large-bust build, calibrated against
-    // real-world breast jiggle on rhythmic body motion (skip rope, jog).
-    //
-    // Counter-intuitive: stiffer spring + lower damping produces MORE
-    // pronounced bounce, not less. Mechanism on each landing impact:
-    //   1. Mass inertia keeps body moving while chest decelerates
-    //      (offset grows ∝ chest decel × m / k during the ~50 ms
-    //       impact phase). Big mass = bigger initial offset.
-    //   2. Stiff spring then accelerates body back hard → strong
-    //      rebound velocity → big overshoot past the anchor.
-    //   3. Low damping lets that overshoot ring out at ω_n for many
-    //      cycles. Each visible bounce is a half-period of ringing.
-    //
-    // Soft spring + high damping (the previous wrong direction) damps
-    // out before any bounce is visible — body just floats sluggishly
-    // behind the anchor, reads as "bolted on with a delay".
-    //
-    //   ω_n  = sqrt(k/m) = sqrt(80/2.0) ≈ 6.32 rad/s → period ~1.0 s
-    //                      (matches real ~1 Hz breast tissue resonance)
-    //   ζ    = lin_damping / (2·ω_n) = 0.3 / 12.6 ≈ 0.024
-    //                      (extremely under-damped — rings ~15 cycles
-    //                       before amplitude decays to 1/e)
-    //   limit = ±0.20 m → 20 cm peak envelope. Hard impacts will hit
-    //                      this and clamp with some collision damping
-    //                      (acts as the non-linear skin/muscle tether).
-    let breast_mass = cc5_breast_override
-        .mass
-        .or_else(|| cc5_body_soft.as_ref().map(|s| s.mass))
-        .unwrap_or(2.0);
-    let breast_lin_stiffness = cc5_breast_override
-        .linear_stiffness
-        .or_else(|| {
-            cc5_body_soft.as_ref().map(|s| {
-                let omega = 2.0 * std::f32::consts::PI * s.stiffness_freq_hz;
-                omega * omega * breast_mass
-            })
-        })
-        .unwrap_or(80.0);
-    let breast_lin_damping = cc5_breast_override
-        .linear_damping
-        .or_else(|| cc5_body_soft.as_ref().map(|s| s.damping))
-        .unwrap_or(0.3);
-    let breast_translation_limit = cc5_breast_override
-        .translation_limit
-        .or_else(|| cc5_breast_radius.map(|r| 0.6 * r))
-        .unwrap_or(0.20);
-    if cc5_breast_override.mass.is_some()
-        || cc5_breast_override.linear_stiffness.is_some()
-        || cc5_breast_override.linear_damping.is_some()
-        || cc5_breast_override.translation_limit.is_some()
-        || cc5_body_soft.is_some()
-        || cc5_breast_radius.is_some()
-    {
-        tracing::info!(
-            target: "cc_render",
-            "physics: breast tuning resolved → mass={:.2}kg k={:.1} c_lin={:.2} lim=±{:.3}m \
-             (override={} cc5_soft={} cc5_radius={:?})",
-            breast_mass, breast_lin_stiffness, breast_lin_damping, breast_translation_limit,
-            cc5_breast_override.mass.is_some()
-                || cc5_breast_override.linear_stiffness.is_some()
-                || cc5_breast_override.linear_damping.is_some()
-                || cc5_breast_override.translation_limit.is_some(),
-            cc5_body_soft.is_some(),
-            cc5_breast_radius,
-        );
-    }
+    let breast = breast_tuning(cc5_physics.as_ref().map(|p| &p.0));
+    tracing::info!(target: "cc_render", "physics: breast tuning {breast:?}");
     if let Some(r) = chest_radius_m {
         tracing::info!(
             target: "cc_render",
@@ -334,36 +276,12 @@ pub(crate) fn auto_detect_chains(
                 })
                 .is_none()
         {
-            breast_mass
+            breast.mass
         } else {
             mass_default
         };
 
-        // CRITICAL ARCHITECTURE NOTE — sibling-anchor design:
-        //
-        // The naive approach (jiggle body as child of bone, joint
-        // anchored to bone) creates a positive-feedback loop:
-        //   1. rapier reads bone.global_transform to position the
-        //      kinematic joint anchor
-        //   2. We compute jiggle delta and write it to bone.local_rotation
-        //   3. TransformPropagate updates bone.global_transform
-        //   4. Next tick, rapier reads the updated bone.global → joint
-        //      anchor moves → dynamic body chases its own reflection
-        //
-        // This is what made max-rotation-from-identity hit 360° on the
-        // first test — runaway spin.
-        //
-        // Fix: spawn the kinematic anchor + dynamic body as SIBLINGS
-        // of the bone (children of the bone's parent). The kinematic
-        // anchor sits at the bone's bind transform IN PARENT'S FRAME
-        // and never moves relative to its parent. The dynamic body
-        // starts at the same pose; the motor pulls it toward the
-        // anchor's rotation. When the parent (e.g. spine) rotates, the
-        // anchor rotates with it instantly (kinematic), and the
-        // dynamic body lags due to inertia. write_jiggle_bones copies
-        // dynamic.local rotation onto bone.local — no feedback because
-        // bone.local writes don't affect a sibling subtree's
-        // GlobalTransform.
+        // Anchors follow the animated parent, never the jiggle-driven bone.
         let kinematic_e = commands
             .spawn((
                 Name::new(format!("JiggleAnchor_{}", bone_name)),
@@ -391,49 +309,12 @@ pub(crate) fn auto_detect_chains(
             .get(bone_e)
             .map(|gt| gt.compute_transform().rotation)
             .unwrap_or(Quat::IDENTITY);
-        // Parent's world rotation at spawn — seeds JiggleParentState so
-        // the first frame's centrifugal force computation has a baseline
-        // (= no rotation since spawn → ω=0 → zero force on frame 1).
-        let parent_world_rot_at_spawn = parent_globals
-            .get(parent_e)
-            .map(|gt| gt.compute_transform().rotation)
-            .unwrap_or(Quat::IDENTITY);
-
         let mode = if is_breast {
             JiggleMode::Translation
         } else {
             JiggleMode::Rotation
         };
 
-        // Branch on mode. Translation-mode (breast) and rotation-mode
-        // (hair / glute / skirt / tongue) need different body bind
-        // poses, joint geometry, and damping.
-        //
-        // ── ROTATION MODE (hair, glute, skirt, tongue) ──
-        //   Body sits on a pendulum offset 0.6 × chest_radius below the
-        //   anchor in parent's local -Y, joint is a SphericalJoint
-        //   anchored at anchor2 = -body_offset (body's local +Y top),
-        //   gravity ON so the offset arm produces real torque, motor
-        //   springs body rotation back to anchor's. Per-axis limits
-        //   ±18° bend / ±2° twist cap the swing.
-        //
-        // ── TRANSLATION MODE (breast) ──
-        //   The fundamental "rotate around a single pivot looks like a
-        //   rigid cone" problem can't be fixed by tuning a rotation
-        //   spring. Real breast tissue undergoes volumetric translation:
-        //   when the chest accelerates, the soft volume's center-of-
-        //   mass lags, then springs back. We recreate that here:
-        //
-        //     - body bind = anchor bind (both at the bone's bind pose)
-        //     - GenericJoint locks all 3 angular axes (no rotation),
-        //       leaves the 3 linear axes free with linear motors
-        //       springing the body back to the anchor's position
-        //     - gravity OFF (don't want the breast to sag indefinitely)
-        //     - linear limits ±0.04 m cap the displacement
-        //     - write_jiggle_bones writes (body.t - anchor.t) onto
-        //       bone.translation, leaving rotation at bind. LBS
-        //       skinning then distributes that translation across the
-        //       weight gradient as a soft volumetric squish.
         let mut body_bind = bone_bind;
         let pendulum_offset = if mode == JiggleMode::Rotation {
             let l = chest_radius_m.map(|r| r * 0.6).unwrap_or(0.05);
@@ -445,10 +326,20 @@ pub(crate) fn auto_detect_chains(
             Vec3::ZERO
         };
 
+        if mode == JiggleMode::Translation {
+            body_bind = parent_globals
+                .get(parent_e)
+                .expect("detected bone parent has a global transform")
+                .mul_transform(body_bind)
+                .compute_transform();
+        }
+
         let mut entity_cmds = commands.spawn((
             Name::new(format!("Jiggle_{}", bone_name)),
             JiggleBone {
                 bone_entity: bone_e,
+                parent_entity: parent_e,
+                translation_limit: breast.limit,
                 anchor_entity: kinematic_e,
                 debug_name: bone_name.clone(),
                 anchor_world_rest,
@@ -460,87 +351,28 @@ pub(crate) fn auto_detect_chains(
             Collider::ball(radius),
             CollisionGroups::new(Group::GROUP_3, Group::NONE),
             AdditionalMassProperties::Mass(mass),
-            // Linear damping is the PRIMARY trailing mechanism for
-            // translation-mode bodies. It opposes the body's absolute
-            // velocity in world frame, which during a body spin pulls
-            // the body BACKWARD against its tangential motion —
-            // producing real "lag behind the chest" trailing.
-            // Equilibrium: spring force = m·linear_damping·v_anchor,
-            // giving offset = m·linear_damping·v_anchor/k behind anchor.
-            //
-            // For breast (m=0.8 with the breast mass override above,
-            // k=200 from the breast tuning below), peak spin
-            // (v_anchor≈0.84 m/s):
-            //   linear_damping=8 → ~27mm trailing.
-            //
-            // Rotation-mode bodies don't need much (their pendulum
-            // offset + angular damping handle the dynamics) — keep
-            // their linear damping low.
+            // Breast damping belongs to the joint's relative velocity, so
+            // constant-speed walking does not drag the tissue backward.
             Damping {
                 linear_damping: if mode == JiggleMode::Translation {
-                    breast_lin_damping
+                    0.0
                 } else {
                     0.5
                 },
                 angular_damping: 1.0,
             },
         ));
-        // TransformInterpolation: only for rotation-mode (hair / glute /
-        // skirt / tongue). For translation-mode (breast), interpolation
-        // sampling beyond the latest physics step extrapolates the
-        // body's pose forward in time — visually reads as "the breasts
-        // anticipate the spin" because the renderer shows where the
-        // body WOULD be one substep into the future, ahead of the
-        // chest's actual rendered pose. Rotation-mode bodies don't
-        // have this issue because their pose is angular (around a
-        // pivot) and the chain inheritance dominates the visible
-        // position; the small angular extrapolation reads as
-        // sub-degree noise. Translation-mode bodies, where world
-        // position IS the visible thing, surface the extrapolation
-        // as visible "leading the rotation". Drop interpolation here
-        // and accept the (imperceptible at 30+ fps) sub-frame
-        // discretization for the breast bones.
         if mode == JiggleMode::Rotation {
             entity_cmds.insert(TransformInterpolation::default());
         }
         if mode == JiggleMode::Translation {
-            // Breast: PARTIAL gravity. Captures the visual phenomenon
-            // of breast tissue continuing to rise after the body has
-            // started falling — at apex, body has built up upward
-            // momentum from being dragged by the spring during the
-            // launch phase; once the chest peaks and starts descending,
-            // gravity decelerates the body's upward velocity and
-            // eventually reverses it, while the spring also pulls back
-            // toward the (now descending) chest. The COMBINED gravity +
-            // spring restoring force produces the asymmetric "weight"
-            // feel that pure spring restoration lacks.
-            //
-            // Static sag at rest: m·(GravityScale·g)/k. With defaults
-            // (m=2, GravityScale=0.3, k=80): sag ≈ 0.073 m = 7.3 cm.
-            // Visible at rest as the breasts hanging slightly below
-            // their anchor — anatomically correct for a large bust.
-            //
-            // The translation_limit cube must accommodate sag + dynamic
-            // overshoot. With sag 7.3 cm and limit 20 cm, the body has
-            // ±13 cm headroom in each direction at rest before clamping.
-            //
-            // ExternalForce + ReadMassProperties + JiggleParentState
-            // wire the body up for `apply_jiggle_inertia`'s centrifugal
-            // pseudo-force injection — gives the body real inertial
-            // outward pull during a body spin instead of the spring/motor
-            // alone (which has zero inertia arm and produces underdamped
-            // PD overshoot that reads as "anticipating the spin").
-            entity_cmds.insert((
-                GravityScale(0.3),
-                ExternalForce::default(),
-                ReadMassProperties::default(),
-                JiggleParentState {
-                    prev_parent_world_rot: parent_world_rot_at_spawn,
-                },
-            ));
+            // Colliderless kinematic anchors do not wake sleeping joint bodies.
+            entity_cmds.insert((GravityScale(0.0), Velocity::zero(), Sleeping::disabled()));
         }
         let jiggle_e = entity_cmds.id();
-        commands.entity(parent_e).add_child(jiggle_e);
+        if mode == JiggleMode::Rotation {
+            commands.entity(parent_e).add_child(jiggle_e);
+        }
 
         match mode {
             JiggleMode::Rotation => {
@@ -571,89 +403,21 @@ pub(crate) fn auto_detect_chains(
                     .insert(ImpulseJoint::new(kinematic_e, joint));
             }
             JiggleMode::Translation => {
-                // Translation jiggle: lock all rotation, spring all
-                // translation back to anchor.
-                //
-                // Tuning: ω = sqrt(stiffness). f = ω / 2π. Real breast
-                // tissue measures ~1-2 Hz, but for visible-at-30fps
-                // motion we run faster (~3.6 Hz) so the body actually
-                // responds within a few render frames of chest impact
-                // rather than oozing through the motion. Period of
-                // ~280 ms = ~9 render frames @ 30 fps = clearly
-                // visible swing on every step.
-                //
-                //   stiffness = 500   → ω ≈ 22.4 rad/s → f ≈ 3.6 Hz
-                //   damping   = 32    → ζ = 32 / (2·22.4) ≈ 0.71
-                //                       → critically-damped-ish; clean
-                //                         single drag on each impulse,
-                //                         no leading-edge overshoot.
-                //   limit     = ±6 cm → larger envelope so a hard jolt
-                //                       reads as a real bounce, not a
-                //                       capped 4 cm nudge.
-                //
-                // Damping was previously 9 (ζ ≈ 0.20) which produced
-                // visible velocity-overshoot during the angular-
-                // acceleration phase of a body spin: the spring
-                // accelerated the body so hard that it briefly
-                // *passed* the kinematic anchor in motion direction
-                // before settling. Combined with the spin fix that
-                // actually rotates the spine column (see commit that
-                // added twist preservation to axis_match_chained),
-                // this read as the breasts "leading the rotation".
-                // Raising damping to ζ ≈ 0.7 eliminates the overshoot
-                // while keeping the response time under one render
-                // frame.
-                //
-                // `apply_jiggle_inertia` adds the centrifugal pseudo-
-                // force on top so sustained rotations produce real
-                // outward swell (small at typical spin rates ~1 rad/s
-                // — equilibrium offset ≈ m·ω²·r / k ~0.1 mm — but
-                // builds visibly on faster gestures).
-                //
-                // (We override the generic `stiffness`/`damping` knobs
-                // computed above because those were tuned for angular
-                // motors and don't translate cleanly to linear ones.)
-                // Tuning for large-breast jiggle. The previous
-                // stiffness=200 + mass=0.8 setup tracked the anchor
-                // too tightly in practice (Rapier's per-substep motor
-                // integration is more aggressive than the analytic
-                // formula predicts — body's effective stiffness ~4x
-                // the nominal at 4 substeps/frame). With breasts
-                // appearing "bolted on", drop stiffness much further:
-                //
-                //   ω_n = sqrt(k/m) = sqrt(60/1.5) ≈ 6.3 rad/s
-                //   period ≈ 1.0 s (~1 Hz, matches the slow swing
-                //                   of unsupported large breast tissue)
-                //   ζ = 5 / (2 · 6.3) ≈ 0.40 (underdamped, lively)
-                //
-                // Predicted at peak spin (ω_parent ≈ 7 rad/s, breast
-                // at radius 0.12 m from spine pivot):
-                //   tangential trailing offset  ≈ 105 mm theoretical
-                //                              (capped at limit corner)
-                //   radial centrifugal swell    ≈ 60 mm
-                //                              (also capped)
-                //   the limit cube of ±0.08 m caps the total
-                //   magnitude at ≈ 138 mm corner-to-corner — body
-                //   bounces inside that envelope.
-                let translation_limit = breast_translation_limit;
-                let lin_stiffness = breast_lin_stiffness;
-                // Motor damping = 0: do not use the joint motor's
-                // velocity term. It opposes RELATIVE velocity in the
-                // joint frame, which goes to zero in steady-state
-                // co-rotation and does nothing useful there. During
-                // transients it pushes the body in the anchor's
-                // motion direction (= "leading"), which is the
-                // OPPOSITE of what we want. Trailing comes from the
-                // linear_damping on the body itself (Damping component
-                // above), which opposes the body's absolute world
-                // velocity.
-                let lin_damping = 0.0_f32;
+                let translation_limit = breast.limit;
+                let lin_stiffness = breast.stiffness;
+                // Legacy damping is a rate (1/s). Convert it to a force
+                // coefficient and enforce enough damping to avoid ringing.
+                let critical = 2.0 * (lin_stiffness * mass).sqrt();
+                let lin_damping = (breast.damping * mass).max(0.55 * critical);
                 let joint = GenericJointBuilder::new(JointAxesMask::ANG_AXES)
                     .local_anchor1(Vec3::ZERO)
                     .local_anchor2(Vec3::ZERO)
                     .limits(JointAxis::LinX, [-translation_limit, translation_limit])
                     .limits(JointAxis::LinY, [-translation_limit, translation_limit])
                     .limits(JointAxis::LinZ, [-translation_limit, translation_limit])
+                    .motor_model(JointAxis::LinX, MotorModel::ForceBased)
+                    .motor_model(JointAxis::LinY, MotorModel::ForceBased)
+                    .motor_model(JointAxis::LinZ, MotorModel::ForceBased)
                     .motor_position(JointAxis::LinX, 0.0, lin_stiffness, lin_damping)
                     .motor_position(JointAxis::LinY, 0.0, lin_stiffness, lin_damping)
                     .motor_position(JointAxis::LinZ, 0.0, lin_stiffness, lin_damping)
@@ -707,183 +471,6 @@ pub(crate) fn auto_detect_chains(
     }
 }
 
-/// Per-bone state tracking the parent's world rotation across frames so
-/// [`apply_jiggle_inertia`] can compute the parent's angular velocity.
-/// Initialized at spawn from the parent's GlobalTransform; updated each
-/// frame after the inertia force is applied.
-#[derive(Component)]
-pub(crate) struct JiggleParentState {
-    pub prev_parent_world_rot: Quat,
-}
-
-/// Centrifugal pseudo-force on a body whose parent is rotating.
-///
-/// Real soft tissue, when its host body spins, "feels" a centrifugal
-/// outward pull (in the rotating frame, where the tissue lives). The
-/// dynamic body in our setup has no inertia mechanism on its own (joint
-/// locks angular axes; spring chases anchor), so we inject this force
-/// each frame to recreate the missing inertial behavior.
-///
-/// Math:
-/// ```text
-///   ω         = (parent_rot_now · parent_rot_prev⁻¹) as axis·angle / dt
-///   r         = body_world_pos - parent_world_pos
-///   F_centrifugal = -m · ω × (ω × r)        (outward from rotation axis)
-/// ```
-///
-/// Returns `Vec3::ZERO` for a static parent (no rotation between frames)
-/// or sub-microsecond `dt` (avoids NaN from `Quat::to_axis_angle()`).
-pub(crate) fn centrifugal_pseudo_force(
-    parent_rot_now: Quat,
-    parent_rot_prev: Quat,
-    parent_world_pos: Vec3,
-    body_world_pos: Vec3,
-    mass: f32,
-    dt: f32,
-) -> Vec3 {
-    if dt <= 1e-6 {
-        return Vec3::ZERO;
-    }
-    // Quaternion double-cover: q and -q represent the same rotation. The
-    // straight `now * prev⁻¹` can land on either side. If we end up on
-    // the w < 0 side, `to_axis_angle()` reports `angle = 2π - small`
-    // instead of `small` → spurious enormous ω → 600 N centripetal
-    // kick that flings the body into "leading" position. Normalize to
-    // short-arc form (w ≥ 0) so we always read the small actual rotation.
-    let drot_raw = parent_rot_now * parent_rot_prev.inverse();
-    let drot = if drot_raw.w < 0.0 {
-        Quat::from_xyzw(-drot_raw.x, -drot_raw.y, -drot_raw.z, -drot_raw.w)
-    } else {
-        drot_raw
-    };
-    let (axis, angle) = drot.to_axis_angle();
-    if angle.abs() < 1e-6 || !axis.is_finite() {
-        return Vec3::ZERO;
-    }
-    let omega = axis.normalize_or_zero() * (angle / dt);
-    let r = body_world_pos - parent_world_pos;
-    -mass * omega.cross(omega.cross(r))
-}
-
-/// Inject centrifugal pseudo-force into translation-mode jiggle bodies
-/// so they exhibit realistic inertial pull when their parent (e.g. the
-/// chest spine) rotates. Without this, the body has zero inertia arm
-/// (COM at the joint anchor, angular axes locked) and the spring/motor
-/// alone produces only a tiny PD-controller lag — visible during a
-/// body spin as "the breasts anticipate the spin" because the
-/// underdamped spring overshoots before settling.
-///
-/// Runs in PostUpdate before [`bevy_rapier3d::plugin::PhysicsSet::SyncBackend`]
-/// so the force is in place when Rapier integrates this frame's step.
-/// Reads the previous frame's GlobalTransform (stale by 1 frame —
-/// imperceptible at 30+ fps) since `TransformPropagate` won't have run
-/// yet for this frame's pose. Updates [`JiggleParentState`] after each
-/// step so the next frame's ω calculation has fresh history.
-pub(crate) fn apply_jiggle_inertia(
-    time: Res<Time>,
-    mut bodies: Query<(
-        Entity,
-        &JiggleBone,
-        &Parent,
-        &GlobalTransform,
-        &mut ExternalForce,
-        &mut JiggleParentState,
-    )>,
-    other_globals: Query<&GlobalTransform, Without<JiggleBone>>,
-    mass_props: Query<&ReadMassProperties>,
-    mut throttle: Local<u32>,
-) {
-    let dt = time.delta_secs().max(1e-4);
-    *throttle = throttle.wrapping_add(1);
-    let log_this_tick = *throttle % 6 == 0; // ~5 Hz at 30 fps
-    for (body_e, jb, body_parent, body_global, mut ext_force, mut state) in bodies.iter_mut() {
-        // Reset force regardless of mode so a stale value from a previous
-        // mode toggle doesn't leak. Translation mode is the only mode
-        // that needs injected inertia (rotation mode bones already have
-        // a pendulum offset → real torque arm).
-        if jb.mode != JiggleMode::Translation {
-            ext_force.force = Vec3::ZERO;
-            ext_force.torque = Vec3::ZERO;
-            continue;
-        }
-        let parent_e = body_parent.get();
-        let Ok(parent_global) = other_globals.get(parent_e) else {
-            ext_force.force = Vec3::ZERO;
-            continue;
-        };
-        let parent_t = parent_global.compute_transform();
-        let body_world_pos = body_global.translation();
-        let mass = mass_props
-            .get(body_e)
-            .ok()
-            .map(|m| m.mass)
-            .filter(|m| *m > 1e-4)
-            .unwrap_or(0.3);
-
-        // Compute ω directly so we can both apply force and report it.
-        // Same quaternion-double-cover normalization as in
-        // `centrifugal_pseudo_force` — without it, sign flips in the
-        // stored quaternions between frames produce phantom 180+ rad/s
-        // ω readings.
-        let drot_raw = parent_t.rotation * state.prev_parent_world_rot.inverse();
-        let drot = if drot_raw.w < 0.0 {
-            Quat::from_xyzw(-drot_raw.x, -drot_raw.y, -drot_raw.z, -drot_raw.w)
-        } else {
-            drot_raw
-        };
-        let (axis, angle) = drot.to_axis_angle();
-        let omega_world = if angle.abs() > 1e-6 && axis.is_finite() {
-            axis.normalize_or_zero() * (angle / dt)
-        } else {
-            Vec3::ZERO
-        };
-
-        ext_force.force = centrifugal_pseudo_force(
-            parent_t.rotation,
-            state.prev_parent_world_rot,
-            parent_t.translation,
-            body_world_pos,
-            mass,
-            dt,
-        );
-
-        // Directional diagnostic: project body offset (vs anchor) onto
-        // the tangent of the parent's rotation at the body's position.
-        // This is the definitive answer to "leading vs trailing":
-        //   sign > 0  →  body LEADS  (offset is in motion direction)
-        //   sign < 0  →  body TRAILS (offset opposes motion direction)
-        //   sign ≈ 0  →  tracking
-        if log_this_tick && omega_world.length() > 0.1 {
-            if let Ok(anchor_global) = other_globals.get(jb.anchor_entity) {
-                let anchor_world = anchor_global.translation();
-                let offset_world = body_world_pos - anchor_world;
-                let r_world = body_world_pos - parent_t.translation;
-                let tangent_world = omega_world.cross(r_world);
-                let sign = offset_world.dot(tangent_world);
-                let label = if sign > 1e-7 {
-                    "LEAD"
-                } else if sign < -1e-7 {
-                    "TRAIL"
-                } else {
-                    "TRACK"
-                };
-                tracing::info!(
-                    target: "cc_render",
-                    "jiggle_dir: {} {} sign={:+.6e} |offset|={:.4}m |omega|={:.3}rad/s force=({:.3},{:.3},{:.3})",
-                    jb.debug_name,
-                    label,
-                    sign,
-                    offset_world.length(),
-                    omega_world.length(),
-                    ext_force.force.x, ext_force.force.y, ext_force.force.z,
-                );
-            }
-        }
-
-        state.prev_parent_world_rot = parent_t.rotation;
-    }
-}
-
 pub(crate) fn write_jiggle_bones(
     jiggle_bodies: Query<(&JiggleBone, &Transform)>,
     bone_globals: Query<&GlobalTransform>,
@@ -895,9 +482,10 @@ pub(crate) fn write_jiggle_bones(
     struct Snap {
         bone_e: Entity,
         body_rot: Quat,
-        body_t: Vec3,
+        delta_local: Vec3,
+        displacement_m: f32,
+        raw_displacement_m: f32,
         anchor_rot: Quat,
-        anchor_t: Vec3,
         anchor_world_rot: Quat,
         anchor_world_rest: Quat,
         bone_bind_t: Vec3,
@@ -913,12 +501,17 @@ pub(crate) fn write_jiggle_bones(
                 .ok()
                 .map(|gt| gt.compute_transform().rotation)
                 .unwrap_or(Quat::IDENTITY);
+            let parent = bone_globals.get(jb.parent_entity).ok()?;
+            let anchor_world = parent.transform_point(anchor.translation);
+            let delta_world =
+                bounded_displacement(t_jiggle.translation - anchor_world, jb.translation_limit);
             Some(Snap {
                 bone_e: jb.bone_entity,
                 body_rot: t_jiggle.rotation,
-                body_t: t_jiggle.translation,
+                delta_local: parent.affine().inverse().transform_vector3(delta_world),
+                displacement_m: delta_world.length(),
+                raw_displacement_m: (t_jiggle.translation - anchor_world).length(),
                 anchor_rot: anchor.rotation,
-                anchor_t: anchor.translation,
                 anchor_world_rot,
                 anchor_world_rest: jb.anchor_world_rest,
                 bone_bind_t: jb.bone_bind_translation,
@@ -946,36 +539,16 @@ pub(crate) fn write_jiggle_bones(
                     }
                 }
                 JiggleMode::Translation => {
-                    // Visible displacement = body − anchor in parent's
-                    // local frame. Add to the bone's bind translation
-                    // (NOT overwriting the bind, just delta).
-                    let delta = snap.body_t - snap.anchor_t;
-                    let before = bone_t.translation;
-                    bone_t.translation = snap.bone_bind_t + delta;
-                    let after = bone_t.translation;
-                    let mag_cm = delta.length() * 100.0;
+                    bone_t.translation = snap.bone_bind_t + snap.delta_local;
+                    bone_t.rotation = snap.anchor_rot;
+                    let mag_cm = snap.displacement_m * 100.0;
                     if mag_cm > max_translation_cm {
                         max_translation_cm = mag_cm;
                         max_translation_name = snap.name.clone();
                     }
-                    // Per-bone INFO diagnostic. Confirms the writeback
-                    // actually mutates the bone's Transform — if this
-                    // log shows non-zero deltas but the rendered mesh
-                    // still looks bolted on, the issue is downstream
-                    // (skinning weights / bone entity mismatch).
-                    // Throttle by global tick (= writeback's `throttle`
-                    // local) so all 2 breast bones log together at 5 Hz.
-                    if mag_cm > 0.5 {
-                        tracing::info!(
-                            target: "cc_render",
-                            "jiggle_writeback: {} bone_e={:?} \
-                             before=({:+.4},{:+.4},{:+.4}) \
-                             after=({:+.4},{:+.4},{:+.4}) delta_cm={:.2}",
-                            snap.name, snap.bone_e,
-                            before.x, before.y, before.z,
-                            after.x, after.y, after.z,
-                            mag_cm,
-                        );
+                    if *throttle % 6 == 0 {
+                        tracing::debug!(target: "cc_render",
+                            "jiggle_writeback: {} delta_cm={:.3} raw_cm={:.3}", snap.name, mag_cm, snap.raw_displacement_m * 100.0);
                     }
                 }
             }
@@ -999,6 +572,15 @@ pub(crate) fn write_jiggle_bones(
             max_anchor_drive_deg,
         );
     }
+}
+
+/// Solver limits can briefly overshoot on discontinuities. Bound the visible
+/// *radial* displacement (not a cube), in world meters, including invalid input.
+fn bounded_displacement(delta: Vec3, limit: f32) -> Vec3 {
+    if !delta.is_finite() {
+        return Vec3::ZERO;
+    }
+    delta.clamp_length_max(limit)
 }
 
 /// Shortest-arc angle (degrees) between two unit quaternions, in
@@ -1063,26 +645,6 @@ mod tests {
     }
 
     #[test]
-    fn jiggle_bone_carries_bone_entity() {
-        // The sibling-anchor architecture means JiggleBone only needs
-        // to remember which bone entity to write to + which anchor
-        // entity to compare against for diagnostics. Bind pose lives
-        // on the kinematic anchor's Transform, not on JiggleBone.
-        let jb = JiggleBone {
-            bone_entity: Entity::from_raw(7),
-            anchor_entity: Entity::from_raw(8),
-            debug_name: "TestBone".into(),
-            anchor_world_rest: Quat::IDENTITY,
-            bone_bind_translation: Vec3::ZERO,
-            mode: JiggleMode::Rotation,
-        };
-        assert_eq!(jb.bone_entity, Entity::from_raw(7));
-        assert_eq!(jb.anchor_entity, Entity::from_raw(8));
-        assert_eq!(jb.debug_name, "TestBone");
-        assert_eq!(jb.mode, JiggleMode::Rotation);
-    }
-
-    #[test]
     fn angle_between_handles_double_cover() {
         // q ≡ −q double-cover trap: a near-identity rotation expressed
         // as q with q.w slightly negative was getting reported as ~360°
@@ -1109,134 +671,149 @@ mod tests {
         );
     }
 
-    #[test]
-    fn sibling_writeback_at_bind_keeps_bone_at_bind() {
-        // Steady-state check: if the dynamic body has settled at the
-        // anchor's bind pose, write_jiggle_bones writes that same
-        // bind pose onto the bone — no drift, no off-by-one.
-        let bind_rot = Quat::from_rotation_y(0.3);
-        // Simulating: dynamic.local.rotation == bind (motor pulled body
-        // to anchor's frame) → bone.rotation = bind.
-        let dynamic_local_rot = bind_rot;
-        let bone_after = dynamic_local_rot;
-        assert!(bone_after.abs_diff_eq(bind_rot, 1e-5));
+    struct Simulation {
+        app: App,
+        parent: Entity,
+        bone: Entity,
     }
 
-    /// Centrifugal pseudo-force = +m·ω²·r_perp (outward from rotation axis).
-    /// Body at +X offset from a Y-axis rotation pivot must receive a force
-    /// in +X direction with magnitude m·ω²·r — the inertial outward pull
-    /// soft tissue would feel during a body spin.
-    #[test]
-    fn centrifugal_pseudo_force_pulls_outward_for_pure_y_rotation() {
-        let dt = 1.0 / 60.0;
-        let omega_rate = std::f32::consts::FRAC_PI_2; // π/2 rad/s = 90 °/s
-        let dtheta = omega_rate * dt;
-        let parent_rot_prev = Quat::IDENTITY;
-        let parent_rot_now = Quat::from_rotation_y(dtheta);
-        let parent_world_pos = Vec3::ZERO;
-        let body_world_pos = Vec3::new(0.5, 0.0, 0.0); // 0.5 m radius right
-        let mass = 0.3_f32;
+    impl Simulation {
+        fn new(fps: f32) -> Self {
+            let mut app = App::new();
+            app.add_plugins((MinimalPlugins, TransformPlugin, HierarchyPlugin));
+            app.init_resource::<Assets<Mesh>>();
+            app.init_resource::<SceneSpawner>();
+            app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+            app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_secs_f32(1.0 / fps),
+            ));
+            app.insert_resource(TimestepMode::Interpolated {
+                dt: 1.0 / 120.0,
+                time_scale: 1.0,
+                substeps: 4,
+            });
+            app.init_resource::<JiggleSpawned>();
+            app.init_resource::<crate::cc_render::bevy_app::pose::CC5BindRotations>();
+            app.add_systems(Update, auto_detect_chains);
+            app.add_systems(
+                PostUpdate,
+                write_jiggle_bones
+                    .after(PhysicsSet::Writeback)
+                    .before(bevy::transform::TransformSystem::TransformPropagate),
+            );
+            let parent = app
+                .world_mut()
+                .spawn(Transform::from_xyz(0.0, 1.4, 0.0))
+                .id();
+            let bone = app
+                .world_mut()
+                .spawn((
+                    Name::new("CC_Base_L_Breast"),
+                    Transform::from_xyz(0.12, 0.0, 0.12),
+                ))
+                .id();
+            app.world_mut().entity_mut(parent).add_child(bone);
+            app.update();
+            app.world_mut()
+                .resource_mut::<crate::cc_render::bevy_app::pose::CC5BindRotations>()
+                .captured = true;
+            app.update();
+            Self { app, parent, bone }
+        }
 
-        let force = centrifugal_pseudo_force(
-            parent_rot_now,
-            parent_rot_prev,
-            parent_world_pos,
-            body_world_pos,
-            mass,
-            dt,
-        );
-
-        let expected_magnitude = mass * omega_rate * omega_rate * 0.5;
-        assert!(
-            force.x > 0.0,
-            "force should point outward (+X) for body at +X with Y-axis rotation, got {:?}",
-            force,
-        );
-        assert!(
-            (force.length() - expected_magnitude).abs() < expected_magnitude * 0.05,
-            "magnitude should be m·ω²·r ≈ {}, got {} (force {:?})",
-            expected_magnitude,
-            force.length(),
-            force,
-        );
-        assert!(
-            force.y.abs() < 1e-3,
-            "y component should be ~0, got {}",
-            force.y
-        );
-        assert!(
-            force.z.abs() < 1e-3,
-            "z component should be ~0, got {}",
-            force.z
-        );
+        fn step(&mut self, translation: Vec3, rotation: Quat, scale: Vec3) -> Vec3 {
+            *self
+                .app
+                .world_mut()
+                .get_mut::<Transform>(self.parent)
+                .unwrap() = Transform {
+                translation,
+                rotation,
+                scale,
+            };
+            self.app.update();
+            let local = self
+                .app
+                .world()
+                .get::<Transform>(self.bone)
+                .unwrap()
+                .translation;
+            rotation * (scale * (local - Vec3::new(0.12, 0.0, 0.12)))
+        }
     }
 
-    /// No rotation between frames → zero force. Guards against division-
-    /// by-zero or NaN from `Quat::to_axis_angle()` on identity input.
     #[test]
-    fn centrifugal_pseudo_force_is_zero_when_parent_static() {
-        let force = centrifugal_pseudo_force(
-            Quat::IDENTITY,
-            Quat::IDENTITY,
-            Vec3::ZERO,
-            Vec3::new(0.5, 0.0, 0.0),
-            0.3,
-            1.0 / 60.0,
-        );
-        assert!(
-            force.length() < 1e-4,
-            "force should be ~0 for static parent, got {:?}",
-            force
-        );
+    fn breast_spring_moves_and_settles_at_multiple_frame_rates() {
+        for fps in [15.0, 30.0, 60.0, 120.0] {
+            let mut sim = Simulation::new(fps);
+            let origin = Vec3::new(0.0, 1.4, 0.0);
+            for _ in 0..30 {
+                assert!(sim.step(origin, Quat::IDENTITY, Vec3::ONE).length() < 0.001);
+            }
+            let mut peak = 0.0_f32;
+            for frame in 0..(fps as usize * 4) {
+                let t = frame as f32 / fps;
+                let position = origin + Vec3::new(t * 0.5, 0.015 * (t * 12.0).sin(), 0.0);
+                let delta = sim.step(position, Quat::from_rotation_y(t), Vec3::ONE);
+                assert!(delta.is_finite() && delta.length() <= 0.03001);
+                peak = peak.max(delta.length());
+            }
+            assert!(
+                peak > 0.002,
+                "secondary motion must remain visible: {fps}fps peak={peak}"
+            );
+            let stop = sim
+                .app
+                .world()
+                .get::<Transform>(sim.parent)
+                .copied()
+                .unwrap();
+            let mut final_delta = Vec3::ZERO;
+            for _ in 0..(fps as usize * 3) {
+                final_delta = sim.step(stop.translation, stop.rotation, stop.scale);
+            }
+            assert!(
+                final_delta.length() < 0.001,
+                "must settle: {fps}fps {final_delta}"
+            );
+            let world = sim.app.world_mut();
+            let mut bodies = world.query_filtered::<Option<&Parent>, With<JiggleBone>>();
+            assert!(
+                bodies.iter(world).all(|parent| parent.is_none()),
+                "spring mass must not inherit animation"
+            );
+        }
     }
 
-    /// Quaternion double-cover regression. q and -q represent the same
-    /// rotation; if the relative rotation `now * prev⁻¹` lands on the
-    /// w < 0 side, `to_axis_angle()` returns `2π - small` instead of
-    /// `small`, producing a spurious enormous ω that translates into a
-    /// hundreds-of-Newtons centripetal kick. This test pins the fix:
-    /// negating either input must produce the same physical force as
-    /// the un-negated version, since both encode the same rotation.
-    /// Discovered when the diagnostic log showed |ω|=180 rad/s spikes
-    /// during a 1-2 rad/s body spin, with corresponding 600 N force
-    /// kicks that pushed the body into "leading" position for the
-    /// rest of the clip.
     #[test]
-    fn centrifugal_pseudo_force_handles_quaternion_double_cover() {
-        let dt = 1.0 / 60.0;
-        let mass = 0.3_f32;
-        let parent_world_pos = Vec3::ZERO;
-        let body_world_pos = Vec3::new(0.5, 0.0, 0.0);
-        let prev = Quat::IDENTITY;
-        let now = Quat::from_rotation_y(0.05); // tiny rotation, ~3°
-
-        let f_pos = centrifugal_pseudo_force(now, prev, parent_world_pos, body_world_pos, mass, dt);
-
-        // Negate `now` — represents the SAME rotation, opposite quaternion sign.
-        // Without the double-cover fix in centrifugal_pseudo_force, this
-        // returned a force ~500x larger than f_pos (omega ~ 2π/dt ≈ 188 rad/s
-        // instead of 0.05/dt ≈ 3 rad/s, force scales with ω²).
-        let now_neg = Quat::from_xyzw(-now.x, -now.y, -now.z, -now.w);
-        let f_neg =
-            centrifugal_pseudo_force(now_neg, prev, parent_world_pos, body_world_pos, mass, dt);
-
-        let diff = (f_pos - f_neg).length();
+    fn breast_discontinuities_stay_bounded_in_world_meters() {
+        let mut sim = Simulation::new(30.0);
+        for frame in 0..120 {
+            let rotation = Quat::from_rotation_z(frame as f32 * 0.9);
+            let position = Vec3::new(if frame % 2 == 0 { 3.0 } else { -3.0 }, 1.0, 2.0);
+            let delta = sim.step(position, rotation, Vec3::new(0.5, 2.0, 1.5));
+            assert!(delta.is_finite() && delta.length() <= 0.03001, "{delta}");
+        }
+        sim.app
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(800),
+            ));
+        assert!(sim.step(Vec3::Y, Quat::IDENTITY, Vec3::ONE).length() <= 0.03001);
+        sim.app
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_secs_f32(1.0 / 30.0),
+            ));
+        let mut settled = Vec3::ZERO;
+        for _ in 0..90 {
+            settled = sim.step(Vec3::Y, Quat::IDENTITY, Vec3::ONE);
+        }
         assert!(
-            diff < 1e-4,
-            "negating quaternion sign must not change force (double-cover): \
-             f_pos={:?} f_neg={:?} diff={}",
-            f_pos,
-            f_neg,
-            diff,
+            settled.length() < 0.001,
+            "must recover after teleports and stalls: {settled}"
         );
-        // Sanity bound: physical force = m·ω²·r = 0.3·(0.05/dt)²·0.5
-        // ≈ 1.35 N. Without the fix, ω would be ~2π/dt ≈ 374 rad/s,
-        // giving force ≈ 21,000 N. Anything under 100 is in the
-        // physically-correct regime.
-        assert!(
-            f_pos.length() < 100.0,
-            "force at small ω should be small, got {} N (likely double-cover bug)",
-            f_pos.length(),
+        assert_eq!(
+            bounded_displacement(Vec3::splat(f32::NAN), 0.03),
+            Vec3::ZERO
         );
     }
 }

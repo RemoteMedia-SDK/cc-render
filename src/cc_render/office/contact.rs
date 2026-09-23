@@ -94,27 +94,29 @@ fn posed_global(
     )
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct ContactResidual {
+    offset: Vec3,
+    rotation: Quat,
+    pts_ms: u64,
+}
+
 pub(crate) fn correct_contacts(
     office: Res<OfficeController>,
     bind: Res<CC5BindRotations>,
     parents: Query<&Parent>,
     mut transforms: Query<&mut Transform>,
+    mut residuals: Local<[Option<ContactResidual>; 4]>,
 ) {
     if !bind.captured {
+        *residuals = [None; 4];
         return;
     }
-    for constraint in &office.display_motion().joints {
-        if constraint.rotation_only || office.observed.displayed_pts_ms < constraint.contact_pts_ms
-        {
-            continue;
-        }
-        let indices = match constraint.joint.as_str() {
-            "LeftHand" => [16, 18, 20],
-            "RightHand" => [17, 19, 21],
-            "LeftFoot" => [1, 4, 7],
-            "RightFoot" => [2, 5, 8],
-            _ => continue,
-        };
+    let pts_ms = office.observed.displayed_pts_ms;
+    for (limb, (joint, indices)) in [
+        ("LeftHand", [16, 18, 20]), ("RightHand", [17, 19, 21]),
+        ("LeftFoot", [1, 4, 7]), ("RightFoot", [2, 5, 8]),
+    ].into_iter().enumerate() {
         let [Some(shoulder), Some(elbow), Some(wrist)] = indices.map(|i| bind.entities[i]) else {
             continue;
         };
@@ -125,30 +127,57 @@ pub(crate) fn correct_contacts(
         ) else {
             continue;
         };
-        let target = Vec3::from(constraint.position)
-            + if constraint.root_relative {
-                Vec3::from(office.observed.pelvis)
+        let active = office.display_motion().joints.iter().find(|c| {
+            c.joint == joint && !c.rotation_only && pts_ms >= c.contact_pts_ms
+        }).and_then(|constraint| {
+            let target = Vec3::from(constraint.position)
+                + if constraint.root_relative { Vec3::from(office.observed.pelvis) } else { Vec3::ZERO };
+            // The model must first reach the neighborhood. Fade at the spatial
+            // boundary as well as activation, avoiding a late 12 cm snap.
+            let time = (pts_ms.saturating_sub(constraint.contact_pts_ms) as f32 / 200.).clamp(0., 1.);
+            let proximity = ((0.35 - w.translation().distance(target)) / 0.15).clamp(0., 1.);
+            let weight = time * time * (3. - 2. * time) * proximity * proximity * (3. - 2. * proximity);
+            if weight <= 0. { return None; }
+            let orientation = if joint.ends_with("Foot") {
+                Quat::from_rotation_y(office.display_motion().heading.unwrap_or(office.observed.heading))
+                    * bind.cc5_rest_world[indices[2]]
             } else {
-                Vec3::ZERO
+                Quat::from_array(constraint.rotation_xyzw) * bind.calibrated_world[indices[2]]
             };
-        // The model must first reach the neighborhood. Never teleport an arm
-        // across the scene, through furniture, or beyond its physical length.
-        if w.translation().distance(target) > 0.35 {
-            continue;
+            let current = w.compute_transform().rotation;
+            Some(ContactResidual {
+                offset: (target - w.translation()).clamp_length_max(0.12) * weight,
+                rotation: current.slerp(orientation, weight) * current.inverse(),
+                pts_ms,
+            })
+        });
+        let correction = active.or_else(|| residuals[limb].and_then(|last| {
+            if pts_ms < last.pts_ms { return None; }
+            let t = pts_ms.saturating_sub(last.pts_ms) as f32 / 200.;
+            if t >= 1. { return None; }
+            let weight = 1. - t * t * (3. - 2. * t);
+            Some(ContactResidual { offset: last.offset * weight,
+                rotation: Quat::IDENTITY.slerp(last.rotation, weight), ..last })
+        }));
+        let Some(mut correction) = correction else { residuals[limb] = None; continue; };
+        if active.is_none() && office.display_motion().joints.iter().any(|c| c.joint == joint && c.rotation_only) {
+            // The source pose already supplies the continuing grip orientation.
+            // Fade the reach offset without applying an old wrist rotation twice.
+            correction.rotation = Quat::IDENTITY;
         }
-        // Retargeting changes limb lengths. Limit correction to 12 cm from
-        // the generated pose, preserving both lengths. This is a spatial
-        // bound, not a per-frame step: generation replaces the pose each tick.
-        let target = w.translation() + (target - w.translation()).clamp_length_max(0.12);
+        // Release only the small retargeting residual, leaving the new generated
+        // body motion authoritative. Never retain a hidden old body pose.
+        let target = w.translation() + correction.offset;
         let Some(new_elbow) =
             elbow_point(s.translation(), e.translation(), w.translation(), target)
         else {
-            tracing::debug!(target: "office_contact", joint=%constraint.joint,
+            tracing::debug!(target: "office_contact", joint,
                 shoulder=?s.translation(), wrist=?w.translation(), goal=?target,
                 reach=s.translation().distance(e.translation()) + e.translation().distance(w.translation()),
                 "contact outside arm reach");
             continue;
         };
+        if let Some(active) = active { residuals[limb] = Some(active); }
         let upper_delta = Quat::from_rotation_arc(
             (e.translation() - s.translation()).normalize(),
             (new_elbow - s.translation()).normalize(),
@@ -183,18 +212,8 @@ pub(crate) fn correct_contacts(
                 * e.compute_transform().rotation;
         }
         if let Ok(mut t) = transforms.get_mut(wrist) {
-            let orientation = if constraint.joint.ends_with("Foot") {
-                Quat::from_rotation_y(
-                    office
-                        .display_motion()
-                        .heading
-                        .unwrap_or(office.observed.heading),
-                ) * bind.cc5_rest_world[indices[2]]
-            } else {
-                Quat::from_array(constraint.rotation_xyzw)
-            };
             t.rotation = (lower_delta * upper_delta * wg.compute_transform().rotation).inverse()
-                * orientation;
+                * correction.rotation * w.compute_transform().rotation;
         }
     }
 }
@@ -202,6 +221,95 @@ pub(crate) fn correct_contacts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn contact_preserves_calibrated_wrist_frame_at_the_target() {
+        use crate::cc_render::office::controller::JointTarget;
+        let mut app = App::new();
+        let yaw = Quat::from_rotation_y(0.7);
+        let calibration = Quat::from_rotation_x(0.5);
+        let root = app.world_mut().spawn(Transform::from_rotation(yaw)).id();
+        let shoulder = app.world_mut().spawn(Transform::IDENTITY).id();
+        let elbow = app
+            .world_mut()
+            .spawn(Transform::from_xyz(0.25, 0.15, 0.))
+            .id();
+        let wrist = app
+            .world_mut()
+            .spawn(Transform::from_xyz(0.25, -0.15, 0.).with_rotation(calibration))
+            .id();
+        app.world_mut().entity_mut(root).add_child(shoulder);
+        app.world_mut().entity_mut(shoulder).add_child(elbow);
+        app.world_mut().entity_mut(elbow).add_child(wrist);
+        let mut bind = CC5BindRotations::default();
+        bind.captured = true;
+        for (index, entity) in [(16, shoulder), (18, elbow), (20, wrist)] {
+            bind.entities[index] = Some(entity);
+        }
+        bind.calibrated_world[20] = calibration;
+        let mut office = OfficeController::default();
+        office.observed.displayed_pts_ms = 200;
+        office.motion.joints.push(JointTarget {
+            joint: "LeftHand".into(),
+            position: (yaw * Vec3::new(0.5, 0., 0.)).to_array(),
+            rotation_xyzw: yaw.to_array(),
+            root_relative: false,
+            rotation_only: false,
+            heading_reference: None,
+            contact_pts_ms: 0,
+        });
+        app.insert_resource(bind)
+            .insert_resource(office)
+            .add_systems(Update, correct_contacts);
+        app.update();
+        let mut state =
+            bevy::ecs::system::SystemState::<(Query<&Parent>, Query<&mut Transform>)>::new(
+                app.world_mut(),
+            );
+        let (parents, transforms) = state.get_mut(app.world_mut());
+        let actual = posed_global(wrist, &parents, &transforms)
+            .unwrap()
+            .compute_transform();
+        assert!(actual.translation.distance(yaw * Vec3::new(0.5, 0., 0.)) < 1e-5);
+        assert!(
+            actual.rotation.angle_between(yaw * calibration) < 0.001,
+            "contact discarded the target rig calibration"
+        );
+
+        // Generation supplies a fresh pose each render tick. A newly active
+        // correction must approach the handle over time, not jump there.
+        let origin = yaw * Vec3::new(0.5, 0., 0.);
+        let goal = yaw * Vec3::new(0.46, 0.06, 0.);
+        for (elapsed, fraction) in [(0, 0.), (100, 0.5), (200, 1.)] {
+            let mut office = app.world_mut().resource_mut::<OfficeController>();
+            office.observed.displayed_pts_ms = 1000 + elapsed;
+            office.motion.joints[0].contact_pts_ms = 1000;
+            office.motion.joints[0].position = goal.to_array();
+            app.world_mut().get_mut::<Transform>(shoulder).unwrap().rotation = Quat::IDENTITY;
+            app.world_mut().get_mut::<Transform>(elbow).unwrap().rotation = Quat::IDENTITY;
+            app.world_mut().get_mut::<Transform>(wrist).unwrap().rotation = calibration;
+            app.update();
+            let (parents, transforms) = state.get_mut(app.world_mut());
+            let actual = posed_global(wrist, &parents, &transforms).unwrap().compute_transform();
+            assert!(actual.translation.distance(origin.lerp(goal, fraction)) < 1e-5,
+                "contact must blend from the freshly retargeted pose at {elapsed} ms");
+            assert!(actual.rotation.angle_between(yaw * calibration) < 0.001);
+        }
+        // Releasing the positional reach after attachment must not expose the
+        // entire retargeting residual in one frame either.
+        app.world_mut().resource_mut::<OfficeController>().motion.joints.clear();
+        for (elapsed, fraction) in [(100, 0.5), (200, 0.)] {
+            app.world_mut().resource_mut::<OfficeController>().observed.displayed_pts_ms = 1200 + elapsed;
+            app.world_mut().get_mut::<Transform>(shoulder).unwrap().rotation = Quat::IDENTITY;
+            app.world_mut().get_mut::<Transform>(elbow).unwrap().rotation = Quat::IDENTITY;
+            app.world_mut().get_mut::<Transform>(wrist).unwrap().rotation = calibration;
+            app.update();
+            let (parents, transforms) = state.get_mut(app.world_mut());
+            let actual = posed_global(wrist, &parents, &transforms).unwrap().compute_transform();
+            assert!(actual.translation.distance(origin.lerp(goal, fraction)) < 1e-5,
+                "releasing a contact must fade its residual at {elapsed} ms");
+        }
+    }
+
     #[test]
     fn idle_filter_damps_noise_but_new_motion_bypasses_it() {
         let mut filter = SeatedIdleFilter::default();

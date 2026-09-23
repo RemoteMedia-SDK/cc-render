@@ -20,6 +20,16 @@ the `FBX2glTF → prune_morphs → bake_alpha` pipeline. It consumes:
   each rendered Video frame so downstream consumers receive
   content-time-aligned A/V pairs.
 
+Body poses use `CC_AVATAR_RETARGET_MODE=calibrated` by default. The renderer
+calibrates canonical target frames once from the avatar bind pose, then transfers
+complete source world rotations and converts them to CC5 parent-local rotations.
+This preserves shoulder roll and independent wrist motion across different bind
+axes. The pelvis keeps its anatomical bind orientation. For comparison with the
+previous solver, set `CC_AVATAR_RETARGET_MODE=axis_match_chained`;
+`CC_AVATAR_FREEZE_LEAF_BONES` applies only to the legacy axis-match modes.
+Retargeting preserves the generated pose; it does not correct an implausible
+source reach or enforce chair contact.
+
 The Bevy thread free-runs at `framerate` and produces frames into a
 ring; the SDK's pacer drives `tick()` at the bound wire clock (typically
 the outbound audio media clock, falling back to `framerate` Hz at idle)
@@ -98,6 +108,43 @@ takes 3–5 minutes; subsequent incremental builds are seconds.
 | `CC_SCENE_ROT_DEG_Y=<deg>`   | Scene rotation around Y (default `0`).                     |
 | `CC_SCENE_SCALE=<f>`         | Scene uniform scale (default `1.0`).                       |
 | `CC_SCENE_KEEP_LIGHTS=0`     | Strip authored lights from the environment scene.          |
+
+## Renderer correction A/B diagnostics
+
+Run fresh `office_acceptance` sessions with the same avatar, scene, seed,
+choreography, camera and speech settings. These switches are independent:
+
+| Switch | Default | Disabled behavior |
+| --- | --- | --- |
+| `CC_AVATAR_ROOT_INCLINATION_MAX_DEG` | `0` (disabled) | `0` bypasses the renderer pelvis-inclination cap; `30` restores the former cap. |
+| `CC_OFFICE_CONTACT_CORRECTIONS` | enabled | `0` skips post-retarget hand/foot contact IK, including its release residual. Read at renderer startup. |
+
+For the two arms, prefix the normal acceptance command with:
+
+```sh
+# A: former pelvis cap plus contact IK
+CC_AVATAR_ROOT_INCLINATION_MAX_DEG=30 CC_OFFICE_CONTACT_CORRECTIONS=1 \
+  target/debug/examples/office_acceptance avatar.glb arkit-map.json corrections-on.mp4
+# B: pelvis cap and contact IK disabled
+CC_AVATAR_ROOT_INCLINATION_MAX_DEG=0 CC_OFFICE_CONTACT_CORRECTIONS=0 \
+  target/debug/examples/office_acceptance avatar.glb arkit-map.json corrections-off.mp4
+```
+
+Both arms retain ARDY guidance/source-pose enforcement, renderer seat-root
+support, collision handling, seated idle smoothing, finger grips and secondary
+motion. This is not an uncorrected/raw-ARDY mode. Keep future handoffs disabled.
+Matching seeds control random draws but do not make live runs identical: changed
+displayed contacts can change action completion, requests and subsequent motion.
+For attribution, also test each switch separately; exact renderer-only comparisons
+require replaying identical poses and contact/controller state.
+
+The selected default is **pelvis cap OFF, contact IK ON**. In the seed-73129
+`beautiful_assistant` transition comparison with concurrent Audio2Face, that
+combination completed all eight actions; pickup took about 4.4 seconds. Contact
+IK OFF alone took about 20.7 seconds for pickup, and both corrections OFF timed
+out at pickup. These are single-run results, not a reliability guarantee. User
+visual review preferred the uncapped pelvis. Source support and the remaining
+renderer corrections are still enabled.
 
 ## What it exports
 
