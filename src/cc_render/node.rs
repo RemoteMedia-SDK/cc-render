@@ -43,9 +43,8 @@ pub struct CcRenderConfig {
     pub scene_glb_path: Option<PathBuf>,
     /// When true, `tick()` emits `RuntimeData::Video` frames continuously
     /// once the renderer is ready, regardless of upstream audio /
-    /// blendshape arrival. Skips A+V pairing and the audio buffer drain
-    /// entirely — audio is routed via a separate sink in real-time
-    /// pipelines (e.g. WebRTC's `audio` resample node).
+    /// blendshape arrival. Buffered speech drains on that same presentation
+    /// clock, including ticks where video capture misses its deadline.
     ///
     /// Default `false` preserves the smoke binary's strict A+V pairing
     /// for offline recording. Set to `true` for live WebRTC so the
@@ -82,6 +81,10 @@ struct AudioBuf {
     channels: u32,
     /// Total samples emitted so far (for content-time bookkeeping).
     samples_emitted: u64,
+    faces: std::collections::VecDeque<ArkitPose>,
+    speech_ends: std::collections::VecDeque<(u64, serde_json::Value)>,
+    face_started: bool,
+    speech_epoch: u64,
 }
 
 impl AudioBuf {
@@ -91,8 +94,71 @@ impl AudioBuf {
             sample_rate: 0,
             channels: 0,
             samples_emitted: 0,
+            faces: Default::default(),
+            speech_ends: Default::default(),
+            face_started: false,
+            speech_epoch: 0,
         }
     }
+    fn cancel(&mut self) {
+        let epoch = self.speech_epoch + 1;
+        *self = Self::new();
+        self.speech_epoch = epoch;
+    }
+
+    fn push_audio(
+        &mut self,
+        samples: &[f32],
+        rate: u32,
+        channels: u32,
+        epoch: Option<u64>,
+    ) -> Result<()> {
+        if epoch.is_some_and(|e| e < self.speech_epoch) {
+            return Ok(());
+        }
+        if rate == 0 || channels == 0 || samples.len() % channels as usize != 0 {
+            return Err(Error::Execution("invalid speech audio format".into()));
+        }
+        if self.sample_rate != 0 && self.sample_rate != rate {
+            return Err(Error::Execution(
+                "speech sample rate changed mid-session".into(),
+            ));
+        }
+        if self.samples.len() + samples.len() / channels as usize > rate as usize * 60 {
+            return Err(Error::Execution(
+                "renderer speech buffer exceeds 60 seconds".into(),
+            ));
+        }
+        self.sample_rate = rate;
+        self.channels = 1;
+        self.samples.extend(
+            samples
+                .chunks_exact(channels as usize)
+                .map(|c| c.iter().sum::<f32>() / channels as f32),
+        );
+        Ok(())
+    }
+
+    fn push_face(&mut self, pose: ArkitPose, epoch: Option<u64>) -> Result<()> {
+        if epoch.is_some_and(|e| e < self.speech_epoch) {
+            return Ok(());
+        }
+        if self.faces.len() >= 1800 {
+            return Err(Error::Execution(
+                "renderer facial queue exceeds 60 seconds".into(),
+            ));
+        }
+        if self.faces.back().is_some_and(|p| p.pts_ms > pose.pts_ms) {
+            return Err(Error::Execution("out of order facial frame".into()));
+        }
+        self.faces.push_back(pose);
+        Ok(())
+    }
+}
+
+fn audio_samples_per_tick(frame: u64, rate: u32, fps: u64) -> usize {
+    (((frame + 1) as u128 * rate as u128 / fps as u128)
+        - (frame as u128 * rate as u128 / fps as u128)) as usize
 }
 
 pub struct CcRenderNode {
@@ -167,6 +233,19 @@ impl std::fmt::Debug for CcRenderNode {
 }
 
 impl CcRenderNode {
+    fn office_query(&self, data: &RuntimeData) -> Option<RuntimeData> {
+        let RuntimeData::Json(value) = data else { return None };
+        let reply = match value.get("kind")?.as_str()? {
+            "get_scene_state" => serde_json::json!({"kind":"scene_state",
+                "state":self.renderer.scene_state(), "request_id":value.get("request_id")}),
+            "generate_waypoint" => super::office::navigation::query_reply(
+                &self.renderer.scene_state(), value,
+            ),
+            _ => return None,
+        };
+        Some(RuntimeData::Json(reply))
+    }
+
     pub fn new(config: CcRenderConfig) -> Result<Self> {
         let renderer = CcRenderer::spawn(RendererConfig {
             glb_path: config.glb_path.clone(),
@@ -206,6 +285,47 @@ impl CcRenderNode {
             first_bs_recv_at: Arc::new(parking_lot::Mutex::new(None)),
             stale_frames_dropped: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    fn accept_face(&self, pose: ArkitPose, data: &RuntimeData) -> Result<()> {
+        if self.config.realtime_mode {
+            let epoch = match data {
+                RuntimeData::Json(v) => v["speech_epoch"].as_u64(),
+                _ => None,
+            };
+            self.audio_buf.lock().push_face(pose, epoch)
+        } else {
+            self.renderer.push_pose(pose);
+            Ok(())
+        }
+    }
+
+    fn accept_speech_end(&self, data: &RuntimeData) -> Result<bool> {
+        let RuntimeData::Json(value) = data else {
+            return Ok(false);
+        };
+        if value["kind"] != "speech_end" {
+            return Ok(false);
+        }
+        let mut audio = self.audio_buf.lock();
+        if value["speech_epoch"]
+            .as_u64()
+            .is_some_and(|e| e < audio.speech_epoch)
+        {
+            return Ok(true);
+        }
+        audio.push_face(
+            ArkitPose {
+                pts_ms: value["pts_us"].as_u64().unwrap_or(0) / 1000,
+                ..Default::default()
+            },
+            value["speech_epoch"].as_u64(),
+        )?;
+        if self.config.realtime_mode {
+            let end = audio.samples_emitted + audio.samples.len() as u64;
+            audio.speech_ends.push_back((end, value.clone()));
+        }
+        Ok(true)
     }
 
     pub fn frames_emitted(&self) -> u64 {
@@ -336,11 +456,26 @@ impl AsyncStreamingNode for CcRenderNode {
     where
         F: FnMut(RuntimeData) -> Result<()> + Send,
     {
-        if matches!(&data,RuntimeData::Json(v) if v.get("kind").and_then(|k|k.as_str())==Some("get_scene_state"))
-        {
-            _callback(RuntimeData::Json(
-                serde_json::json!({"kind":"scene_state","state":self.renderer.scene_state(),"request_id":match &data {RuntimeData::Json(v)=>v.get("request_id"),_=>None}}),
-            ))?;
+        // Python workers carry structured envelopes on the JSON text channel.
+        // Decode that channel before dispatch, just as native Json inputs are.
+        let data = match &data {
+            RuntimeData::Text(text)
+                if remotemedia_plugin_sdk::types::split_text_str(text).0 == "json" =>
+            {
+                RuntimeData::Json(
+                    serde_json::from_str(remotemedia_plugin_sdk::types::split_text_str(text).1)
+                        .map_err(|e| {
+                            Error::Execution(format!("invalid renderer JSON channel: {e}"))
+                        })?,
+                )
+            }
+            _ => data,
+        };
+        if self.accept_speech_end(&data)? {
+            return Ok(0);
+        }
+        if let Some(reply) = self.office_query(&data) {
+            _callback(reply)?;
             return Ok(1);
         }
         // Audio inputs: buffer for `tick()` to emit paired with Video
@@ -353,6 +488,7 @@ impl AsyncStreamingNode for CcRenderNode {
             sample_rate,
             channels,
             timestamp_us,
+            metadata,
             ..
         } = &data
         {
@@ -363,28 +499,15 @@ impl AsyncStreamingNode for CcRenderNode {
                 samples = samples.len() as u64,
             );
             *self.last_audio_recv_at.lock() = Some(std::time::Instant::now());
-            let mut buf = self.audio_buf.lock();
-            if buf.sample_rate == 0 {
-                buf.sample_rate = *sample_rate;
-                buf.channels = *channels;
-                tracing::info!(
-                    target: "cc_render",
-                    "audio buffer initialized: {} Hz, {} ch",
-                    sample_rate, channels,
-                );
-            }
-            // Mono only — sum down if stereo arrives (kokoro is mono so
-            // this is defensive).
-            if *channels == 1 {
-                buf.samples.extend(samples.as_slice().iter().copied());
-            } else {
-                let n = *channels as usize;
-                let it = samples
-                    .as_slice()
-                    .chunks_exact(n)
-                    .map(|c| c.iter().sum::<f32>() / n as f32);
-                buf.samples.extend(it);
-            }
+            self.audio_buf.lock().push_audio(
+                samples.as_slice(),
+                *sample_rate,
+                *channels,
+                metadata
+                    .as_ref()
+                    .and_then(|m| m.get("speech_epoch"))
+                    .and_then(|v| v.as_u64()),
+            )?;
             return Ok(0);
         }
 
@@ -439,7 +562,7 @@ impl AsyncStreamingNode for CcRenderNode {
                         *slot = Some(std::time::Instant::now());
                     }
                 }
-                self.renderer.push_pose(Self::frame_to_pose(&f));
+                self.accept_face(Self::frame_to_pose(&f), &data)?;
             }
             Some(RendererInput::Skeletal(s)) => {
                 tracing::debug!(
@@ -491,9 +614,7 @@ impl AsyncStreamingNode for CcRenderNode {
                 let mut anchor = self.anchor_pts_ms.lock().await;
                 *anchor = None;
                 // Drop buffered audio too so we don't replay stale TTS.
-                let mut ab = self.audio_buf.lock();
-                ab.samples.clear();
-                ab.samples_emitted = 0;
+                self.audio_buf.lock().cancel();
             }
             None => {}
         }
@@ -505,6 +626,14 @@ impl AsyncStreamingNode for CcRenderNode {
         message: RuntimeData,
         _session_id: Option<String>,
     ) -> Result<bool> {
+        if matches!(aux_port_of(&message), Some("shutdown")) {
+            let renderer = self.renderer.clone();
+            tokio::task::spawn_blocking(move || renderer.shutdown())
+                .await
+                .map_err(|e| Error::Execution(format!("renderer shutdown task failed: {e}")))?
+                .map_err(|e| Error::Execution(format!("renderer shutdown failed: {e}")))?;
+            return Ok(true);
+        }
         if matches!(aux_port_of(&message), Some(BARGE_IN_PORT)) {
             self.renderer.push_pose(ArkitPose::default());
             // Also drop any active skeletal stream so the avatar
@@ -514,6 +643,7 @@ impl AsyncStreamingNode for CcRenderNode {
             }
             let mut anchor = self.anchor_pts_ms.lock().await;
             *anchor = None;
+            self.audio_buf.lock().cancel();
             return Ok(true);
         }
         Ok(false)
@@ -539,7 +669,7 @@ impl AsyncStreamingNode for CcRenderNode {
 
     async fn tick(
         &self,
-        _tick: Tick,
+        tick: Tick,
         _session_id: Option<String>,
         mut callback: Box<dyn FnMut(RuntimeData) -> std::result::Result<(), Error> + Send>,
     ) -> Result<()> {
@@ -603,7 +733,7 @@ impl AsyncStreamingNode for CcRenderNode {
             drained = frames.len() as u64,
             audio_buf_samples = buf_samples,
         );
-        if frames.is_empty() {
+        if frames.is_empty() && !self.config.realtime_mode {
             return Ok(());
         }
         tracing::debug!(
@@ -676,50 +806,30 @@ impl AsyncStreamingNode for CcRenderNode {
                     );
                 }
             }
-            let Some(f) = latest else {
-                return Ok(());
+            // Speech content advances only as samples are played. Queue facial
+            // frames until their content deadline; fast A2F inference must never
+            // overwrite an entire sentence in the renderer watch channel.
+            let face_was_started = {
+                let mut audio = self.audio_buf.lock();
+                let started = audio.face_started;
+                let content_ms = if audio.sample_rate == 0 {
+                    0
+                } else {
+                    audio.samples_emitted * 1000 / audio.sample_rate as u64
+                };
+                let mut pose = None;
+                while audio.faces.front().is_some_and(|p| p.pts_ms <= content_ms) {
+                    pose = audio.faces.pop_front();
+                }
+                if let Some(pose) = pose {
+                    self.renderer.push_pose(pose);
+                    audio.face_started = true;
+                }
+                started
             };
 
-            // First-emit lipsync alignment: when the audio buffer
-            // has its first real samples, the visible mouth pose
-            // already carries `f.pts_ms` (set by `LastAppliedPts`
-            // via the most-recent blendshape). The audio buffer
-            // holds samples from content_time=0 (kokoro starts
-            // there). Without correction, V_0 shows the mouth at
-            // content_time=warmup_gap_ms while A_0 plays content=0
-            // — speech leads mouth by the warmup gap. Fix: pop the
-            // pose-pts worth of samples off the front of the buffer
-            // on first audio-bearing frame.
-            //
-            // Anchored on the frame we actually emit — using
-            // `frames.first()` here would skip an audio offset that
-            // doesn't match the visible pose after we drop the stale
-            // backlog above.
             {
-                let mut anchor = self.anchor_pts_ms.lock().await;
-                if anchor.is_none() {
-                    let mut ab = self.audio_buf.lock();
-                    if ab.sample_rate != 0 && f.pts_ms > 0 && !ab.samples.is_empty() {
-                        let skip = ((f.pts_ms as u128 * ab.sample_rate as u128) / 1000) as usize;
-                        let actual = skip.min(ab.samples.len());
-                        for _ in 0..actual {
-                            ab.samples.pop_front();
-                        }
-                        tracing::debug!(
-                            target: "timing",
-                            stage = "ccrender_lipsync_align",
-                            pts_ms = f.pts_ms as i64,
-                            samples_skipped = actual as u64,
-                            samples_remaining = ab.samples.len() as u64,
-                        );
-                        *anchor = Some(f.pts_ms);
-                    }
-                }
-            }
-
-            {
-                let frame_number = self.frame_counter.fetch_add(1, Ordering::AcqRel);
-                let frame_pts_us = (frame_number * 1_000_000) / fps;
+                let frame_pts_us = tick.pts_us;
 
                 // Pull this frame's audio chunk from the buffer.
                 // Only emits A when the buffer holds REAL samples
@@ -727,16 +837,21 @@ impl AsyncStreamingNode for CcRenderNode {
                 // simply receives no Audio events for this tick.
                 let audio_chunk = {
                     let mut ab = self.audio_buf.lock();
-                    if ab.sample_rate == 0 || ab.samples.is_empty() {
+                    if ab.sample_rate == 0 || ab.samples.is_empty() || !face_was_started {
                         None
                     } else {
-                        let target_total = ((frame_number + 1) * ab.sample_rate as u64) / fps;
-                        let already = ab.samples_emitted;
-                        let want = target_total.saturating_sub(already) as usize;
+                        // Exactly one frame of samples, including the fractional
+                        // remainder at rates not divisible by fps. Idle time must
+                        // never turn into a catch-up burst of queued speech.
+                        let want = audio_samples_per_tick(tick.frame_idx, ab.sample_rate, fps);
                         if want == 0 {
                             None
                         } else {
-                            let real_take = want.min(ab.samples.len());
+                            let until_end =
+                                ab.speech_ends.front().map_or(usize::MAX, |(end, _)| {
+                                    end.saturating_sub(ab.samples_emitted) as usize
+                                });
+                            let real_take = want.min(ab.samples.len()).min(until_end);
                             if real_take == 0 {
                                 None
                             } else {
@@ -744,31 +859,38 @@ impl AsyncStreamingNode for CcRenderNode {
                                 for _ in 0..real_take {
                                     chunk.push(ab.samples.pop_front().expect("len checked"));
                                 }
-                                let pts_us =
-                                    (ab.samples_emitted * 1_000_000) / ab.sample_rate as u64;
+                                let pts_us = frame_pts_us;
                                 ab.samples_emitted += chunk.len() as u64;
-                                Some((chunk, ab.sample_rate, ab.channels.max(1), pts_us))
+                                Some((
+                                    chunk,
+                                    ab.sample_rate,
+                                    ab.channels.max(1),
+                                    pts_us,
+                                    ab.speech_epoch,
+                                ))
                             }
                         }
                     }
                 };
 
-                let video = RuntimeData::Video {
-                    pixel_data: f.pixels,
-                    width: f.width,
-                    height: f.height,
-                    format: PixelFormat::Rgba32,
-                    codec: None,
-                    frame_number,
-                    timestamp_us: frame_pts_us,
-                    is_keyframe: true,
-                    stream_id: Some(self.config.video_stream_id.clone()),
-                    arrival_ts_us: None,
-                };
-                callback(video)?;
-                emitted += 1;
+                if let Some(f) = latest {
+                    let frame_number = self.frame_counter.fetch_add(1, Ordering::AcqRel);
+                    callback(RuntimeData::Video {
+                        pixel_data: f.pixels,
+                        width: f.width,
+                        height: f.height,
+                        format: PixelFormat::Rgba32,
+                        codec: None,
+                        frame_number,
+                        timestamp_us: frame_pts_us,
+                        is_keyframe: true,
+                        stream_id: Some(self.config.video_stream_id.clone()),
+                        arrival_ts_us: None,
+                    })?;
+                    emitted += 1;
+                }
 
-                if let Some((chunk, sr, ch, pts_us)) = audio_chunk {
+                if let Some((chunk, sr, ch, pts_us, epoch)) = audio_chunk {
                     let audio = RuntimeData::Audio {
                         samples: AudioSamples::Vec(chunk),
                         sample_rate: sr,
@@ -776,10 +898,27 @@ impl AsyncStreamingNode for CcRenderNode {
                         stream_id: None,
                         timestamp_us: Some(pts_us),
                         arrival_ts_us: None,
-                        metadata: None,
+                        metadata: Some(serde_json::json!({"speech_epoch":epoch})),
                     };
                     callback(audio)?;
                     emitted += 1;
+                }
+                // Forward utterance boundaries only after their audio has played.
+                // Downstream resamplers can now flush the exact final samples.
+                let ends = {
+                    let mut audio = self.audio_buf.lock();
+                    let mut ends = Vec::new();
+                    while audio
+                        .speech_ends
+                        .front()
+                        .is_some_and(|(end, _)| *end <= audio.samples_emitted)
+                    {
+                        ends.push(audio.speech_ends.pop_front().unwrap().1);
+                    }
+                    ends
+                };
+                for end in ends {
+                    callback(RuntimeData::Json(end))?;
                 }
             }
             let total = self.frame_counter.load(Ordering::Relaxed);
@@ -1069,5 +1208,260 @@ impl AsyncStreamingNode for CcRenderNode {
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod speech_clock_tests {
+    use super::*;
+    #[test]
+    fn idle_never_becomes_audio_catchup() {
+        assert_eq!(audio_samples_per_tick(300, 16000, 30), 533);
+        assert_eq!(
+            (300..330)
+                .map(|f| audio_samples_per_tick(f, 16000, 30))
+                .sum::<usize>(),
+            16000
+        );
+    }
+}
+
+#[cfg(test)]
+#[path = "node_navigation_tests.rs"]
+mod navigation_tests;
+
+#[cfg(test)]
+mod realtime_speech_tests {
+    use super::*;
+    use crate::cc_render::renderer::{RenderedFrame, SkeletalPose};
+    #[derive(Default)]
+    struct MockRenderer {
+        poses: parking_lot::Mutex<Vec<ArkitPose>>,
+        skeletal: parking_lot::Mutex<Vec<SkeletalPose>>,
+        miss_capture: AtomicBool,
+    }
+    impl Renderer for MockRenderer {
+        fn push_pose(&self, pose: ArkitPose) {
+            self.poses.lock().push(pose);
+        }
+        fn push_skeletal_pose(&self, pose: Option<SkeletalPose>) {
+            if let Some(pose) = pose {
+                self.skeletal.lock().push(pose);
+            }
+        }
+        fn drain_frames(&self, sink: &mut Vec<RenderedFrame>) {
+            if self.miss_capture.load(Ordering::Relaxed) {
+                return;
+            }
+            sink.push(RenderedFrame {
+                pixels: vec![0; 4],
+                width: 1,
+                height: 1,
+                pts_ms: self.poses.lock().last().map_or(0, |p| p.pts_ms),
+            });
+        }
+    }
+    #[tokio::test]
+    async fn python_json_channel_delivers_skeletal_frames() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(CcRenderConfig::default(), renderer.clone());
+        let envelope = serde_json::json!({"kind":"skeletal_pose", "pts_ms":50,
+            "joint_quats_xyzw":vec![[0.0,0.0,0.0,1.0];22], "root_pos":[0.0,1.0,0.0]});
+        let input = RuntimeData::Text(remotemedia_plugin_sdk::types::tag_text_str(
+            &envelope.to_string(),
+            "json",
+        ));
+        node.process_streaming(input, None, |_| Ok(()))
+            .await
+            .unwrap();
+        assert_eq!(renderer.skeletal.lock().len(), 1);
+        assert_eq!(renderer.skeletal.lock()[0].pts_ms, 50);
+    }
+    #[tokio::test]
+    async fn idle_then_speech_keeps_samples_and_uses_shared_presentation_time() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig {
+                realtime_mode: true,
+                ..Default::default()
+            },
+            renderer.clone(),
+        );
+        node.frame_counter.store(300, Ordering::Release);
+        {
+            let mut audio = node.audio_buf.lock();
+            audio.sample_rate = 16000;
+            audio.channels = 1;
+            audio.samples.extend(vec![0.5; 16000]);
+            for pts_ms in [0, 33, 66, 100] {
+                audio.faces.push_back(ArkitPose {
+                    pts_ms,
+                    ..Default::default()
+                });
+            }
+        }
+        let outputs = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        for index in 300..304 {
+            let out = outputs.clone();
+            node.tick(
+                Tick {
+                    clock_id: "avatar".into(),
+                    pts_us: index * 1_000_000 / 30,
+                    frame_idx: index,
+                    deadline_us: 0,
+                },
+                None,
+                Box::new(move |data| {
+                    out.lock().push(data);
+                    Ok(())
+                }),
+            )
+            .await
+            .unwrap();
+        }
+        let out = outputs.lock();
+        let audio: Vec<_> = out
+            .iter()
+            .filter_map(|d| {
+                if let RuntimeData::Audio {
+                    samples,
+                    timestamp_us,
+                    ..
+                } = d
+                {
+                    Some((samples.len(), timestamp_us.unwrap()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(audio.len(), 3);
+        assert!(audio.iter().all(|(n, _)| *n <= 534));
+        assert_eq!(audio[0].1, 301 * 1_000_000 / 30);
+        assert_eq!(
+            node.audio_buf.lock().samples.len(),
+            16000 - audio.iter().map(|(n, _)| n).sum::<usize>()
+        );
+        assert!(renderer.poses.lock().len() >= 2);
+    }
+
+    #[tokio::test]
+    async fn missed_video_capture_does_not_pause_speech_clock() {
+        let renderer = Arc::new(MockRenderer::default());
+        renderer.miss_capture.store(true, Ordering::Relaxed);
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig {
+                realtime_mode: true,
+                ..Default::default()
+            },
+            renderer,
+        );
+        {
+            let mut audio = node.audio_buf.lock();
+            audio
+                .push_audio(&vec![0.5; 16000], 16000, 1, Some(0))
+                .unwrap();
+            audio.face_started = true;
+        }
+        let outputs = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        for index in 0..30 {
+            let outputs = outputs.clone();
+            node.tick(
+                Tick {
+                    clock_id: "avatar".into(),
+                    pts_us: index * 1_000_000 / 30,
+                    frame_idx: index,
+                    deadline_us: 0,
+                },
+                None,
+                Box::new(move |out| {
+                    outputs.lock().push(out);
+                    Ok(())
+                }),
+            )
+            .await
+            .unwrap();
+        }
+        let mut total = 0;
+        for (index, out) in outputs
+            .lock()
+            .iter()
+            .filter(|out| !matches!(out, RuntimeData::Json(_)))
+            .enumerate()
+        {
+            let RuntimeData::Audio {
+                samples,
+                timestamp_us,
+                ..
+            } = out
+            else {
+                panic!("unexpected video");
+            };
+            assert_eq!(*timestamp_us, Some(index as u64 * 1_000_000 / 30));
+            total += samples.len();
+        }
+        assert_eq!(total, 16000);
+        assert!(node.audio_buf.lock().samples.is_empty());
+    }
+
+    #[tokio::test]
+    async fn speech_end_follows_playback_and_precedes_next_utterance() {
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig {
+                realtime_mode: true,
+                ..Default::default()
+            },
+            Arc::new(MockRenderer::default()),
+        );
+        {
+            let mut audio = node.audio_buf.lock();
+            audio
+                .push_audio(&vec![0.25; 100], 16000, 1, Some(0))
+                .unwrap();
+            audio.face_started = true;
+        }
+        assert!(node
+            .accept_speech_end(&RuntimeData::Json(
+                serde_json::json!({"kind":"speech_end", "speech_epoch":0, "pts_us":6250})
+            ))
+            .unwrap());
+        node.audio_buf
+            .lock()
+            .push_audio(&vec![0.5; 1000], 16000, 1, Some(0))
+            .unwrap();
+        let outputs = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let out = outputs.clone();
+        node.tick(
+            Tick {
+                clock_id: "avatar".into(),
+                pts_us: 0,
+                frame_idx: 0,
+                deadline_us: 0,
+            },
+            None,
+            Box::new(move |data| {
+                out.lock().push(data);
+                Ok(())
+            }),
+        )
+        .await
+        .unwrap();
+        let output = outputs.lock();
+        let audio_index = output
+            .iter()
+            .position(|v| matches!(v, RuntimeData::Audio { .. }))
+            .unwrap();
+        let RuntimeData::Audio {
+            samples, metadata, ..
+        } = &output[audio_index]
+        else {
+            unreachable!()
+        };
+        assert_eq!(samples.len(), 100);
+        assert_eq!(metadata.as_ref().unwrap()["speech_epoch"], 0);
+        assert!(
+            matches!(&output[audio_index+1], RuntimeData::Json(v) if v["kind"] == "speech_end")
+        );
+        assert_eq!(node.audio_buf.lock().samples.len(), 1000);
     }
 }

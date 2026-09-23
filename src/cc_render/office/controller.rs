@@ -74,6 +74,8 @@ pub struct ActionEvent {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Observation {
     pub ready: bool,
+    /// A captured world-space pelvis observation, independent of worker readiness.
+    pub position_valid: bool,
     pub pelvis: [f32; 3],
     pub wrists: [[f32; 3]; 2],
     pub heading: f32,
@@ -997,7 +999,7 @@ impl OfficeController {
                         if a.stage == Stage::Returning {
                             "lowers"
                         } else {
-                            "waves"
+                            "raises"
                         },
                         if hand_index(r.hand) == 0 {
                             "left"
@@ -1011,7 +1013,7 @@ impl OfficeController {
                                 " back down to the side and relaxes the arm"
                             }
                         } else {
-                            ""
+                            " to shoulder height and waves it side to side in greeting"
                         }
                     )),
                     Verb::Sit => {
@@ -1462,10 +1464,11 @@ impl OfficeController {
                                 }).collect::<Vec<_>>()
                             }));
                         }
+                        // Gestures continue from motion history with only the
+                        // scene contacts above, never a frozen seated body.
                         if (self.seated.is_some() || settling.is_some())
                             && self.active.iter().all(|a| {
                                 a.request.verb == Verb::Smile
-                                    || a.request.verb == Verb::Wave
                                     || (a.request.verb == Verb::Sit && a.stage == Stage::Settling)
                             })
                             && self.timeline_layers.is_empty()
@@ -1477,17 +1480,10 @@ impl OfficeController {
                                 "hold":true, "blend_ms":800,
                                 "pts_ms":start + 800, "visible_from_ms":start,
                                 "root_position":root, "heading":o.yaw_deg.to_radians(),
-                                "free_hands":self.active.iter()
-                                    .filter(|a| a.request.verb == Verb::Wave && a.stage != Stage::Returning)
-                                    .map(|a| if hand_index(a.request.hand) == 0 { "Left" } else { "Right" })
-                                    .collect::<Vec<_>>(),
                                 "carry_hands":self.held.iter().map(|(hand, _)| match hand {
                                     Hand::Left => "Left", Hand::Right => "Right"
                                 }).collect::<Vec<_>>()
                             }));
-                        }
-                        for wave in self.active.iter().filter(|a| a.request.verb == Verb::Wave) {
-                            add_seated_wave_keys(&mut timeline, wave, root, o.yaw_deg.to_radians());
                         }
                     }
                 }
@@ -1517,11 +1513,35 @@ impl OfficeController {
                 }).collect::<Vec<_>>()
             }));
         }
+        self.constrain_standing_idle(&mut timeline);
         for layer in self.timeline_layers.values() {
             layer.apply(&mut timeline);
         }
         self.motion.timeline = Some(timeline);
         self.committed_motion = self.motion.handoff_pts_ms.map(|_| committed);
+    }
+
+    /// Condition the generator on a stable stance while waiting for a task.
+    /// This is a native pose constraint, never a post-generation pose override.
+    /// Body gestures release it entirely; the model continues from history.
+    fn constrain_standing_idle(&self, timeline: &mut super::motion_timeline::MotionTimeline) {
+        if self.seated.is_some() || !self.timeline_layers.is_empty()
+            || self.active.iter().any(|a| a.request.verb != Verb::Smile)
+        {
+            return;
+        }
+        let (start, mut root) = self.motion_start();
+        root[1] = 0.95;
+        timeline.root.keyframes = vec![super::motion_timeline::RootKeyframe {
+            pts_ms: start as i64, position: root,
+        }];
+        timeline.root.heading = Some(self.observed.heading);
+        timeline.root.constrain_height = true;
+        timeline.pose_keyframes.push(serde_json::json!({
+            "kind":"full_body", "preset":"standing", "hold":true,
+            "pts_ms":start + 1000, "root_position":root, "heading":self.observed.heading,
+            "carry_hands":self.held.iter().map(|(hand, _)| if *hand == Hand::Left { "Left" } else { "Right" }).collect::<Vec<_>>()
+        }));
     }
     /// Acquire support only within 15 cm, then preserve contact until standing.
     /// Subsequent model drift cannot repeatedly detach and drop onto the seat.
@@ -1650,30 +1670,7 @@ impl OfficeController {
             world_keypoints: self
                 .objects
                 .iter()
-                .map(|o| {
-                    (
-                        o.id.clone(),
-                        o.keypoints
-                            .iter()
-                            .map(|(name, p)| {
-                                let world = o.transform().mul_transform(
-                                    Transform::from_translation(Vec3::from(p.position))
-                                        .with_rotation(
-                                            Quat::from_array(p.rotation_xyzw).normalize(),
-                                        ),
-                                );
-                                (
-                                    name.clone(),
-                                    super::InteractionKeypoint {
-                                        role: p.role.clone(),
-                                        position: world.translation.to_array(),
-                                        rotation_xyzw: world.rotation.to_array(),
-                                    },
-                                )
-                            })
-                            .collect(),
-                    )
-                })
+                .map(|o| (o.id.clone(), o.resolved_world_keypoints()))
                 .collect(),
             avatar: self.observed.clone(),
             posture: if self.seated.is_some() {
@@ -1716,48 +1713,9 @@ fn seat_contacts_aligned(observed: &Observation, seat: &OfficeObject) -> bool {
         })
 }
 
-/// Sparse wrist keyframes guide the free arm over the retained seated support.
-fn add_seated_wave_keys(
-    timeline: &mut super::motion_timeline::MotionTimeline,
-    wave: &Active,
-    root: [f32; 3],
-    heading: f32,
-) {
-    let side = if hand_index(wave.request.hand) == 0 {
-        1.
-    } else {
-        -1.
-    };
-    let joint = if side > 0. { "LeftHand" } else { "RightHand" };
-    // Returning blends the complete supported pose, including the hand in the
-    // lap. A second, below-seat wrist target would fight that coherent pose.
-    if wave.stage == Stage::Returning {
-        return;
-    }
-    let keys: Vec<(u64, f32, f32)> = [(0.3, 0.32), (0.5, 0.48), (0.7, 0.32)]
-            .into_iter()
-            .map(|(fraction, x)| {
-                (
-                    wave.execute_pts_ms + (wave.request.duration_sec * fraction * 1000.) as u64,
-                    x,
-                    0.65,
-                )
-            })
-            .collect();
-    for (pts, x, y) in keys {
-        let target =
-            Vec3::from(root) + Quat::from_rotation_y(heading) * Vec3::new(side * x, y, 0.15);
-        timeline.pose_keyframes.push(serde_json::json!({
-            "kind":"end_effectors", "pts_ms":pts,
-            "visible_from_ms":wave.execute_pts_ms, "heading":heading,
-            "keypoints":[{"joint":joint,"position":target.to_array()}]
-        }));
-    }
-}
-
 /// Reserve time to turn before translating. Heading is generated by ARDY from
 /// the same route; this never rotates a rendered pose or rewrites its history.
-fn walking_waypoints(path: &[pathfinder::Waypoint], mut time: f32, heading: f32) -> Vec<[f32; 4]> {
+pub(super) fn walking_waypoints(path: &[pathfinder::Waypoint], mut time: f32, heading: f32) -> Vec<[f32; 4]> {
     let Some(first) = path.first() else {
         return Vec::new();
     };
@@ -1874,6 +1832,25 @@ mod tests {
     }
 
     #[test]
+    fn standing_idle_is_generated_with_a_native_target_and_yields_to_actions() {
+        let mut c = ready();
+        let w = SceneState::default();
+        c.rebuild(&w);
+        let idle = &c.motion.timeline.as_ref().unwrap().pose_keyframes[0];
+        assert_eq!(idle["preset"], "standing");
+        assert_eq!(idle["hold"], true);
+        assert!(idle.get("enforce").is_none());
+        submit(&mut c, action("wave", Verb::Wave, Some(Hand::Left), None), &w);
+        assert!(c.motion.timeline.as_ref().unwrap().pose_keyframes.is_empty(),
+            "standing wave must use current motion history without pose or wrist targets");
+        let mut walk = action("walk", Verb::Walk, None, None);
+        walk.position = Some([1.5, 0., 0.2]);
+        submit(&mut c, walk, &w);
+        assert!(!c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
+            .any(|key| key["preset"] == "standing" && key["hold"] == true));
+    }
+
+    #[test]
     fn seated_idle_contacts_remain_committed_until_handoff() {
         let mut c = ready();
         let w = SceneState::default();
@@ -1902,10 +1879,13 @@ mod tests {
         assert!(c.seated_idle());
         assert_eq!(c.display_motion().prompt, old_prompt);
         assert!(supported(c.display_motion()));
-        assert!(supported(&c.motion), "wave must preserve seated support");
-        let support = c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
-            .find(|k| k["enforce"] == true).unwrap();
-        assert_eq!(support["free_hands"], serde_json::json!(["Right"]));
+        assert!(!supported(&c.motion), "wave must release the full-body hold");
+        let keys = &c.motion.timeline.as_ref().unwrap().pose_keyframes;
+        assert!(keys.iter().all(|key| key["kind"] == "end_effectors"));
+        let contacts: Vec<_> = keys.iter().flat_map(|key| key["keypoints"].as_array().unwrap())
+            .map(|point| point["joint"].as_str().unwrap()).collect();
+        assert_eq!(contacts, ["LeftFoot", "RightFoot", "Hips"],
+            "retain seat and floor contacts, without authored wave wrist targets");
         assert!(c.motion.prompt.contains("waves"));
         c.observed.displayed_pts_ms = 1000;
         assert!(!c.seated_idle());
@@ -2135,6 +2115,28 @@ mod tests {
         assert_eq!(c.revision, revision);
         assert_eq!(c.events.back().unwrap().status, Status::Failed);
     }
+    #[test]
+    fn kitchen_plate_grab_uses_live_rim_pose_without_attaching_early() {
+        let mut c = ready();
+        let world = SceneState::default();
+        let plate = c.objects.iter().find(|o| o.id == "plate").unwrap().clone();
+        submit(&mut c, action("fetch-plate", Verb::Grab, Some(Hand::Right), Some("plate")), &world);
+        assert_eq!(c.active[0].stage, Stage::Approach);
+        assert!(c.motion.joints.is_empty(), "do not reach while walking across the home");
+        c.observed.pelvis = plate.approach_position();
+        c.observed.pelvis[1] = 0.95;
+        c.active[0].stage = Stage::Execute;
+        c.active[0].execute_origin = c.observed.pelvis;
+        c.active[0].execute_pts_ms = 1000;
+        c.rebuild(&world);
+        let target = c.motion.joints.iter().find(|p| p.joint == "RightHand").unwrap();
+        let grasp = plate.grasp_transform().unwrap();
+        assert_eq!(target.position, grasp.translation.to_array());
+        assert!(Quat::from_array(target.rotation_xyzw).angle_between(grasp.rotation).abs() < 1e-5);
+        assert!(c.grab_commands.is_empty());
+        assert!(!c.events.iter().any(|e| e.status == Status::Completed));
+    }
+
     #[test]
     fn grab_pursuit_waits_for_displayed_contact_even_when_hand_is_nearby() {
         let mut c = ready();

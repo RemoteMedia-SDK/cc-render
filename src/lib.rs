@@ -124,6 +124,16 @@ fn build_node(params: CcRenderManifestParams) -> Result<CcRenderNode, String> {
 #[derive(Default)]
 pub struct CcRenderNodeFactory;
 
+impl CcRenderNodeFactory {
+    /// Authored outputs for in-process hosts to negotiate media before SDP.
+    pub fn output_schema() -> remotemedia_plugin_sdk::traits::schema::NodeSchema {
+        use remotemedia_plugin_sdk::traits::schema::{NodeSchema, RuntimeDataType};
+        NodeSchema::new("CcRenderNode")
+            .accepts([RuntimeDataType::Audio, RuntimeDataType::Json, RuntimeDataType::Text])
+            .produces([RuntimeDataType::Video, RuntimeDataType::Audio, RuntimeDataType::Json])
+    }
+}
+
 impl FfiNodeFactory for CcRenderNodeFactory {
     fn node_type(&self) -> RString {
         RString::from("CcRenderNode")

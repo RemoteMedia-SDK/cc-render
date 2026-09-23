@@ -50,17 +50,22 @@ pub fn install(app: &mut App) {
         tracing::warn!("CC_OFFICE_CONTACT_CORRECTIONS=0: renderer contact IK disabled");
     }
     let mut controller = OfficeController::default();
+    let mut bundled = true;
     if let Ok(path) = std::env::var("CC_OFFICE_SCENE") {
         match std::fs::read_to_string(path)
             .ok()
             .and_then(|s| serde_json::from_str::<Vec<super::OfficeObject>>(&s).ok())
             .filter(|objects| super::validate_objects(objects).is_ok())
         {
-            Some(objects) => controller.objects = objects,
+            Some(objects) => {
+                controller.objects = objects;
+                bundled = false;
+            }
             None => tracing::error!("CC_OFFICE_SCENE invalid; using bundled starter office"),
         }
     }
     app.insert_resource(controller)
+        .insert_resource(super::home::BundledHome(bundled))
         .add_systems(Startup, spawn_office)
         .add_systems(PreUpdate, classify_animated_colliders)
         .add_systems(
@@ -88,6 +93,7 @@ fn spawn_office(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut registry: ResMut<PropRegistry>,
+    layout: Option<Res<super::home::BundledHome>>,
 ) {
     for o in &office.objects {
         let h = Vec3::from(o.half_extents);
@@ -124,7 +130,10 @@ fn spawn_office(
                         } else {
                             meshes.add(Cuboid::from_size(size * 2.))
                         }),
-                        MeshMaterial3d(material.clone()),
+                        MeshMaterial3d(part.color.map_or_else(
+                            || material.clone(),
+                            |c| materials.add(Color::srgb(c[0], c[1], c[2])),
+                        )),
                         Transform::from_translation(Vec3::from(part.position)),
                         Collider::cuboid(size.x, size.y, size.z),
                     ));
@@ -158,22 +167,12 @@ fn spawn_office(
             registry.by_id.insert(o.id.clone(), entity.id());
         }
     }
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(8., 0.05, 8.))),
-        MeshMaterial3d(materials.add(Color::srgb(0.28, 0.23, 0.18))),
-        Transform::from_xyz(0., -0.025, -1.),
-        RigidBody::Fixed,
-        Collider::cuboid(4., 0.025, 4.),
-    ));
-    commands.spawn((
-        PointLight {
-            color: Color::srgb(1., 0.8, 0.6),
-            intensity: 180000.,
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(0., 3., -1.),
-    ));
+    super::home::spawn_surfaces(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        layout.as_ref().is_none_or(|layout| layout.0),
+    );
 }
 fn observe(
     mut office: ResMut<OfficeController>,
@@ -186,6 +185,7 @@ fn observe(
     office.now = time.elapsed_secs_f64();
     if let Some(p) = bind.entities[0].and_then(|e| globals.get(e).ok()) {
         office.observed.ready = bind.captured && office.motion_ready;
+        office.observed.position_valid = bind.captured;
         office.observed.pelvis = p.translation().to_array();
     }
     if let (Some(left), Some(right)) = (
@@ -237,6 +237,11 @@ fn observe(
                 .to_degrees();
         }
     }
+    // Compile the first idle only after the avatar's world position is known.
+    // Otherwise a slow LLM turn starts with an unconstrained root-only stream.
+    if office.observed.position_valid && office.motion.timeline.is_none() {
+        office.rebuild(&world);
+    }
     office.advance(&world);
     if (moved || office.blocked) && office.now - office.last_replan >= 0.5 {
         office.blocked = false;
@@ -251,6 +256,51 @@ fn observe(
 fn hip_heading(left: Vec3, right: Vec3) -> Option<f32> {
     let lateral = left - right;
     (lateral.x * lateral.x + lateral.z * lateral.z > 1e-8).then(|| (-lateral.z).atan2(lateral.x))
+}
+
+#[cfg(test)]
+mod home_tests {
+    use super::*;
+
+    #[test]
+    fn home_spawns_furniture_materials_and_floor_for_every_room() {
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .init_resource::<PropRegistry>()
+            .insert_resource(OfficeController::default())
+            .add_systems(Startup, spawn_office);
+        app.update();
+        let world = app.world_mut();
+        let names: Vec<_> = world
+            .query::<&Name>()
+            .iter(world)
+            .map(|n| n.as_str().to_owned())
+            .collect();
+        for object in super::super::starter_objects() {
+            assert!(names.contains(&object.label), "missing {}", object.id);
+        }
+        assert_eq!(world.query::<&PointLight>().iter(world).count(), 5);
+        let floor = world
+            .query::<(&Name, &Transform, &Collider)>()
+            .iter(world)
+            .find(|(name, _, _)| name.as_str() == "Home floor")
+            .unwrap();
+        let half = floor.2.as_cuboid().unwrap().half_extents();
+        for room in super::super::home::ROOMS {
+            assert!(room.min_xz[0] >= floor.1.translation.x - half.x);
+            assert!(room.max_xz[0] <= floor.1.translation.x + half.x);
+            assert!(room.min_xz[1] >= floor.1.translation.z - half.z);
+            assert!(room.max_xz[1] <= floor.1.translation.z + half.z);
+        }
+        let colors = world.resource::<Assets<StandardMaterial>>();
+        assert!(
+            colors
+                .iter()
+                .any(|(_, m)| m.base_color == Color::srgb(0.18, 0.37, 0.44)),
+            "desk screen should use its authored part color"
+        );
+    }
 }
 
 #[cfg(test)]

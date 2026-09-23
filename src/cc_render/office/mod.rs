@@ -1,7 +1,9 @@
 //! Authored office and observed-state action controller. Coordinates are meters, Y-up.
 pub mod controller;
+pub mod home;
 pub mod metadata;
 pub mod motion_timeline;
+pub mod navigation;
 pub mod pathfinder;
 pub(crate) mod systems;
 pub mod timeline;
@@ -35,6 +37,9 @@ pub struct OfficeObject {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OfficePart {
+    /// Optional material override for upholstery, screens, ceramics and trim.
+    #[serde(default)]
+    pub color: Option<[f32; 3]>,
     #[serde(default)]
     pub cylinder: bool,
     pub position: [f32; 3],
@@ -65,6 +70,31 @@ impl OfficeObject {
         self.local_keypoint(role)
             .map(|p| self.transform().mul_transform(p))
     }
+    /// Publish the same resolved affordances the controller executes, including
+    /// legacy anchors on furniture that has no named keypoint map yet.
+    pub fn resolved_world_keypoints(&self) -> std::collections::BTreeMap<String, InteractionKeypoint> {
+        let mut points: std::collections::BTreeMap<_, _> = self.keypoints.iter().map(|(name, p)| {
+            let world = self.transform().mul_transform(
+                Transform::from_translation(p.position.into())
+                    .with_rotation(Quat::from_array(p.rotation_xyzw).normalize()));
+            (name.clone(), InteractionKeypoint { role: p.role.clone(),
+                position: world.translation.to_array(), rotation_xyzw: world.rotation.to_array() })
+        }).collect();
+        for (role, position) in [
+            ("approach", Some(self.approach_position())),
+            ("grasp", self.grasp_transform().map(|t| t.translation.to_array())),
+            ("seat_pelvis", self.seat_position()),
+            ("placement", self.placement_position()),
+        ] {
+            if points.values().any(|p| p.role == role) { continue; }
+            if let Some(position) = position {
+                points.insert(role.into(), InteractionKeypoint { role: role.into(), position,
+                    rotation_xyzw: self.transform().rotation.to_array() });
+            }
+        }
+        points
+    }
+
     pub fn grasp_transform(&self) -> Option<Transform> {
         self.world_keypoint("grasp").or_else(|| {
             self.grasp.map(|p| {
@@ -141,7 +171,13 @@ impl OfficeObject {
     }
 }
 pub fn starter_objects() -> Vec<OfficeObject> {
-    serde_json::from_str(include_str!("starter.json")).expect("bundled office is valid")
+    let mut objects: Vec<OfficeObject> =
+        serde_json::from_str(include_str!("starter.json")).expect("bundled office is valid");
+    objects.extend(
+        serde_json::from_str::<Vec<OfficeObject>>(include_str!("home.json"))
+            .expect("bundled home is valid"),
+    );
+    objects
 }
 pub fn validate_objects(objects: &[OfficeObject]) -> Result<(), String> {
     let mut ids = std::collections::HashSet::new();
@@ -177,7 +213,9 @@ pub fn validate_objects(objects: &[OfficeObject]) -> Result<(), String> {
                 .any(|v| !v.is_finite())
             || o.color
                 .iter()
-                .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
+                .copied()
+                .chain(o.parts.iter().filter_map(|p| p.color).flatten())
+                .any(|v| !v.is_finite() || !(0. ..=1.).contains(&v))
         {
             return Err(format!("{} has invalid transform or anchor values", o.id));
         }

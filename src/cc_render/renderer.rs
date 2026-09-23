@@ -148,6 +148,9 @@ impl Default for RendererConfig {
 /// poses and emits scripted frames.
 pub trait Renderer: Send + Sync {
     fn push_pose(&self, pose: ArkitPose);
+    fn shutdown(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
     /// Push a full-body skeletal pose. `None` clears any active stream
     /// and lets the avatar's baked AnimationPlayer take over again.
     fn push_skeletal_pose(&self, pose: Option<SkeletalPose>);
@@ -202,7 +205,7 @@ pub struct CcRenderer {
     /// readiness instead of a wall-clock warmup timer.
     ready: Arc<AtomicBool>,
     /// Explicit shutdown joins before a standalone process unloads GPU libraries.
-    join: Option<JoinHandle<()>>,
+    join: parking_lot::Mutex<Option<JoinHandle<()>>>,
     shutdown_tx: crossbeam_channel::Sender<()>,
     prop_cmd_tx: tokio::sync::mpsc::UnboundedSender<PropCmd>,
     despawn_cmd_tx: tokio::sync::mpsc::UnboundedSender<PropId>,
@@ -211,6 +214,9 @@ pub struct CcRenderer {
 }
 
 impl Renderer for CcRenderer {
+    fn shutdown(&self) -> anyhow::Result<()> {
+        CcRenderer::shutdown(self)
+    }
     fn push_pose(&self, pose: ArkitPose) {
         Self::push_pose(self, pose);
     }
@@ -317,7 +323,7 @@ impl CcRenderer {
             frame_rx,
             config,
             ready,
-            join: Some(join),
+            join: parking_lot::Mutex::new(Some(join)),
             shutdown_tx,
             prop_cmd_tx,
             despawn_cmd_tx,
@@ -337,9 +343,9 @@ impl CcRenderer {
 
     /// Finish GPU teardown before the host exits. Ordinary Drop remains
     /// nonblocking for pipeline owners that are not terminating the process.
-    pub fn shutdown(mut self) -> anyhow::Result<()> {
+    pub fn shutdown(&self) -> anyhow::Result<()> {
         let _ = self.shutdown_tx.try_send(());
-        if let Some(thread) = self.join.take() {
+        if let Some(thread) = self.join.lock().take() {
             thread
                 .join()
                 .map_err(|_| anyhow::anyhow!("renderer thread panicked during shutdown"))?;

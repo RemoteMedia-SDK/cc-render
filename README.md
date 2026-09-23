@@ -154,3 +154,93 @@ renderer corrections are still enabled.
 
 Pacing-domain: `ClockedToOutboundMedia` with a wall fallback at
 `framerate` Hz.
+
+### Authored home scene
+
+`CC_OFFICE=1` with physics enabled now loads a furnished 10 × 12 metre home.
+The roof and upper front wall are cut away for an overview; the remaining walls
+and 1.4 metre doorways participate in both physics and navigation. Coordinates
+are metres, Y-up; the floor is at Y=0. The avatar starts in the open work area.
+
+| Area | Furnishings / action target IDs |
+| --- | --- |
+| Kitchen, rear left | `kitchen_sink`, `stove`, `fridge`, `dining_table`, `dining_chair` |
+| Work area, front left | Existing `desk`, `chair`, `shelf`, `sofa`, `mug`, `book`; computer, keyboard and mouse on the desk |
+| Bathroom, rear centre | `shower`, `toilet`, `bathroom_vanity` with mirror |
+| Bedroom, rear right | `bed`, `nightstand` with lamp, `wardrobe` |
+| Living room, front right | `living_sofa`, `coffee_table`, `television` and media console |
+
+The original office objects and interaction coordinates are preserved. All new
+furniture has reachable walk-to approach points. The dining chair and living
+sofa also have sitting anchors; tables, the sink counter, vanity, bed and
+nightstand expose placement surfaces. Fixtures are static geometry: appliance
+operation, bathing and lying-down animations are not action verbs.
+
+`src/cc_render/office/starter.json` defines the original office furniture;
+`home.json` adds the rooms' furniture and walls. Optional `parts[].color` values
+provide material overrides while older object arrays remain valid.
+`home::ROOMS` defines room bounds and entrances; `home.rs` supplies floor finishes
+and lighting. `CC_OFFICE_SCENE=/absolute/objects.json` replaces the bundled objects
+and retains the original office floor and light instead of adding the home shell.
+
+The default office camera frames the entire home. Override
+`CC_AVATAR_CAMERA_POS=x,y,z`, `CC_AVATAR_CAMERA_LOOK_AT=x,y,z` and
+`CC_AVATAR_CAMERA_FOV_DEG` for closer views. Produce a PNG using the actual renderer
+without starting ARDY or a speech worker:
+
+```sh
+cargo run --example home_snapshot -- avatar.glb arkit-map.json home.png
+cargo test --lib
+```
+
+The home tests check every room entrance and furniture approach with avatar
+clearance, routes between rooms through doorways, enclosure, floor coverage,
+spawned furniture, lights and part materials.
+
+### Query a navigation path
+
+Walking already routes around obstacles and supplies timed `root_waypoints` to
+ARDY. `generate_waypoint(from, to)` exposes that planner as a **read-only preview**.
+Both endpoints accept an exact object ID, `"avatar"`, or `[x, y, z]` world metres.
+Object IDs resolve to their transformed approach points; furniture remains an
+obstacle. Coordinates are projected onto the floor for 2D XZ navigation.
+
+Send this JSON to `cc_render.in` (native JSON or the tagged Python JSON channel):
+
+```json
+{"kind":"generate_waypoint","request_id":"path-1","from":"avatar","to":"bed"}
+```
+
+The correlated `cc_render.out` reply is
+`{"kind":"waypoint_path","request_id":"path-1","ok":true,"path":{...}}`.
+The path contains:
+
+- `waypoints`: ordered world `[x, floor_y, z]` endpoints and corners.
+- `root_waypoints`: `[x, pelvis_y, z, seconds]`, using the same 0.8 m/s walking
+  timing and 0.95 m pelvis height as the walk action. Seconds start at zero;
+  an avatar origin also reserves time for its observed initial turn. An explicit
+  point/object origin assumes it already faces the first segment.
+- `distance_m`, `duration_sec`, `session_id`, `generation_revision`, and
+  `snapshot_pts_ms` identifying the observation used for planning.
+
+Errors return `ok:false` and `error:{code,message}`. Codes include
+`invalid_request`, `invalid_position`, `scene_unavailable`, `avatar_not_ready`,
+`unknown_target`, `start_blocked`, `goal_blocked`, and `no_path`. A seated avatar
+may be inside its seat footprint: stand up before asking for a walking path from
+that position. Queries neither stand the avatar up nor move it.
+
+Native Rust callers can use
+`renderer.scene_state().generate_waypoint("avatar", "bed")`, or supply
+`[0., 0., 0.]` arrays. The web session provides
+`await session.generate_waypoint("avatar", "bed")` with correlated replies,
+timeout and disconnect cleanup. A loaded avatar observation is sufficient;
+no motion worker is required. Query the actual rendered home from the terminal:
+
+```sh
+cargo run --example generate_waypoint -- avatar.glb arkit-map.json avatar bed path.json
+```
+
+This returns a snapshot, not a reservation or an activated motion timeline.
+Use `perform_action` with `verb:"walk"` and `target:"bed"` to execute a route
+against current state. Custom timeline edits still use absolute renderer
+milliseconds; the preview's relative seconds cannot be copied into `pts_ms`.

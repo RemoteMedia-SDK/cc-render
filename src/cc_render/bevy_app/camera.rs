@@ -82,27 +82,21 @@ fn env_vec3_opt(key: &str) -> Option<Vec3> {
 /// the const default. Read by both `setup_scene` and
 /// `auto_orient_avatar` so they stay in sync.
 pub(crate) fn camera_pos() -> Vec3 {
-    env_vec3(
-        "CC_AVATAR_CAMERA_POS",
-        if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
-            Vec3::new(5., 3.2, 5.)
-        } else {
-            CAMERA_POS
-        },
-    )
+    env_vec3("CC_AVATAR_CAMERA_POS", camera_defaults().0)
 }
 pub(crate) fn camera_look_at() -> Vec3 {
-    env_vec3(
-        "CC_AVATAR_CAMERA_LOOK_AT",
-        if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
-            Vec3::new(0., 0.8, -1.)
-        } else {
-            CAMERA_LOOK_AT
-        },
-    )
+    env_vec3("CC_AVATAR_CAMERA_LOOK_AT", camera_defaults().1)
 }
 pub(crate) fn camera_fov_deg() -> f32 {
-    env_f32("CC_AVATAR_CAMERA_FOV_DEG", CAMERA_FOV_DEG)
+    env_f32("CC_AVATAR_CAMERA_FOV_DEG", camera_defaults().2)
+}
+
+fn camera_defaults() -> (Vec3, Vec3, f32) {
+    if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
+        (Vec3::new(7., 17., 9.), Vec3::new(1., 0., -3.), 42.)
+    } else {
+        (CAMERA_POS, CAMERA_LOOK_AT, CAMERA_FOV_DEG)
+    }
 }
 
 /// Resolve `CC_AVATAR_FOCUS` (case-insensitive) into a list of SMPL-22
@@ -971,6 +965,7 @@ pub(crate) fn setup_scene(
 pub(crate) fn follow_avatar_camera(
     bind: Res<CC5BindRotations>,
     transforms: Query<&GlobalTransform>,
+    physics: Query<&bevy_rapier3d::prelude::RapierContext>,
     mut cam_q: Query<&mut Transform, (With<Camera3d>, Without<DirectionalLight>)>,
     mut anchor: Local<Option<Vec3>>,
 ) {
@@ -1039,6 +1034,20 @@ pub(crate) fn follow_avatar_camera(
     } else {
         cam_xform.translation.lerp(target_cam_pos, lerp)
     };
+    // Keep the camera on the avatar's side of opaque scene geometry. Apply
+    // after smoothing so an interpolated camera cannot pass through a wall.
+    // Cast above the pelvis to avoid starting inside a supporting seat.
+    if let Ok(context) = physics.get_single() {
+        let origin = pelvis_pos + Vec3::Y * 0.25;
+        let ray = cam_xform.translation - origin;
+        let distance = ray.length();
+        if distance > 0.01 {
+            if let Some((_, hit)) = context.cast_ray(origin, ray / distance, distance, true,
+                bevy_rapier3d::prelude::QueryFilter::only_fixed().exclude_sensors()) {
+                cam_xform.translation = origin + ray / distance * (hit - 0.15).max(0.05);
+            }
+        }
+    }
     // Re-aim. Look-at target also smoothed via the same translation
     // lerp implicitly (since cam_pos drives where Y-up look-at lands).
     cam_xform.look_at(pelvis_pos, Vec3::Y);
