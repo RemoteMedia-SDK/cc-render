@@ -82,7 +82,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
     });
-    let mut encoder = Command::new("ffmpeg");
+    let mut encoder = Command::new(std::env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".into()));
     encoder.args([
         "-y",
         "-loglevel",
@@ -144,7 +144,8 @@ fn main() -> anyhow::Result<()> {
         .clamp(3, 120);
     let mut stage = 0;
     let mut choreography = (std::env::var("OFFICE_ACCEPTANCE_TRANSITIONS").as_deref() == Ok("1")
-        || std::env::var("OFFICE_ACCEPTANCE_WALKTHROUGH").as_deref() == Ok("1"))
+        || std::env::var("OFFICE_ACCEPTANCE_WALKTHROUGH").as_deref() == Ok("1")
+        || std::env::var("OFFICE_ACCEPTANCE_SURFACE_JUMP").as_deref() == Ok("1"))
     .then(office_choreography::Choreography::new);
     let mut seated_hold: Option<Instant> = None;
     let mut last_event = 0;

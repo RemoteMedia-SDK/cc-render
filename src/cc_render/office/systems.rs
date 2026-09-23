@@ -213,6 +213,13 @@ fn observe(
             .normalize_or_zero()
             .to_array();
     }
+    if std::env::var("OFFICE_DEBUG_MOTION").as_deref() == Ok("1") {
+        let deltas: Option<Vec<_>> = [9, 12, 15].into_iter().map(|joint| {
+            let transform = globals.get(bind.entities[joint]?).ok()?;
+            Some((transform.rotation() * bind.calibrated_world[joint].inverse()).normalize().to_array())
+        }).collect();
+        office.observed.debug_rotation_deltas = deltas.and_then(|v| v.try_into().ok());
+    }
     let world = tx.0.borrow().clone();
     let mut moved = false;
     for prop in &world.props {

@@ -3,11 +3,16 @@ use super::{pathfinder, scene_metadata, starter_objects, OfficeObject};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+#[path = "surface_actions.rs"]
+mod surface_actions;
+use surface_actions::SurfaceJump;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verb {
     Walk,
+    JumpOnto,
+    JumpDown,
     Sit,
     StandUp,
     BendAndReturn,
@@ -82,6 +87,9 @@ pub struct Observation {
     pub displayed_pts_ms: u64,
     pub feet: [[f32; 3]; 2],
     pub torso_up: [f32; 3],
+    /// Diagnostic canonical world deltas: chest, neck, head, observed after FK.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_rotation_deltas: Option<[[f32; 4]; 3]>,
     pub stale_frames: u64,
     pub underrun_frames: u64,
 }
@@ -127,6 +135,7 @@ pub struct OfficeSnapshot {
     >,
     pub avatar: Observation,
     pub posture: String,
+    pub standing_surface: Option<super::support::StandingSurface>,
     pub events: Vec<ActionEvent>,
     pub active: Vec<ActionRequest>,
     pub queued: Vec<ActionRequest>,
@@ -135,6 +144,7 @@ pub struct OfficeSnapshot {
 }
 #[derive(Clone, Debug)]
 struct Active {
+    jump: Option<SurfaceJump>,
     request: ActionRequest,
     started: f64,
     stage: Stage,
@@ -146,6 +156,16 @@ struct Active {
     stable_since_ms: Option<u64>,
     moved: bool,
     sent: bool,
+}
+impl Active {
+    fn approach_goal(&self, object: Option<&OfficeObject>) -> Option<[f32; 3]> {
+        self.jump.as_ref().map(|j| j.from).or(self.request.position)
+            .or_else(|| object.map(OfficeObject::approach_position))
+    }
+    fn approach_direction(&self, object: Option<&OfficeObject>) -> Option<Vec2> {
+        self.jump.as_ref().map(|jump| Vec2::new(jump.support.heading.sin(), jump.support.heading.cos()))
+            .or_else(|| object.map(super::locomotion::target_direction))
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 enum Stage {
@@ -175,6 +195,7 @@ pub struct OfficeController {
     pub objects: Vec<OfficeObject>,
     pub observed: Observation,
     pub seated: Option<String>,
+    pub standing_surface: Option<super::support::StandingSurface>,
     pub seat_supported: bool,
     seated_pose_at_ms: u64,
     pub motion_ready: bool,
@@ -220,6 +241,7 @@ impl Default for OfficeController {
             objects: starter_objects(),
             observed: Observation::default(),
             seated: None,
+            standing_surface: None,
             seat_supported: false,
             seated_pose_at_ms: 0,
             active: vec![],
@@ -318,7 +340,7 @@ fn resources(r: &ActionRequest) -> u8 {
         Verb::Wave => 2 << hand_index(r.hand),
         Verb::Release => (if r.target.is_some() { 1 } else { 0 }) | (2 << hand_index(r.hand)),
         Verb::Grab => 1 | (2 << hand_index(r.hand)),
-        Verb::BendAndReturn => 1 | 2 | 4,
+        Verb::BendAndReturn | Verb::JumpOnto | Verb::JumpDown => 1 | 2 | 4,
         _ => 1,
     }
 }
@@ -371,6 +393,7 @@ impl OfficeController {
                 self.advance(world);
             }
             OfficeCommand::CancelAction { action_id } => {
+                if self.defer_jump_cancel(&action_id) { return; }
                 let old = self.active.len() + self.pending.len();
                 if self.seat_supported {
                     if let Some(a) = self
@@ -401,6 +424,10 @@ impl OfficeController {
                 expected_revision,
                 layer,
             } => {
+                if self.surface_owns_motion() {
+                    self.event(&edit_id, Status::Failed, "surface traversal owns the motion timeline");
+                    return;
+                }
                 if expected_revision != self.revision || edit_id.is_empty() || edit_id.len() > 128 {
                     self.event(
                         &edit_id,
@@ -488,6 +515,7 @@ impl OfficeController {
             Verb::Walk if r.position.is_none() && obj.is_none() => {
                 Err("walk needs an object or position".into())
             }
+            Verb::JumpOnto if obj.is_none() => Err("jump_onto needs a target".into()),
             Verb::Sit if obj.and_then(|o| o.seat).is_none() => Err("target has no seat".into()),
             Verb::Release if r.target.is_some() && obj.and_then(|o| o.surface).is_none() => {
                 Err("target has no placement surface".into())
@@ -523,6 +551,58 @@ impl OfficeController {
         }
         true
     }
+    fn start_action(&mut self, r: ActionRequest) -> bool {
+        if r.verb == Verb::Sit && self.seated.is_some() && self.seated == r.target {
+            self.event(&r.action_id, Status::Completed, "already seated");
+            return false;
+        }
+        let jump = match self.prepare_surface_action(&r) {
+            Ok(jump) => jump,
+            Err(error) => { self.event(&r.action_id, Status::Failed, error); return false; }
+        };
+        let stage = if r.verb == Verb::JumpOnto {
+            Stage::Approach
+        } else if self.seated.is_some()
+            && matches!(
+                r.verb,
+                Verb::Walk
+                    | Verb::Sit
+                    | Verb::Grab
+                    | Verb::StandUp
+                    | Verb::Release
+                    | Verb::BendAndReturn
+            ) {
+            Stage::Standing
+        } else if matches!(r.verb, Verb::Walk | Verb::Sit | Verb::Grab)
+            || (r.verb == Verb::Release && r.target.is_some())
+        {
+            Stage::Approach
+        } else if r.verb == Verb::BendAndReturn && r.target.is_some() {
+            Stage::Align
+        } else {
+            Stage::Execute
+        };
+        self.event(&r.action_id, Status::Running, "");
+        if r.verb == Verb::Release && r.target.is_none() {
+            self.grab_commands
+                .push(GrabOrRelease::Release(r.hand.unwrap_or(Hand::Right)));
+        }
+        self.active.push(Active {
+            jump,
+            origin_wrist: self.observed.wrists[hand_index(r.hand)],
+            origin_feet: self.observed.feet,
+            execute_pts_ms: self.motion_start().0,
+            execute_origin: self.motion_start().1,
+            execute_heading: self.observed.heading,
+            stable_since_ms: None,
+            request: r,
+            started: self.now,
+            stage,
+            moved: false,
+            sent: false,
+        });
+        true
+    }
     pub fn advance(&mut self, world: &SceneState) {
         let held: Vec<_> = world
             .grabs
@@ -549,49 +629,7 @@ impl OfficeController {
                 self.pending.push_back(r);
                 continue;
             }
-            if r.verb == Verb::Sit && self.seated.is_some() && self.seated == r.target {
-                self.event(&r.action_id, Status::Completed, "already seated");
-                continue;
-            }
-            let stage = if self.seated.is_some()
-                && matches!(
-                    r.verb,
-                    Verb::Walk
-                        | Verb::Sit
-                        | Verb::Grab
-                        | Verb::StandUp
-                        | Verb::Release
-                        | Verb::BendAndReturn
-                ) {
-                Stage::Standing
-            } else if matches!(r.verb, Verb::Walk | Verb::Sit | Verb::Grab)
-                || (r.verb == Verb::Release && r.target.is_some())
-            {
-                Stage::Approach
-            } else if r.verb == Verb::BendAndReturn && r.target.is_some() {
-                Stage::Align
-            } else {
-                Stage::Execute
-            };
-            self.event(&r.action_id, Status::Running, "");
-            if r.verb == Verb::Release && r.target.is_none() {
-                self.grab_commands
-                    .push(GrabOrRelease::Release(r.hand.unwrap_or(Hand::Right)));
-            }
-            self.active.push(Active {
-                origin_wrist: self.observed.wrists[hand_index(r.hand)],
-                origin_feet: self.observed.feet,
-                execute_pts_ms: self.motion_start().0,
-                execute_origin: self.motion_start().1,
-                execute_heading: self.observed.heading,
-                stable_since_ms: None,
-                request: r,
-                started: self.now,
-                stage,
-                moved: false,
-                sent: false,
-            });
-            changed = true;
+            changed |= self.start_action(r);
         }
         let mut active = std::mem::take(&mut self.active);
         for mut a in active.drain(..) {
@@ -608,6 +646,10 @@ impl OfficeController {
             }
             if self.observed.displayed_pts_ms < a.execute_pts_ms {
                 self.active.push(a);
+                continue;
+            }
+            if a.jump.is_some() {
+                changed |= self.advance_surface_action(a);
                 continue;
             }
             let obj = r
@@ -836,6 +878,7 @@ impl OfficeController {
                         }
                     }
                     Verb::Walk => true,
+                    Verb::JumpOnto | Verb::JumpDown => unreachable!("handled by surface traversal"),
                 };
                 if r.verb == Verb::Grab
                     && world.failed_grabs.iter().any(|g| {
@@ -1002,13 +1045,13 @@ impl OfficeController {
                 continue;
             }
             if a.stage == Stage::Approach {
-                let goal = r.position.or_else(|| object.map(|o| o.approach_position()));
+                let goal = a.approach_goal(object);
                 if let Some(goal) = goal {
                     if let Ok(path) = super::locomotion::approach_path(
                         &self.navigation_scene(),
                         Vec2::new(self.motion_start().1[0], self.motion_start().1[2]),
                         Vec2::new(goal[0], goal[2]),
-                        object.map(super::locomotion::target_direction),
+                        a.approach_direction(object),
                         super::locomotion::arrival_angle(),
                     ) {
                         let t = self
@@ -1291,6 +1334,8 @@ impl OfficeController {
             observed_root: self.observed.pelvis,
             posture: if self.seated.is_some() {
                 "seated"
+            } else if self.standing_surface.is_some() {
+                "standing_on_surface"
             } else {
                 "standing"
             }
@@ -1550,6 +1595,7 @@ impl OfficeController {
             }));
         }
         self.constrain_standing_idle(&mut timeline);
+        self.apply_surface_motion(&mut timeline);
         for layer in self.timeline_layers.values() {
             layer.apply(&mut timeline);
         }
@@ -1586,12 +1632,13 @@ impl OfficeController {
             return;
         }
         let (start, mut root) = self.motion_start();
-        root[1] = 0.95;
+        root[1] = self.standing_surface.as_ref().map_or(0.95, |s| s.position[1] + super::support::ROOT_HEIGHT);
         timeline.root.keyframes = vec![super::motion_timeline::RootKeyframe {
             pts_ms: start as i64, position: root,
         }];
         timeline.root.heading = Some(self.observed.heading);
         timeline.root.constrain_height = true;
+        if self.standing_surface.is_some() { return; }
         timeline.pose_keyframes.push(serde_json::json!({
             "kind":"full_body", "preset":"standing", "hold":true,
             "pts_ms":start + 1000, "root_position":root, "heading":self.observed.heading,
@@ -1654,6 +1701,7 @@ impl OfficeController {
     }
 
     pub fn permits_root(&self, position: Vec3) -> bool {
+        if let Some(permitted) = self.permits_surface_root(position) { return permitted; }
         let start = Vec2::new(self.observed.pelvis[0], self.observed.pelvis[2]);
         let end = Vec2::new(position.x, position.z);
         let scene = self.navigation_scene();
@@ -1730,10 +1778,13 @@ impl OfficeController {
             avatar: self.observed.clone(),
             posture: if self.seated.is_some() {
                 "seated"
+            } else if self.standing_surface.is_some() {
+                "standing_on_surface"
             } else {
                 "standing"
             }
             .into(),
+            standing_surface: self.standing_surface.clone(),
             events: self.events.iter().cloned().collect(),
             active: self.active.iter().map(|a| a.request.clone()).collect(),
             queued: self.pending.iter().cloned().collect(),

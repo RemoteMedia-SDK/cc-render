@@ -17,6 +17,9 @@ pub struct HeadingTransition {
 pub struct RootTrack {
     pub keyframes: Vec<RootKeyframe>,
     pub interpolation: String,
+    /// Dense preserves walking behavior; keyframes leaves flight unconstrained.
+    #[serde(default = "dense_position_mode")]
+    pub position_mode: String,
     pub constrain_height: bool,
     pub heading: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -28,6 +31,7 @@ pub struct RootTrack {
     #[serde(default)]
     pub heading_interval_ms: u64,
 }
+fn dense_position_mode() -> String { "dense".into() }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PromptSpan {
     pub start_ms: u64,
@@ -72,6 +76,7 @@ impl MotionTimeline {
             skeleton_id: "cskel27".into(),
             root: RootTrack {
                 keyframes: keys,
+                position_mode: dense_position_mode(),
                 interpolation: if motion.ease_root { "smooth" } else { "linear" }.into(),
                 constrain_height: motion.constrain_root_height,
                 heading: motion.heading,
@@ -110,6 +115,7 @@ impl TimelineLayer {
         if let Some(root) = &self.root {
             if root.keyframes.is_empty()
                 || root.keyframes.len() > 256
+                || !matches!(root.position_mode.as_str(), "dense" | "keyframes")
                 || !matches!(root.interpolation.as_str(), "linear" | "smooth")
                 || root
                     .keyframes

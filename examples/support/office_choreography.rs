@@ -11,10 +11,12 @@ pub struct Choreography {
     hold_until: Option<u64>,
     hold_ms: u64,
     walkthrough: bool,
+    surface_jump: bool,
 }
 impl Choreography {
     pub fn new() -> Self {
         Self {
+            surface_jump: std::env::var("OFFICE_ACCEPTANCE_SURFACE_JUMP").as_deref() == Ok("1"),
             step: 0,
             sent: false,
             hold_until: None,
@@ -27,9 +29,13 @@ impl Choreography {
             walkthrough: std::env::var("OFFICE_ACCEPTANCE_WALKTHROUGH").as_deref() == Ok("1"),
         }
     }
+    fn is_hold(&self) -> bool {
+        (self.surface_jump && matches!(self.step, 1 | 3))
+            || (!self.surface_jump && ((!self.walkthrough && matches!(self.step, 1 | 9)) || (self.walkthrough && self.step == 6)))
+    }
     pub fn tick(&mut self, state: &OfficeSnapshot) -> (Option<OfficeCommand>, bool) {
         // Wait on the playback clock, including when inference stalls.
-        if (!self.walkthrough && matches!(self.step, 1 | 9)) || (self.walkthrough && self.step == 6)
+        if self.is_hold()
         {
             let end = *self
                 .hold_until
@@ -40,7 +46,13 @@ impl Choreography {
             self.step += 1;
             self.hold_until = None;
         }
-        let action = if self.walkthrough {
+        let action = if self.surface_jump {
+            match self.step {
+                0 => ("surface-up", Verb::JumpOnto, Some("living_sofa"), None),
+                2 => ("surface-down", Verb::JumpDown, None, None),
+                _ => return (None, true),
+            }
+        } else if self.walkthrough {
             match self.step {
                 0 => ("tour-shelf", Verb::Walk, Some("shelf"), None),
                 1 => ("tour-sofa", Verb::Walk, Some("sofa"), None),

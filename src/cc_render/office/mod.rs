@@ -8,6 +8,7 @@ pub mod navigation;
 pub mod pathfinder;
 pub(crate) mod systems;
 pub mod timeline;
+pub mod support;
 
 use bevy::prelude::*;
 use metadata::*;
