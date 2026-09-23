@@ -361,7 +361,9 @@ fn despawn_prop(commands: &mut Commands, registry: &mut PropRegistry, id: &PropI
 pub(crate) fn publish_scene_state(
     tx: Option<Res<SceneStateTx>>,
     mut registry: ResMut<PropRegistry>,
-    props: Query<(&Prop, &GlobalTransform, Option<&Collider>)>,
+    props: Query<(Entity, &Prop, &GlobalTransform)>,
+    colliders: Query<(&Collider, &GlobalTransform)>,
+    children: Query<&Children>,
     fsms: Res<super::grab::GrabFsms>,
     last_pts: Option<Res<crate::cc_render::bevy_app::capture::LastAppliedPts>>,
 ) {
@@ -379,12 +381,27 @@ pub(crate) fn publish_scene_state(
         return;
     }
     let mut snapshots = Vec::new();
-    for (prop, gt, collider) in props.iter() {
+    for (entity, prop, gt) in props.iter() {
         let t = gt.compute_transform();
         let mat = transform_to_4x4(&t);
-        let (aabb_min, aabb_max) = collider
-            .map(|c| world_aabb_from_collider(c, gt))
-            .unwrap_or(([0.0; 3], [0.0; 3]));
+        // Authored office props and GLB meshes have child colliders. A zero
+        // AABB for a collider-less parent makes observed placement impossible.
+        let mut min = Vec3::splat(f32::INFINITY);
+        let mut max = Vec3::splat(f32::NEG_INFINITY);
+        let mut stack = vec![entity];
+        while let Some(node) = stack.pop() {
+            if let Ok((collider, world)) = colliders.get(node) {
+                let (lo, hi) = world_aabb_from_collider(collider, world);
+                min = min.min(Vec3::from(lo));
+                max = max.max(Vec3::from(hi));
+            }
+            if let Ok(kids) = children.get(node) {
+                stack.extend(kids.iter());
+            }
+        }
+        let (aabb_min, aabb_max) = if min.is_finite() && max.is_finite() {
+            (min.to_array(), max.to_array())
+        } else { ([0.0; 3], [0.0; 3]) };
         snapshots.push(PropSnapshot {
             id: prop.id.clone(),
             transform: mat,

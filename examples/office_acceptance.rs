@@ -327,6 +327,13 @@ fn main() -> anyhow::Result<()> {
                         stage = 5;
                     }
                     5 if complete("grab") => {
+                        if std::env::var("OFFICE_ACCEPTANCE_PLACE_ONLY").as_deref() == Ok("1") {
+                            renderer.office_command(action(
+                                "place", Verb::Release, Some("desk"), Some(Hand::Right),
+                            ));
+                            stage = 7;
+                            continue;
+                        }
                         renderer.office_command(action("carry", Verb::Walk, Some("sofa"), None));
                         renderer.office_command(action(
                             "wave-carry",

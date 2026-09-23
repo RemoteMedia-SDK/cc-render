@@ -154,6 +154,9 @@ struct Active {
     execute_origin: [f32; 3],
     execute_heading: f32,
     stable_since_ms: Option<u64>,
+    placement_prop: Option<String>,
+    placement_sample: Option<(u64, [f32; 3])>,
+    release_pts_ms: Option<u64>,
     moved: bool,
     sent: bool,
 }
@@ -347,6 +350,73 @@ fn resources(r: &ActionRequest) -> u8 {
 fn distance(a: [f32; 3], b: [f32; 3]) -> f32 {
     Vec3::from(a).distance(Vec3::from(b))
 }
+
+/// Check the released collider against the requested object's actual box tops,
+/// not just its authored placement hint. The hint selects a nearby landing area;
+/// collision geometry determines whether the prop is supported.
+fn placement_prop(r: &ActionRequest, world: &SceneState) -> Result<Option<String>, &'static str> {
+    if r.verb != Verb::Release || r.target.is_none() {
+        return Ok(None);
+    }
+    world.grabs.iter().find(|g| g.hand == r.hand.unwrap_or(Hand::Right))
+        .map(|g| Some(g.prop.clone())).ok_or("hand is not holding a prop")
+}
+
+fn placement_settled(
+    surface: &OfficeObject, world: &SceneState, id: &str, observed_pts_ms: u64,
+    stable_since_ms: &mut Option<u64>, sample: &mut Option<(u64, [f32; 3])>,
+) -> bool {
+    let Some(prop) = world.props.iter().find(|p| p.id == id && !p.loading) else { return false; };
+    if !placement_supported(surface, prop) {
+        *stable_since_ms = None;
+        *sample = None;
+        return false;
+    }
+    let center = (Vec3::from(prop.aabb_min) + Vec3::from(prop.aabb_max)) * 0.5;
+    let steady = sample.is_none_or(|(pts, last)| {
+        let dt = observed_pts_ms.saturating_sub(pts);
+        // The office motion clock advances even without an ARKit face pose;
+        // SceneState.pts_ms is the latter and can stay zero throughout playback.
+        observed_pts_ms == pts || (observed_pts_ms > pts && dt <= 150
+            && center.distance(Vec3::from(last)) <= 0.03 * dt as f32 / 1000. + 0.002)
+    });
+    if steady { stable_since_ms.get_or_insert(observed_pts_ms); }
+    else { *stable_since_ms = None; }
+    if sample.is_none_or(|(pts, _)| observed_pts_ms > pts) {
+        *sample = Some((observed_pts_ms, center.to_array()));
+    }
+    stable_since_ms.is_some_and(|since| observed_pts_ms > since && observed_pts_ms - since >= 400)
+}
+
+fn placement_supported(surface: &OfficeObject, prop: &super::super::renderer::PropSnapshot) -> bool {
+    let Some(anchor) = surface.placement_position() else { return false; };
+    let min = Vec3::from(prop.aabb_min);
+    let max = Vec3::from(prop.aabb_max);
+    if !min.is_finite() || !max.is_finite() || !min.cmple(max).all() {
+        return false;
+    }
+    let center = (min + max) * 0.5;
+    if Vec2::new(center.x - anchor[0], center.z - anchor[2]).length() > 0.25 {
+        return false;
+    }
+    let transform = surface.transform();
+    // Authored office supports are upright boxes; tilted furniture needs a
+    // different contact test rather than a false positive from a world AABB.
+    if (transform.rotation * Vec3::Y).dot(Vec3::Y) < 0.99 {
+        return false;
+    }
+    let local = transform.rotation.inverse() * (center - transform.translation);
+    std::iter::once(([0.; 3], surface.half_extents))
+        .chain(surface.parts.iter().map(|p| (p.position, p.half_extents)))
+        .any(|(position, half)| {
+            let top = surface.position[1] + position[1] + half[1];
+            (min.y - top).abs() <= 0.06
+                && local.x >= position[0] - half[0] + 0.02
+                && local.x <= position[0] + half[0] - 0.02
+                && local.z >= position[2] - half[2] + 0.02
+                && local.z <= position[2] + half[2] - 0.02
+        })
+}
 impl OfficeController {
     fn event(&mut self, id: &str, status: Status, detail: impl Into<String>) {
         self.sequence += 1;
@@ -517,7 +587,7 @@ impl OfficeController {
             }
             Verb::JumpOnto if obj.is_none() => Err("jump_onto needs a target".into()),
             Verb::Sit if obj.and_then(|o| o.seat).is_none() => Err("target has no seat".into()),
-            Verb::Release if r.target.is_some() && obj.and_then(|o| o.surface).is_none() => {
+            Verb::Release if r.target.is_some() && obj.and_then(OfficeObject::placement_position).is_none() => {
                 Err("target has no placement surface".into())
             }
             Verb::Grab if !obj.is_some_and(|o| o.dynamic && o.grasp_transform().is_some()) => {
@@ -551,7 +621,14 @@ impl OfficeController {
         }
         true
     }
-    fn start_action(&mut self, r: ActionRequest) -> bool {
+    fn start_action(&mut self, r: ActionRequest, world: &SceneState) -> bool {
+        let placement_prop = match placement_prop(&r, world) {
+            Ok(prop) => prop,
+            Err(error) => {
+                self.event(&r.action_id, Status::Failed, error);
+                return false;
+            }
+        };
         if r.verb == Verb::Sit && self.seated.is_some() && self.seated == r.target {
             self.event(&r.action_id, Status::Completed, "already seated");
             return false;
@@ -595,6 +672,9 @@ impl OfficeController {
             execute_origin: self.motion_start().1,
             execute_heading: self.observed.heading,
             stable_since_ms: None,
+            placement_prop,
+            placement_sample: None,
+            release_pts_ms: None,
             request: r,
             started: self.now,
             stage,
@@ -629,7 +709,7 @@ impl OfficeController {
                 self.pending.push_back(r);
                 continue;
             }
-            changed |= self.start_action(r);
+            changed |= self.start_action(r, world);
         }
         let mut active = std::mem::take(&mut self.active);
         for mut a in active.drain(..) {
@@ -831,21 +911,27 @@ impl OfficeController {
                         }
                     }
                     Verb::Release => {
-                        let held = world
-                            .grabs
-                            .iter()
-                            .any(|g| g.hand == r.hand.unwrap_or(Hand::Right));
-                        if held
-                            && !a.sent
-                            && obj.and_then(|o| o.placement_position()).is_some_and(|p| {
+                        let held = world.grabs.iter().any(|g| {
+                            g.hand == r.hand.unwrap_or(Hand::Right)
+                                && a.placement_prop.as_ref().is_none_or(|id| &g.prop == id)
+                        });
+                        if held && !a.sent
+                            && obj.and_then(OfficeObject::placement_position).is_some_and(|p| {
                                 distance(p, self.observed.wrists[hand_index(r.hand)]) < 0.1
                             })
                         {
-                            self.grab_commands
-                                .push(GrabOrRelease::Release(r.hand.unwrap_or(Hand::Right)));
+                            self.grab_commands.push(GrabOrRelease::Release(r.hand.unwrap_or(Hand::Right)));
                             a.sent = true;
+                            a.release_pts_ms = Some(self.observed.displayed_pts_ms);
                         }
-                        !held
+                        match (a.placement_prop.as_deref(), obj) {
+                            (Some(id), Some(surface)) if a.sent && !held => placement_settled(
+                                surface, world, id, self.observed.displayed_pts_ms,
+                                &mut a.stable_since_ms, &mut a.placement_sample,
+                            ),
+                            (Some(_), _) => false,
+                            (None, _) => !held,
+                        }
                     }
                     Verb::Smile => elapsed >= r.duration_sec as f64,
                     Verb::Wave => {
@@ -880,6 +966,22 @@ impl OfficeController {
                     Verb::Walk => true,
                     Verb::JumpOnto | Verb::JumpDown => unreachable!("handled by surface traversal"),
                 };
+                if r.verb == Verb::Release && a.placement_prop.is_some() && !a.sent
+                    && !world.grabs.iter().any(|g| g.hand == r.hand.unwrap_or(Hand::Right)
+                        && Some(&g.prop) == a.placement_prop.as_ref())
+                {
+                    self.event(&r.action_id, Status::Failed, "grip lost before placement");
+                    changed = true;
+                    continue;
+                }
+                if r.verb == Verb::Release && a.placement_prop.is_some()
+                    && a.release_pts_ms.is_some_and(|pts|
+                        self.observed.displayed_pts_ms.saturating_sub(pts) > 5000)
+                {
+                    self.event(&r.action_id, Status::Failed, "prop did not settle on requested surface");
+                    changed = true;
+                    continue;
+                }
                 if r.verb == Verb::Grab
                     && world.failed_grabs.iter().any(|g| {
                         g.hand == r.hand.unwrap_or(Hand::Right)
@@ -1871,6 +1973,72 @@ mod tests {
     }
     fn submit(c: &mut OfficeController, r: ActionRequest, w: &SceneState) {
         c.command(OfficeCommand::PerformAction { request: r }, w);
+    }
+
+    #[test]
+    fn placement_requires_a_grip_and_observed_stable_support() {
+        use super::super::super::renderer::{GrabSnapshot, PropSnapshot};
+        let mut c = ready();
+        let desk = c.objects.iter().find(|o| o.id == "desk").unwrap().clone();
+        let anchor = desk.placement_position().unwrap();
+        let request = action("place", Verb::Release, Some(Hand::Right), Some("desk"));
+        let mut world = SceneState::default();
+        submit(&mut c, request.clone(), &world);
+        assert!(c.events.iter().any(|e| e.status == Status::Failed && e.detail == "hand is not holding a prop"));
+
+        let mut c = ready();
+        c.observed.wrists[1] = anchor;
+        c.observed.displayed_pts_ms = 1000;
+        world.grabs.push(GrabSnapshot { hand: Hand::Right, prop: "mug".into() });
+        submit(&mut c, request, &world);
+        c.active[0].stage = Stage::Execute;
+        c.active[0].execute_pts_ms = 0;
+        c.advance(&world);
+        assert!(c.grab_commands.iter().any(|cmd| matches!(cmd, GrabOrRelease::Release(Hand::Right))));
+        assert!(!c.events.iter().any(|e| e.status == Status::Completed));
+        world.grabs.clear();
+        world.props.push(PropSnapshot {
+            id: "mug".into(), transform: [[0.; 4]; 4],
+            aabb_min: [anchor[0] - 0.04, 0.70, anchor[2] - 0.04],
+            aabb_max: [anchor[0] + 0.04, 0.78, anchor[2] + 0.04],
+            grasp_world: None, loading: false,
+        });
+        for pts in (1050..=1500).step_by(50) {
+            // Face pose PTS can remain zero throughout body-motion playback.
+            world.pts_ms = 0;
+            c.observed.displayed_pts_ms = pts;
+            c.advance(&world);
+        }
+        assert!(!c.events.iter().any(|e| e.status == Status::Completed), "unsupported height cannot complete");
+        world.props[0].aabb_min[1] = 0.76;
+        world.props[0].aabb_max[1] = 0.84;
+        for pts in (1550..=2000).step_by(50) {
+            world.pts_ms = 0;
+            c.observed.displayed_pts_ms = pts;
+            c.advance(&world);
+        }
+        assert!(c.events.iter().any(|e| e.status == Status::Completed));
+    }
+
+    #[test]
+    fn placement_outside_surface_fails_after_release_timeout() {
+        use super::super::super::renderer::GrabSnapshot;
+        let mut c = ready();
+        let anchor = c.objects.iter().find(|o| o.id == "desk").unwrap().placement_position().unwrap();
+        c.observed.wrists[1] = anchor;
+        c.observed.displayed_pts_ms = 1000;
+        let mut world = SceneState::default();
+        world.grabs.push(GrabSnapshot { hand: Hand::Right, prop: "mug".into() });
+        submit(&mut c, action("place", Verb::Release, Some(Hand::Right), Some("desk")), &world);
+        c.active[0].stage = Stage::Execute;
+        c.active[0].execute_pts_ms = 0;
+        c.advance(&world);
+        world.grabs.clear();
+        c.observed.displayed_pts_ms = 6101;
+        world.pts_ms = 6101;
+        c.advance(&world);
+        assert!(c.events.iter().any(|e| e.status == Status::Failed && e.detail.contains("did not settle")));
+        assert!(!c.events.iter().any(|e| e.status == Status::Completed));
     }
     #[test]
     fn walking_faces_the_route_and_preserves_that_policy_during_a_gesture() {
