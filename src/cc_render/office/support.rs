@@ -127,6 +127,22 @@ pub(super) fn discover(objects: &[OfficeObject], target: &str) -> Result<Standin
         .ok_or_else(|| "no support with two-foot area, headroom and clear takeoff".into())
 }
 
+/// Observed ankles must actually project onto a supporting top face; distance
+/// from a planned center alone could complete a landing over empty air.
+pub(super) fn feet_inside_patch(
+    feet: &[[f32; 3]; 2], surface: &StandingSurface, objects: &[OfficeObject],
+) -> bool {
+    let top = surface.position[1];
+    let patches = boxes(objects);
+    feet.iter().all(|foot| patches.iter().any(|b| {
+        if b.owner != surface.object_id || (b.center.y + b.half.y - top).abs() > 0.04 {
+            return false;
+        }
+        let local = b.rotation.inverse() * (Vec3::from(*foot) - b.center);
+        local.x.abs() <= b.half.x - 0.035 && local.z.abs() <= b.half.z - 0.035
+    }))
+}
+
 pub(super) fn flight_duration(from: Vec3, to: Vec3) -> u64 {
     let dy = to.y - from.y;
     let rise = (2. * (dy.max(0.) + 0.10) / 9.81).sqrt();
@@ -186,6 +202,13 @@ mod tests {
             let support = discover(&objects, "living_sofa").unwrap();
             assert!((support.position[1] - if variant == 3 { 0.667 } else { 0.58 }).abs() < 0.001);
             assert!(stance_clear(support.position.into(), &boxes(&objects)));
+            let center = Vec3::from(support.position) + Vec3::Y * ANKLE_HEIGHT;
+            let across = Quat::from_rotation_y(support.heading) * Vec3::X;
+            let feet = [(center + across * 0.12).to_array(),
+                        (center - across * 0.12).to_array()];
+            assert!(feet_inside_patch(&feet, &support, &objects));
+            let empty_air = [(center + across * 1.2).to_array(), feet[1]];
+            assert!(!feet_inside_patch(&empty_air, &support, &objects));
             let scene = scene_metadata(&objects);
             assert!(pathfinder::find_path(
                 &scene,

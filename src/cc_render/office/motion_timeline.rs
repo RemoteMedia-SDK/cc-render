@@ -150,10 +150,28 @@ impl TimelineLayer {
             }
         }
         for key in &self.pose_keyframes {
-            if !matches!(key["kind"].as_str(), Some("full_body" | "end_effectors"))
+            if !matches!(key["kind"].as_str(), Some("full_body" | "end_effectors" | "generated_posture" | "observed_support"))
                 || key["pts_ms"].as_u64().is_none_or(|t| t <= now)
             {
                 return Err("pose edits must target future frames".into());
+            }
+        }
+        let destinations: Vec<_> = self.pose_keyframes.iter()
+            .filter(|k| k["kind"] == "generated_posture").collect();
+        let supports: Vec<_> = self.pose_keyframes.iter()
+            .filter(|k| k["kind"] == "observed_support").collect();
+        if !destinations.is_empty() || !supports.is_empty() {
+            // Both markers are a single atomic, model-led posture transition.
+            // They cannot be submitted separately: the worker must never infer
+            // support from a frame which was not itself generated and committed.
+            if destinations.len() != 1 || supports.len() != 1
+                || supports[0]["pts_ms"].as_u64() <= destinations[0]["pts_ms"].as_u64()
+                || self.root.as_ref().is_none_or(|r| r.position_mode != "keyframes"
+                    || r.constrain_height || r.heading.is_some() || r.face_path)
+                || self.prompts.is_none()
+                || !self.contacts.is_empty()
+            {
+                return Err("model-led posture requires a later observed support, free root height and continuous prompts".into());
             }
         }
         for key in &self.pose_keyframes {
@@ -190,6 +208,23 @@ impl TimelineLayer {
 fn validate_pose(key: &serde_json::Value) -> Result<(), String> {
     let invalid = || "invalid Core pose keyframe".to_string();
     let start = key["pts_ms"].as_u64().ok_or_else(invalid)?;
+    if key["kind"] == "generated_posture" {
+        if !matches!(key["posture"].as_str(), Some("kneeling" | "standing"))
+            || key["heading"].as_f64().is_none_or(|h| !h.is_finite())
+            || key["visible_from_ms"].as_u64().is_none_or(|t| t > start)
+            || key.as_object().is_none_or(|o| o.keys().any(|k|
+                !matches!(k.as_str(), "kind" | "posture" | "pts_ms" | "visible_from_ms" | "heading")))
+        {
+            return Err(invalid());
+        }
+        return Ok(());
+    }
+    if key["kind"] == "observed_support" {
+        if key.as_object().is_none_or(|o| o.len() != 2 || !o.contains_key("kind")) {
+            return Err(invalid());
+        }
+        return Ok(());
+    }
     if key
         .get("end_ms")
         .is_some_and(|v| v.as_u64().is_none_or(|end| end <= start))
@@ -282,4 +317,38 @@ fn finite_vector(value: &serde_json::Value, width: usize) -> bool {
     value.as_array().is_some_and(|v| {
         v.len() == width && v.iter().all(|x| x.as_f64().is_some_and(f64::is_finite))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn model_led_kneel_is_atomic_and_never_accepts_authored_rotations() {
+        let mut layer: TimelineLayer = serde_json::from_value(json!({
+            "root": {"keyframes": [{"pts_ms": 1050, "position": [0., 0.95, 0.]},
+                                   {"pts_ms": 2600, "position": [0., 0.35, 0.]}],
+                     "interpolation":"smooth", "position_mode":"keyframes",
+                     "constrain_height":false, "heading":null},
+            "prompts": [{"start_ms":1000, "end_ms":null,
+                         "text":"A woman kneels down onto both knees on the floor."}],
+            "pose_keyframes": [
+                {"kind":"generated_posture", "posture":"kneeling", "pts_ms":2200,
+                 "visible_from_ms":1000, "heading":0.0},
+                {"kind":"observed_support", "pts_ms":2700}
+            ]
+        })).unwrap();
+        assert!(layer.validate(1000).is_ok());
+        layer.pose_keyframes[0]["rotations_xyzw"] = json!([[0., 0., 0., 1.]]);
+        assert!(layer.validate(1000).is_err());
+        layer.pose_keyframes[0].as_object_mut().unwrap().remove("rotations_xyzw");
+        layer.pose_keyframes.pop();
+        assert!(layer.validate(1000).is_err());
+        layer.pose_keyframes.push(json!({"kind":"observed_support", "pts_ms":1900}));
+        assert!(layer.validate(1000).is_err());
+        layer.pose_keyframes[1]["pts_ms"] = json!(2700);
+        layer.root.as_mut().unwrap().constrain_height = true;
+        assert!(layer.validate(1000).is_err());
+    }
 }

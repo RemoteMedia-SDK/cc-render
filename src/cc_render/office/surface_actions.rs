@@ -24,8 +24,21 @@ impl OfficeController {
     }
 
     pub(super) fn advance_surface_action(&mut self, mut action: Active) -> bool {
+        let phase_limit_ms = match action.stage {
+            Stage::Approach => 20_000,
+            Stage::Align => 5_000,
+            _ => 6_000,
+        };
+        if self.observed.displayed_pts_ms.saturating_sub(action.execute_pts_ms) > phase_limit_ms {
+            self.event(&action.request.action_id, Status::Failed,
+                "surface transition did not reach observed support/clearance in time");
+            return true;
+        }
         let (done, changed) = self.tick_jump(&mut action);
         if done {
+            if action.request.verb == Verb::JumpDown {
+                self.surface_recovery_at_ms = Some(self.observed.displayed_pts_ms);
+            }
             let status = if action.jump.as_ref().unwrap().cancelled {
                 Status::Cancelled
             } else {
@@ -174,7 +187,9 @@ impl OfficeController {
             && observed.feet.iter().all(|foot| {
                 (foot[1] - jump.to[1] - ANKLE_HEIGHT).abs() < 0.16
                     && Vec2::new(foot[0] - jump.to[0], foot[2] - jump.to[2]).length() < 0.38
-            });
+            })
+            && (action.request.verb == Verb::JumpDown
+                || support::feet_inside_patch(&observed.feet, &jump.support, &self.objects));
         if !landed {
             action.stable_since_ms = None;
             return (false, false);
@@ -215,6 +230,23 @@ impl OfficeController {
                     pts_ms: action.execute_pts_ms as i64,
                     position: [jump.from[0], ROOT_HEIGHT, jump.from[2]],
                 }];
+                {
+                    // A bent walking history can otherwise linger at takeoff
+                    // for tens of seconds. Sample the upright destination
+                    // from ARDY, not from authored body rotations, and let
+                    // ARDY generate the whole standing transition.
+                    let start = action.execute_pts_ms;
+                    timeline.prompts = vec![super::super::motion_timeline::PromptSpan {
+                        start_ms: start, end_ms: None,
+                        text: "A person comes to a relaxed upright stand with both feet planted, facing the low platform.".into(),
+                    }];
+                    timeline.pose_keyframes = vec![
+                        serde_json::json!({"kind":"generated_posture", "posture":"standing",
+                            "pts_ms":start + 1500, "visible_from_ms":start,
+                            "heading":jump.support.heading}),
+                        serde_json::json!({"kind":"observed_support", "pts_ms":start + 1900}),
+                    ];
+                }
                 return;
             }
             let start = action.execute_pts_ms;
@@ -239,26 +271,47 @@ impl OfficeController {
                 support::foot_key(jump.from, jump.support.heading, start, Some(start + 1000)),
                 support::foot_key(jump.to, jump.support.heading, land, None),
             ];
+            let (settle_delay, support_delay) = if action.request.verb == Verb::JumpOnto {
+                (150, 550)
+            } else {
+                (650, 1050)
+            };
+            timeline.pose_keyframes.extend([
+                serde_json::json!({"kind":"generated_posture", "posture":"standing",
+                    "pts_ms":land + settle_delay, "visible_from_ms":start + 800,
+                    "heading":jump.support.heading}),
+                serde_json::json!({"kind":"observed_support", "pts_ms":land + support_delay}),
+            ]);
             let text = if action.request.verb == Verb::JumpOnto {
                 "A person stands facing a low platform, bends their knees and jumps forward up onto it with both feet, lands on both feet and stands upright on top."
             } else {
                 "A person stands upright on a low platform, bends their knees and jumps backward down to the floor, lands on both feet and stands upright."
             };
-            timeline.prompts = vec![super::super::motion_timeline::PromptSpan {
-                start_ms: start,
-                end_ms: None,
-                text: text.into(),
-            }];
+            timeline.prompts = vec![
+                super::super::motion_timeline::PromptSpan {
+                    start_ms: start, end_ms: Some(land), text: text.into(),
+                },
+                super::super::motion_timeline::PromptSpan {
+                    start_ms: land, end_ms: None,
+                    text: if action.request.verb == Verb::JumpOnto {
+                        "A person stands upright on the platform with both feet planted, shoulders relaxed and head up."
+                    } else {
+                        "A person stands upright on the floor with both feet planted, shoulders relaxed and head up."
+                    }.into(),
+                },
+            ];
             self.motion.prompt = text.into();
             self.motion.constrain_root_height = false;
             self.motion.heading = timeline.root.heading;
         } else if let Some(surface) = &self.standing_surface {
-            timeline.pose_keyframes.push(support::foot_key(
-                surface.position,
-                surface.heading,
-                self.motion_start().0,
-                None,
-            ));
+            if !timeline.pose_keyframes.iter().any(|key| key["kind"] == "observed_support") {
+                timeline.pose_keyframes.push(support::foot_key(
+                    surface.position,
+                    surface.heading,
+                    self.motion_start().0,
+                    None,
+                ));
+            }
         }
     }
 
@@ -384,6 +437,61 @@ mod tests {
     }
 
     #[test]
+    fn flight_prompt_changes_to_upright_pose_at_observed_landing_window() {
+        let c = jump_ready();
+        let timeline = c.motion.timeline.as_ref().unwrap();
+        let jump = c.active[0].jump.as_ref().unwrap();
+        let land = jump.landing_ms(c.active[0].execute_pts_ms);
+        assert_eq!(timeline.prompts[0].end_ms, Some(land));
+        assert_eq!(timeline.prompts[1].start_ms, land);
+        assert!(timeline.prompts[1].text.contains("head up"));
+        assert!(timeline.pose_keyframes.iter().any(|key| key["kind"] == "generated_posture"
+            && key["posture"] == "standing" && key["pts_ms"] == land + 150));
+        assert!(!timeline.pose_keyframes.iter().any(|key| key["kind"] == "full_body"));
+    }
+
+    #[test]
+    fn elevated_idle_guides_whole_generated_pose_before_history_foot_support() {
+        let mut c = jump_ready();
+        land(&mut c);
+        assert!(c.standing_surface.is_some());
+        let timeline = c.motion.timeline.as_ref().unwrap();
+        assert_eq!(timeline.root.position_mode, "keyframes");
+        assert!(!timeline.root.constrain_height);
+        assert!(timeline.root.keyframes[0].position[1] > 1.5);
+        assert_eq!(timeline.pose_keyframes.iter().filter(|key|
+            key["kind"] == "generated_posture" && key["posture"] == "standing").count(), 1);
+        assert_eq!(timeline.pose_keyframes.iter().filter(|key|
+            key["kind"] == "observed_support").count(), 1);
+        assert!(!timeline.pose_keyframes.iter().any(|key| key["kind"] == "full_body"));
+        assert!(!timeline.pose_keyframes.iter().any(|key| key["kind"] == "end_effectors"));
+    }
+
+    #[test]
+    fn bent_takeoff_uses_model_generated_standing_destination() {
+        let mut c = at_takeoff();
+        c.observed.torso_up = [0.5, 0.85, 0.];
+        c.rebuild(&world());
+        let keys = &c.motion.timeline.as_ref().unwrap().pose_keyframes;
+        assert!(keys.iter().any(|key| key["kind"] == "generated_posture"
+            && key["posture"] == "standing"));
+        assert!(keys.iter().any(|key| key["kind"] == "observed_support"));
+        assert!(!keys.iter().any(|key| key["kind"] == "full_body"));
+    }
+
+    #[test]
+    fn unsafe_jump_alignment_fails_instead_of_hanging() {
+        let mut c = at_takeoff();
+        assert_eq!(c.active[0].stage, Stage::Align);
+        c.observed.torso_up = [0.5, 0.85, 0.];
+        c.observed.displayed_pts_ms = c.active[0].execute_pts_ms + 5_050;
+        c.advance(&world());
+        assert!(c.active.is_empty());
+        assert_eq!(c.events.back().unwrap().status, Status::Failed);
+        assert!(c.events.back().unwrap().detail.contains("support/clearance"));
+    }
+
+    #[test]
     fn jump_waits_for_sustained_facing_and_resets_if_avatar_turns_away() {
         let mut c = at_takeoff();
         for (stamp, heading) in [
@@ -412,8 +520,10 @@ mod tests {
         assert_eq!(timeline.root.position_mode, "keyframes");
         assert!(!timeline.root.constrain_height);
         assert!(timeline.contacts.is_empty() && c.motion.joints.is_empty());
-        assert_eq!(timeline.pose_keyframes.len(), 2);
+        assert_eq!(timeline.pose_keyframes.len(), 4);
         assert_eq!(timeline.pose_keyframes[1]["pts_ms"], 3650);
+        assert_eq!(timeline.pose_keyframes[2]["kind"], "generated_posture");
+        assert_eq!(timeline.pose_keyframes[3]["kind"], "observed_support");
         c.observed.displayed_pts_ms = 6000;
         c.advance(&world());
         assert_eq!(
@@ -446,6 +556,11 @@ mod tests {
         land(&mut c);
         assert!(c.standing_surface.is_none());
         assert_eq!(c.events.back().unwrap().status, Status::Completed);
+        let keys = &c.motion.timeline.as_ref().unwrap().pose_keyframes;
+        assert!(keys.iter().any(|key| key["kind"] == "generated_posture"
+            && key["posture"] == "standing"));
+        assert!(keys.iter().any(|key| key["kind"] == "observed_support"));
+        assert!(!keys.iter().any(|key| key["preset"] == "standing"));
     }
     #[test]
     fn cancellation_finishes_landing_and_unrelated_obstacles_still_block() {

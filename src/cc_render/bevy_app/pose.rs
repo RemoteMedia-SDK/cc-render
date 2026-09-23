@@ -904,6 +904,10 @@ pub(crate) struct CC5BindRotations {
     /// scaled by a small length. Captured for downstream debugging.
     #[allow(dead_code)]
     pub cc5_bone_tip_world: [Vec3; 22],
+    /// Rest lengths between mapped parent/primary-child joints. The renderer
+    /// checks these after retargeting and contact correction, so a stretched
+    /// or collapsed CC5 chain cannot silently enter displayed playback.
+    pub rest_bone_lengths: [f32; 22],
 }
 
 /// Bevy resource that mirrors the latest applied pose's `pts_ms`.
@@ -1634,6 +1638,9 @@ pub(crate) fn capture_cc5_bind_rotations(
     bind.eye_axis_world = eye_axis_world;
     bind.cc5_bone_axis_world = cc5_bone_axis_world;
     bind.cc5_bone_tip_world = cc5_bone_tip_world;
+    bind.rest_bone_lengths = std::array::from_fn(|i| {
+        SMPL_PRIMARY_CHILD[i].map_or(0., |child| bone_world_pos[i].distance(bone_world_pos[child]))
+    });
     bind.captured = true;
     tracing::info!(
         target: "cc_render",
@@ -1706,6 +1713,26 @@ pub(crate) fn apply_skeletal_pose(
 
     *tick += 1;
     let (new_pose, cleared) = world_motion.receive(&rx.0);
+    if world_motion.failed() {
+        // Source validation normally rejects a bad block before playback. If
+        // the CC5 FK guard catches a retarget/contact defect instead, stop
+        // replaying the unsafe cached pose and restore a known neutral rig.
+        if last_pose.take().is_some() {
+            for (index, entity) in bind.entities.iter().enumerate() {
+                if let Some(entity) = entity {
+                    if let Ok(mut transform) = transforms.get_mut(*entity) {
+                        transform.rotation = bind.own_rest_local[index];
+                        if index == 0 {
+                            transform.translation = bind.pelvis_rest_translation;
+                        }
+                    }
+                }
+            }
+        }
+        *active = false;
+        *anchor_root_pos = None;
+        return;
+    }
 
     // Burst-edge logging at INFO so we can correlate pipeline events to
     // actual avatar driving without enabling firehose `timing=debug`.

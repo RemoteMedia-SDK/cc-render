@@ -175,6 +175,29 @@ fn main() -> anyhow::Result<()> {
         for reply in output_rx.try_iter() {
             if let Some(error) = reply.get("error") {
                 eprintln!("worker failed: {error}");
+                renderer.office_command(OfficeCommand::MotionError {
+                    error: error.as_str().unwrap_or("motion worker failed").into(),
+                });
+                writeln!(report, "{}", serde_json::json!({
+                    "kind":"motion_error", "error":error,
+                    "wall_ms":started.elapsed().as_millis()
+                }))?;
+                // The production stream forwards the same failure to the
+                // controller. Wait for its action failure event so acceptance
+                // recordings also prove that unsafe motion was not completed.
+                for _ in 0..30 {
+                    std::thread::sleep(Duration::from_millis(20));
+                    let state = renderer.scene_state();
+                    if let Some(office) = state.office {
+                        if office.motion_error.is_some() {
+                            for event in office.events.iter().filter(|e| e.sequence > last_event) {
+                                writeln!(report, "{}", serde_json::to_value(event)?)?;
+                                eprintln!("{} {:?}: {}", event.action_id, event.status, event.detail);
+                            }
+                            break;
+                        }
+                    }
+                }
                 failed = true;
                 break;
             }
@@ -259,11 +282,19 @@ fn main() -> anyhow::Result<()> {
                 }
             } else if choreography.is_none() {
                 match stage {
-                    0 if office.avatar.ready && live_speech.ready() => {
+                    0 if office.avatar.ready && (live_speech.ready()
+                        || std::env::var("OFFICE_ACCEPTANCE_FLOOR_ONLY").as_deref() == Ok("1")) => {
                         actions_started = Some(Instant::now());
                         if std::env::var("OFFICE_ACCEPTANCE_SIT_ONLY").as_deref() == Ok("1") {
                             renderer.office_command(action("sit", Verb::Sit, Some("chair"), None));
                             stage = 10;
+                            continue;
+                        }
+                        if std::env::var("OFFICE_ACCEPTANCE_FLOOR_ONLY").as_deref() == Ok("1") {
+                            renderer.office_command(action(
+                                "floor_grab", Verb::Grab, Some("floor_mug"), Some(Hand::Right),
+                            ));
+                            stage = 11;
                             continue;
                         }
                         if std::env::var("OFFICE_ACCEPTANCE_GRAB_ONLY").as_deref() == Ok("1") {
@@ -288,6 +319,10 @@ fn main() -> anyhow::Result<()> {
                             Some(Hand::Left),
                         ));
                         stage = 1;
+                    }
+                    11 if complete("floor_grab") => {
+                        stage = 8;
+                        break;
                     }
                     10 if complete("sit") => {
                         if seated_hold.get_or_insert_with(Instant::now).elapsed()

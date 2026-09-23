@@ -4,7 +4,7 @@ use crate::cc_render::bevy_app::{
         grab::GrabFsms,
         props::{Prop, PropRegistry, SceneStateTx},
     },
-    pose::CC5BindRotations,
+    pose::{CC5BindRotations, SMPL_PRIMARY_CHILD},
 };
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -174,6 +174,74 @@ fn spawn_office(
         layout.as_ref().is_none_or(|layout| layout.0),
     );
 }
+/// A last-line CC5 FK guard, independent of the source-model gate. Source
+/// checks happen before playback; this also catches retarget/contact defects.
+fn extreme_body_deformation(pelvis: Vec3, neck: Vec3, head: Vec3, posture: &str) -> Option<String> {
+    if !pelvis.is_finite() || !neck.is_finite() || !head.is_finite() {
+        return Some("extreme_deformation: non-finite CC5 body position".into());
+    }
+    if matches!(posture, "standing" | "standing_on_surface" | "seated")
+        && (head.y - pelvis.y < 0.05 || neck.y - pelvis.y < 0.02)
+    {
+        return Some(format!("extreme_deformation: CC5 torso inverted (head {:.3} m, neck {:.3} m above pelvis)",
+            head.y - pelvis.y, neck.y - pelvis.y));
+    }
+    None
+}
+
+fn extreme_skeleton_deformation(joints: &[Vec3; 22], posture: &str) -> Option<String> {
+    let pelvis = joints[0];
+    if joints.iter().any(|joint| !joint.is_finite()) {
+        return Some("extreme_deformation: non-finite CC5 joint".into());
+    }
+    if joints.iter().any(|joint| joint.distance(pelvis) > 2.5) {
+        return Some("extreme_deformation: CC5 joint outside body envelope".into());
+    }
+    // A reclining or kneeling body may put the head below the hips, but no
+    // posture permits a leg or wrist to pass substantially through the floor.
+    if [4, 5, 7, 8, 10, 11, 20, 21]
+        .into_iter()
+        .any(|index| joints[index].y < -0.20)
+    {
+        return Some("extreme_deformation: CC5 limb penetrates floor".into());
+    }
+    extreme_body_deformation(pelvis, joints[12], joints[15], posture)
+}
+
+fn extreme_head_rotation(neck_delta: Quat, head_delta: Quat, posture: &str) -> Option<String> {
+    if !neck_delta.is_finite() || !head_delta.is_finite()
+        || neck_delta.length_squared() < 0.5 || head_delta.length_squared() < 0.5
+    {
+        return Some("extreme_deformation: invalid CC5 head rotation".into());
+    }
+    if matches!(posture, "standing" | "standing_on_surface" | "seated") {
+        let relative = (neck_delta.inverse() * head_delta).normalize();
+        let degrees = 2. * relative.w.abs().clamp(0., 1.).acos().to_degrees();
+        if degrees > 85. {
+            return Some(format!("extreme_deformation: CC5 head twisted {degrees:.1} degrees relative to neck"));
+        }
+    }
+    None
+}
+
+fn extreme_bone_stretch(joints: &[Vec3; 22], rest_lengths: &[f32; 22]) -> Option<String> {
+    for (i, child) in SMPL_PRIMARY_CHILD.iter().enumerate() {
+        let Some(child) = child else { continue };
+        let rest = rest_lengths[i];
+        if rest < 0.025 || !rest.is_finite() {
+            continue; // coincident facial/auxiliary joints are not length probes
+        }
+        let ratio = joints[i].distance(joints[*child]) / rest;
+        if !ratio.is_finite() || !(0.45..=1.85).contains(&ratio) {
+            return Some(format!(
+                "extreme_deformation: CC5 bone {i}->{child} length {:.2} times rest",
+                ratio
+            ));
+        }
+    }
+    None
+}
+
 fn observe(
     mut office: ResMut<OfficeController>,
     bind: Res<CC5BindRotations>,
@@ -221,6 +289,28 @@ fn observe(
         office.observed.debug_rotation_deltas = deltas.and_then(|v| v.try_into().ok());
     }
     let world = tx.0.borrow().clone();
+    if office.observed.ready && office.motion_error.is_none() {
+        let joints: Option<Vec<Vec3>> = bind.entities.iter().map(|entity|
+            entity.and_then(|e| globals.get(e).ok()).map(|gt| gt.translation())
+        ).collect();
+        let error = match joints.and_then(|j| j.try_into().ok()) {
+            Some(joints) => extreme_skeleton_deformation(&joints, &office.motion.posture)
+                .or_else(|| extreme_bone_stretch(&joints, &bind.rest_bone_lengths))
+                .or_else(|| {
+                    let neck = globals.get(bind.entities[12]?).ok()?.rotation()
+                        * bind.calibrated_world[12].inverse();
+                    let head = globals.get(bind.entities[15]?).ok()?.rotation()
+                        * bind.calibrated_world[15].inverse();
+                    extreme_head_rotation(neck, head, &office.motion.posture)
+                }),
+            None => Some("extreme_deformation: missing CC5 joint".into()),
+        };
+        if let Some(error) = error {
+            office.command(OfficeCommand::MotionError { error }, &world);
+            tx.0.send_modify(|s| s.office = Some(office.snapshot()));
+            return;
+        }
+    }
     let mut moved = false;
     for prop in &world.props {
         let carried = office.held.iter().any(|(_, id)| id == &prop.id);
@@ -313,6 +403,61 @@ mod home_tests {
 #[cfg(test)]
 mod heading_tests {
     use super::*;
+
+    #[test]
+    fn cc5_extreme_body_pose_is_an_immediate_failure() {
+        let hips = Vec3::new(0., 0.6, 0.);
+        assert!(extreme_body_deformation(hips, Vec3::new(0.3, 0.55, 0.),
+            Vec3::new(0.5, 0.52, 0.), "standing").unwrap().contains("extreme_deformation"));
+        assert!(extreme_body_deformation(hips, Vec3::new(0., 1.15, 0.),
+            Vec3::new(0., 1.3, 0.), "standing").is_none());
+        assert!(extreme_body_deformation(hips, Vec3::new(0.3, 0.55, 0.),
+            Vec3::new(0.5, 0.52, 0.), "lying").is_none());
+        assert!(extreme_body_deformation(hips, Vec3::splat(f32::NAN),
+            Vec3::Y, "lying").is_some());
+    }
+
+    #[test]
+    fn cc5_gate_checks_all_joints_even_when_reclining() {
+        let mut joints = [Vec3::new(0., 0.5, 0.); 22];
+        joints[12].y = 1.1;
+        joints[15].y = 1.4;
+        for index in [4, 5, 7, 8, 10, 11] { joints[index].y = 0.02; }
+        joints[20].y = -0.08; // mild floor contact is not a failure
+        assert!(extreme_skeleton_deformation(&joints, "lying").is_none());
+        joints[10].y = -0.25;
+        assert!(extreme_skeleton_deformation(&joints, "lying").unwrap().contains("penetrates floor"));
+        joints[10].y = 0.02;
+        joints[21].x = 3.;
+        assert!(extreme_skeleton_deformation(&joints, "standing").unwrap().contains("body envelope"));
+        joints[21].x = f32::NAN;
+        assert!(extreme_skeleton_deformation(&joints, "standing").unwrap().contains("non-finite"));
+    }
+
+    #[test]
+    fn cc5_head_twist_fails_without_waiting_for_torso_position_to_invert() {
+        let normal = Quat::from_rotation_y(25_f32.to_radians());
+        assert!(extreme_head_rotation(Quat::IDENTITY, normal, "standing_on_surface").is_none());
+        let twisted = Quat::from_rotation_y(100_f32.to_radians());
+        assert!(extreme_head_rotation(Quat::IDENTITY, twisted, "standing_on_surface")
+            .unwrap().contains("head twisted"));
+        assert!(extreme_head_rotation(Quat::IDENTITY, twisted, "lying").is_none());
+        assert!(extreme_head_rotation(Quat::from_xyzw(0., 0., 0., 0.), normal, "standing").is_some());
+    }
+
+    #[test]
+    fn cc5_gate_rejects_stretched_and_collapsed_bones() {
+        let mut joints = [Vec3::ZERO; 22];
+        let mut lengths = [0.; 22];
+        let child = SMPL_PRIMARY_CHILD[0].unwrap();
+        lengths[0] = 0.3;
+        joints[child] = Vec3::new(0., 0.3, 0.);
+        assert!(extreme_bone_stretch(&joints, &lengths).is_none());
+        joints[child].y = 0.6;
+        assert!(extreme_bone_stretch(&joints, &lengths).unwrap().contains("extreme_deformation"));
+        joints[child].y = 0.05;
+        assert!(extreme_bone_stretch(&joints, &lengths).unwrap().contains("extreme_deformation"));
+    }
 
     #[test]
     fn multipart_prop_colliders_keep_the_animated_body_exclusion() {

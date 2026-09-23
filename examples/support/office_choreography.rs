@@ -12,11 +12,13 @@ pub struct Choreography {
     hold_ms: u64,
     walkthrough: bool,
     surface_jump: bool,
+    surface_up_only: bool,
 }
 impl Choreography {
     pub fn new() -> Self {
         Self {
             surface_jump: std::env::var("OFFICE_ACCEPTANCE_SURFACE_JUMP").as_deref() == Ok("1"),
+            surface_up_only: std::env::var("OFFICE_ACCEPTANCE_SURFACE_UP_ONLY").as_deref() == Ok("1"),
             step: 0,
             sent: false,
             hold_until: None,
@@ -49,7 +51,7 @@ impl Choreography {
         let action = if self.surface_jump {
             match self.step {
                 0 => ("surface-up", Verb::JumpOnto, Some("living_sofa"), None),
-                2 => ("surface-down", Verb::JumpDown, None, None),
+                2 if !self.surface_up_only => ("surface-down", Verb::JumpDown, None, None),
                 _ => return (None, true),
             }
         } else if self.walkthrough {

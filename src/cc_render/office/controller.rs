@@ -7,6 +7,11 @@ use std::collections::VecDeque;
 mod surface_actions;
 use surface_actions::SurfaceJump;
 
+const FLOOR_GRASP_MAX_Y: f32 = 0.20;
+const KNEEL_TRANSITION_MS: u64 = 2000;
+const KNEEL_SUPPORT_MS: u64 = 2400;
+const FLOOR_CONTACT_MS: u64 = 4000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verb {
@@ -199,6 +204,7 @@ pub struct OfficeController {
     pub observed: Observation,
     pub seated: Option<String>,
     pub standing_surface: Option<super::support::StandingSurface>,
+    surface_recovery_at_ms: Option<u64>,
     pub seat_supported: bool,
     seated_pose_at_ms: u64,
     pub motion_ready: bool,
@@ -245,6 +251,7 @@ impl Default for OfficeController {
             observed: Observation::default(),
             seated: None,
             standing_surface: None,
+            surface_recovery_at_ms: None,
             seat_supported: false,
             seated_pose_at_ms: 0,
             active: vec![],
@@ -1254,17 +1261,22 @@ impl OfficeController {
                         // Blend the natural approach into reaching; legacy mode
                         // retains its crouch. Wrist proximity and the grab FSM
                         // still verify ownership changes.
+                        let floor_grasp = self.timeline_layers.is_empty()
+                            && object.and_then(OfficeObject::grasp_transform)
+                                .is_some_and(|grasp| grasp.translation.y <= FLOOR_GRASP_MAX_Y);
                         let (path, facing, contact_delay) = self.grab_reach_path(a, object);
-                        roots = path;
-                        heading = facing;
-                        prompt.push(format!(
-                            "leans forward and reaches with the {} hand to grasp the object",
-                            if hand_index(r.hand) == 0 {
-                                "left"
-                            } else {
-                                "right"
-                            }
-                        ));
+                        if floor_grasp {
+                            roots = vec![[a.execute_origin[0], a.execute_origin[1], a.execute_origin[2], 0.]];
+                            heading = None; // preserve the aligned facing in generated history
+                            prompt.push("A woman kneels down onto both knees on the floor.".into());
+                        } else {
+                            roots = path;
+                            heading = facing;
+                            prompt.push(format!(
+                                "leans forward and reaches with the {} hand to grasp the object",
+                                if hand_index(r.hand) == 0 { "left" } else { "right" }
+                            ));
+                        }
                         if let Some(p) = object
                             .and_then(|o| o.grasp_transform().map(|p| p.translation.to_array()))
                         {
@@ -1283,7 +1295,7 @@ impl OfficeController {
                                 root_relative: false,
                                 rotation_only: false,
                                 heading_reference: None,
-                                contact_pts_ms: a.execute_pts_ms + contact_delay,
+                                contact_pts_ms: a.execute_pts_ms + if floor_grasp { FLOOR_CONTACT_MS } else { contact_delay },
                             });
                         }
                     }
@@ -1512,6 +1524,7 @@ impl OfficeController {
         timeline
             .contacts
             .retain(|j| !j.joint.ends_with("Hand") || j.root_relative || j.rotation_only);
+        self.schedule_floor_grab(&mut timeline);
         for recovery in self.active.iter().filter(|a| a.request.verb == Verb::Grab && a.stage == Stage::Returning && self.timeline_layers.is_empty()) {
             let mut root = recovery.execute_origin;
             root[1] = 0.95;
@@ -1705,6 +1718,59 @@ impl OfficeController {
         self.committed_motion = self.motion.handoff_pts_ms.map(|_| committed);
     }
 
+    /// Stage a floor grasp with a model-sampled destination, then support
+    /// sampled from ARDY's committed history. Only the final hand target is
+    /// specified by the object; no task-specific body rotations are authored.
+    fn schedule_floor_grab(&self, timeline: &mut super::motion_timeline::MotionTimeline) {
+        let Some(action) = self.active.iter().find(|a| {
+            a.stage == Stage::Execute && a.request.verb == Verb::Grab
+                && self.timeline_layers.is_empty()
+                && a.request.target.as_ref().and_then(|id| self.objects.iter().find(|o| &o.id == id))
+                    .and_then(OfficeObject::grasp_transform)
+                    .is_some_and(|grasp| grasp.translation.y <= FLOOR_GRASP_MAX_Y)
+        }) else { return };
+        let kneel = action.execute_pts_ms + KNEEL_TRANSITION_MS;
+        let support = action.execute_pts_ms + KNEEL_SUPPORT_MS;
+        let contact = action.execute_pts_ms + FLOOR_CONTACT_MS;
+        let start = self.motion.pts_ms;
+        let hand = if hand_index(action.request.hand) == 0 { "LeftHand" } else { "RightHand" };
+        timeline.root.keyframes = vec![
+            super::motion_timeline::RootKeyframe { pts_ms: start as i64, position: self.motion.observed_root },
+            super::motion_timeline::RootKeyframe { pts_ms: kneel as i64, position: action.execute_origin },
+        ];
+        timeline.root.position_mode = "keyframes".into();
+        timeline.root.constrain_height = false;
+        timeline.root.heading = None;
+        timeline.root.heading_transition = None;
+        timeline.root.face_path = false;
+        timeline.root.heading_interval_ms = 0;
+        timeline.prompts = vec![
+            super::motion_timeline::PromptSpan { start_ms: start, end_ms: Some(support),
+                text: "A woman kneels down onto both knees on the floor.".into() },
+            super::motion_timeline::PromptSpan { start_ms: support, end_ms: None,
+                text: "A woman is kneeling on the floor.".into() },
+        ];
+        timeline.pose_keyframes.retain(|k| k["kind"] != "end_effectors"
+            || !k["keypoints"].as_array().is_some_and(|points|
+                points.iter().any(|p| p["joint"] == hand)));
+        timeline.pose_keyframes.push(serde_json::json!({
+            "kind":"generated_posture", "posture":"kneeling", "pts_ms":kneel,
+            "visible_from_ms":start, "heading":action.execute_heading
+        }));
+        timeline.pose_keyframes.push(serde_json::json!({
+            "kind":"observed_support", "pts_ms":support
+        }));
+        if let Some(target) = self.motion.joints.iter().find(|j| j.joint == hand) {
+            timeline.pose_keyframes.push(serde_json::json!({
+                "kind":"end_effectors", "pts_ms":contact - 400, "end_ms":contact + 800,
+                "visible_from_ms":support, "keypoints":[{
+                    "joint":hand, "position":target.position,
+                    "rotation_xyzw":target.rotation_xyzw
+                }]
+            }));
+        }
+    }
+
     fn guide_natural_heading(&self, timeline: &mut super::motion_timeline::MotionTimeline) {
         if !self.natural_navigation { return; }
         let interval = self.natural_heading_interval_ms;
@@ -1740,7 +1806,33 @@ impl OfficeController {
         }];
         timeline.root.heading = Some(self.observed.heading);
         timeline.root.constrain_height = true;
-        if self.standing_surface.is_some() { return; }
+        if self.standing_surface.is_some()
+            || self.surface_recovery_at_ms.is_some_and(|pts| start.saturating_sub(pts) <= 1500)
+        {
+            // Feet alone keep the actor on the cushion but leave the torso and
+            // head free to fold over time. Give ARDY an upright full-body
+            // destination, placed at the discovered support height; thereafter
+            // support is sampled from actual committed feet, as for kneeling.
+            timeline.root.position_mode = "keyframes".into();
+            timeline.root.constrain_height = false;
+            timeline.prompts = vec![super::motion_timeline::PromptSpan {
+                start_ms: start, end_ms: None,
+                text: if self.standing_surface.is_some() {
+                    "A woman stands upright on the support with both feet planted, shoulders relaxed and head comfortably above her shoulders."
+                } else {
+                    "A woman stands upright on the floor with both feet planted, shoulders relaxed and head comfortably above her shoulders."
+                }.into(),
+            }];
+            timeline.pose_keyframes.push(serde_json::json!({
+                "kind":"generated_posture", "posture":"standing",
+                "pts_ms":start + 800, "visible_from_ms":start,
+                "heading":self.observed.heading
+            }));
+            timeline.pose_keyframes.push(serde_json::json!({
+                "kind":"observed_support", "pts_ms":start + 1200
+            }));
+            return;
+        }
         timeline.pose_keyframes.push(serde_json::json!({
             "kind":"full_body", "preset":"standing", "hold":true,
             "pts_ms":start + 1000, "root_position":root, "heading":self.observed.heading,
@@ -2353,6 +2445,37 @@ mod tests {
         assert_eq!(c.held.len(), 1);
     }
     #[test]
+    fn live_model_led_kneel_edit_compiles_without_authored_body_pose() {
+        use super::super::motion_timeline::TimelineLayer;
+        let mut c = ready();
+        c.observed.displayed_pts_ms = 1000;
+        let layer: TimelineLayer = serde_json::from_value(serde_json::json!({
+            "root": {"keyframes": [{"pts_ms": 1050, "position": [0., 0.95, 0.]},
+                                   {"pts_ms": 2600, "position": [0., 0.35, 0.]}],
+                     "interpolation":"smooth", "position_mode":"keyframes",
+                     "constrain_height":false, "heading":null},
+            "prompts": [{"start_ms":1000, "end_ms":2200,
+                         "text":"A woman kneels down onto both knees on the floor."},
+                        {"start_ms":2200, "end_ms":null,
+                         "text":"A woman is kneeling on the floor."}],
+            "pose_keyframes": [
+                {"kind":"generated_posture", "posture":"kneeling", "pts_ms":2200,
+                 "visible_from_ms":1000, "heading":0.0},
+                {"kind":"observed_support", "pts_ms":2700}
+            ]
+        })).unwrap();
+        c.command(OfficeCommand::EditMotionTimeline {
+            edit_id: "low-posture".into(), expected_revision: c.revision,
+            layer: Some(layer),
+        }, &SceneState::default());
+        assert_eq!(c.events.back().unwrap().status, Status::Accepted);
+        let timeline = c.motion.timeline.as_ref().unwrap();
+        assert!(timeline.pose_keyframes.iter().any(|k| k["kind"] == "generated_posture"));
+        assert!(timeline.pose_keyframes.iter().any(|k| k["kind"] == "observed_support"));
+        assert!(!timeline.pose_keyframes.iter().any(|k| k["kind"] == "full_body"));
+    }
+
+    #[test]
     fn live_root_edit_starts_at_displayed_position_and_invalid_pose_is_atomic() {
         use super::super::motion_timeline::TimelineLayer;
         let mut c = ready();
@@ -2457,6 +2580,39 @@ mod tests {
         c.observed.wrists[1] = c.motion.joints[0].position;
         c.advance(&w);
         assert!(c.grab_commands.is_empty(), "a nearby wrist cannot attach before the planned contact");
+    }
+
+    #[test]
+    fn floor_grab_schedules_model_kneel_and_history_supported_reach() {
+        let mut c = ready();
+        let w = SceneState::default();
+        submit(&mut c, action("floor", Verb::Grab, Some(Hand::Right), Some("mug")), &w);
+        let floor = c.objects.iter_mut().find(|o| o.id == "mug").unwrap();
+        floor.position = [0., 0.08, 0.28];
+        floor.approach = [0., -0.08, -0.28];
+        floor.keypoints.retain(|_, point| point.role != "approach");
+        let floor = floor.clone();
+        c.active[0].stage = Stage::Execute;
+        c.active[0].execute_pts_ms = 1200;
+        c.active[0].execute_origin = [0., 0.95, 0.];
+        c.active[0].execute_heading = 0.;
+        c.observed.displayed_pts_ms = 1200;
+        c.rebuild(&w);
+        let timeline = c.motion.timeline.as_ref().unwrap();
+        assert_eq!(timeline.root.position_mode, "keyframes");
+        assert!(!timeline.root.constrain_height);
+        assert!(timeline.pose_keyframes.iter().any(|k|
+            k["kind"] == "generated_posture" && k["pts_ms"] == 3200));
+        assert!(timeline.pose_keyframes.iter().any(|k|
+            k["kind"] == "observed_support" && k["pts_ms"] == 3600));
+        let reach = timeline.pose_keyframes.iter().find(|k|
+            k["kind"] == "end_effectors" && k["keypoints"][0]["joint"] == "RightHand").unwrap();
+        assert_eq!(reach["pts_ms"], 4800);
+        assert_eq!(reach["end_ms"], 6000);
+        assert_eq!(reach["keypoints"][0]["position"], serde_json::json!(
+            floor.grasp_transform().unwrap().translation.to_array()));
+        assert_eq!(c.motion.joints[0].contact_pts_ms, 5200);
+        assert!(timeline.contacts.is_empty());
     }
 
     #[test]

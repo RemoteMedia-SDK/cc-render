@@ -261,10 +261,19 @@ pub(crate) struct WorldMotion<'w, 's> {
     globals: Query<'w, 's, &'static GlobalTransform>,
 }
 impl WorldMotion<'_, '_> {
+    pub fn failed(&self) -> bool {
+        self.office.as_ref().is_some_and(|o| o.motion_error.is_some())
+    }
+
     pub fn receive(
         &mut self,
         rx: &crossbeam_channel::Receiver<Option<SkeletalPose>>,
     ) -> (Option<SkeletalPose>, bool) {
+        if self.failed() {
+            *self.timeline = PoseTimeline::default();
+            while rx.try_recv().is_ok() {} // discard already queued unsafe poses
+            return (None, true);
+        }
         if let Some(o) = self.office.as_ref() {
             self.timeline
                 .schedule_revision(o.revision, o.motion.handoff_pts_ms);
