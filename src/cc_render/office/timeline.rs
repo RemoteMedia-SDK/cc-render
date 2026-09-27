@@ -110,9 +110,9 @@ impl PoseTimeline {
             self.epoch = Some((now, self.watermark));
             self.starved = false;
         }
-        if self.queue.len() < 96 {
+        if self.queue.len() < 136 {
             self.queue.push_back(p);
-        } // Core40 + maximum 2.4s scene prefetch and token margin; bounded to 4.8s
+        } // Core40 + maximum 4.4s scene prefetch and token margin; bounded to 6.8s
     }
     pub fn sample(&mut self, now: f64) -> Option<SkeletalPose> {
         let (epoch, base) = self.epoch?;
@@ -160,10 +160,12 @@ impl PoseTimeline {
             "stream":p.stream,
         });
         self.rejection = Some(serde_json::json!({
-            "session_id":self.session,"generation_revision":self.revision,
+            "session_id":pose.stream.as_ref().map(|s| s.session_id.as_str()),
+            "generation_revision":pose.stream.as_ref().map(|s| s.generation_revision),
+            "scheduled_generation_revision":self.revision,
             "rejected_pts_ms":pose.pts_ms,"displayed_pts_ms":previous.as_ref().map_or(0, |p| p.pts_ms),
             "reason":"office root-path validation rejected the unchanged candidate",
-            "validator":"OfficeController::permits_root",
+            "validator":"OfficeController::resolve_native_pose",
             "candidate":diagnostic_pose(&pose),
             "displayed_before":previous.as_ref().map(diagnostic_pose),
         }));
@@ -431,7 +433,7 @@ impl WorldMotion<'_, '_> {
             let Some(office) = self.office.as_mut() else {
                 return true;
             };
-            if office.resolve_root(Vec3::from(pose.root_pos)).is_some() {
+            if office.resolve_native_pose(pose).is_some() {
                 return true;
             }
             office.blocked = true;
@@ -441,9 +443,9 @@ impl WorldMotion<'_, '_> {
         if let Some(office) = self.office.as_mut() {
             if office.native_motion_revision.is_some() && office.motion_rejection.is_none() {
                 if let Some(rejection) = self.timeline.rejection.as_ref() {
-                    let error = format!("native root validation rejected session={} revision={} frame={} displayed={}: {}",
+                    let error = office.motion_error.clone().unwrap_or_else(|| format!("native root validation rejected session={} revision={} frame={} displayed={}: {}",
                         rejection["session_id"], rejection["generation_revision"],
-                        rejection["rejected_pts_ms"], rejection["displayed_pts_ms"], rejection["reason"]);
+                        rejection["rejected_pts_ms"], rejection["displayed_pts_ms"], rejection["reason"]));
                     tracing::error!(%error, diagnostic=%rejection, "native motion stopped without repair");
                     office.motion_error = Some(error);
                     office.motion_rejection = Some(rejection.clone());
@@ -462,7 +464,7 @@ impl WorldMotion<'_, '_> {
         let resolved = self
             .office
             .as_mut()
-            .map_or(Some(proposed), |o| o.resolve_root(proposed));
+            .map_or(Some(proposed), |o| o.resolve_native_pose(pose));
         let allowed = resolved.is_some();
         if let Some(o) = self.office.as_mut() {
             o.observed.buffered_until_pts_ms = self.timeline.queue.back().map(|p| p.pts_ms);
@@ -470,6 +472,7 @@ impl WorldMotion<'_, '_> {
             o.observed.underrun_frames = self.timeline.underruns;
             o.observed.displayed_pts_ms = pose.pts_ms;
             if allowed {
+                o.record_native_pose(pose);
                 o.observed.native_stream = pose.stream.clone();
                 if let Some(stream) = &pose.stream {
                     o.native_motion_revision = Some(stream.generation_revision);

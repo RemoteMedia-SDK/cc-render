@@ -1,7 +1,9 @@
 //! Authored office and observed-state action controller. Coordinates are meters, Y-up.
+pub(crate) mod avatar_geometry;
 pub mod controller;
 pub mod home;
 mod locomotion;
+pub(crate) mod native_seat;
 pub mod metadata;
 pub mod motion_timeline;
 pub mod navigation;

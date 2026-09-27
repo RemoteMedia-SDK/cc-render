@@ -15,6 +15,8 @@ pub(crate) struct SceneSamplerCapability {
     pub server_instance: String,
     #[serde(default)]
     pub grip_capture: Option<GripCapture>,
+    #[serde(default)]
+    pub renderer_geometry_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -135,7 +137,7 @@ mod tests {
         avatar.write_all(b"test avatar").unwrap();
         let mut capability = SceneSamplerCapability { protocol: 3, context_version: 1,
             policy: "model-owned-scene-v1".into(), avatar_sha256: file_hash(avatar.path()).unwrap(),
-            profile_identity: "0".repeat(64), authenticated_context: true, server_instance: "1".repeat(32), grip_capture: None };
+            profile_identity: "0".repeat(64), authenticated_context: true, server_instance: "1".repeat(32), grip_capture: None, renderer_geometry_sha256: None };
         assert!(SceneSigner::load(key.path(), avatar.path(), &capability).is_ok());
         capability.avatar_sha256 = "0".repeat(64);
         assert!(SceneSigner::load(key.path(), avatar.path(), &capability).is_err());

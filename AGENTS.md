@@ -1,5 +1,7 @@
 # Motion ownership (owner-mandated)
 
+Owner-approved seat overlap policy: target-seat penetration and swept overlap are diagnostic WARN by default, with no 3mm fatal cutoff. `CC_RENDER_STRICT_SEAT_COLLISIONS=1` opts into strict checks. See `docs/design/development-seat-warnings.md`. Do not repair poses or treat these warnings as proof of physical support.
+
 Read `docs/design/model-owned-motion.md` before changing motion, actions, physics interaction, retargeting, or acceptance tests.
 
 - Task code describes semantic outcomes; it must not write pelvis/root paths, body heights/headings, joint targets, stance/gait timing, reference poses, or corrective transforms.

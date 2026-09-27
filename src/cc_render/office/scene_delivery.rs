@@ -17,7 +17,7 @@ impl SceneDelivery {
         // ACK owns the complete source-token grid. The renderer may still be
         // draining the batch and expose a partial (non-token-aligned) tail.
         let end = generated_until;
-        let latest = end.min(displayed.checked_add(2400)?);
+        let latest = end.min(displayed.checked_add(4400)?);
         let anchor = end.checked_sub((end-latest).div_ceil(200)*200)?;
         (anchor >= displayed.checked_add(2200)?).then_some(anchor)
     }
@@ -53,9 +53,9 @@ mod tests {
         let mut office = OfficeController::default().snapshot();
         office.avatar.displayed_pts_ms = 1500;
         office.avatar.buffered_until_pts_ms = Some(4000);
-        assert_eq!(SceneDelivery::anchor(&office, 4000), Some(3800));
+        assert_eq!(SceneDelivery::anchor(&office, 4000), Some(4000));
         office.avatar.buffered_until_pts_ms = Some(3900);
-        assert_eq!(SceneDelivery::anchor(&office, 4000), Some(3800)); // Partial renderer drain must not shift token grid.
+        assert_eq!(SceneDelivery::anchor(&office, 4000), None); // Wait for the exact reserved source tail.
         office.avatar.buffered_until_pts_ms = Some(3500);
         assert_eq!(SceneDelivery::anchor(&office, 4000), None);
     }

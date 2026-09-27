@@ -211,7 +211,8 @@ impl NativeMotionDriver {
         self.observe_clock(displayed_pts_ms, now_ms);
         // Scene conditioning is slower than stock inference. This is a bounded
         // delivery lead, never a change to model timing or frame content.
-        let prefetch_ms = if goal.scene_outcome().is_some() { 2400 } else { PREFETCH_MS };
+        // 2s generation allowance plus the existing 2.4s revision-handoff lead.
+        let prefetch_ms = if goal.scene_outcome().is_some() { 4400 } else { PREFETCH_MS };
         if (self.has_committed_output && displayed_pts_ms < 200)
             || self.generated_until_pts_ms.is_some_and(|end| end > displayed_pts_ms.saturating_add(prefetch_ms))
             || self.empty_acks_at_clock >= MAX_EMPTY_ACKS_AT_CLOCK
@@ -422,6 +423,23 @@ mod tests {
         driver.acknowledge("test", 2, 3399);
         assert!(driver.next_request(3399, 800).is_none());
         assert_eq!(driver.next_request(4800, 900).unwrap().wire.pts_ms, 4800);
+    }
+
+    #[test]
+    fn scene_prefetch_preserves_handoff_lead_after_generation_latency() {
+        let mut driver = NativeMotionDriver::default();
+        let goal = serde_json::json!({"kind":"motion_goal","version":3,"session_id":"test",
+            "generation_revision":1,"pts_ms":0,"seed":42,"goal":{"operation":"sit","target_id":"chair"}});
+        driver.submit(serde_json::from_value(goal).unwrap()).unwrap();
+        driver.next_request(0, 0).unwrap();
+        for pts in (50..=6000).step_by(50) { driver.observe_frame("test", 1, pts); }
+        driver.acknowledge("test", 1, 0);
+        assert!(driver.next_request(1599, 0).is_none());
+        assert!(driver.next_request(1600, 1).is_some());
+        // After a 2s generation, a full suffix leaves >2.2s for a safe handoff.
+        for pts in (6050..=8000).step_by(50) { driver.observe_frame("test", 1, pts); }
+        driver.acknowledge("test", 1, 1600);
+        assert!(super::super::scene_delivery::SceneDelivery::source_anchor(3600, driver.generated_until().unwrap()).is_some());
     }
 
     #[test]

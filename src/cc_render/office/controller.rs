@@ -52,6 +52,11 @@ fn intensity() -> f32 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OfficeCommand {
+    /// Renderer-owned registration only; not deserializable from public commands.
+    #[serde(skip)]
+    InstallNativeSeatGeometry { geometry: std::sync::Arc<super::avatar_geometry::AvatarGeometry> },
+    #[serde(skip)]
+    AuthorizeNativeSeat { session_id: String, generation_revision: u64, target_id: String },
     NativeMotionRevision {
         generation_revision: u64,
     },
@@ -101,6 +106,7 @@ pub struct Observation {
     pub displayed_pts_ms: u64,
     /// Identity of the pose actually applied, not the latest requested goal.
     pub native_stream: Option<super::timeline::StreamIdentity>,
+    pub native_seat: Option<super::native_seat::SeatObservation>,
     /// Read-only native queue watermark; not a body target.
     pub buffered_until_pts_ms: Option<u64>,
     pub feet: [[f32; 3]; 2],
@@ -153,6 +159,7 @@ pub(crate) struct PushForceIntent {
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct OfficeSnapshot {
+    pub native_seat_profile: Option<String>,
     pub motion_error: Option<String>,
     pub motion_rejection: Option<serde_json::Value>,
     pub timeline_edit_ids: Vec<String>,
@@ -228,6 +235,9 @@ pub struct OfficeController {
     pub motion_rejection: Option<serde_json::Value>,
     pub native_motion_revision: Option<u64>,
     pub native_scene_handoff: Option<(u64, u64)>,
+    native_seat: Option<super::native_seat::NativeSeatAdmission>,
+    native_previous_pose: Option<super::super::renderer::SkeletalPose>,
+    native_seat_candidate: Option<super::native_seat::SeatObservation>,
     pub future_root: Option<(u64, [f32; 3])>,
     pub future_handoffs: bool,
     /// Diagnostic comparison switch; natural navigation uses sparse facing guidance.
@@ -274,6 +284,9 @@ impl Default for OfficeController {
             motion_rejection: None,
             native_motion_revision: None,
             native_scene_handoff: None,
+            native_seat: None,
+            native_previous_pose: None,
+            native_seat_candidate: None,
             future_root: None,
             future_handoffs: std::env::var("OFFICE_FUTURE_HANDOFFS").as_deref() == Ok("1"),
             natural_navigation: std::env::var("OFFICE_NATURAL_NAVIGATION").as_deref() != Ok("0"),
@@ -480,6 +493,18 @@ impl OfficeController {
     }
     pub fn command(&mut self, command: OfficeCommand, world: &SceneState) {
         match command {
+            OfficeCommand::InstallNativeSeatGeometry { geometry } => {
+                if self.native_seat.as_ref().is_some_and(|old| old.profile_identity() != geometry.profile_identity()) {
+                    self.motion_error = Some("native seat calibration replacement rejected".into());
+                } else if self.native_seat.is_none() {
+                    self.native_seat = Some(super::native_seat::NativeSeatAdmission::new(geometry));
+                }
+            }
+            OfficeCommand::AuthorizeNativeSeat { session_id, generation_revision, target_id } => {
+                let result = self.native_seat.as_mut().ok_or_else(|| "native seat calibration unavailable".to_string())
+                    .and_then(|admission| admission.authorize(super::native_seat::SeatScope { session_id, generation_revision, target_id }));
+                if let Err(error) = result { self.motion_error = Some(error); }
+            }
             OfficeCommand::NativeMotionRevision { generation_revision } => {
                 self.native_motion_revision = Some(generation_revision);
                 self.native_scene_handoff = None;
@@ -2066,7 +2091,32 @@ impl OfficeController {
         self.permits_root(proposed).then_some(proposed)
     }
 
+    pub(crate) fn resolve_native_pose(&mut self, pose: &super::super::renderer::SkeletalPose) -> Option<Vec3> {
+        self.native_seat_candidate = None;
+        let root = Vec3::from(pose.root_pos);
+        let measurement = self.native_seat.as_ref().and_then(|admission|
+            admission.measure(pose, self.native_previous_pose.as_ref(), &self.objects));
+        match measurement {
+            None => self.resolve_root(root),
+            Some(Err(error)) => { self.motion_error = Some(error); None }
+            Some(Ok(evidence)) => {
+                if !self.permits_root_with_validated_seat(root, Some(&evidence.target_id)) { return None; }
+                self.native_seat_candidate = Some(evidence);
+                Some(root)
+            }
+        }
+    }
+
+    pub(crate) fn record_native_pose(&mut self, pose: &super::super::renderer::SkeletalPose) {
+        self.observed.native_seat = self.native_seat_candidate.clone();
+        self.native_previous_pose = Some(pose.clone());
+    }
+
     pub fn permits_root(&self, position: Vec3) -> bool {
+        self.permits_root_with_validated_seat(position, None)
+    }
+
+    fn permits_root_with_validated_seat(&self, position: Vec3, validated_seat: Option<&str>) -> bool {
         if let Some(permitted) = self.permits_surface_root(position) { return permitted; }
         let start = Vec2::new(self.observed.pelvis[0], self.observed.pelvis[2]);
         let end = Vec2::new(position.x, position.z);
@@ -2082,7 +2132,7 @@ impl OfficeController {
         let polygons: Vec<_> = scene
             .objects
             .iter()
-            .filter(|o| self.seat_transition() != Some(o.id.as_str())
+            .filter(|o| validated_seat != Some(o.id.as_str()) && self.seat_transition() != Some(o.id.as_str())
                 && push.is_none_or(|plan| plan.id != o.id))
             .map(|o| (o.id.clone(), o.footprint.inflated_polygon(0.35)))
             .collect();
@@ -2141,6 +2191,7 @@ impl OfficeController {
     }
     pub fn snapshot(&self) -> OfficeSnapshot {
         OfficeSnapshot {
+            native_seat_profile: self.native_seat.as_ref().map(|g| g.profile_identity().to_owned()),
             navigation_object_ids: self.navigation_scene().objects.into_iter().map(|o| o.id).collect(),
             motion_error: self.motion_error.clone(),
             motion_rejection: self.motion_rejection.clone(),
@@ -3458,6 +3509,37 @@ mod tests {
         assert!(c.resolve_root(Vec3::new(0.8, 0.83, -1.8)).is_none());
         let safe = Vec3::from(c.observed.pelvis);
         assert_eq!(c.resolve_root(safe), Some(safe));
+    }
+    #[test]
+    fn native_seat_admission_is_revision_scoped_and_preserves_other_obstacles() {
+        use crate::cc_render::renderer::SkeletalPose;
+        let mut c = ready();
+        let world = SceneState::default();
+        c.command(OfficeCommand::InstallNativeSeatGeometry { geometry: std::sync::Arc::new(
+            super::super::avatar_geometry::AvatarGeometry::test_fixture()) }, &world);
+        let mut previous = SkeletalPose::rest();
+        previous.stream = Some(super::super::timeline::StreamIdentity { session_id:"test".into(),
+            generation_revision:1,skeleton_id:"smpl22".into(),root_mode:"world".into() });
+        previous.root_pos = [0.,1.,0.1];
+        c.observed.pelvis = previous.root_pos;
+        c.record_native_pose(&previous);
+        let mut candidate = previous.clone(); candidate.pts_ms = 50;
+        candidate.stream.as_mut().unwrap().generation_revision = 2;
+        candidate.root_pos = [0.,1.,-0.8];
+        assert!(c.resolve_native_pose(&candidate).is_none());
+        c.command(OfficeCommand::AuthorizeNativeSeat { session_id:"test".into(),generation_revision:2,target_id:"chair".into() }, &world);
+        assert_eq!(c.resolve_native_pose(&candidate), Some(Vec3::from(candidate.root_pos)));
+        candidate.stream.as_mut().unwrap().generation_revision = 3;
+        assert!(c.resolve_native_pose(&candidate).is_none());
+        candidate.stream.as_mut().unwrap().generation_revision = 2;
+        candidate.root_pos[2] = -1.8;
+        assert!(c.resolve_native_pose(&candidate).is_none()); // Desk is never exempted.
+        candidate.root_pos = [-1.,0.42,-0.8];
+        // Owner-approved default: target-seat overlaps warn, never repair or stop the pose.
+        assert_eq!(c.resolve_native_pose(&candidate), Some(Vec3::from(candidate.root_pos)));
+        assert_eq!(candidate.root_pos, [-1.,0.42,-0.8]);
+        assert!(serde_json::from_value::<OfficeCommand>(serde_json::json!({"kind":"authorize_native_seat",
+            "session_id":"test","generation_revision":3,"target_id":"chair"})).is_err());
     }
     #[test]
     fn blocked_destination_and_invalid_input_fail() {

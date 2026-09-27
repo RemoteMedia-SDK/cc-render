@@ -53,6 +53,8 @@ pub struct CcRenderConfig {
     pub realtime_mode: bool,
     /// Startup-owned signing key; never accepted through runtime control messages.
     pub scene_key_file: Option<PathBuf>,
+    /// Fixed asset data, verified against the registered sampler's content hash.
+    pub scene_geometry_file: Option<PathBuf>,
 }
 
 impl Default for CcRenderConfig {
@@ -67,6 +69,7 @@ impl Default for CcRenderConfig {
             scene_glb_path: None,
             realtime_mode: false,
             scene_key_file: None,
+            scene_geometry_file: None,
         }
     }
 }
@@ -314,6 +317,10 @@ impl CcRenderNode {
             let mut operations = Vec::new();
             if let Some((_, capability)) = registered.as_ref() {
                 operations.push("navigate");
+                if capability.renderer_geometry_sha256.is_some()
+                    && office["native_seat_profile"].as_str() == Some(capability.profile_identity.as_str()) {
+                    operations.push("sit");
+                }
                 if capability.grip_capture.as_ref().zip(self.renderer.grab_config())
                     .is_some_and(|(contract, config)| contract.matches(&config)) {
                     operations.push("grasp");
@@ -385,7 +392,7 @@ impl CcRenderNode {
                 let mut slot = self.scene_task.lock();
                 self.motion_driver.lock().validate_goal(&goal).map_err(Error::Execution)?;
                 if let Some(outcome) = goal.scene_outcome() {
-                    if outcome.operation == super::office::motion_intent::SceneOperation::Sit || self.scene_signer.lock().is_none() {
+                    if self.scene_signer.lock().is_none() {
                         return Err(Error::Execution("unsupported_capability: scene operation is not registered".into()));
                     }
                     if outcome.operation == super::office::motion_intent::SceneOperation::Grasp {
@@ -401,6 +408,13 @@ impl CcRenderNode {
                     if !office.avatar.ready || self.motion_driver.lock().current_goal().is_none()
                         || !office.avatar.native_stream.as_ref().is_some_and(|s| s.session_id == goal.session_id()) {
                         return Err(Error::Execution("scene operation requires active native history".into()));
+                    }
+                    if outcome.operation == super::office::motion_intent::SceneOperation::Sit {
+                        let registered = self.scene_signer.lock();
+                        if !registered.as_ref().is_some_and(|(_, cap)| cap.renderer_geometry_sha256.is_some()
+                            && office.native_seat_profile.as_deref() == Some(cap.profile_identity.as_str())) {
+                            return Err(Error::Execution("unsupported_capability: native seat geometry not installed".into()));
+                        }
                     }
                     super::office::scene_lifecycle::SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)?;
                     if delivery.pending.as_ref().is_some_and(|(old, _)| old.revision() >= goal.revision()) {
@@ -428,6 +442,13 @@ impl CcRenderNode {
                     }
                     let signer = super::office::scene_signing::SceneSigner::load(
                         key_file, &self.config.glb_path, &capability).map_err(Error::Execution)?;
+                    if let Some(path) = &self.config.scene_geometry_file {
+                        let geometry = super::office::avatar_geometry::AvatarGeometry::load(path, &capability)
+                            .map_err(Error::Execution)?;
+                        self.renderer.office_command(super::office::controller::OfficeCommand::InstallNativeSeatGeometry {
+                            geometry: std::sync::Arc::new(geometry),
+                        });
+                    }
                     *slot = Some((signer, capability));
                 }
                 Ok(true)
@@ -942,6 +963,11 @@ impl AsyncStreamingNode for CcRenderNode {
                     signer.as_mut().ok_or_else(|| Error::Execution("scene signer unavailable".into()))?.0
                         .sign(&goal, &snapshot, task.phase.as_str(), &caption, "right").map_err(Error::Execution)?
                 } else { serde_json::to_value(&goal).unwrap() };
+                if let Some(outcome) = goal.scene_outcome().filter(|o| o.operation == super::office::motion_intent::SceneOperation::Sit) {
+                    self.renderer.office_command(super::office::controller::OfficeCommand::AuthorizeNativeSeat {
+                        session_id: goal.session_id().into(), generation_revision: goal.revision(), target_id: outcome.target_id.clone(),
+                    });
+                }
                 if goal.scene_outcome().is_none() {
                     self.renderer.office_command(super::office::controller::OfficeCommand::NativeMotionRevision {
                         generation_revision: goal.revision(),
@@ -1581,7 +1607,7 @@ mod realtime_speech_tests {
         let signature: String = hmac_sha256::HMAC::mac(payload.as_bytes(), [9;32]).iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(envelope["signature"], signature);
         assert!(renderer.commands.lock().iter().any(|c| matches!(c,
-            OfficeCommand::NativeSceneHandoff { generation_revision:2, history_pts_ms:3800 })));
+            OfficeCommand::NativeSceneHandoff { generation_revision:2, history_pts_ms:4000 })));
         assert!(!renderer.commands.lock().iter().any(|c| matches!(c,
             OfficeCommand::NativeMotionRevision { generation_revision:2 })));
         drop(outputs);
