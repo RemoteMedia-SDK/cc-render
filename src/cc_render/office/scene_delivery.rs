@@ -16,10 +16,23 @@ impl SceneDelivery {
     pub(crate) fn source_anchor(displayed: u64, generated_until: u64) -> Option<u64> {
         // ACK owns the complete source-token grid. The renderer may still be
         // draining the batch and expose a partial (non-token-aligned) tail.
-        let end = generated_until;
-        let latest = end.min(displayed.checked_add(4400)?);
+        Self::token_anchor(displayed, generated_until, 4400, 2200)
+    }
+
+    pub(crate) fn request_anchor(goal: &MotionGoal, displayed: u64, end: u64) -> Option<u64> {
+        if goal.scene_outcome().is_some() { return Self::source_anchor(displayed, end); }
+        Self::token_anchor(displayed, end, 600, 200)
+    }
+
+    fn token_anchor(displayed: u64, end: u64, lead: u64, minimum: u64) -> Option<u64> {
+        let latest = end.min(displayed.checked_add(lead)?);
         let anchor = end.checked_sub((end-latest).div_ceil(200)*200)?;
-        (anchor >= displayed.checked_add(2200)?).then_some(anchor)
+        (anchor >= displayed.checked_add(minimum)?).then_some(anchor)
+    }
+
+    pub(crate) fn reserved_for(&self, goal: &MotionGoal) -> bool {
+        self.reservation.as_ref().is_some_and(|(session, revision, _)|
+            session == goal.session_id() && *revision == goal.revision())
     }
 
     pub(crate) fn reserve(&mut self, goal: &MotionGoal, anchor: u64) {
@@ -59,6 +72,19 @@ mod tests {
         office.avatar.buffered_until_pts_ms = Some(3500);
         assert_eq!(SceneDelivery::anchor(&office, 4000), None);
     }
+    #[test]
+    fn semantic_anchor_matches_worker_and_keeps_latency_headroom() {
+        let goal = MotionGoal::new("test".into(), 3, 1500, 42, "Wave".into()).unwrap();
+        assert_eq!(SceneDelivery::request_anchor(&goal, 1500, 4000), Some(2000));
+        assert_eq!(SceneDelivery::request_anchor(&goal, 200, 400), Some(400));
+        assert_eq!(SceneDelivery::request_anchor(&goal, 350, 400), None);
+        let mut delivery = SceneDelivery::default();
+        delivery.reserve(&goal, 2000);
+        assert!(delivery.reserved_for(&goal));
+        assert!(delivery.first_frame("test", 3, 2050, 1800).is_ok());
+        assert!(!delivery.reserved_for(&goal));
+    }
+
     #[test]
     fn first_frame_must_arrive_before_reserved_prefix_finishes() {
         let mut delivery = SceneDelivery::default();

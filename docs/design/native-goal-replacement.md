@@ -13,7 +13,13 @@ All incoming motion goals now respect the pending revision floor. Revisions at o
 
 Replacing a goal does not interrupt or relabel generation already in flight. Only that request's matching session/revision/PTS ACK releases its slot. Old accepted frames cannot set the replacement's generation horizon. No generated poses, history, timestamps, collision policies or geometry are modified.
 
-## Verification
+## Buffered semantic handoff
+
+Subsequent live interruption testing exposed another issue: semantic dispatch cleared queued native frames before generation completed. Semantic replacements now also wait in the pending slot for the old ACK and an existing future source-token boundary. `SceneDelivery::request_anchor` selects a token up to600ms ahead with at least200ms lead (scene goals retain4400/2200ms). The Python service selects the identical token. A reserved semantic handoff must not be overwritten by an unanchored `NativeMotionRevision` command. Initial requests remain unchanged; no pose, history sample or timestamp is repaired.
+
+The live replacement/Stop/reconnect test passed after this change; detailed failures, evidence and limits are in SDK `openspec/changes/add-model-owned-spatial-goals/INTERRUPTION-VALIDATION.md`. The following earlier checkpoint is retained for history.
+
+## Initial revision-order verification
 
 Two new renderer regressions initially failed, then passed:
 

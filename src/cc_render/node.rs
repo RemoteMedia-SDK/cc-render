@@ -346,15 +346,20 @@ impl CcRenderNode {
         let mut driver = self.motion_driver.lock();
         if driver.in_flight() || !office.avatar.ready || office.motion_error.is_some() { return Ok(()) }
         let Some(end) = driver.generated_until() else { return Ok(()) };
-        let Some(anchor) = SceneDelivery::anchor(office, end) else { return Ok(()) };
-        let mut next = if continuation {
-            task.as_ref().ok_or_else(|| Error::Execution("missing scene continuation owner".into()))?.clone()
-        } else { SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)? };
-        if continuation { next.bind_generation(goal.clone()).map_err(Error::Execution)?; }
+        let Some(anchor) = SceneDelivery::request_anchor(&goal, office.avatar.displayed_pts_ms, end)
+            .filter(|anchor| office.avatar.buffered_until_pts_ms.is_some_and(|buffered| buffered >= *anchor))
+            else { return Ok(()) };
+        let next = if continuation {
+            let mut next = task.as_ref().ok_or_else(|| Error::Execution("missing scene continuation owner".into()))?.clone();
+            next.bind_generation(goal.clone()).map_err(Error::Execution)?;
+            Some(next)
+        } else if goal.scene_outcome().is_some() {
+            Some(SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)?)
+        } else { None };
         driver.submit(goal.clone()).map_err(Error::Execution)?;
         delivery.reserve(&goal, anchor);
         self.renderer.office_command(OfficeCommand::NativeSceneHandoff { generation_revision: goal.revision(), history_pts_ms: anchor });
-        *task = Some(next);
+        *task = next;
         delivery.pending = None;
         Ok(())
     }
@@ -387,6 +392,23 @@ impl CcRenderNode {
             "phase":task.phase, "status":status,"detail":detail,"displayed_pts_ms":office.avatar.displayed_pts_ms});
         if status == "failed" { *slot = None; }
         Ok(Some(event))
+    }
+
+    fn accept_semantic_goal(&self, goal: super::office::motion_intent::MotionGoal,
+        delivery: &mut super::office::scene_delivery::SceneDelivery,
+        task: &mut Option<super::office::scene_lifecycle::SceneLifecycle>) -> Result<()> {
+        let mut driver = self.motion_driver.lock();
+        if driver.current_goal().is_some_and(|old| goal.revision() > old.revision()) {
+            // Finish the in-flight source block, then hand off at an existing
+            // future token. Keep the old sampler context until that handoff.
+            if let Some(task) = task.as_mut() { task.superseded = true; }
+            delivery.pending = Some((goal, false));
+        } else {
+            driver.submit(goal).map_err(Error::Execution)?;
+            delivery.pending = None;
+            *task = None;
+        }
+        Ok(())
     }
 
     fn accept_motion_control(&self, data: &RuntimeData) -> Result<bool> {
@@ -433,10 +455,8 @@ impl CcRenderNode {
                     if let Some(task) = slot.as_mut() { task.superseded = true; }
                     delivery.pending = Some((goal, false));
                 } else {
-                    self.motion_driver.lock().submit(goal).map_err(Error::Execution)?;
-                    delivery.pending = None;
+                    self.accept_semantic_goal(goal, &mut delivery, &mut slot)?;
                     self.renderer.cancel_grab_pursuit(super::renderer::Hand::Right);
-                    *slot = None;
                 }
                 Ok(true)
             }
@@ -956,9 +976,10 @@ impl AsyncStreamingNode for CcRenderNode {
             // An ACK-complete batch may not yet be reflected in the renderer's
             // observation. Give its queued prefix time to become visible before
             // starting another old-phase generation and starving the handoff.
-            let awaiting_drain = delivery.pending.is_some() && driver.generated_until().is_some_and(|end|
-                super::office::scene_delivery::SceneDelivery::source_anchor(displayed, end).is_some());
+            let awaiting_drain = delivery.pending.as_ref().is_some_and(|(goal, _)| driver.generated_until().is_some_and(|end|
+                super::office::scene_delivery::SceneDelivery::request_anchor(goal, displayed, end).is_some()));
             let goal = if awaiting_drain { None } else { driver.next_request(displayed, now_ms) };
+            let reserved = goal.as_ref().is_some_and(|goal| delivery.reserved_for(goal));
             drop(driver);
             drop(delivery);
             if let Some(goal) = goal {
@@ -977,7 +998,7 @@ impl AsyncStreamingNode for CcRenderNode {
                         session_id: goal.session_id().into(), generation_revision: goal.revision(), target_id: outcome.target_id.clone(),
                     });
                 }
-                if goal.scene_outcome().is_none() {
+                if goal.scene_outcome().is_none() && !reserved {
                     self.renderer.office_command(super::office::controller::OfficeCommand::NativeMotionRevision {
                         generation_revision: goal.revision(),
                     });
@@ -1592,15 +1613,25 @@ mod realtime_speech_tests {
         }
         goal["generation_revision"] = 4.into();
         node.accept_motion_control(&RuntimeData::Json(goal)).unwrap();
+        assert_eq!(node.scene_delivery.lock().pending.as_ref().unwrap().0.revision(), 4);
+        {
+            let mut driver = node.motion_driver.lock();
+            assert_eq!(driver.current_goal().unwrap().revision(), 1);
+            assert!(driver.next_request(1500, 100).is_none());
+            driver.acknowledge("replacement", 3, 0); // Wrong request cannot release the old slot.
+            assert!(driver.in_flight());
+            driver.observe_frame("replacement", 1, 4000);
+            driver.acknowledge("replacement", 1, 0);
+        }
+        let mut office = super::super::office::controller::OfficeController::default().snapshot();
+        office.avatar.ready = true;
+        office.avatar.displayed_pts_ms = 1500;
+        office.avatar.buffered_until_pts_ms = Some(4000);
+        node.start_pending_scene(&office).unwrap();
         assert!(node.scene_delivery.lock().pending.is_none());
         let mut driver = node.motion_driver.lock();
-        assert_eq!(driver.current_goal().unwrap().revision(), 4);
-        assert!(driver.next_request(1500, 100).is_none());
-        driver.acknowledge("replacement", 3, 0); // Wrong request cannot release the old slot.
-        assert!(driver.in_flight());
-        driver.observe_frame("replacement", 1, 4000);
         assert_eq!(driver.generated_until(), None); // Old output cannot own the new horizon.
-        driver.acknowledge("replacement", 1, 0);
+        assert!(node.scene_delivery.lock().reserved_for(driver.current_goal().unwrap()));
         assert_eq!(driver.next_request(1500, 200).unwrap().revision(), 4);
     }
 
