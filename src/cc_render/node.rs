@@ -310,8 +310,15 @@ impl CcRenderNode {
     fn observed_scene(&self) -> serde_json::Value {
         let mut scene = serde_json::to_value(self.renderer.scene_state()).unwrap();
         if let Some(office) = scene.get_mut("office").filter(|v| v.is_object()) {
+            // A queued, accepted goal already owns request revision ordering;
+            // its lifecycle/poses remain distinct until the native handoff.
+            let delivery = self.scene_delivery.lock();
             let task = self.scene_task.lock();
-            office["motion"] = serde_json::to_value(self.motion_driver.lock().current_goal()).unwrap();
+            office["motion"] = if let Some((goal, _)) = delivery.pending.as_ref() {
+                serde_json::to_value(goal).unwrap()
+            } else {
+                serde_json::to_value(self.motion_driver.lock().current_goal()).unwrap()
+            };
             office["scene_lifecycle"] = serde_json::to_value(task.as_ref()).unwrap();
             let registered = self.scene_signer.lock();
             let mut operations = Vec::new();
@@ -391,6 +398,11 @@ impl CcRenderNode {
                 let mut delivery = self.scene_delivery.lock();
                 let mut slot = self.scene_task.lock();
                 self.motion_driver.lock().validate_goal(&goal).map_err(Error::Execution)?;
+                // Semantic replacements must not bypass an already accepted
+                // scene revision while its old generation is still draining.
+                if delivery.pending.as_ref().is_some_and(|(old, _)| old.revision() >= goal.revision()) {
+                    return Err(Error::Execution("stale pending scene revision".into()));
+                }
                 if let Some(outcome) = goal.scene_outcome() {
                     if self.scene_signer.lock().is_none() {
                         return Err(Error::Execution("unsupported_capability: scene operation is not registered".into()));
@@ -417,9 +429,6 @@ impl CcRenderNode {
                         }
                     }
                     super::office::scene_lifecycle::SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)?;
-                    if delivery.pending.as_ref().is_some_and(|(old, _)| old.revision() >= goal.revision()) {
-                        return Err(Error::Execution("stale pending scene revision".into()));
-                    }
                     self.renderer.cancel_grab_pursuit(super::renderer::Hand::Right);
                     if let Some(task) = slot.as_mut() { task.superseded = true; }
                     delivery.pending = Some((goal, false));
@@ -1543,6 +1552,56 @@ mod realtime_speech_tests {
         assert!(node.scene_signer.lock().is_some());
         value["scene_sampler"]["server_instance"] = "2".repeat(32).into();
         assert!(node.accept_motion_control(&RuntimeData::Json(value)).is_err());
+    }
+
+    fn node_with_pending_scene() -> (CcRenderNode, serde_json::Value) {
+        use super::super::office::controller::OfficeController;
+        let renderer = Arc::new(MockRenderer::default());
+        *renderer.office.lock() = Some(OfficeController::default().snapshot());
+        let node = CcRenderNode::with_renderer(CcRenderConfig::default(), renderer);
+        let goal = serde_json::json!({"kind":"motion_goal","version":2,"session_id":"replacement",
+            "generation_revision":1,"pts_ms":0,"seed":42,"goal":{"description":"A person stands still."}});
+        node.accept_motion_control(&RuntimeData::Json(goal.clone())).unwrap();
+        node.motion_driver.lock().next_request(0, 0).unwrap();
+        let mut pending = goal.clone();
+        pending["version"] = 3.into();
+        pending["generation_revision"] = 3.into();
+        pending["goal"] = serde_json::json!({"operation":"navigate","target_id":"chair"});
+        node.scene_delivery.lock().pending = Some((serde_json::from_value(pending).unwrap(), false));
+        (node, goal)
+    }
+
+    #[test]
+    fn pending_scene_is_reported_as_requested_owner_not_displayed_completion() {
+        let (node, _) = node_with_pending_scene();
+        let scene = node.observed_scene();
+        assert_eq!(scene["office"]["motion"]["generation_revision"], 3);
+        assert_eq!(scene["office"]["motion"]["goal"]["operation"], "navigate");
+        assert!(scene["office"]["scene_lifecycle"].is_null());
+        assert_eq!(node.motion_driver.lock().current_goal().unwrap().revision(), 1);
+    }
+
+    #[test]
+    fn semantic_replacement_respects_pending_revision_and_in_flight_ack() {
+        let (node, mut goal) = node_with_pending_scene();
+        for revision in [2, 3] {
+            goal["generation_revision"] = revision.into();
+            assert!(node.accept_motion_control(&RuntimeData::Json(goal.clone())).is_err());
+            assert_eq!(node.scene_delivery.lock().pending.as_ref().unwrap().0.revision(), 3);
+            assert_eq!(node.motion_driver.lock().current_goal().unwrap().revision(), 1);
+        }
+        goal["generation_revision"] = 4.into();
+        node.accept_motion_control(&RuntimeData::Json(goal)).unwrap();
+        assert!(node.scene_delivery.lock().pending.is_none());
+        let mut driver = node.motion_driver.lock();
+        assert_eq!(driver.current_goal().unwrap().revision(), 4);
+        assert!(driver.next_request(1500, 100).is_none());
+        driver.acknowledge("replacement", 3, 0); // Wrong request cannot release the old slot.
+        assert!(driver.in_flight());
+        driver.observe_frame("replacement", 1, 4000);
+        assert_eq!(driver.generated_until(), None); // Old output cannot own the new horizon.
+        driver.acknowledge("replacement", 1, 0);
+        assert_eq!(driver.next_request(1500, 200).unwrap().revision(), 4);
     }
 
     #[tokio::test]
