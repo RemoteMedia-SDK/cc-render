@@ -142,6 +142,7 @@ impl NativeMotionDriver {
     }
 
     pub(crate) fn in_flight(&self) -> bool { self.in_flight.is_some() }
+    pub(crate) fn generated_until(&self) -> Option<u64> { self.generated_until_pts_ms }
 
     pub(crate) fn validate_goal(&self, goal: &MotionGoal) -> Result<(), String> {
         if self.failed {

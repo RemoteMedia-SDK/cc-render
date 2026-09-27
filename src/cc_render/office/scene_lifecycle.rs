@@ -19,20 +19,28 @@ pub(crate) struct SceneLifecycle {
     pub goal: MotionGoal,
     pub phase: Phase,
     pub complete: bool,
+    pub superseded: bool,
+    pub pending_phase: Option<Phase>,
     #[serde(skip)] awaiting_revision: bool,
     #[serde(skip)] previous: Option<(u64, [f32;3])>,
     #[serde(skip)] stable_since: Option<u64>,
+    #[serde(skip)] pursuit_started: Option<u64>,
 }
 impl SceneLifecycle {
     pub(crate) fn new(goal: MotionGoal, office: &OfficeSnapshot) -> Result<Self, String> {
         let outcome = goal.scene_outcome().ok_or("scene outcome required")?;
         let object = office.objects.iter().find(|o| o.id == outcome.target_id).ok_or("unknown scene target")?;
+        if outcome.operation == SceneOperation::Grasp && office.occupied_hands.iter().any(|(h, id)|
+            *h == crate::cc_render::Hand::Right && id != &outcome.target_id) {
+            return Err("requested hand already holds another object".into());
+        }
         let phase = match outcome.operation {
             SceneOperation::Navigate => Phase::Arrive,
             SceneOperation::Grasp if object.dynamic && (object.grasp.is_some() || object.local_keypoint("grasp").is_some()) => Phase::Contact,
             _ => return Err("unsupported_capability: lifecycle admission not registered for operation".into()),
         };
-        Ok(Self { goal, phase, complete:false, awaiting_revision:false, previous:None, stable_since:None })
+        Ok(Self { goal, phase, complete:false, superseded:false, pending_phase:None,
+            awaiting_revision:false, previous:None, stable_since:None, pursuit_started:None })
     }
 
     /// Must follow successful scheduling of the new generation. Until then,
@@ -42,6 +50,7 @@ impl SceneLifecycle {
             || goal.session_id() != self.goal.session_id() || goal.scene_outcome() != self.goal.scene_outcome() {
             return Err("invalid lifecycle generation handoff".into());
         }
+        self.phase = self.pending_phase.take().ok_or("missing pending lifecycle phase")?;
         self.goal = goal;
         self.awaiting_revision = false;
         self.previous = None;
@@ -51,11 +60,28 @@ impl SceneLifecycle {
 
     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
 
+    /// Arm physics only when this contact revision is actually displayed.
+    pub(crate) fn arm_pursuit(&mut self, office: &OfficeSnapshot) -> Option<String> {
+        let observation = &office.avatar;
+        if self.superseded || self.phase != Phase::Contact || self.pursuit_started.is_some() || !observation.ready
+            || !observation.position_valid || office.motion_error.is_some()
+            || !observation.native_stream.as_ref().is_some_and(|s|
+                s.session_id == self.goal.session_id() && s.generation_revision == self.goal.revision()) {
+            return None;
+        }
+        let target = &self.goal.scene_outcome()?.target_id;
+        self.pursuit_started = Some(observation.displayed_pts_ms);
+        if office.occupied_hands.iter().any(|(h, id)| *h == crate::cc_render::Hand::Right && id == target) {
+            return None;
+        }
+        Some(target.clone())
+    }
+
     pub(crate) fn caption(&self, office: &OfficeSnapshot) -> String {
         let action = match self.phase {
             Phase::Arrive => "A person walks to a destination",
             Phase::Occupy => "A person stops walking and stands still",
-            Phase::Contact => "A person reaches to pick up an object with their right hand",
+            Phase::Contact => "A person picks up an object with their right hand and holds it",
             Phase::Holding => "A person holds an object in their right hand",
         };
         let carrying = matches!(self.phase, Phase::Arrive | Phase::Occupy)
@@ -66,7 +92,7 @@ impl SceneLifecycle {
     pub(crate) fn observe(&mut self, office: &OfficeSnapshot) -> Update {
         if let Some(error) = &office.motion_error { return Update::Failed(error.clone()); }
         let observation = &office.avatar;
-        if self.complete || self.awaiting_revision || !observation.ready || !observation.position_valid
+        if self.superseded || self.complete || self.awaiting_revision || !observation.ready || !observation.position_valid
             || !observation.native_stream.as_ref().is_some_and(|s|
                 s.session_id == self.goal.session_id() && s.generation_revision == self.goal.revision()) {
             return Update::None;
@@ -83,7 +109,7 @@ impl SceneLifecycle {
                 let region = object.approach_position();
                 let inside = ((position[0]-region[0]).powi(2)+(position[2]-region[2]).powi(2)).sqrt() <= 0.25;
                 if self.phase == Phase::Arrive && inside {
-                    self.phase = Phase::Occupy;
+                    self.pending_phase = Some(Phase::Occupy);
                     self.awaiting_revision = true;
                     return Update::PhaseChanged;
                 }
@@ -98,9 +124,12 @@ impl SceneLifecycle {
                 let held = office.occupied_hands.iter().any(|(hand, id)|
                     *hand == crate::cc_render::Hand::Right && id == &outcome.target_id);
                 if self.phase == Phase::Contact && held {
-                    self.phase = Phase::Holding;
+                    self.pending_phase = Some(Phase::Holding);
                     self.awaiting_revision = true;
                     return Update::PhaseChanged;
+                }
+                if self.phase == Phase::Contact && self.pursuit_started.is_some_and(|at| pts.saturating_sub(at) >= 2200) {
+                    return Update::Failed("requested contact grip was not acquired".into());
                 }
                 if self.phase == Phase::Holding && !held {
                     return Update::Failed("requested physical grip lost".into());
@@ -136,12 +165,19 @@ mod tests {
         scene.avatar.ready = true; scene.avatar.position_valid = true;
         scene.avatar.native_stream = Some(StreamIdentity {session_id:"test".into(),
             generation_revision:1,skeleton_id:"smpl22".into(),root_mode:"world".into()});
+        scene.avatar.native_stream.as_mut().unwrap().generation_revision = 0;
+        assert!(task.arm_pursuit(&scene).is_none());
+        scene.avatar.native_stream.as_mut().unwrap().generation_revision = 1;
+        assert_eq!(task.arm_pursuit(&scene), Some(target.clone()));
+        assert!(task.arm_pursuit(&scene).is_none());
         scene.occupied_hands = vec![(crate::cc_render::Hand::Left, target.clone()),
                                    (crate::cc_render::Hand::Right, "other".into())];
         assert_eq!(task.observe(&scene), Update::None);
         scene.avatar.displayed_pts_ms = 50;
         scene.occupied_hands = vec![(crate::cc_render::Hand::Right, target)];
         assert_eq!(task.observe(&scene), Update::PhaseChanged);
+        assert_eq!(task.phase, Phase::Contact); // Keep old generation policy until handoff.
+        assert_eq!(task.pending_phase, Some(Phase::Holding));
         value["generation_revision"] = 2.into();
         task.bind_generation(serde_json::from_value(value).unwrap()).unwrap();
         scene.avatar.native_stream.as_mut().unwrap().generation_revision = 2;

@@ -8,9 +8,15 @@ pub(crate) struct SceneDelivery {
     reservation: Option<(String, u64, u64)>,
 }
 impl SceneDelivery {
-    pub(crate) fn anchor(office: &OfficeSnapshot) -> Option<u64> {
-        let displayed = office.avatar.displayed_pts_ms;
-        let end = office.avatar.buffered_until_pts_ms?;
+    pub(crate) fn anchor(office: &OfficeSnapshot, generated_until: u64) -> Option<u64> {
+        let anchor = Self::source_anchor(office.avatar.displayed_pts_ms, generated_until)?;
+        (office.avatar.buffered_until_pts_ms? >= anchor).then_some(anchor)
+    }
+
+    pub(crate) fn source_anchor(displayed: u64, generated_until: u64) -> Option<u64> {
+        // ACK owns the complete source-token grid. The renderer may still be
+        // draining the batch and expose a partial (non-token-aligned) tail.
+        let end = generated_until;
         let latest = end.min(displayed.checked_add(2400)?);
         let anchor = end.checked_sub((end-latest).div_ceil(200)*200)?;
         (anchor >= displayed.checked_add(2200)?).then_some(anchor)
@@ -47,9 +53,11 @@ mod tests {
         let mut office = OfficeController::default().snapshot();
         office.avatar.displayed_pts_ms = 1500;
         office.avatar.buffered_until_pts_ms = Some(4000);
-        assert_eq!(SceneDelivery::anchor(&office), Some(3800));
+        assert_eq!(SceneDelivery::anchor(&office, 4000), Some(3800));
+        office.avatar.buffered_until_pts_ms = Some(3900);
+        assert_eq!(SceneDelivery::anchor(&office, 4000), Some(3800)); // Partial renderer drain must not shift token grid.
         office.avatar.buffered_until_pts_ms = Some(3500);
-        assert_eq!(SceneDelivery::anchor(&office), None);
+        assert_eq!(SceneDelivery::anchor(&office, 4000), None);
     }
     #[test]
     fn first_frame_must_arrive_before_reserved_prefix_finishes() {

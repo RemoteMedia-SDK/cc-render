@@ -180,6 +180,8 @@ pub trait Renderer: Send + Sync {
     fn despawn_prop(&self, _id: PropId) {}
     fn grab(&self, _cmd: GrabCmd) {}
     fn release(&self, _hand: Hand) {}
+    fn cancel_grab_pursuit(&self, _hand: Hand) {}
+    fn grab_config(&self) -> Option<GrabConfig> { None }
     fn scene_state(&self) -> SceneState {
         SceneState::default()
     }
@@ -214,6 +216,9 @@ pub struct CcRenderer {
 }
 
 impl Renderer for CcRenderer {
+    fn grab_config(&self) -> Option<GrabConfig> {
+        self.config.physics.as_ref().map(|physics| physics.grab.clone())
+    }
     fn shutdown(&self) -> anyhow::Result<()> {
         CcRenderer::shutdown(self)
     }
@@ -248,6 +253,9 @@ impl Renderer for CcRenderer {
     }
     fn release(&self, hand: Hand) {
         let _ = self.grab_cmd_tx.send(GrabOrRelease::Release(hand));
+    }
+    fn cancel_grab_pursuit(&self, hand: Hand) {
+        let _ = self.grab_cmd_tx.send(GrabOrRelease::CancelPursuit(hand));
     }
     fn scene_state(&self) -> SceneState {
         self.scene_state_rx.borrow().clone()

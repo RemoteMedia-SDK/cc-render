@@ -13,6 +13,43 @@ pub(crate) struct SceneSamplerCapability {
     pub profile_identity: String,
     pub authenticated_context: bool,
     pub server_instance: String,
+    #[serde(default)]
+    pub grip_capture: Option<GripCapture>,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GripCapture {
+    kind: String,
+    max_pivot_distance_m: f32,
+    pursuit_timeout_secs: f32,
+}
+
+#[cfg(test)]
+mod grip_contract_tests {
+    use super::*;
+    #[test]
+    fn requires_matching_actual_physics_settings() {
+        let contract: GripCapture = serde_json::from_value(serde_json::json!({
+            "kind":"intersecting-shapes-relative-frame-v1",
+            "max_pivot_distance_m":0.05,"pursuit_timeout_secs":2.0})).unwrap();
+        let mut actual = crate::cc_render::renderer::GrabConfig::default();
+        assert!(contract.matches(&actual));
+        actual.proximity_m = 0.06;
+        assert!(!contract.matches(&actual));
+        actual.proximity_m = 0.05;
+        actual.timeout_secs = 3.;
+        assert!(!contract.matches(&actual));
+    }
+}
+
+impl GripCapture {
+    pub(crate) fn matches(&self, config: &crate::cc_render::renderer::GrabConfig) -> bool {
+        self.kind == "intersecting-shapes-relative-frame-v1"
+            && self.max_pivot_distance_m.is_finite() && self.max_pivot_distance_m > 0.
+            && self.max_pivot_distance_m == config.proximity_m
+            && self.pursuit_timeout_secs == config.timeout_secs
+    }
 }
 
 // No Debug/Serialize: a key must never be included in scene telemetry.
@@ -98,7 +135,7 @@ mod tests {
         avatar.write_all(b"test avatar").unwrap();
         let mut capability = SceneSamplerCapability { protocol: 3, context_version: 1,
             policy: "model-owned-scene-v1".into(), avatar_sha256: file_hash(avatar.path()).unwrap(),
-            profile_identity: "0".repeat(64), authenticated_context: true, server_instance: "1".repeat(32) };
+            profile_identity: "0".repeat(64), authenticated_context: true, server_instance: "1".repeat(32), grip_capture: None };
         assert!(SceneSigner::load(key.path(), avatar.path(), &capability).is_ok());
         capability.avatar_sha256 = "0".repeat(64);
         assert!(SceneSigner::load(key.path(), avatar.path(), &capability).is_err());

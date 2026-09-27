@@ -310,6 +310,16 @@ impl CcRenderNode {
             let task = self.scene_task.lock();
             office["motion"] = serde_json::to_value(self.motion_driver.lock().current_goal()).unwrap();
             office["scene_lifecycle"] = serde_json::to_value(task.as_ref()).unwrap();
+            let registered = self.scene_signer.lock();
+            let mut operations = Vec::new();
+            if let Some((_, capability)) = registered.as_ref() {
+                operations.push("navigate");
+                if capability.grip_capture.as_ref().zip(self.renderer.grab_config())
+                    .is_some_and(|(contract, config)| contract.matches(&config)) {
+                    operations.push("grasp");
+                }
+            }
+            office["scene_capabilities"] = serde_json::json!({"operations":operations});
         }
         scene
     }
@@ -321,7 +331,8 @@ impl CcRenderNode {
         let mut task = self.scene_task.lock();
         let mut driver = self.motion_driver.lock();
         if driver.in_flight() || !office.avatar.ready || office.motion_error.is_some() { return Ok(()) }
-        let Some(anchor) = SceneDelivery::anchor(office) else { return Ok(()) };
+        let Some(end) = driver.generated_until() else { return Ok(()) };
+        let Some(anchor) = SceneDelivery::anchor(office, end) else { return Ok(()) };
         let mut next = if continuation {
             task.as_ref().ok_or_else(|| Error::Execution("missing scene continuation owner".into()))?.clone()
         } else { SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)? };
@@ -339,6 +350,10 @@ impl CcRenderNode {
         let mut delivery = self.scene_delivery.lock();
         let mut slot = self.scene_task.lock();
         let Some(task) = slot.as_mut() else { return Ok(None) };
+        if let Some(target) = task.arm_pursuit(office) {
+            self.renderer.grab(super::renderer::GrabCmd { hand: super::renderer::Hand::Right,
+                target, palm_offset_override: None });
+        }
         let update = task.observe(office);
         let (status, detail) = match update {
             Update::None => return Ok(None),
@@ -370,8 +385,16 @@ impl CcRenderNode {
                 let mut slot = self.scene_task.lock();
                 self.motion_driver.lock().validate_goal(&goal).map_err(Error::Execution)?;
                 if let Some(outcome) = goal.scene_outcome() {
-                    if outcome.operation != super::office::motion_intent::SceneOperation::Navigate || self.scene_signer.lock().is_none() {
+                    if outcome.operation == super::office::motion_intent::SceneOperation::Sit || self.scene_signer.lock().is_none() {
                         return Err(Error::Execution("unsupported_capability: scene operation is not registered".into()));
+                    }
+                    if outcome.operation == super::office::motion_intent::SceneOperation::Grasp {
+                        let registered = self.scene_signer.lock();
+                        let compatible = registered.as_ref().and_then(|(_, capability)| capability.grip_capture.as_ref())
+                            .zip(self.renderer.grab_config()).is_some_and(|(contract, config)| contract.matches(&config));
+                        if !compatible {
+                            return Err(Error::Execution("unsupported_capability: physical grip contract mismatch".into()));
+                        }
                     }
                     let state = self.renderer.scene_state();
                     let office = state.office.as_ref().ok_or_else(|| Error::Execution("office context unavailable".into()))?;
@@ -383,10 +406,13 @@ impl CcRenderNode {
                     if delivery.pending.as_ref().is_some_and(|(old, _)| old.revision() >= goal.revision()) {
                         return Err(Error::Execution("stale pending scene revision".into()));
                     }
+                    self.renderer.cancel_grab_pursuit(super::renderer::Hand::Right);
+                    if let Some(task) = slot.as_mut() { task.superseded = true; }
                     delivery.pending = Some((goal, false));
                 } else {
                     self.motion_driver.lock().submit(goal).map_err(Error::Execution)?;
                     delivery.pending = None;
+                    self.renderer.cancel_grab_pursuit(super::renderer::Hand::Right);
                     *slot = None;
                 }
                 Ok(true)
@@ -894,9 +920,17 @@ impl AsyncStreamingNode for CcRenderNode {
         {
             // Same lock order as input submission: the phase and request must
             // remain one transaction even when control arrives during a tick.
+            let delivery = self.scene_delivery.lock();
             let task = self.scene_task.lock();
-            let goal = if task.as_ref().is_some_and(|t| t.awaiting_revision()) { None }
-                else { self.motion_driver.lock().next_request(displayed, now_ms) };
+            let mut driver = self.motion_driver.lock();
+            // An ACK-complete batch may not yet be reflected in the renderer's
+            // observation. Give its queued prefix time to become visible before
+            // starting another old-phase generation and starving the handoff.
+            let awaiting_drain = delivery.pending.is_some() && driver.generated_until().is_some_and(|end|
+                super::office::scene_delivery::SceneDelivery::source_anchor(displayed, end).is_some());
+            let goal = if awaiting_drain { None } else { driver.next_request(displayed, now_ms) };
+            drop(driver);
+            drop(delivery);
             if let Some(goal) = goal {
                 let output = if let Some(task) = task.as_ref() {
                     let office = office_state.office.as_ref().ok_or_else(|| Error::Execution("office context unavailable".into()))?;
@@ -1550,6 +1584,30 @@ mod realtime_speech_tests {
             OfficeCommand::NativeSceneHandoff { generation_revision:2, history_pts_ms:3800 })));
         assert!(!renderer.commands.lock().iter().any(|c| matches!(c,
             OfficeCommand::NativeMotionRevision { generation_revision:2 })));
+        drop(outputs);
+        {
+            let mut driver = node.motion_driver.lock();
+            driver.observe_frame("test", 2, 5800);
+            driver.acknowledge("test", 2, 1566);
+            node.scene_delivery.lock().pending = Some((driver.current_goal().unwrap().next_revision().unwrap(), false));
+        }
+        {
+            let mut state = renderer.office.lock(); let office = state.as_mut().unwrap();
+            office.avatar.displayed_pts_ms = 3500;
+            office.avatar.buffered_until_pts_ms = Some(5750);
+            office.avatar.native_stream.as_mut().unwrap().generation_revision = 2;
+        }
+        node.tick(Tick {clock_id:"avatar".into(),pts_us:66000,frame_idx:2,deadline_us:0}, None,
+            Box::new(|_| Ok(()))).await.unwrap();
+        assert!(!node.motion_driver.lock().in_flight(), "partial drain must not launch another old-phase request");
+        {
+            let mut state = renderer.office.lock(); let office = state.as_mut().unwrap();
+            office.avatar.displayed_pts_ms = 3533;
+            office.avatar.buffered_until_pts_ms = Some(5800);
+        }
+        node.tick(Tick {clock_id:"avatar".into(),pts_us:99000,frame_idx:3,deadline_us:0}, None,
+            Box::new(|_| Ok(()))).await.unwrap();
+        assert_eq!(node.motion_driver.lock().current_goal().unwrap().revision(), 3);
     }
 
     #[tokio::test]
