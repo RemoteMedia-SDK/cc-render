@@ -150,7 +150,12 @@ impl TimelineLayer {
             }
         }
         for key in &self.pose_keyframes {
-            if !matches!(key["kind"].as_str(), Some("full_body" | "end_effectors" | "generated_posture" | "observed_support"))
+            // Public timeline edits describe intent and geometry, never an
+            // authored body. Internal legacy presets are not a public API.
+            if key["kind"] == "full_body" {
+                return Err("full-body edits require model-generated posture intent".into());
+            }
+            if !matches!(key["kind"].as_str(), Some("end_effectors" | "generated_posture" | "observed_support" | "model_pose"))
                 || key["pts_ms"].as_u64().is_none_or(|t| t <= now)
             {
                 return Err("pose edits must target future frames".into());
@@ -208,6 +213,18 @@ impl TimelineLayer {
 fn validate_pose(key: &serde_json::Value) -> Result<(), String> {
     let invalid = || "invalid Core pose keyframe".to_string();
     let start = key["pts_ms"].as_u64().ok_or_else(invalid)?;
+    if key["kind"] == "model_pose" {
+        if !matches!(key["posture"].as_str(), Some("standing" | "seated" | "bend"))
+            || !finite_vector(&key["root_position"], 3)
+            || key["heading"].as_f64().is_none_or(|v| !v.is_finite())
+            || key.as_object().is_none_or(|o| o.keys().any(|field| !matches!(field.as_str(),
+                "kind" | "posture" | "root_position" | "heading" | "pts_ms" |
+                "visible_from_ms" | "end_ms" | "hold" | "free_hands" | "carry_hands")))
+        {
+            return Err(invalid());
+        }
+        return Ok(());
+    }
     if key["kind"] == "generated_posture" {
         if !matches!(key["posture"].as_str(), Some("kneeling" | "standing"))
             || key["heading"].as_f64().is_none_or(|h| !h.is_finite())
@@ -235,6 +252,8 @@ fn validate_pose(key: &serde_json::Value) -> Result<(), String> {
         let points = points.as_array().ok_or_else(invalid)?;
         let mut names = std::collections::HashSet::new();
         if key["kind"] != "end_effectors"
+            || ["preset", "positions", "rotations_xyzw", "legacy_authored", "source", "joints"]
+                .iter().any(|field| key.get(*field).is_some())
             || points.is_empty()
             || points.iter().any(|p| {
                 !matches!(
@@ -257,61 +276,7 @@ fn validate_pose(key: &serde_json::Value) -> Result<(), String> {
         }
         return Ok(());
     }
-    if key["kind"] == "end_effectors" {
-        let joints = key["joints"].as_array().ok_or_else(invalid)?;
-        if joints.is_empty()
-            || joints.iter().any(|j| {
-                !matches!(
-                    j.as_str(),
-                    Some("Hips" | "LeftHand" | "RightHand" | "LeftFoot" | "RightFoot")
-                )
-            })
-        {
-            return Err(invalid());
-        }
-    }
-    if let Some(target) = key.get("hand_target") {
-        if !matches!(target["joint"].as_str(), Some("LeftHand" | "RightHand"))
-            || !finite_vector(&target["position"], 3)
-            || target.get("rotation_xyzw").is_some_and(|q| {
-                !finite_vector(q, 4)
-                    || q.as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|v| v.as_f64().unwrap().powi(2))
-                        .sum::<f64>()
-                        < 1e-12
-            })
-        {
-            return Err(invalid());
-        }
-    }
-    if let Some(preset) = key.get("preset") {
-        if !matches!(preset.as_str(), Some("seated" | "standing" | "bend"))
-            || !finite_vector(&key["root_position"], 3)
-        {
-            return Err(invalid());
-        }
-    } else {
-        for (name, width) in [("positions", 3), ("rotations_xyzw", 4)] {
-            let rows = key[name].as_array().ok_or_else(invalid)?;
-            if rows.len() != 27
-                || rows.iter().any(|r| {
-                    !finite_vector(r, width)
-                        || (width == 4
-                            && r.as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|v| v.as_f64().unwrap().powi(2))
-                                .sum::<f64>()
-                                < 1e-12)
-                })
-            {
-                return Err(invalid());
-            }
-        }
-    }
-    Ok(())
+    Err("end-effector edits must use sparse keypoints, not a body pose".into())
 }
 fn finite_vector(value: &serde_json::Value, width: usize) -> bool {
     value.as_array().is_some_and(|v| {
@@ -323,6 +288,28 @@ fn finite_vector(value: &serde_json::Value, width: usize) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn public_timeline_edits_cannot_submit_internal_legacy_body_presets() {
+        let layer = TimelineLayer {
+            pose_keyframes: vec![json!({
+                "kind":"full_body", "preset":"standing", "legacy_authored":true,
+                "pts_ms":1100, "root_position":[0.0, 0.95, 0.0]
+            })],
+            ..Default::default()
+        };
+        assert!(layer.validate(1000).unwrap_err().contains("model-generated"));
+        let mut sparse = TimelineLayer {
+            pose_keyframes: vec![json!({
+                "kind":"end_effectors", "pts_ms":1100,
+                "keypoints":[{"joint":"RightFoot", "position":[0.0, 0.08, 0.0]}]
+            })],
+            ..Default::default()
+        };
+        assert!(sparse.validate(1000).is_ok());
+        sparse.pose_keyframes[0]["rotations_xyzw"] = json!([[0.0, 0.0, 0.0, 1.0]]);
+        assert!(sparse.validate(1000).is_err());
+    }
 
     #[test]
     fn model_led_kneel_is_atomic_and_never_accepts_authored_rotations() {

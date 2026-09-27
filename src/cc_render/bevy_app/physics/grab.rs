@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use super::body_colliders::{BodyBoneCollider, LoadedSidecar};
+use super::body_colliders::BodyBoneCollider;
+use super::contact_grasp::capture_joint;
 use super::props::{Prop, PropRegistry};
 use crate::cc_render::renderer::{GrabFailure, GrabOrRelease, Hand, PropId};
 
@@ -114,9 +115,8 @@ pub(crate) fn handle_grab_cmds(
     mut prop_registry: ResMut<PropRegistry>,
     body_colliders: Query<(Entity, &BodyBoneCollider, &GlobalTransform)>,
     props: Query<(&Prop, &GlobalTransform)>,
-    sidecar: Option<Res<LoadedSidecar>>,
+    physics: Query<&RapierContext>,
     stored_cfg: Res<super::StoredPhysicsConfig>,
-    bind: Res<super::super::pose::CC5BindRotations>,
 ) {
     let dt = time.delta_secs();
     let proximity_m = stored_cfg.0.grab.proximity_m;
@@ -126,7 +126,7 @@ pub(crate) fn handle_grab_cmds(
 
     // Wrist world positions + entities (SMPL idx 20 = L_Wrist, 21 = R_Wrist).
     let mut wrist_pos: HashMap<Hand, Vec3> = HashMap::new();
-    let mut wrist_bodies: HashMap<Hand, (Entity, Quat)> = HashMap::new();
+    let mut wrist_bodies: HashMap<Hand, (Entity, GlobalTransform)> = HashMap::new();
     for (e, bc, gt) in body_colliders.iter() {
         let h = match bc.smpl_idx {
             20 => Some(Hand::Left),
@@ -135,14 +135,9 @@ pub(crate) fn handle_grab_cmds(
         };
         if let Some(hand) = h {
             wrist_pos.insert(hand, gt.translation());
-            wrist_bodies.insert(hand, (e, bind.calibrated_world[bc.smpl_idx]));
+            wrist_bodies.insert(hand, (e, *gt));
         }
     }
-
-    let palm_offset_default = sidecar
-        .as_ref()
-        .and_then(|s| s.0.palm_offset_local)
-        .unwrap_or(stored_cfg.0.grab.default_palm_offset);
 
     // Per-hand transition collection (split borrow safe).
     let mut transitions: Vec<(Hand, FsmTransition)> = Vec::new();
@@ -164,15 +159,16 @@ pub(crate) fn handle_grab_cmds(
             GrabOrRelease::CancelPursuit(h) => *h == hand,
         });
         let wrist = wrist_pos.get(&hand).copied().unwrap_or(Vec3::ZERO);
-        let grasp = match state {
+        let target = match state {
             GrabState::Pursuing { target, .. } => prop_registry
                 .by_id
                 .get(target)
                 .copied()
-                .and_then(|e| props.get(e).ok())
-                .map(|(p, gt)| p.grasp_world(gt)),
+                .and_then(|e| props.get(e).ok().map(|(prop, transform)| (e, prop, transform))),
             _ => None,
         };
+        let grasp = super::contact_grasp::target_position(
+            physics.get_single().ok(), wrist_bodies.get(&hand).map(|(entity, _)| *entity), target);
         let trans = step_fsm(
             state,
             wrist,
@@ -212,6 +208,13 @@ pub(crate) fn handle_grab_cmds(
                         hand, target,
                     );
                 }
+                if palm_override.is_some() {
+                    *state = GrabState::Idle;
+                    prop_registry.pending_failures.push(GrabFailure {
+                        hand, target, reason: "contact_grip_rejects_forced_palm_offset".into(),
+                    });
+                    continue;
+                }
                 tracing::info!(
                     target: "cc_render",
                     "physics: grab pursuit started — hand={:?} target={} palm_override={:?}",
@@ -233,7 +236,7 @@ pub(crate) fn handle_grab_cmds(
                     });
                     continue;
                 };
-                let Some((wrist_e, calibration)) = wrist_bodies.get(&hand).copied() else {
+                let Some((wrist_e, wrist_world)) = wrist_bodies.get(&hand).copied() else {
                     *state = GrabState::Idle;
                     prop_registry.pending_failures.push(GrabFailure {
                         hand,
@@ -242,21 +245,25 @@ pub(crate) fn handle_grab_cmds(
                     });
                     continue;
                 };
-                // Pull the palm override stored on the current Pursuing state.
-                let palm_arr = if let GrabState::Pursuing { palm_override, .. } = state {
-                    palm_override.unwrap_or(palm_offset_default)
-                } else {
-                    palm_offset_default
+                let active_contact = physics.get_single().ok().is_some_and(|context|
+                    super::contact_grasp::has_object_contact(context, wrist_e, prop_e));
+                let joint = props.get(prop_e).ok().and_then(|(_, object_world)| {
+                    capture_joint(&wrist_world, object_world, active_contact)
+                });
+                let Some(joint) = joint else {
+                    *state = GrabState::Idle;
+                    prop_registry.pending_failures.push(GrabFailure {
+                        hand, target, reason: "physical_contact_lost".into(),
+                    });
+                    continue;
                 };
-                let palm = Vec3::from(palm_arr);
-                let joint = grasp_joint(palm, calibration, props.get(prop_e).ok().map(|(p, _)| p));
                 commands
                     .entity(prop_e)
                     .insert(ImpulseJoint::new(wrist_e, joint));
                 tracing::info!(
                     target: "cc_render",
-                    "physics: grab attached — hand={:?} target={} palm={:?}",
-                    hand, target, palm_arr,
+                    "physics: contact grip attached without repositioning — hand={:?} target={}",
+                    hand, target,
                 );
                 *state = GrabState::Attached {
                     target,
@@ -290,7 +297,8 @@ pub(crate) fn handle_grab_cmds(
     }
 }
 
-/// Wrist bodies have identity transforms beneath the retargeted CC5 hand bone.
+/// Historical canonical-frame fixture, not the production contact-grip policy.
+#[cfg(test)]
 fn grasp_joint(palm: Vec3, calibration: Quat, prop: Option<&Prop>) -> FixedJoint {
     let grasp_rotation = prop
         .and_then(|p| p.grasp_local)

@@ -78,6 +78,8 @@ pub struct CcRenderManifestParams {
     /// When true, emit Video continuously once ready (skips A+V pairing
     /// and audio buffer drain). Used by live WebRTC pipelines.
     pub realtime_mode: bool,
+    /// Private deployment binding for authenticated renderer scene jobs.
+    pub scene_key_file: Option<PathBuf>,
 }
 
 impl Default for CcRenderManifestParams {
@@ -91,6 +93,7 @@ impl Default for CcRenderManifestParams {
             height: 1280,
             scene_glb_path: None,
             realtime_mode: false,
+            scene_key_file: None,
         }
     }
 }
@@ -116,6 +119,7 @@ fn build_node(params: CcRenderManifestParams) -> Result<CcRenderNode, String> {
         video_stream_id: params.video_stream_id,
         scene_glb_path: params.scene_glb_path,
         realtime_mode: params.realtime_mode,
+        scene_key_file: params.scene_key_file,
     };
 
     CcRenderNode::new(config).map_err(|e| format!("CcRenderNode spawn failed: {e}"))

@@ -27,6 +27,9 @@ pub struct OfficeObject {
     pub yaw_deg: f32,
     #[serde(default)]
     pub dynamic: bool,
+    /// Dynamic furniture that may be displaced by observed hand contact.
+    #[serde(default)]
+    pub pushable: bool,
     #[serde(default)]
     pub rotation_xyzw: Option<[f32; 4]>,
     #[serde(default)]
@@ -34,6 +37,9 @@ pub struct OfficeObject {
     /// All anchors are object-local and transformed with the geometry.
     pub approach: [f32; 3],
     pub seat: Option<[f32; 3]>,
+    /// Environmental support solid, independent of the retired pelvis anchor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seat_surface_part: Option<usize>,
     pub grasp: Option<[f32; 3]>,
     pub surface: Option<[f32; 3]>,
 }
@@ -109,6 +115,37 @@ impl OfficeObject {
         self.world_keypoint("seat_pelvis")
             .map(|t| t.translation.to_array())
             .or_else(|| self.seat.map(|p| self.anchor(p)))
+    }
+    /// Front edge of the seat-bearing collider in the object's local frame.
+    /// Prefer the broad support immediately below the pelvis over chair legs
+    /// or a taller backrest; transformed objects retain the same local gap.
+    fn seat_front_z(&self) -> Option<f32> {
+        let seat = self.seat_position()?;
+        let transform = self.transform();
+        let local = transform.rotation.inverse() * (Vec3::from(seat) - transform.translation);
+        self.parts.iter()
+            .filter(|p| {
+                let below = local.y - (p.position[1] + p.half_extents[1]);
+                (0.0..=0.30).contains(&below)
+            })
+            .max_by(|a, b| {
+                let area = |p: &OfficePart| p.half_extents[0] * p.half_extents[2];
+                area(a).partial_cmp(&area(b)).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|p| p.position[2] + p.half_extents[2])
+    }
+    /// Stage the pelvis beyond the seat front with room for the legs and
+    /// normal model overshoot. This is geometry, not a body-joint pose.
+    pub fn seat_staging_position(&self) -> [f32; 3] {
+        let front = self.seat_front_z().map_or(0.35, |z| z + 0.10);
+        self.anchor([0., 0., front.max(0.35)])
+    }
+    pub fn seat_floor_foot(&self, world_position: [f32; 3]) -> [f32; 3] {
+        let Some(front) = self.seat_front_z() else { return world_position };
+        let transform = self.transform();
+        let mut local = transform.rotation.inverse() * (Vec3::from(world_position) - transform.translation);
+        local.z = local.z.max(front + 0.28);
+        transform.transform_point(local).to_array()
     }
     pub fn approach_position(&self) -> [f32; 3] {
         self.world_keypoint("approach")
@@ -190,7 +227,8 @@ pub fn validate_objects(objects: &[OfficeObject]) -> Result<(), String> {
         let valid_rotation = |q: [f32; 4]| {
             q.iter().all(|v| v.is_finite()) && q.iter().map(|v| v * v).sum::<f32>() > 1e-6
         };
-        if o.rotation_xyzw.is_some_and(|q| !valid_rotation(q))
+        if (o.pushable && !o.dynamic)
+            || o.rotation_xyzw.is_some_and(|q| !valid_rotation(q))
             || o.keypoints.iter().any(|(name, p)| {
                 name.is_empty()
                     || p.role.is_empty()
@@ -248,7 +286,15 @@ pub fn scene_metadata(objects: &[OfficeObject]) -> SceneMetadata {
     }
 }
 
+// Retired correction implementation is retained only for historical unit tests.
+// It cannot be linked into production playback.
+#[cfg(test)]
 pub(crate) mod contact;
+pub mod motion_intent;
+pub mod scene_context;
+pub(crate) mod scene_lifecycle;
+pub(crate) mod scene_delivery;
+pub(crate) mod scene_signing;
 
 pub(crate) fn compose_expression(
     weights: &mut std::collections::HashMap<String, f32>,

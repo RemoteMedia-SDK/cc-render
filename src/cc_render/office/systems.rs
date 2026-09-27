@@ -43,12 +43,8 @@ impl OfficeCommandInbox<'_> {
 }
 
 pub fn install(app: &mut App) {
-    // Diagnostic A/B switch: disable only post-retarget hand/foot contact IK.
-    // Source constraints, seat support, idle damping and grips remain active.
-    let contact_corrections = std::env::var("CC_OFFICE_CONTACT_CORRECTIONS").as_deref() != Ok("0");
-    if !contact_corrections {
-        tracing::warn!("CC_OFFICE_CONTACT_CORRECTIONS=0: renderer contact IK disabled");
-    }
+    // Body output is model-owned. No contact repair or goal-directed actuator
+    // may be registered here; tests/test_motion_ownership.py guards this seam.
     let mut controller = OfficeController::default();
     let mut bundled = true;
     if let Ok(path) = std::env::var("CC_OFFICE_SCENE") {
@@ -68,18 +64,6 @@ pub fn install(app: &mut App) {
         .insert_resource(super::home::BundledHome(bundled))
         .add_systems(Startup, spawn_office)
         .add_systems(PreUpdate, classify_animated_colliders)
-        .add_systems(
-            PostUpdate,
-            (
-                super::contact::damp_seated_idle,
-                super::contact::correct_contacts.run_if(move || contact_corrections),
-                super::contact::grasp_fingers,
-            )
-                .chain()
-                .after(crate::cc_render::bevy_app::pose::apply_skeletal_pose)
-                .before(bevy_rapier3d::plugin::PhysicsSet::SyncBackend)
-                .before(bevy::transform::TransformSystem::TransformPropagate),
-        )
         .add_systems(
             PostUpdate,
             observe
@@ -149,6 +133,13 @@ fn spawn_office(
             });
         }
         if o.dynamic {
+            if o.pushable {
+                entity.insert((
+                    LockedAxes::ROTATION_LOCKED,
+                    Damping { linear_damping: 4.0, angular_damping: 8.0 },
+                    ExternalForce::default(),
+                ));
+            }
             entity.insert((
                 Prop {
                     id: o.id.clone(),
@@ -162,7 +153,7 @@ fn spawn_office(
                 // verified grasp. Props still collide with the physical world.
                 CollisionGroups::new(Group::GROUP_1, Group::ALL & !Group::GROUP_32),
                 Velocity::default(),
-                AdditionalMassProperties::Mass(0.3),
+                AdditionalMassProperties::Mass(if o.pushable { 8.0 } else { 0.3 }),
             ));
             registry.by_id.insert(o.id.clone(), entity.id());
         }
@@ -174,6 +165,45 @@ fn spawn_office(
         layout.as_ref().is_none_or(|layout| layout.0),
     );
 }
+/// A contact-actuated force, not a position animation. Rapier owns furniture
+/// displacement and collisions; the controller only supplies the requested
+/// direction and the hands must reach the observed near face first.
+#[cfg(test)]
+fn apply_furniture_push(
+    office: Res<OfficeController>,
+    mut furniture: Query<(&Prop, &Transform, &Velocity, &mut ExternalForce)>,
+) {
+    let intent = office.push_force_intent();
+    for (prop, transform, velocity, mut force) in &mut furniture {
+        force.force = Vec3::ZERO;
+        force.torque = Vec3::ZERO;
+        if let Some(plan) = intent.as_ref().filter(|plan| plan.id == prop.id) {
+            force.force = furniture_push_force(plan, transform.translation, velocity.linvel,
+                Vec3::from(office.observed.pelvis), office.observed.wrists.map(Vec3::from));
+        }
+    }
+}
+
+#[cfg(test)]
+fn furniture_push_force(plan: &PushForceIntent, center: Vec3, velocity: Vec3,
+    pelvis: Vec3, wrists: [Vec3; 2]) -> Vec3 {
+    let remaining = (plan.goal - center).dot(plan.direction);
+    if remaining < 0.03 || (plan.goal - center).length() > 1.25 { return Vec3::ZERO; }
+    let contact = center + plan.contact_offset;
+    if wrists.iter().any(|w| w.distance(contact) > 0.22)
+        || (contact - pelvis).dot(plan.direction) < 0.12
+    { return Vec3::ZERO; }
+    let object_progress = (center - plan.start).dot(plan.direction);
+    let avatar_progress = (pelvis - plan.avatar_start).dot(plan.direction);
+    if object_progress > avatar_progress + 0.05 { return Vec3::ZERO; }
+    let forward_speed = velocity.dot(plan.direction);
+    // Static friction must be overcome, but cap speed so the body can
+    // follow the chair rather than letting it skate ahead of the hands.
+    if forward_speed >= 0.28 { return Vec3::ZERO; }
+    plan.direction * (100.0 + 24.0 * (0.28 - forward_speed))
+        * plan.intensity.clamp(0.2, 1.0)
+}
+
 /// A last-line CC5 FK guard, independent of the source-model gate. Source
 /// checks happen before playback; this also catches retarget/contact defects.
 fn extreme_body_deformation(pelvis: Vec3, neck: Vec3, head: Vec3, posture: &str) -> Option<String> {
@@ -358,6 +388,21 @@ fn hip_heading(left: Vec3, right: Vec3) -> Option<f32> {
 #[cfg(test)]
 mod home_tests {
     use super::*;
+
+    #[test]
+    fn furniture_force_requires_two_hands_and_pelvis_follow_through() {
+        let intent = PushForceIntent { id: "chair".into(), start: Vec3::new(0., 0.23, 0.8),
+            goal: Vec3::new(0., 0.23, 1.02), avatar_start: Vec3::new(0., 0.95, 0.17),
+            direction: Vec3::Z, contact_offset: Vec3::new(0., 0.85, -0.3), intensity: 1. };
+        let wrists = [Vec3::new(0.15, 1.08, 0.5), Vec3::new(-0.15, 1.08, 0.5)];
+        assert!(furniture_push_force(&intent, intent.start, Vec3::ZERO,
+            intent.avatar_start, wrists).z > 0.);
+        assert_eq!(furniture_push_force(&intent, intent.start, Vec3::ZERO,
+            intent.avatar_start, [wrists[0], Vec3::new(-0.15, 1.08, 0.)]), Vec3::ZERO);
+        assert_eq!(furniture_push_force(&intent, intent.start + Vec3::Z * 0.12,
+            Vec3::ZERO, intent.avatar_start, wrists), Vec3::ZERO,
+            "furniture must not skate ahead while ARDY's root is blocked");
+    }
 
     #[test]
     fn home_spawns_furniture_materials_and_floor_for_every_room() {

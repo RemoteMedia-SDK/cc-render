@@ -143,6 +143,10 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or(20)
         .clamp(3, 120);
     let mut stage = 0;
+    let push_repeats = std::env::var("OFFICE_ACCEPTANCE_PUSH_REPEATS").ok()
+        .and_then(|s| s.parse::<u32>().ok()).unwrap_or(1).clamp(1, 4);
+    let mut push_index = 1_u32;
+    let mut push_last_id = String::from("push_chair");
     let mut choreography = (std::env::var("OFFICE_ACCEPTANCE_TRANSITIONS").as_deref() == Ok("1")
         || std::env::var("OFFICE_ACCEPTANCE_WALKTHROUGH").as_deref() == Ok("1")
         || std::env::var("OFFICE_ACCEPTANCE_SURFACE_JUMP").as_deref() == Ok("1"))
@@ -283,8 +287,26 @@ fn main() -> anyhow::Result<()> {
             } else if choreography.is_none() {
                 match stage {
                     0 if office.avatar.ready && (live_speech.ready()
-                        || std::env::var("OFFICE_ACCEPTANCE_FLOOR_ONLY").as_deref() == Ok("1")) => {
+                        || std::env::var("OFFICE_ACCEPTANCE_FLOOR_ONLY").as_deref() == Ok("1")
+                        || std::env::var("OFFICE_ACCEPTANCE_PUSH_ONLY").as_deref() == Ok("1")) => {
                         actions_started = Some(Instant::now());
+                        if std::env::var("OFFICE_ACCEPTANCE_PUSH_ONLY").as_deref() == Ok("1") {
+                            let goal_z = std::env::var("OFFICE_ACCEPTANCE_PUSH_GOAL_Z")
+                                .ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or_else(|| {
+                                    if std::env::var("OFFICE_ACCEPTANCE_PUSH_FRONT").as_deref() == Ok("1") {
+                                        -1.02
+                                    } else { 1.02 }
+                                });
+                            let duration_sec = std::env::var("OFFICE_ACCEPTANCE_PUSH_DURATION_SEC")
+                                .ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(3.0);
+                            renderer.office_command(OfficeCommand::PerformAction { request: ActionRequest {
+                                action_id: "push_chair".into(), verb: Verb::Push,
+                                target: Some("chair".into()), position: Some([0., 0.23, goal_z]),
+                                hand: None, duration_sec, intensity: 1.0,
+                            }});
+                            stage = 12;
+                            continue;
+                        }
                         if std::env::var("OFFICE_ACCEPTANCE_SIT_ONLY").as_deref() == Ok("1") {
                             renderer.office_command(action("sit", Verb::Sit, Some("chair"), None));
                             stage = 10;
@@ -319,6 +341,21 @@ fn main() -> anyhow::Result<()> {
                             Some(Hand::Left),
                         ));
                         stage = 1;
+                    }
+                    12 if complete(&push_last_id) => {
+                        if push_index < push_repeats {
+                            if let Some(chair) = state.props.iter().find(|p| p.id == "chair") {
+                                push_index += 1;
+                                push_last_id = format!("push_chair_{push_index}");
+                                let goal_z = chair.transform[3][2] + 0.22;
+                                renderer.office_command(OfficeCommand::PerformAction { request: ActionRequest {
+                                    action_id: push_last_id.clone(), verb: Verb::Push,
+                                    target: Some("chair".into()), position: Some([0., chair.transform[3][1], goal_z]),
+                                    hand: None, duration_sec: 3.0, intensity: 1.0,
+                                }});
+                            }
+                        } else if seated_hold.get_or_insert_with(Instant::now).elapsed()
+                            >= Duration::from_secs(idle_hold) { stage = 8; break; }
                     }
                     11 if complete("floor_grab") => {
                         stage = 8;

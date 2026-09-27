@@ -109,48 +109,36 @@ takes 3–5 minutes; subsequent incremental builds are seconds.
 | `CC_SCENE_SCALE=<f>`         | Scene uniform scale (default `1.0`).                       |
 | `CC_SCENE_KEEP_LIGHTS=0`     | Strip authored lights from the environment scene.          |
 
-## Renderer correction A/B diagnostics
+## Model-owned motion migration (breaking)
 
-Run fresh `office_acceptance` sessions with the same avatar, scene, seed,
-choreography, camera and speech settings. These switches are independent:
+See [the ownership architecture](docs/design/model-owned-motion.md).
+Production playback no longer registers contact IK, seated body smoothing,
+finger-grasp posing or the scripted furniture-push actuator. Root collision
+validation rejects an unchanged candidate instead of clipping it or moving it
+onto a seat. The pelvis inclination cap has no production call path.
 
-| Switch | Default | Disabled behavior |
-| --- | --- | --- |
-| `CC_AVATAR_ROOT_INCLINATION_MAX_DEG` | `0` (disabled) | `0` bypasses the renderer pelvis-inclination cap; `30` restores the former cap. |
-| `CC_OFFICE_CONTACT_CORRECTIONS` | enabled | `0` skips post-retarget hand/foot contact IK, including its release residual. Read at renderer startup. |
+`CC_AVATAR_ROOT_INCLINATION_MAX_DEG` and `CC_OFFICE_CONTACT_CORRECTIONS` no
+longer enable corrections. Historical A/B results are not compliant-motion
+acceptance evidence.
 
-For the two arms, prefix the normal acceptance command with:
+The replacement worker accepts only closed `motion_goal` v2 requests. Submit an
+initial semantic goal to `CcRenderNode`; its native request/ack driver forwards
+that goal at the displayed clock, with one request in flight. Route worker
+`skeletal_pose`, `motion_tick` (including request `pts_ms`), and `motion_error`
+responses back to the node. The renderer no longer emits the old controller's
+body-prescriptive request. Core40 playback retains complete 40-frame batches.
 
-```sh
-# A: former pelvis cap plus contact IK
-CC_AVATAR_ROOT_INCLINATION_MAX_DEG=30 CC_OFFICE_CONTACT_CORRECTIONS=1 \
-  target/debug/examples/office_acceptance avatar.glb arkit-map.json corrections-on.mp4
-# B: pelvis cap and contact IK disabled
-CC_AVATAR_ROOT_INCLINATION_MAX_DEG=0 CC_OFFICE_CONTACT_CORRECTIONS=0 \
-  target/debug/examples/office_acceptance avatar.glb arkit-map.json corrections-off.mp4
-```
-
-Both arms retain ARDY guidance/source-pose enforcement, renderer seat-root
-support, collision handling, seated idle smoothing, finger grips and secondary
-motion. This is not an uncorrected/raw-ARDY mode. Keep future handoffs disabled.
-Matching seeds control random draws but do not make live runs identical: changed
-displayed contacts can change action completion, requests and subsequent motion.
-For attribution, also test each switch separately; exact renderer-only comparisons
-require replaying identical poses and contact/controller state.
-
-The selected default is **pelvis cap OFF, contact IK ON**. In the seed-73129
-`beautiful_assistant` transition comparison with concurrent Audio2Face, that
-combination completed all eight actions; pickup took about 4.4 seconds. Contact
-IK OFF alone took about 20.7 seconds for pickup, and both corrections OFF timed
-out at pickup. These are single-run results, not a reliability guarantee. User
-visual review preferred the uncapped pelvis. Source support and the remaining
-renderer corrections are still enabled.
+**Legacy action buttons, timeline edits and `office_acceptance` remain unsupported
+and fail explicitly.** Do not translate their authored timelines into goals.
+The adjacent SDK's `scripts/avatars/docs/native-motion-integration.md` documents
+Core40 startup, explicit squat-to-stand wording, tests and deployment limits.
+Rebuild the plugin and restart the application/worker to activate source changes.
 
 ## What it exports
 
 | Node type      | Input                                                                    | Output                                                       |
 |----------------|--------------------------------------------------------------------------|--------------------------------------------------------------|
-| `CcRenderNode` | Json `{blendshapes \| skeletal_pose \| barge_in}` + `Audio` (mono f32)   | `Video {format: Rgba32, ...}` + paired `Audio` (offline pairing) or `Video`-only (`realtime_mode: true`) |
+| `CcRenderNode` | Json `{blendshapes \| skeletal_pose \| motion_goal \| motion_tick \| barge_in}` + `Audio` (mono f32)   | `Video {format: Rgba32, ...}` + paired `Audio` (offline pairing) or `Video`-only (`realtime_mode: true`) |
 
 Pacing-domain: `ClockedToOutboundMedia` with a wall fallback at
 `framerate` Hz.

@@ -7,6 +7,7 @@ pub(crate) mod body_colliders;
 pub(crate) mod cc5_json;
 pub(crate) mod debug_overlay;
 pub(crate) mod grab;
+mod contact_grasp;
 pub(crate) mod props;
 pub(crate) mod secondary;
 pub(crate) mod sidecar;

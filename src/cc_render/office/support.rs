@@ -221,6 +221,34 @@ mod tests {
     }
 
     #[test]
+    fn seat_staging_and_feet_clear_front_edge_under_scene_transforms() {
+        for variant in 0..3 {
+            let mut objects = starter_objects();
+            let chair = objects.iter_mut().find(|o| o.id == "chair").unwrap();
+            if variant == 1 {
+                chair.position[0] += 0.4;
+                chair.rotation_xyzw = Some(Quat::from_rotation_y(0.6).to_array());
+            } else if variant == 2 {
+                for part in &mut chair.parts {
+                    part.position[2] *= 1.25;
+                    part.half_extents[2] *= 1.25;
+                }
+            }
+            let transform = chair.transform();
+            let local = |world: [f32; 3]| {
+                transform.rotation.inverse() * (Vec3::from(world) - transform.translation)
+            };
+            let stage = local(chair.seat_staging_position());
+            let foot = local(chair.seat_floor_foot(
+                chair.world_keypoint("left_foot").unwrap().translation.to_array()));
+            let front = if variant == 2 { 0.375 } else { 0.3 };
+            assert!(stage.z >= front + 0.09, "pelvis needs room for bent legs");
+            assert!(foot.z >= front + 0.27, "feet need clearance from seat front");
+            assert!(foot.z >= stage.z);
+        }
+    }
+
+    #[test]
     fn unsupported_targets_fail_and_timing_tracks_height() {
         let mut objects = starter_objects();
         assert!(discover(&objects, "missing").is_err());

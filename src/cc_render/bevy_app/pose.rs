@@ -356,6 +356,7 @@ fn calibrated_cc5_world_frames(
 /// preserves descendant orientations, not positions or skinned geometry:
 /// changing the pelvis still moves its child joint offsets. Poses already
 /// within the bound pass through unchanged. A nonpositive bound disables it.
+#[cfg(test)]
 pub(crate) fn limit_pelvis_inclination(
     quats: &mut [[f32; 4]; 22],
     r_align: Quat,
@@ -1713,6 +1714,11 @@ pub(crate) fn apply_skeletal_pose(
 
     *tick += 1;
     let (new_pose, cleared) = world_motion.receive(&rx.0);
+    if world_motion.native_rejected() {
+        // The rejected candidate was never displayed. Keep the last committed
+        // transforms and paused clock; do not enter the legacy neutral reset.
+        return;
+    }
     if world_motion.failed() {
         // Source validation normally rejects a bad block before playback. If
         // the CC5 FK guard catches a retarget/contact defect instead, stop
@@ -1846,18 +1852,8 @@ pub(crate) fn apply_skeletal_pose(
         .unwrap_or(0.0);
     let r_align = Quat::from_rotation_y(align_y_deg.to_radians());
 
-    // ─── Root inclination bound (pure, unit-tested) ──────────────
-    //
-    // Preserve generated pelvis motion by default. The old 30-degree cap
-    // remains opt-in for A/B comparisons; its child compensation preserves
-    // world orientations but does not preserve positions or mesh deformation.
-    let max_inclination_deg: f32 =
-        std::env::var("CC_AVATAR_ROOT_INCLINATION_MAX_DEG")
-            .ok()
-            .and_then(|s| s.parse::<f32>().ok())
-            .unwrap_or(0.0);
-    let mut quats = pose.joint_quats;
-    limit_pelvis_inclination(&mut quats, r_align, max_inclination_deg.to_radians());
+    // No pelvis inclination repair, including diagnostic environment overrides.
+    let quats = pose.joint_quats;
 
     // Keep legacy modes available for recorded-pose comparisons.
     let mode = std::env::var("CC_AVATAR_RETARGET_MODE")

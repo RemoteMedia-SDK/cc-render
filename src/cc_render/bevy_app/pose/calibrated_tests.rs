@@ -3,6 +3,32 @@ use super::*;
 const IDENT_SOURCE: [[f32; 4]; 22] = [[0., 0., 0., 1.]; 22];
 
 #[test]
+fn actual_cc5_scene_fit_geometry_matches_production_calibration() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cc5-scene-fit-calibration.json"
+    ))).unwrap();
+    let quats = |key: &str| {
+        serde_json::from_value::<[[f32; 4]; 22]>(fixture[key].clone()).unwrap().map(Quat::from_array)
+    };
+    let axes = serde_json::from_value::<[[f32; 3]; 22]>(fixture["axes"].clone()).unwrap().map(Vec3::from_array);
+    let parent = Quat::from_array(serde_json::from_value(fixture["pelvis_parent"].clone()).unwrap());
+    let inter = quats("inter");
+    let calibrated = calibrated_cc5_world_frames(&quats("rest"), &axes, &inter, &quats("own"), parent);
+    for case in fixture["cases"].as_array().unwrap() {
+        let input = serde_json::from_value::<[[f32; 4]; 22]>(case["quats"].clone()).unwrap();
+        let expected = serde_json::from_value::<[[f32; 4]; 22]>(case["expected_local"].clone()).unwrap();
+        let actual = fk_retarget_smpl_to_cc5_with_align(&input, &calibrated, &inter, parent, Quat::IDENTITY);
+        for i in 0..22 {
+            assert!(actual[i].normalize().dot(Quat::from_array(expected[i]).normalize()).abs() > 1.-1e-6,
+                "production/geometry bone {i} mismatch");
+        }
+        let root = Vec3::from_array(serde_json::from_value(case["root"].clone()).unwrap());
+        let realized = Vec3::from_array(serde_json::from_value(case["realized_root"].clone()).unwrap());
+        assert!(root.abs_diff_eq(realized, 1e-6), "geometry must not adjust native root");
+    }
+}
+
+#[test]
 fn calibrated_transfer_preserves_mixed_arm_rotation_and_independent_wrist() {
     // Different bind frames, A-pose axes and unmapped intermediate joints.
     let rest = std::array::from_fn(|i| Quat::from_rotation_y(i as f32 * 0.07));

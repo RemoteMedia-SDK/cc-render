@@ -1,7 +1,7 @@
 //! `CcRenderNode` — streaming-pipeline wrapper around [`super::CcRenderer`].
 //!
 //! Consumes JSON envelopes (`kind = "blendshapes" | "skeletal_pose" |
-//! "barge_in"`) on its reactive input path and emits
+//! "barge_in" | "motion_goal"`) on its reactive input path and emits
 //! `RuntimeData::Video` frames from `tick()` —
 //! `pacing_nature() = ClockedToOutboundMedia` with a wall fallback at
 //! `config.fps`. The Bevy thread free-runs and produces frames; the
@@ -51,6 +51,8 @@ pub struct CcRenderConfig {
     /// avatar / scene is visible immediately on connect, during model
     /// warmup, and during silence.
     pub realtime_mode: bool,
+    /// Startup-owned signing key; never accepted through runtime control messages.
+    pub scene_key_file: Option<PathBuf>,
 }
 
 impl Default for CcRenderConfig {
@@ -64,6 +66,7 @@ impl Default for CcRenderConfig {
             video_stream_id: "avatar.video".to_string(),
             scene_glb_path: None,
             realtime_mode: false,
+            scene_key_file: None,
         }
     }
 }
@@ -206,6 +209,13 @@ pub struct CcRenderNode {
     /// flow downstream and getting dropped by the WebRTC dispatcher
     /// after a YUV conversion + memcpy. Logged at debug.
     stale_frames_dropped: Arc<AtomicU64>,
+    motion_driver: parking_lot::Mutex<super::office::motion_intent::NativeMotionDriver>,
+    scene_delivery: parking_lot::Mutex<super::office::scene_delivery::SceneDelivery>,
+    scene_task: parking_lot::Mutex<Option<super::office::scene_lifecycle::SceneLifecycle>>,
+    scene_context_revision: AtomicU64,
+    scene_signer: parking_lot::Mutex<Option<(super::office::scene_signing::SceneSigner,
+        super::office::scene_signing::SceneSamplerCapability)>>,
+    motion_clock: std::time::Instant,
 }
 
 /// Minimum wallclock delay between receiving the first blendshape on
@@ -237,7 +247,7 @@ impl CcRenderNode {
         let RuntimeData::Json(value) = data else { return None };
         let reply = match value.get("kind")?.as_str()? {
             "get_scene_state" => serde_json::json!({"kind":"scene_state",
-                "state":self.renderer.scene_state(), "request_id":value.get("request_id")}),
+                "state":self.observed_scene(), "request_id":value.get("request_id")}),
             "generate_waypoint" => super::office::navigation::query_reply(
                 &self.renderer.scene_state(), value,
             ),
@@ -284,6 +294,135 @@ impl CcRenderNode {
             last_skel_recv_at: Arc::new(parking_lot::Mutex::new(None)),
             first_bs_recv_at: Arc::new(parking_lot::Mutex::new(None)),
             stale_frames_dropped: Arc::new(AtomicU64::new(0)),
+            motion_driver: parking_lot::Mutex::new(Default::default()),
+            scene_signer: parking_lot::Mutex::new(None),
+            scene_task: parking_lot::Mutex::new(None),
+            scene_delivery: parking_lot::Mutex::new(Default::default()),
+            scene_context_revision: AtomicU64::new(0),
+            motion_clock: std::time::Instant::now(),
+        }
+    }
+
+    /// Replace retired planner telemetry with the actual native request owner.
+    fn observed_scene(&self) -> serde_json::Value {
+        let mut scene = serde_json::to_value(self.renderer.scene_state()).unwrap();
+        if let Some(office) = scene.get_mut("office").filter(|v| v.is_object()) {
+            let task = self.scene_task.lock();
+            office["motion"] = serde_json::to_value(self.motion_driver.lock().current_goal()).unwrap();
+            office["scene_lifecycle"] = serde_json::to_value(task.as_ref()).unwrap();
+        }
+        scene
+    }
+
+    fn start_pending_scene(&self, office: &super::office::controller::OfficeSnapshot) -> Result<()> {
+        use super::office::{controller::OfficeCommand, scene_delivery::SceneDelivery, scene_lifecycle::SceneLifecycle};
+        let mut delivery = self.scene_delivery.lock();
+        let Some((goal, continuation)) = delivery.pending.clone() else { return Ok(()) };
+        let mut task = self.scene_task.lock();
+        let mut driver = self.motion_driver.lock();
+        if driver.in_flight() || !office.avatar.ready || office.motion_error.is_some() { return Ok(()) }
+        let Some(anchor) = SceneDelivery::anchor(office) else { return Ok(()) };
+        let mut next = if continuation {
+            task.as_ref().ok_or_else(|| Error::Execution("missing scene continuation owner".into()))?.clone()
+        } else { SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)? };
+        if continuation { next.bind_generation(goal.clone()).map_err(Error::Execution)?; }
+        driver.submit(goal.clone()).map_err(Error::Execution)?;
+        delivery.reserve(&goal, anchor);
+        self.renderer.office_command(OfficeCommand::NativeSceneHandoff { generation_revision: goal.revision(), history_pts_ms: anchor });
+        *task = Some(next);
+        delivery.pending = None;
+        Ok(())
+    }
+
+    fn observe_scene_lifecycle(&self, office: &super::office::controller::OfficeSnapshot) -> Result<Option<serde_json::Value>> {
+        use super::office::scene_lifecycle::Update;
+        let mut delivery = self.scene_delivery.lock();
+        let mut slot = self.scene_task.lock();
+        let Some(task) = slot.as_mut() else { return Ok(None) };
+        let update = task.observe(office);
+        let (status, detail) = match update {
+            Update::None => return Ok(None),
+            Update::PhaseChanged => {
+                let next = task.goal.next_revision().map_err(Error::Execution)?;
+                if delivery.pending.is_none() { delivery.pending = Some((next, true)); }
+                ("running", None)
+            }
+            Update::Completed => ("completed", None),
+            Update::Failed(error) => {
+                self.motion_driver.lock().fail();
+                self.renderer.office_command(super::office::controller::OfficeCommand::MotionError { error: error.clone() });
+                ("failed", Some(error))
+            }
+        };
+        let event = serde_json::json!({"kind":"motion_goal_status", "goal":task.goal,
+            "phase":task.phase, "status":status,"detail":detail,"displayed_pts_ms":office.avatar.displayed_pts_ms});
+        if status == "failed" { *slot = None; }
+        Ok(Some(event))
+    }
+
+    fn accept_motion_control(&self, data: &RuntimeData) -> Result<bool> {
+        let RuntimeData::Json(value) = data else { return Ok(false) };
+        match value["kind"].as_str() {
+            Some("motion_goal") => {
+                let goal: super::office::motion_intent::MotionGoal = serde_json::from_value(value.clone())
+                    .map_err(|e| Error::Execution(format!("invalid motion_goal: {e}")))?;
+                let mut delivery = self.scene_delivery.lock();
+                let mut slot = self.scene_task.lock();
+                self.motion_driver.lock().validate_goal(&goal).map_err(Error::Execution)?;
+                if let Some(outcome) = goal.scene_outcome() {
+                    if outcome.operation != super::office::motion_intent::SceneOperation::Navigate || self.scene_signer.lock().is_none() {
+                        return Err(Error::Execution("unsupported_capability: scene operation is not registered".into()));
+                    }
+                    let state = self.renderer.scene_state();
+                    let office = state.office.as_ref().ok_or_else(|| Error::Execution("office context unavailable".into()))?;
+                    if !office.avatar.ready || self.motion_driver.lock().current_goal().is_none()
+                        || !office.avatar.native_stream.as_ref().is_some_and(|s| s.session_id == goal.session_id()) {
+                        return Err(Error::Execution("scene operation requires active native history".into()));
+                    }
+                    super::office::scene_lifecycle::SceneLifecycle::new(goal.clone(), office).map_err(Error::Execution)?;
+                    if delivery.pending.as_ref().is_some_and(|(old, _)| old.revision() >= goal.revision()) {
+                        return Err(Error::Execution("stale pending scene revision".into()));
+                    }
+                    delivery.pending = Some((goal, false));
+                } else {
+                    self.motion_driver.lock().submit(goal).map_err(Error::Execution)?;
+                    delivery.pending = None;
+                    *slot = None;
+                }
+                Ok(true)
+            }
+            Some("motion_capabilities") => {
+                if let Some(key_file) = &self.config.scene_key_file {
+                    let capability = serde_json::from_value(value["scene_sampler"].clone())
+                        .map_err(|e| Error::Execution(format!("invalid scene capability: {e}")))?;
+                    let mut slot = self.scene_signer.lock();
+                    if let Some((_, current)) = slot.as_ref() {
+                        if current == &capability { return Ok(true); }
+                        return Err(Error::Execution("scene capability cannot be replaced mid-session".into()));
+                    }
+                    let signer = super::office::scene_signing::SceneSigner::load(
+                        key_file, &self.config.glb_path, &capability).map_err(Error::Execution)?;
+                    *slot = Some((signer, capability));
+                }
+                Ok(true)
+            }
+            Some("motion_tick") => {
+                if let (Some(session), Some(revision), Some(pts)) = (
+                    value["session_id"].as_str(), value["generation_revision"].as_u64(),
+                    value["pts_ms"].as_u64(),
+                ) {
+                    self.motion_driver.lock().acknowledge(session, revision, pts);
+                }
+                Ok(true)
+            }
+            Some("motion_error") => {
+                self.motion_driver.lock().fail();
+                Ok(false) // Also stop renderer playback through the existing error path.
+            }
+            Some("motion_request" | "perform_action" | "cancel_action" | "edit_motion_timeline") => {
+                Err(Error::Execution("legacy authored motion is retired; submit motion_goal v2".into()))
+            }
+            _ => Ok(false),
         }
     }
 
@@ -387,7 +526,7 @@ impl CcRenderNode {
                 }
                 parsed.map(RendererInput::Skeletal)
             }
-            "perform_action" | "cancel_action" | "edit_motion_timeline" | "motion_error" => {
+            "motion_error" => {
                 serde_json::from_value(v.clone())
                     .ok()
                     .map(RendererInput::Office)
@@ -471,6 +610,9 @@ impl AsyncStreamingNode for CcRenderNode {
             }
             _ => data,
         };
+        if self.accept_motion_control(&data)? {
+            return Ok(0);
+        }
         if self.accept_speech_end(&data)? {
             return Ok(0);
         }
@@ -565,6 +707,17 @@ impl AsyncStreamingNode for CcRenderNode {
                 self.accept_face(Self::frame_to_pose(&f), &data)?;
             }
             Some(RendererInput::Skeletal(s)) => {
+                if let Some(stream) = &s.stream {
+                    let displayed = self.renderer.scene_state().office.as_ref()
+                        .map_or(u64::MAX, |o| o.avatar.displayed_pts_ms);
+                    if let Err(error) = self.scene_delivery.lock().first_frame(&stream.session_id,
+                        stream.generation_revision, s.pts_ms, displayed) {
+                        self.motion_driver.lock().fail();
+                        self.renderer.office_command(super::office::controller::OfficeCommand::MotionError { error: error.clone() });
+                        return Err(Error::Execution(error));
+                    }
+                    self.motion_driver.lock().observe_frame(&stream.session_id, stream.generation_revision, s.pts_ms);
+                }
                 tracing::debug!(
                     target: "timing",
                     stage = "ccrender_apply_skel",
@@ -714,14 +867,54 @@ impl AsyncStreamingNode for CcRenderNode {
         }
 
         let office_state = self.renderer.scene_state();
-        if let Some(office) = &office_state.office {
+        if office_state.office.is_some() {
             callback(RuntimeData::Json(
-                serde_json::json!({"kind":"scene_state","state":office_state}),
+                serde_json::json!({"kind":"scene_state","state":self.observed_scene()}),
             ))?;
-            let mut motion = office.motion.clone();
-            motion.pts_ms = office.avatar.displayed_pts_ms;
-            motion.observed_root = office.avatar.pelvis;
-            callback(RuntimeData::Json(serde_json::to_value(&motion).unwrap()))?;
+        }
+        if let Some(office) = office_state.office.as_ref() {
+            if let Some(error) = &office.motion_error {
+                if self.motion_driver.lock().fail() {
+                    callback(RuntimeData::Json(serde_json::json!({"kind":"motion_error",
+                        "error":error,"rejection":office.motion_rejection})))?;
+                }
+            }
+        }
+        let displayed = office_state.office.as_ref().map_or(0, |o| o.avatar.displayed_pts_ms);
+        let now_ms = self.motion_clock.elapsed().as_millis() as u64;
+        if let Some(error) = self.motion_driver.lock().watchdog(displayed, now_ms) {
+            callback(RuntimeData::Json(serde_json::json!({"kind":"motion_error", "error":error})))?;
+        }
+        if let Some(office) = office_state.office.as_ref() {
+            if let Some(event) = self.observe_scene_lifecycle(office)? {
+                callback(RuntimeData::Json(event))?;
+            }
+            self.start_pending_scene(office)?;
+        }
+        {
+            // Same lock order as input submission: the phase and request must
+            // remain one transaction even when control arrives during a tick.
+            let task = self.scene_task.lock();
+            let goal = if task.as_ref().is_some_and(|t| t.awaiting_revision()) { None }
+                else { self.motion_driver.lock().next_request(displayed, now_ms) };
+            if let Some(goal) = goal {
+                let output = if let Some(task) = task.as_ref() {
+                    let office = office_state.office.as_ref().ok_or_else(|| Error::Execution("office context unavailable".into()))?;
+                    let revision = self.scene_context_revision.fetch_add(1, Ordering::Relaxed) + 1;
+                    let snapshot = super::office::scene_context::SceneSnapshot::from_office(office, goal.session_id(), revision)
+                        .map_err(Error::Execution)?;
+                    let caption = task.caption(office);
+                    let mut signer = self.scene_signer.lock();
+                    signer.as_mut().ok_or_else(|| Error::Execution("scene signer unavailable".into()))?.0
+                        .sign(&goal, &snapshot, task.phase.as_str(), &caption, "right").map_err(Error::Execution)?
+                } else { serde_json::to_value(&goal).unwrap() };
+                if goal.scene_outcome().is_none() {
+                    self.renderer.office_command(super::office::controller::OfficeCommand::NativeMotionRevision {
+                        generation_revision: goal.revision(),
+                    });
+                }
+                callback(RuntimeData::Json(output))?;
+            }
         }
         let mut frames = Vec::new();
         self.renderer.drain_frames(&mut frames);
@@ -1239,8 +1432,16 @@ mod realtime_speech_tests {
         poses: parking_lot::Mutex<Vec<ArkitPose>>,
         skeletal: parking_lot::Mutex<Vec<SkeletalPose>>,
         miss_capture: AtomicBool,
+        office: parking_lot::Mutex<Option<super::super::office::controller::OfficeSnapshot>>,
+        commands: parking_lot::Mutex<Vec<super::super::office::controller::OfficeCommand>>,
     }
     impl Renderer for MockRenderer {
+        fn scene_state(&self) -> super::super::renderer::SceneState {
+            super::super::renderer::SceneState { office: self.office.lock().clone(), ..Default::default() }
+        }
+        fn office_command(&self, cmd: super::super::office::controller::OfficeCommand) {
+            self.commands.lock().push(cmd);
+        }
         fn push_pose(&self, pose: ArkitPose) {
             self.poses.lock().push(pose);
         }
@@ -1261,6 +1462,112 @@ mod realtime_speech_tests {
             });
         }
     }
+    #[test]
+    fn scene_capability_needs_startup_key_and_is_not_replaceable() {
+        use std::io::Write;
+        let mut key = tempfile::NamedTempFile::new().unwrap(); key.write_all(&[9;32]).unwrap();
+        let mut avatar = tempfile::NamedTempFile::new().unwrap(); avatar.write_all(b"avatar").unwrap();
+        let digest: String = hmac_sha256::Hash::hash(b"avatar").iter().map(|b| format!("{b:02x}")).collect();
+        let mut value = serde_json::json!({"kind":"motion_capabilities","scene_sampler":{
+            "protocol":3,"context_version":1,"policy":"model-owned-scene-v1",
+            "avatar_sha256":digest,"profile_identity":"0".repeat(64),
+            "authenticated_context":true,"server_instance":"1".repeat(32)}});
+        let baseline = CcRenderNode::with_renderer(CcRenderConfig::default(), Arc::new(MockRenderer::default()));
+        baseline.accept_motion_control(&RuntimeData::Json(value.clone())).unwrap();
+        assert!(baseline.scene_signer.lock().is_none());
+        let node = CcRenderNode::with_renderer(CcRenderConfig {
+            glb_path: avatar.path().into(), scene_key_file: Some(key.path().into()), ..Default::default()
+        }, Arc::new(MockRenderer::default()));
+        node.accept_motion_control(&RuntimeData::Json(value.clone())).unwrap();
+        node.accept_motion_control(&RuntimeData::Json(value.clone())).unwrap(); // Idempotent, no sequence reset.
+        assert!(node.scene_signer.lock().is_some());
+        value["scene_sampler"]["server_instance"] = "2".repeat(32).into();
+        assert!(node.accept_motion_control(&RuntimeData::Json(value)).is_err());
+    }
+
+    #[tokio::test]
+    async fn pending_navigation_keeps_native_producer_then_signs_reserved_handoff() {
+        use std::io::Write;
+        use super::super::office::{controller::{OfficeController, OfficeCommand}, timeline::StreamIdentity};
+        let mut key = tempfile::NamedTempFile::new().unwrap(); key.write_all(&[9;32]).unwrap();
+        let mut avatar = tempfile::NamedTempFile::new().unwrap(); avatar.write_all(b"avatar").unwrap();
+        let renderer = Arc::new(MockRenderer::default());
+        let mut office = OfficeController::default().snapshot();
+        office.avatar.ready = true; office.avatar.position_valid = true;
+        office.avatar.pelvis = [3., 1., 3.];
+        office.avatar.displayed_pts_ms = 1500; office.avatar.buffered_until_pts_ms = Some(2000);
+        office.avatar.native_stream = Some(StreamIdentity {session_id:"test".into(), generation_revision:1,
+            skeleton_id:"smpl22".into(), root_mode:"world".into()});
+        *renderer.office.lock() = Some(office);
+        let node = CcRenderNode::with_renderer(CcRenderConfig {
+            glb_path:avatar.path().into(), scene_key_file:Some(key.path().into()), ..Default::default()
+        }, renderer.clone());
+        let digest: String = hmac_sha256::Hash::hash(b"avatar").iter().map(|b| format!("{b:02x}")).collect();
+        node.accept_motion_control(&RuntimeData::Json(serde_json::json!({"kind":"motion_capabilities",
+            "scene_sampler":{"protocol":3,"context_version":1,"policy":"model-owned-scene-v1",
+            "avatar_sha256":digest,"profile_identity":"0".repeat(64),"authenticated_context":true,
+            "server_instance":"1".repeat(32)}}))).unwrap();
+        let baseline = serde_json::json!({"kind":"motion_goal","version":2,"session_id":"test",
+            "generation_revision":1,"pts_ms":0,"seed":42,"goal":{"description":"A person stands still."}});
+        node.accept_motion_control(&RuntimeData::Json(baseline.clone())).unwrap();
+        {
+            let mut driver = node.motion_driver.lock();
+            driver.next_request(0, 0).unwrap(); driver.observe_frame("test", 1, 2000);
+            driver.acknowledge("test", 1, 0);
+        }
+        let mut goal = baseline; goal["version"] = 3.into(); goal["generation_revision"] = 2.into();
+        goal["goal"] = serde_json::json!({"operation":"navigate","target_id":"chair"});
+        node.accept_motion_control(&RuntimeData::Json(goal)).unwrap();
+        let outputs = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let out = outputs.clone();
+        node.tick(Tick {clock_id:"avatar".into(),pts_us:0,frame_idx:0,deadline_us:0}, None,
+            Box::new(move |v| {out.lock().push(v); Ok(())})).await.unwrap();
+        assert!(outputs.lock().iter().any(|v| matches!(v, RuntimeData::Json(j) if j["kind"] == "motion_goal" && j["version"] == 2)));
+        assert!(node.scene_task.lock().is_none());
+        {
+            let mut driver = node.motion_driver.lock(); driver.observe_frame("test", 1, 4000);
+            driver.acknowledge("test", 1, 1500);
+        }
+        {
+            let mut office = renderer.office.lock(); let office = office.as_mut().unwrap();
+            office.avatar.displayed_pts_ms = 1566; office.avatar.buffered_until_pts_ms = Some(4000);
+        }
+        let out = outputs.clone();
+        node.tick(Tick {clock_id:"avatar".into(),pts_us:33000,frame_idx:1,deadline_us:0}, None,
+            Box::new(move |v| {out.lock().push(v); Ok(())})).await.unwrap();
+        let outputs = outputs.lock();
+        let envelope = outputs.iter().find_map(|v| match v {
+            RuntimeData::Json(j) if j["kind"] == "scene_step" => Some(j), _ => None
+        }).unwrap();
+        let payload = envelope["payload"].as_str().unwrap();
+        let job: serde_json::Value = serde_json::from_str(payload).unwrap();
+        assert_eq!(job["request"]["pts_ms"], 1566);
+        assert_eq!(job["snapshot"]["displayed_pts_ms"], 1566);
+        assert_eq!(job["phase"], "arrive");
+        let signature: String = hmac_sha256::HMAC::mac(payload.as_bytes(), [9;32]).iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(envelope["signature"], signature);
+        assert!(renderer.commands.lock().iter().any(|c| matches!(c,
+            OfficeCommand::NativeSceneHandoff { generation_revision:2, history_pts_ms:3800 })));
+        assert!(!renderer.commands.lock().iter().any(|c| matches!(c,
+            OfficeCommand::NativeMotionRevision { generation_revision:2 })));
+    }
+
+    #[tokio::test]
+    async fn semantic_input_emits_native_goal_not_legacy_motion() {
+        let node = CcRenderNode::with_renderer(CcRenderConfig::default(), Arc::new(MockRenderer::default()));
+        let goal = serde_json::json!({"kind":"motion_goal", "version":2,
+            "session_id":"native-test", "generation_revision":1, "pts_ms":0,
+            "seed":42, "goal":{"description":"A person stands up from a squat."}});
+        node.process_streaming(RuntimeData::Json(goal.clone()), None, |_| Ok(())).await.unwrap();
+        let outputs = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let out = outputs.clone();
+        node.tick(Tick { clock_id:"avatar".into(), pts_us:0, frame_idx:0, deadline_us:0 },
+            None, Box::new(move |data| { out.lock().push(data); Ok(()) })).await.unwrap();
+        assert!(outputs.lock().iter().any(|v| matches!(v, RuntimeData::Json(value) if value == &goal)));
+        assert!(node.process_streaming(RuntimeData::Json(serde_json::json!({"kind":"motion_request"})),
+            None, |_| Ok(())).await.is_err());
+    }
+
     #[tokio::test]
     async fn python_json_channel_delivers_skeletal_frames() {
         let renderer = Arc::new(MockRenderer::default());

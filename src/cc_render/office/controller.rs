@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 #[path = "surface_actions.rs"]
 mod surface_actions;
+#[path = "furniture_push.rs"]
+mod furniture_push;
+use furniture_push::PushPlan;
 use surface_actions::SurfaceJump;
 
 const FLOOR_GRASP_MAX_Y: f32 = 0.20;
@@ -18,6 +21,7 @@ pub enum Verb {
     Walk,
     JumpOnto,
     JumpDown,
+    Push,
     Sit,
     StandUp,
     BendAndReturn,
@@ -48,6 +52,11 @@ fn intensity() -> f32 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OfficeCommand {
+    NativeMotionRevision {
+        generation_revision: u64,
+    },
+    /// Transport reservation of an existing native token, not authored motion.
+    NativeSceneHandoff { generation_revision: u64, history_pts_ms: u64 },
     PerformAction {
         #[serde(flatten)]
         request: ActionRequest,
@@ -90,6 +99,10 @@ pub struct Observation {
     pub wrists: [[f32; 3]; 2],
     pub heading: f32,
     pub displayed_pts_ms: u64,
+    /// Identity of the pose actually applied, not the latest requested goal.
+    pub native_stream: Option<super::timeline::StreamIdentity>,
+    /// Read-only native queue watermark; not a body target.
+    pub buffered_until_pts_ms: Option<u64>,
     pub feet: [[f32; 3]; 2],
     pub torso_up: [f32; 3],
     /// Diagnostic canonical world deltas: chest, neck, head, observed after FK.
@@ -128,12 +141,25 @@ pub struct MotionRequest {
     pub posture: String,
     pub heading: Option<f32>,
 }
+#[derive(Clone, Debug)]
+pub(crate) struct PushForceIntent {
+    pub id: String,
+    pub goal: Vec3,
+    pub start: Vec3,
+    pub avatar_start: Vec3,
+    pub direction: Vec3,
+    pub contact_offset: Vec3,
+    pub intensity: f32,
+}
 #[derive(Clone, Debug, Serialize)]
 pub struct OfficeSnapshot {
     pub motion_error: Option<String>,
+    pub motion_rejection: Option<serde_json::Value>,
     pub timeline_edit_ids: Vec<String>,
     pub earliest_edit_pts_ms: u64,
     pub objects: Vec<OfficeObject>,
+    /// Exact coarse-navigation membership, including observed held-prop exclusions.
+    pub navigation_object_ids: Vec<String>,
     pub world_keypoints: std::collections::BTreeMap<
         String,
         std::collections::BTreeMap<String, super::InteractionKeypoint>,
@@ -150,6 +176,7 @@ pub struct OfficeSnapshot {
 #[derive(Clone, Debug)]
 struct Active {
     jump: Option<SurfaceJump>,
+    push: Option<PushPlan>,
     request: ActionRequest,
     started: f64,
     stage: Stage,
@@ -167,18 +194,23 @@ struct Active {
 }
 impl Active {
     fn approach_goal(&self, object: Option<&OfficeObject>) -> Option<[f32; 3]> {
-        self.jump.as_ref().map(|j| j.from).or(self.request.position)
+        self.jump.as_ref().map(|j| j.from)
+            .or_else(|| self.push.as_ref().and_then(|p| object.map(|o| (Vec3::from(o.position) + p.stage_offset).to_array())))
+            .or(self.request.position)
             .or_else(|| object.map(OfficeObject::approach_position))
     }
     fn approach_direction(&self, object: Option<&OfficeObject>) -> Option<Vec2> {
         self.jump.as_ref().map(|jump| Vec2::new(jump.support.heading.sin(), jump.support.heading.cos()))
+            .or_else(|| self.push.as_ref().map(|p| Vec2::new(p.direction.x, p.direction.z)))
             .or_else(|| object.map(super::locomotion::target_direction))
     }
 }
 #[derive(Clone, Debug, PartialEq)]
 enum Stage {
     Approach,
+    Turn,
     Align,
+    Contact,
     Execute,
     Settling,
     Standing,
@@ -193,6 +225,9 @@ impl Stage {
 #[derive(Resource)]
 pub struct OfficeController {
     pub motion_error: Option<String>,
+    pub motion_rejection: Option<serde_json::Value>,
+    pub native_motion_revision: Option<u64>,
+    pub native_scene_handoff: Option<(u64, u64)>,
     pub future_root: Option<(u64, [f32; 3])>,
     pub future_handoffs: bool,
     /// Diagnostic comparison switch; natural navigation uses sparse facing guidance.
@@ -236,6 +271,9 @@ impl Default for OfficeController {
         );
         Self {
             motion_error: None,
+            motion_rejection: None,
+            native_motion_revision: None,
+            native_scene_handoff: None,
             future_root: None,
             future_handoffs: std::env::var("OFFICE_FUTURE_HANDOFFS").as_deref() == Ok("1"),
             natural_navigation: std::env::var("OFFICE_NATURAL_NAVIGATION").as_deref() != Ok("0"),
@@ -286,6 +324,9 @@ impl Default for OfficeController {
     }
 }
 fn action_heading(action: &Active, object: &super::OfficeObject) -> f32 {
+    if let Some(push) = &action.push {
+        return push.direction.x.atan2(push.direction.z);
+    }
     if matches!(action.request.verb, Verb::BendAndReturn | Verb::Grab) {
         let target = object
             .grasp_transform()
@@ -313,10 +354,10 @@ fn heading_turn_ms(from: f32, to: f32) -> u64 {
 fn action_constrains_height(action: &Active) -> bool {
     match action.stage {
         Stage::Standing | Stage::StandingSettling => true,
-        Stage::Align => action.request.verb != Verb::BendAndReturn,
+        Stage::Turn | Stage::Align | Stage::Contact => action.request.verb != Verb::BendAndReturn,
         Stage::Execute | Stage::Settling => matches!(
             action.request.verb,
-            Verb::Sit | Verb::Grab | Verb::Release | Verb::BendAndReturn
+            Verb::Sit | Verb::Grab | Verb::Release | Verb::Push
         ),
         Stage::Returning => matches!(action.request.verb, Verb::BendAndReturn | Verb::Grab),
         Stage::Approach => false,
@@ -350,7 +391,7 @@ fn resources(r: &ActionRequest) -> u8 {
         Verb::Wave => 2 << hand_index(r.hand),
         Verb::Release => (if r.target.is_some() { 1 } else { 0 }) | (2 << hand_index(r.hand)),
         Verb::Grab => 1 | (2 << hand_index(r.hand)),
-        Verb::BendAndReturn | Verb::JumpOnto | Verb::JumpDown => 1 | 2 | 4,
+        Verb::BendAndReturn | Verb::JumpOnto | Verb::JumpDown | Verb::Push => 1 | 2 | 4,
         _ => 1,
     }
 }
@@ -439,6 +480,13 @@ impl OfficeController {
     }
     pub fn command(&mut self, command: OfficeCommand, world: &SceneState) {
         match command {
+            OfficeCommand::NativeMotionRevision { generation_revision } => {
+                self.native_motion_revision = Some(generation_revision);
+                self.native_scene_handoff = None;
+            }
+            OfficeCommand::NativeSceneHandoff { generation_revision, history_pts_ms } => {
+                self.native_scene_handoff = Some((generation_revision, history_pts_ms));
+            }
             OfficeCommand::PerformAction { request } => {
                 if let Some(error) = self.motion_error.clone() {
                     self.event(&request.action_id, Status::Failed, error);
@@ -593,6 +641,11 @@ impl OfficeController {
                 Err("walk needs an object or position".into())
             }
             Verb::JumpOnto if obj.is_none() => Err("jump_onto needs a target".into()),
+            Verb::Push => {
+                let object = obj.ok_or("push needs a target")?;
+                let goal = r.position.ok_or("push needs a destination")?;
+                furniture_push::prepare(object, goal, &self.objects).map(|_| ())
+            }
             Verb::Sit if obj.and_then(|o| o.seat).is_none() => Err("target has no seat".into()),
             Verb::Release if r.target.is_some() && obj.and_then(OfficeObject::placement_position).is_none() => {
                 Err("target has no placement surface".into())
@@ -640,11 +693,20 @@ impl OfficeController {
             self.event(&r.action_id, Status::Completed, "already seated");
             return false;
         }
+        let push = if r.verb == Verb::Push {
+            match self.objects.iter().find(|o| Some(&o.id) == r.target.as_ref())
+                .and_then(|o| r.position.map(|p| furniture_push::prepare(o, p, &self.objects))) {
+                Some(Ok(plan)) => Some(plan),
+                _ => { self.event(&r.action_id, Status::Failed, "push target or route changed"); return false; }
+            }
+        } else { None };
         let jump = match self.prepare_surface_action(&r) {
             Ok(jump) => jump,
             Err(error) => { self.event(&r.action_id, Status::Failed, error); return false; }
         };
-        let stage = if r.verb == Verb::JumpOnto {
+        let stage = if r.verb == Verb::Push {
+            Stage::Turn
+        } else if r.verb == Verb::JumpOnto {
             Stage::Approach
         } else if self.seated.is_some()
             && matches!(
@@ -657,7 +719,7 @@ impl OfficeController {
                     | Verb::BendAndReturn
             ) {
             Stage::Standing
-        } else if matches!(r.verb, Verb::Walk | Verb::Sit | Verb::Grab)
+        } else if matches!(r.verb, Verb::Walk | Verb::Sit | Verb::Grab | Verb::Push)
             || (r.verb == Verb::Release && r.target.is_some())
         {
             Stage::Approach
@@ -673,6 +735,7 @@ impl OfficeController {
         }
         self.active.push(Active {
             jump,
+            push,
             origin_wrist: self.observed.wrists[hand_index(r.hand)],
             origin_feet: self.observed.feet,
             execute_pts_ms: self.motion_start().0,
@@ -720,7 +783,7 @@ impl OfficeController {
         }
         let mut active = std::mem::take(&mut self.active);
         for mut a in active.drain(..) {
-            let r = &a.request;
+            let r = a.request.clone();
             let elapsed = self
                 .observed
                 .displayed_pts_ms
@@ -743,7 +806,7 @@ impl OfficeController {
                 .target
                 .as_ref()
                 .and_then(|id| self.objects.iter().find(|o| &o.id == id));
-            let goal = r.position.or_else(|| obj.map(|o| o.approach_position()));
+            let goal = a.approach_goal(obj);
             let mut done = false;
             if a.stage.is_standing() {
                 if a.stage == Stage::Standing && elapsed >= 2.8 {
@@ -771,28 +834,42 @@ impl OfficeController {
                 if let Some(goal) = goal {
                     let start = Vec2::new(self.observed.pelvis[0], self.observed.pelvis[2]);
                     let end = Vec2::new(goal[0], goal[2]);
-                    if let Some(stage) = self.approach_stage(r, goal) {
-                        a.stage = stage;
+                    if let Some(stage) = self.approach_stage(&r, goal) {
+                        a.stage = if r.verb == Verb::Push { Stage::Contact } else { stage };
                         a.execute_pts_ms = self.motion_start().0;
                         a.execute_origin = self.motion_start().1;
                         a.execute_heading = self.observed.heading;
                         changed = true;
                         done = r.verb == Verb::Walk;
-                    } else if let Err(e) =
-                        super::locomotion::approach_path(&self.navigation_scene(), start, end,
-                            obj.map(super::locomotion::target_direction), super::locomotion::arrival_angle())
+                    } else {
+                        let mut scene = self.navigation_scene();
+                        if let Some(plan) = a.push.as_ref() {
+                            scene.objects.retain(|o| o.id != plan.id);
+                        }
+                        if let Err(e) = super::locomotion::approach_path(&scene, start, end,
+                            a.approach_direction(obj), super::locomotion::arrival_angle())
                     {
                         self.event(&r.action_id, Status::Failed, e.to_string());
                         changed = true;
                         continue;
+                        }
                     }
+                }
+            } else if a.stage == Stage::Turn && r.verb == Verb::Push {
+                if obj.is_some_and(|o| (self.observed.heading - action_heading(&a, o)).cos() > 0.12_f32.cos())
+                    && self.observed.pelvis[1] > 0.85
+                    && self.observed.displayed_pts_ms >= a.execute_pts_ms + 1000 {
+                    a.stage = Stage::Approach;
+                    a.execute_pts_ms = self.motion_start().0;
+                    a.execute_origin = self.motion_start().1;
+                    changed = true;
                 }
             } else if a.stage == Stage::Align {
                 let aligned = obj.is_some_and(|o| {
                     (self.observed.heading - action_heading(&a, o)).cos() > 0.12_f32.cos()
                         && self.observed.pelvis[1] > 0.85
                         && (r.verb != Verb::Sit || {
-                            let near = o.anchor([0., 0., 0.35]);
+                            let near = o.seat_staging_position();
                             let pelvis = self.observed.pelvis;
                             seat_contacts_aligned(&self.observed, o)
                                 && self.observed.displayed_pts_ms >= a.execute_pts_ms
@@ -818,11 +895,25 @@ impl OfficeController {
                 };
                 if ready {
                     a.stable_since_ms = None;
-                    a.stage = Stage::Execute;
+                    a.stage = if r.verb == Verb::Push { Stage::Contact } else { Stage::Execute };
                     a.execute_pts_ms = self.motion_start().0;
                     a.execute_origin = self.motion_start().1;
                     a.origin_feet = self.observed.feet;
                     changed = true;
+                }
+            } else if a.stage == Stage::Contact && r.verb == Verb::Push {
+                if furniture_push::contact_ready(&mut a, obj, &self.observed) {
+                    a.stage = Stage::Execute;
+                    a.execute_pts_ms = self.motion_start().0;
+                    a.execute_origin = self.motion_start().1;
+                    a.stable_since_ms = None;
+                    changed = true;
+                } else {
+                    if elapsed > 4.0 {
+                        self.event(&r.action_id, Status::Failed, "hands did not establish stable furniture contact");
+                        changed = true;
+                        continue;
+                    }
                 }
             } else if a.stage == Stage::Execute
                 && r.verb == Verb::Sit
@@ -971,8 +1062,25 @@ impl OfficeController {
                         }
                     }
                     Verb::Walk => true,
+                    Verb::Push if a.stage == Stage::Returning =>
+                        furniture_push::recovered(&mut a, &self.observed, elapsed),
+                    Verb::Push => {
+                        if furniture_push::settled(&mut a, &self.observed, world) {
+                            a.stage = Stage::Returning;
+                            a.execute_pts_ms = self.motion_start().0;
+                            a.execute_origin = self.motion_start().1;
+                            a.stable_since_ms = None;
+                            changed = true;
+                        }
+                        false
+                    }
                     Verb::JumpOnto | Verb::JumpDown => unreachable!("handled by surface traversal"),
                 };
+                if r.verb == Verb::Push && elapsed > r.duration_sec as f64 + 4. {
+                    self.event(&r.action_id, Status::Failed, "furniture did not reach and settle at the goal");
+                    changed = true;
+                    continue;
+                }
                 if r.verb == Verb::Release && a.placement_prop.is_some() && !a.sent
                     && !world.grabs.iter().any(|g| g.hand == r.hand.unwrap_or(Hand::Right)
                         && Some(&g.prop) == a.placement_prop.as_ref())
@@ -1026,8 +1134,8 @@ impl OfficeController {
                 && super::locomotion::within_arrival_cone(-delta, facing, super::locomotion::arrival_angle()))
                 .then_some(Stage::Execute);
         }
-        let tolerance = if matches!(request.verb, Verb::Grab | Verb::Release) { 0.04 } else { 0.12 };
-        (delta.length() < tolerance).then_some(if matches!(request.verb, Verb::Sit | Verb::Grab) {
+        let tolerance = if matches!(request.verb, Verb::Grab | Verb::Release | Verb::Push) { 0.04 } else { 0.12 };
+        (delta.length() < tolerance).then_some(if matches!(request.verb, Verb::Sit | Verb::Grab | Verb::Push) {
             Stage::Align
         } else { Stage::Execute })
     }
@@ -1049,6 +1157,16 @@ impl OfficeController {
             .filter(|(pts, _)| self.future_handoffs && *pts >= self.observed.displayed_pts_ms + 150)
             .unwrap_or((self.observed.displayed_pts_ms, self.observed.pelvis))
     }
+    pub(crate) fn push_force_intent(&self) -> Option<PushForceIntent> {
+        if self.motion_error.is_some() || !self.observed.ready { return None; }
+        let action = self.active.iter().find(|a| a.request.verb == Verb::Push && a.stage == Stage::Execute)?;
+        let plan = action.push.as_ref()?;
+        Some(PushForceIntent {
+            id: plan.id.clone(), goal: plan.goal, start: plan.start,
+            avatar_start: Vec3::from(action.execute_origin), direction: plan.direction,
+            contact_offset: plan.contact_offset, intensity: action.request.intensity,
+        })
+    }
     pub fn display_motion(&self) -> &MotionRequest {
         if self
             .motion
@@ -1067,7 +1185,7 @@ impl OfficeController {
             (a.stage == Stage::Approach || a.stage.is_standing())
                 || matches!(
                     a.request.verb,
-                    Verb::Sit | Verb::Grab | Verb::Release | Verb::BendAndReturn
+                    Verb::Sit | Verb::Grab | Verb::Release | Verb::BendAndReturn | Verb::Push
                 )
         });
         let mut prompt = vec![if changing_posture {
@@ -1095,10 +1213,17 @@ impl OfficeController {
                 .target
                 .as_ref()
                 .and_then(|id| self.objects.iter().find(|o| &o.id == id));
-            if a.stage == Stage::Align {
+            if a.stage == Stage::Contact && r.verb == Verb::Push {
+                let plan = a.push.as_ref().unwrap();
+                prompt.push("stands at the furniture and reaches both hands toward the nearest broad surface, bracing the palms on it while keeping the feet planted".into());
+                heading = Some(plan.direction.x.atan2(plan.direction.z));
+                roots.push([a.execute_origin[0], a.execute_origin[1], a.execute_origin[2], 0.]);
+                continue;
+            }
+            if matches!(a.stage, Stage::Turn | Stage::Align) {
                 prompt.push(
                     if r.verb == Verb::Sit {
-                        "turns smoothly to face away from the chair, takes small steps backward toward it and stops upright in front of the seat"
+                        "turns smoothly to face away from the chair, takes small steps backward, then stops upright clear of the chair front with both feet planted on the floor; she has not sat down yet"
                     } else {
                         "stands gracefully upright with shoulders relaxed and arms resting at her sides, turns calmly in place and comes to a complete stop"
                     }.into(),
@@ -1106,7 +1231,7 @@ impl OfficeController {
                 heading = object.map(|o| action_heading(a, o));
                 if r.verb == Verb::Sit {
                     if let Some(o) = object {
-                        let mut near = o.anchor([0., 0., 0.35]);
+                        let mut near = o.seat_staging_position();
                         near[1] = 0.95;
                         let elapsed = (self.observed.displayed_pts_ms as f64
                             - a.execute_pts_ms as f64) as f32
@@ -1140,7 +1265,7 @@ impl OfficeController {
                 {
                     let p = o.approach_position();
                     let seat = o.anchor(o.seat.unwrap());
-                    let forward = o.anchor([0., 0., 0.35]);
+                    let forward = o.seat_staging_position();
                     let elapsed = (self.observed.displayed_pts_ms as f64 - a.execute_pts_ms as f64)
                         as f32
                         / 1000.;
@@ -1201,6 +1326,45 @@ impl OfficeController {
                             " to shoulder height and waves it side to side in greeting"
                         }
                     )),
+                    Verb::Push => {
+                        let plan = a.push.as_ref().expect("push plan validated at start");
+                        if a.stage == Stage::Returning {
+                            prompt.push("releases the furniture gently, straightens her torso and settles into a balanced upright stance with both feet on the floor".into());
+                            heading = Some(plan.direction.x.atan2(plan.direction.z));
+                            let p = a.execute_origin;
+                            roots.push([p[0], p[1], p[2], 0.]);
+                            continue;
+                        }
+                        let seconds = r.duration_sec;
+                        let elapsed = (self.observed.displayed_pts_ms as f64 - a.execute_pts_ms as f64) as f32 / 1000.;
+                        let displacement = plan.goal - plan.start;
+                        let origin = Vec3::from(a.execute_origin);
+                        let end = origin + displacement;
+                        let waypoint_gait = std::env::var("OFFICE_PUSH_WAYPOINT_GAIT").as_deref() == Ok("1");
+                        prompt.push(if waypoint_gait {
+                            "walks forward step by step while pushing the chair with both palms against its moving surface; her feet alternately lift and plant, her hips travel with the chair, and her hands keep contact"
+                        } else {
+                            "plants her feet, leans naturally into the furniture with both hands against its near face and walks steadily forward to push it across the floor without lifting it"
+                        }.into());
+                        heading = Some(plan.direction.x.atan2(plan.direction.z));
+                        roots.extend([
+                            [origin.x, origin.y, origin.z, -elapsed],
+                            [origin.x, origin.y, origin.z, 0.6 - elapsed],
+                        ]);
+                        if waypoint_gait {
+                            let path = [
+                                pathfinder::Waypoint { xz: Vec2::new(origin.x, origin.z) },
+                                pathfinder::Waypoint { xz: Vec2::new(end.x, end.z) },
+                            ];
+                            let walk = super::locomotion::walking(&self.navigation_scene(), &path, 0.);
+                            let travel = walk.last().map_or(0., |p| p[3]).max(0.001);
+                            roots.extend(walk.into_iter().skip(1).map(|p| [
+                                p[0], origin.y, p[2], 0.6 + p[3] * (seconds - 0.6) / travel - elapsed,
+                            ]));
+                        } else {
+                            roots.push([end.x, origin.y, end.z, seconds - elapsed]);
+                        }
+                    }
                     Verb::Sit => {
                         prompt.push(if a.stage == Stage::Settling {
                             "sits gracefully upright on the chair, shoulders relaxed, both feet planted, with her hands resting naturally in her lap".into()
@@ -1210,7 +1374,6 @@ impl OfficeController {
                         heading = object.map(|o| o.yaw_deg.to_radians());
                         if let Some(p) = object.and_then(|o| o.seat_position()) {
                             let o = object.unwrap();
-                            let near = o.anchor([0., 0., 0.35]);
                             let elapsed = (self.observed.displayed_pts_ms as f64
                                 - a.execute_pts_ms as f64)
                                 as f32
@@ -1218,7 +1381,10 @@ impl OfficeController {
                             let origin = a.execute_origin;
                             roots.extend([
                                 [origin[0], origin[1], origin[2], -elapsed],
-                                [near[0], origin[1], near[2], 1.0 - elapsed],
+                                // Arrival has already been observed. Hold that
+                                // committed position instead of correcting back
+                                // to the ideal waypoint before lowering.
+                                [origin[0], origin[1], origin[2], 1.0 - elapsed],
                                 [p[0], p[1], p[2], 2.4 - elapsed],
                             ]);
                         }
@@ -1243,7 +1409,7 @@ impl OfficeController {
                             [p[0], p[1], p[2], -elapsed],
                             [
                                 p[0],
-                                if returning { 0.95 } else { 0.82 },
+                                if returning { 0.95 } else { p[1] },
                                 p[2],
                                 1.4 - elapsed,
                             ],
@@ -1391,6 +1557,7 @@ impl OfficeController {
                     if let Some(anchor) = anchor {
                         p = anchor.translation.to_array();
                     }
+                    p = o.seat_floor_foot(p);
                     joints.push(JointTarget {
                         joint: joint.into(),
                         position: p,
@@ -1471,6 +1638,11 @@ impl OfficeController {
             }
         }
         timeline.root.face_path = self.active.iter().any(|a| a.stage == Stage::Approach);
+        if std::env::var("OFFICE_PUSH_WAYPOINT_GAIT").as_deref() == Ok("1")
+            && self.active.iter().any(|a| a.request.verb == Verb::Push && a.stage == Stage::Execute) {
+            timeline.root.heading = None;
+            timeline.root.face_path = true;
+        }
         self.guide_natural_heading(&mut timeline);
         if timeline.root.face_path && timeline.root.keyframes.len() >= 2 {
             let first = &timeline.root.keyframes[0];
@@ -1493,7 +1665,7 @@ impl OfficeController {
                     // The route ends at rest. A root-only stop admits raised
                     // arms and folded torsos, especially on a short approach.
                     timeline.pose_keyframes.push(serde_json::json!({
-                        "kind":"full_body", "preset":"standing", "pts_ms":end.pts_ms,
+                        "kind":"model_pose", "posture":"standing", "hold":true, "pts_ms":end.pts_ms,
                         "visible_from_ms":timeline.root.keyframes[0].pts_ms,
                         "root_position":end.position, "heading":heading,
                         "carry_hands":self.held.iter().map(|(hand, _)| match hand {
@@ -1529,7 +1701,7 @@ impl OfficeController {
             let mut root = recovery.execute_origin;
             root[1] = 0.95;
             timeline.pose_keyframes.push(serde_json::json!({
-                "kind":"full_body", "preset":"standing", "hold":true,
+                "kind":"model_pose", "posture":"standing", "hold":true,
                 "pts_ms":recovery.execute_pts_ms + 1200,
                 "visible_from_ms":recovery.execute_pts_ms,
                 "heading":recovery.execute_heading, "root_position":root,
@@ -1546,12 +1718,12 @@ impl OfficeController {
                 // Native coherent endpoints guide the generated rise and exit;
                 // these are point targets, not enforced or held body poses.
                 for (offset, mut root) in [
-                    (1800, seat.anchor([0., 0., 0.35])),
+                    (1800, seat.seat_staging_position()),
                     (2800, seat.approach_position()),
                 ] {
                     root[1] = 0.95;
                     timeline.pose_keyframes.push(serde_json::json!({
-                        "kind":"full_body", "preset":"standing",
+                        "kind":"model_pose", "posture":"standing", "hold":true,
                         "pts_ms":standing.execute_pts_ms + offset,
                         "visible_from_ms":standing.execute_pts_ms,
                         "heading":seat.yaw_deg.to_radians(), "root_position":root,
@@ -1581,8 +1753,7 @@ impl OfficeController {
                     let mut root = object.approach_position();
                     root[1] = 0.95;
                     timeline.pose_keyframes.push(serde_json::json!({
-                        "kind":"full_body", "preset":"standing", "enforce":true,
-                        "hold":true, "blend_ms":800, "pts_ms":align.execute_pts_ms + 800,
+                        "kind":"model_pose", "posture":"standing", "hold":true, "pts_ms":align.execute_pts_ms + 800,
                         "visible_from_ms":align.execute_pts_ms,
                         "heading":self.motion.heading.unwrap_or(self.observed.heading),
                         "root_position":root,
@@ -1591,6 +1762,41 @@ impl OfficeController {
                         }).collect::<Vec<_>>()
                     }));
                 }
+            }
+        }
+        for action in self.active.iter().filter(|a| a.request.verb == Verb::Push
+            && a.stage == Stage::Returning) {
+            let plan = action.push.as_ref().unwrap();
+            let mut root = action.execute_origin;
+            root[1] = 0.95;
+            timeline.pose_keyframes.push(serde_json::json!({
+                "kind":"model_pose", "posture":"standing", "pts_ms":action.execute_pts_ms + 1600,
+                "visible_from_ms":action.execute_pts_ms, "root_position":root,
+                "heading":plan.direction.x.atan2(plan.direction.z)
+            }));
+        }
+        for action in self.active.iter().filter(|a| a.request.verb == Verb::Push
+            && matches!(a.stage, Stage::Contact | Stage::Execute)) {
+            let plan = action.push.as_ref().unwrap();
+            let contact = plan.start + plan.contact_offset;
+            let total_ms = if action.stage == Stage::Contact { 1800 }
+                else { (action.request.duration_sec * 1000.) as u64 };
+            let continuous = action.stage == Stage::Execute && furniture_push::long_probe_enabled();
+            for offset_ms in furniture_push::hand_constraint_times(total_ms, continuous) {
+                let fraction = if action.stage == Stage::Contact { 0. }
+                    else { ((offset_ms as f32 - 600.) / (total_ms as f32 - 600.)).clamp(0., 1.) };
+                let at = contact + (plan.goal - plan.start) * fraction;
+                let pts = action.execute_pts_ms + offset_ms;
+                let hold = action.stage == Stage::Contact && offset_ms == total_ms;
+                timeline.pose_keyframes.push(serde_json::json!({
+                    "kind":"end_effectors", "pts_ms":pts, "hold":hold,
+                    "visible_from_ms":action.execute_pts_ms,
+                    "heading":plan.direction.x.atan2(plan.direction.z),
+                    "keypoints":[
+                        {"joint":"LeftHand", "position":(at + Vec3::new(plan.direction.z, 0., -plan.direction.x) * 0.18).to_array()},
+                        {"joint":"RightHand", "position":(at - Vec3::new(plan.direction.z, 0., -plan.direction.x) * 0.18).to_array()}
+                    ]
+                }));
             }
         }
         // Native end-effector masks constrain only scene contacts. They do not
@@ -1609,33 +1815,17 @@ impl OfficeController {
                 }
                 let contact = self.active.iter().find(|a| a.request.verb == Verb::Sit);
                 if let Some(align) = contact.filter(|a| a.stage == Stage::Align) {
-                    let mut root = o.anchor([0., 0., 0.35]);
+                    let mut root = o.seat_staging_position();
                     root[1] = 0.95;
                     timeline.pose_keyframes.push(serde_json::json!({
-                        "kind":"end_effectors", "hold":true,
+                        "kind":"model_pose", "posture":"standing", "hold":true,
                         "pts_ms":align.execute_pts_ms + heading_turn_ms(align.execute_heading, o.yaw_deg.to_radians()) + 1200,
-                        "heading":o.yaw_deg.to_radians(), "keypoints":[{
-                            "joint":"Hips","position":root,
-                            "rotation_xyzw":Quat::from_rotation_y(o.yaw_deg.to_radians()).to_array()
-                        }]
+                        "visible_from_ms":align.execute_pts_ms,
+                        "root_position":root, "heading":o.yaw_deg.to_radians()
                     }));
-                    if self.timeline_layers.is_empty() {
-                        let turn = heading_turn_ms(align.execute_heading, o.yaw_deg.to_radians());
-                        // Settle upright after turning, before the backward step.
-                        // Both point targets agree with the root path's knots.
-                        for (offset, position) in [(turn, align.execute_origin), (turn + 1200, root)] {
-                            if offset < 50 { continue; }
-                            timeline.pose_keyframes.push(serde_json::json!({
-                                "kind":"full_body", "preset":"standing",
-                                "pts_ms":align.execute_pts_ms + offset,
-                                "visible_from_ms":align.execute_pts_ms,
-                                "heading":o.yaw_deg.to_radians(), "root_position":position,
-                                "carry_hands":self.held.iter().map(|(hand, _)| match hand {
-                                    Hand::Left => "Left", Hand::Right => "Right"
-                                }).collect::<Vec<_>>()
-                            }));
-                        }
-                    }
+                    // Use an ARDY-generated upright destination rather than a
+                    // lone hip contact that lets the model pre-emptively sit and
+                    // drift behind the staged root before Execute begins.
                 }
                 if contact.is_none_or(|a| a.stage != Stage::Align) {
                     if let Some(root) = o.seat_position() {
@@ -1651,7 +1841,7 @@ impl OfficeController {
                         let settling = contact.filter(|a| a.stage == Stage::Settling);
                         if let Some(sitting) = contact.filter(|a| a.stage == Stage::Execute && self.timeline_layers.is_empty()) {
                             timeline.pose_keyframes.push(serde_json::json!({
-                                "kind":"full_body", "preset":"seated",
+                                "kind":"model_pose", "posture":"seated", "hold":true,
                                 "pts_ms":sitting.execute_pts_ms + 2400,
                                 "visible_from_ms":sitting.execute_pts_ms,
                                 "heading":o.yaw_deg.to_radians(), "root_position":root,
@@ -1672,8 +1862,7 @@ impl OfficeController {
                             let start = settling
                                 .map_or(self.seated_pose_at_ms, |a| a.execute_pts_ms + 2400);
                             timeline.pose_keyframes.push(serde_json::json!({
-                                "kind":"full_body", "preset":"seated", "enforce":true,
-                                "hold":true, "blend_ms":800,
+                                "kind":"model_pose", "posture":"seated", "hold":true,
                                 "pts_ms":start + 800, "visible_from_ms":start,
                                 "root_position":root, "heading":o.yaw_deg.to_radians(),
                                 "carry_hands":self.held.iter().map(|(hand, _)| match hand {
@@ -1695,13 +1884,13 @@ impl OfficeController {
             let heading = self.motion.heading.unwrap_or(self.observed.heading);
             let returning = a.stage == Stage::Returning;
             let mut root = a.execute_origin;
-            root[1] = if returning { 0.95 } else { 0.82 };
+            root[1] = if returning { 0.95 } else { a.execute_origin[1] };
             // Guide the whole pose at the root trajectory's deadline. Feet plus
             // an independent wrist target left the shoulders free to flail;
             // returning previously constrained only the feet. Native guidance
             // keeps the transition generated rather than enforcing a static pose.
             timeline.pose_keyframes.push(serde_json::json!({
-                "kind":"full_body", "preset":if returning { "standing" } else { "bend" },
+                "kind":"model_pose", "posture":if returning { "standing" } else { "bend" },
                 "hold":true, "pts_ms":a.execute_pts_ms + 1400,
                 "visible_from_ms":a.execute_pts_ms, "heading":heading, "root_position":root,
                 "carry_hands":self.held.iter().map(|(hand, _)| match hand {
@@ -1834,13 +2023,14 @@ impl OfficeController {
             return;
         }
         timeline.pose_keyframes.push(serde_json::json!({
-            "kind":"full_body", "preset":"standing", "hold":true,
+            "kind":"model_pose", "posture":"standing", "hold":true,
             "pts_ms":start + 1000, "root_position":root, "heading":self.observed.heading,
             "carry_hands":self.held.iter().map(|(hand, _)| if *hand == Hand::Left { "Left" } else { "Right" }).collect::<Vec<_>>()
         }));
     }
     /// Acquire support only within 15 cm, then preserve contact until standing.
     /// Subsequent model drift cannot repeatedly detach and drop onto the seat.
+    #[cfg(test)]
     pub fn supported_root(&mut self, proposed: Vec3) -> Vec3 {
         if self
             .active
@@ -1870,39 +2060,30 @@ impl OfficeController {
         let observed = Vec3::from(self.observed.pelvis);
         observed + (anchor - observed).clamp_length_max(0.025)
     }
-    /// Clip small generated sway at the collision boundary without freezing the
-    /// whole pose clock. Large route errors still reject the frame and replan.
+    /// Accept an unchanged model root or reject the entire candidate frame.
+    /// Validation must never manufacture a collision-safe or seat-supported pose.
     pub fn resolve_root(&mut self, proposed: Vec3) -> Option<Vec3> {
-        let proposed = self.supported_root(proposed);
-        if self.permits_root(proposed) {
-            return Some(proposed);
-        }
-        let mut safe = Vec3::from(self.observed.pelvis);
-        safe.y = proposed.y;
-        if !self.permits_root(safe) {
-            return None;
-        }
-        let mut blocked = proposed;
-        for _ in 0..12 {
-            let candidate = (safe + blocked) * 0.5;
-            if self.permits_root(candidate) {
-                safe = candidate;
-            } else {
-                blocked = candidate;
-            }
-        }
-        (safe.distance(proposed) <= 0.12).then_some(safe)
+        self.permits_root(proposed).then_some(proposed)
     }
 
     pub fn permits_root(&self, position: Vec3) -> bool {
         if let Some(permitted) = self.permits_surface_root(position) { return permitted; }
         let start = Vec2::new(self.observed.pelvis[0], self.observed.pelvis[2]);
         let end = Vec2::new(position.x, position.z);
+        let push = self.active.iter().find_map(|a| a.push.as_ref());
+        if let Some(plan) = push {
+            let Some(object) = self.objects.iter().find(|o| o.id == plan.id) else { return false; };
+            let contact = Vec3::from(object.position) + plan.contact_offset;
+            let separation = (contact - position).dot(plan.direction);
+            let lateral = (contact - position - plan.direction * separation).length();
+            if separation < 0.22 || lateral > 0.65 { return false; }
+        }
         let scene = self.navigation_scene();
         let polygons: Vec<_> = scene
             .objects
             .iter()
-            .filter(|o| self.seat_transition() != Some(o.id.as_str()))
+            .filter(|o| self.seat_transition() != Some(o.id.as_str())
+                && push.is_none_or(|plan| plan.id != o.id))
             .map(|o| (o.id.clone(), o.footprint.inflated_polygon(0.35)))
             .collect();
         super::pathfinder::visible(start, end, &polygons)
@@ -1912,7 +2093,8 @@ impl OfficeController {
             &self
                 .objects
                 .iter()
-                .filter(|o| !self.held.iter().any(|(_, id)| id == &o.id))
+                .filter(|o| !self.held.iter().any(|(_, id)| id == &o.id)
+                    && !self.active.iter().any(|a| a.push.as_ref().is_some_and(|p| p.id == o.id)))
                 .cloned()
                 .collect::<Vec<_>>(),
         )
@@ -1959,7 +2141,9 @@ impl OfficeController {
     }
     pub fn snapshot(&self) -> OfficeSnapshot {
         OfficeSnapshot {
+            navigation_object_ids: self.navigation_scene().objects.into_iter().map(|o| o.id).collect(),
             motion_error: self.motion_error.clone(),
+            motion_rejection: self.motion_rejection.clone(),
             timeline_edit_ids: self.timeline_layers.keys().cloned().collect(),
             earliest_edit_pts_ms: self.motion_start().0,
             occupied_hands: self.held.clone(),
@@ -2068,6 +2252,64 @@ mod tests {
     }
 
     #[test]
+    fn push_waits_for_hand_contact_and_observed_furniture_follow_through() {
+        use super::super::super::renderer::PropSnapshot;
+        let mut c = ready();
+        c.objects.retain(|o| o.id == "chair");
+        let chair = &mut c.objects[0];
+        chair.position[2] = 0.8;
+        chair.dynamic = true;
+        chair.pushable = true;
+        c.observed.heading = 0.;
+        c.observed.pelvis = [0., 0.95, 0.];
+        let mut r = action("push", Verb::Push, None, Some("chair"));
+        r.position = Some([0., 0.23, 1.02]);
+        r.duration_sec = 3.;
+        let mut world = SceneState::default();
+        submit(&mut c, r, &world);
+        assert_eq!(c.active[0].stage, Stage::Turn);
+        assert!(c.push_force_intent().is_none());
+        c.active[0].stage = Stage::Contact;
+        c.active[0].execute_pts_ms = 1000;
+        c.observed.displayed_pts_ms = 2900;
+        let contact = Vec3::from(c.objects[0].position) + c.active[0].push.as_ref().unwrap().contact_offset;
+        c.observed.wrists = [(contact + Vec3::X * 0.18).to_array(),
+                             (contact - Vec3::X * 0.18).to_array()];
+        c.observed.torso_up = [0., 1., 0.];
+        c.advance(&world);
+        assert!(c.push_force_intent().is_none(), "one contact sample cannot start force");
+        c.observed.displayed_pts_ms = 3200;
+        c.advance(&world);
+        assert_eq!(c.active[0].stage, Stage::Execute);
+        assert!(c.push_force_intent().is_some());
+        world.props.push(PropSnapshot { id: "chair".into(), transform: Mat4::from_translation(Vec3::new(0., 0.23, 0.8)).to_cols_array_2d(),
+            aabb_min: [0.; 3], aabb_max: [0.; 3], grasp_world: None, loading: false });
+        c.observed.displayed_pts_ms = 4800;
+        c.advance(&world);
+        assert_eq!(c.active[0].stage, Stage::Execute, "animated feet alone cannot move furniture");
+        world.props[0].transform[3][2] = 0.99;
+        for pts in (4850..=5300).step_by(50) {
+            c.observed.displayed_pts_ms = pts;
+            c.advance(&world);
+        }
+        assert_eq!(c.active[0].stage, Stage::Execute, "the avatar cannot be left behind");
+        c.observed.pelvis[2] += 0.18;
+        c.observed.wrists = c.observed.wrists.map(|w| [w[0], w[1], w[2] + 0.19]);
+        for pts in (5350..=5800).step_by(50) {
+            c.observed.displayed_pts_ms = pts;
+            c.advance(&world);
+            if c.active[0].stage == Stage::Returning { break; }
+        }
+        assert_eq!(c.active[0].stage, Stage::Returning);
+        assert!(!c.events.iter().any(|e| e.status == Status::Completed), "recovery precedes completion");
+        for pts in (7500..=8100).step_by(50) {
+            c.observed.displayed_pts_ms = pts;
+            c.advance(&world);
+        }
+        assert!(c.events.iter().any(|e| e.status == Status::Completed));
+    }
+
+    #[test]
     fn placement_requires_a_grip_and_observed_stable_support() {
         use super::super::super::renderer::{GrabSnapshot, PropSnapshot};
         let mut c = ready();
@@ -2150,7 +2392,7 @@ mod tests {
         assert_eq!(turn.from, c.observed.heading);
         assert_eq!(turn.duration_ms, 750);
         let goal = &c.motion.timeline.as_ref().unwrap().pose_keyframes[0];
-        assert_eq!(goal["preset"], "standing");
+        assert_eq!(goal["posture"], "standing");
         assert_eq!(goal["pts_ms"], root.keyframes.last().unwrap().pts_ms);
         assert_eq!(goal["root_position"], serde_json::json!(root.keyframes.last().unwrap().position));
         let keys = &root.keyframes;
@@ -2158,7 +2400,7 @@ mod tests {
         let previous = keys[keys.len() - 2].position;
         let arrival_heading = (end[0] - previous[0]).atan2(end[2] - previous[2]);
         assert!((goal["heading"].as_f64().unwrap() - arrival_heading as f64).abs() < 1e-6);
-        assert_ne!(goal["hold"], true);
+        assert_eq!(goal["hold"], true);
         assert_ne!(goal["enforce"], true);
         submit(
             &mut c,
@@ -2206,7 +2448,7 @@ mod tests {
         let w = SceneState::default();
         c.rebuild(&w);
         let idle = &c.motion.timeline.as_ref().unwrap().pose_keyframes[0];
-        assert_eq!(idle["preset"], "standing");
+        assert_eq!(idle["posture"], "standing");
         assert_eq!(idle["hold"], true);
         assert!(idle.get("enforce").is_none());
         submit(&mut c, action("wave", Verb::Wave, Some(Hand::Left), None), &w);
@@ -2215,8 +2457,9 @@ mod tests {
         let mut walk = action("walk", Verb::Walk, None, None);
         walk.position = Some([1.5, 0., 0.2]);
         submit(&mut c, walk, &w);
-        assert!(!c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
-            .any(|key| key["preset"] == "standing" && key["hold"] == true));
+        assert!(c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
+            .any(|key| key["posture"] == "standing" && key["hold"] == true),
+            "a generated standing destination stabilizes the route endpoint");
     }
 
     #[test]
@@ -2233,7 +2476,7 @@ mod tests {
                 .unwrap()
                 .pose_keyframes
                 .iter()
-                .any(|k| k["enforce"] == true)
+                .any(|k| k["kind"] == "model_pose" && k["posture"] == "seated" && k["hold"] == true)
         };
         assert!(supported(&c.motion));
         let old_prompt = c.motion.prompt.clone();
@@ -2273,7 +2516,7 @@ mod tests {
             .unwrap()
             .pose_keyframes
             .iter()
-            .find(|k| k["enforce"] == true)
+            .find(|k| k["kind"] == "model_pose" && k["posture"] == "seated")
             .expect("carrying must not disable seat support");
         assert_eq!(key["carry_hands"], serde_json::json!(["Right"]));
         assert_eq!(key["heading"], 0.0);
@@ -2761,8 +3004,8 @@ mod tests {
         assert!(c.motion.joints.iter().all(|j| j.joint != "Spine3"));
         let timeline = c.motion.timeline.as_ref().unwrap();
         let goal = &timeline.pose_keyframes[0];
-        assert_eq!(goal["kind"], "full_body", "feet and one wrist leave the remaining body unconstrained");
-        assert_eq!(goal["preset"], "bend");
+        assert_eq!(goal["kind"], "model_pose", "a generated destination guides the body");
+        assert_eq!(goal["posture"], "bend");
         assert_eq!(goal["pts_ms"], timeline.root.keyframes.last().unwrap().pts_ms);
         assert_eq!(goal["root_position"], serde_json::json!(timeline.root.keyframes.last().unwrap().position));
         assert_eq!(goal["hold"], true);
@@ -2773,7 +3016,7 @@ mod tests {
         assert_eq!(c.active[0].stage, Stage::Returning);
         let timeline = c.motion.timeline.as_ref().unwrap();
         let goal = &timeline.pose_keyframes[0];
-        assert_eq!(goal["preset"], "standing");
+        assert_eq!(goal["posture"], "standing");
         assert_eq!(goal["pts_ms"], 11_400);
         assert_eq!(goal["root_position"], serde_json::json!(timeline.root.keyframes.last().unwrap().position));
         assert_eq!(goal["hold"], true);
@@ -2798,14 +3041,12 @@ mod tests {
         assert_eq!(root.keyframes[0].position, root.keyframes[1].position);
         assert_eq!(root.keyframes.last().unwrap().pts_ms, 4200);
         let goals: Vec<_> = c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
-            .filter(|k| k["kind"] == "full_body").collect();
-        assert_eq!(goals.len(), 2, "turning and backward stepping each need an upright endpoint");
-        for (goal, knot) in goals.iter().zip(&root.keyframes[1..]) {
-            assert_eq!(goal["pts_ms"], knot.pts_ms);
-            assert_eq!(goal["root_position"], serde_json::json!(knot.position));
-            assert_ne!(goal["hold"], true);
-            assert_ne!(goal["enforce"], true);
-        }
+            .filter(|k| k["kind"] == "model_pose").collect();
+        assert_eq!(goals.len(), 1);
+        assert_eq!(goals[0]["posture"], "standing");
+        assert_eq!(goals[0]["pts_ms"], 4200);
+        assert!((goals[0]["root_position"][2].as_f64().unwrap() as f32
+            - chair.seat_staging_position()[2]).abs() < 0.001);
         assert!(c.motion.joints.iter().all(|j| j.contact_pts_ms == 4200));
         assert_eq!(c.active[0].stage, Stage::Align);
         assert!(c.motion.constrain_root_height);
@@ -2819,25 +3060,30 @@ mod tests {
             "heading alone cannot start sitting"
         );
         c.observed.torso_up = [0., 1., 0.];
-        c.observed.feet = [[0.12, 0.08, -0.35], [-0.12, 0.08, -0.35]];
+        c.observed.feet = [chair.seat_floor_foot([0.12, 0.08, -0.35]),
+                           chair.seat_floor_foot([-0.12, 0.08, -0.35])];
         c.advance(&w);
         assert_eq!(c.active[0].stage, Stage::Align, "turning is not completing the backward step");
         c.observed.displayed_pts_ms = 4200;
         c.advance(&w);
         assert_eq!(c.active[0].stage, Stage::Align, "deadline alone cannot stand in for arrival");
-        c.observed.pelvis = chair.anchor([0., 0.95, 0.35]);
+        c.observed.pelvis = chair.seat_staging_position();
+        c.observed.pelvis[1] = 0.95;
+        c.observed.pelvis[2] -= 0.06; // Arrived within tolerance, not exactly at the planned waypoint.
         c.advance(&w);
         assert_eq!(c.active[0].stage, Stage::Execute);
         assert!(c.motion.ease_root);
         assert_eq!(c.motion.root_waypoints.len(), 3);
+        assert_eq!(c.motion.root_waypoints[0][..3], c.motion.root_waypoints[1][..3],
+            "descent must not slide forward to an idealized alignment waypoint");
         assert!(c.motion.joints.iter().all(|j| j.joint != "Spine3"));
         let goal = c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
-            .find(|k| k["kind"] == "full_body").expect("descent needs a coherent seated endpoint");
-        assert_eq!(goal["preset"], "seated");
+            .find(|k| k["kind"] == "model_pose").expect("descent needs a generated seated endpoint");
+        assert_eq!(goal["posture"], "seated");
         assert_eq!(goal["pts_ms"], 6600);
         assert_eq!(goal["root_position"], serde_json::json!(chair.seat_position().unwrap()));
         assert_ne!(goal["enforce"], true);
-        assert_ne!(goal["hold"], true);
+        assert_eq!(goal["hold"], true);
         c.observed.displayed_pts_ms = 4700;
         c.rebuild(&w);
         let end = c.motion.root_waypoints.last().unwrap()[3] * 1000. + c.motion.pts_ms as f32;
@@ -2956,7 +3202,7 @@ mod tests {
         assert!(!c.motion.prompt.contains("reaches"));
         assert!(c.motion.joints.iter().all(|target| target.rotation_only));
         let goal = c.motion.timeline.as_ref().unwrap().pose_keyframes.iter()
-            .find(|key| key["preset"] == "standing").unwrap();
+            .find(|key| key["posture"] == "standing").unwrap();
         assert_eq!(goal["pts_ms"], 3200);
         assert_eq!(goal["carry_hands"], serde_json::json!(["Right"]));
         assert_ne!(goal["enforce"], true);
@@ -3155,7 +3401,8 @@ mod tests {
         for (key, waypoint) in endpoints.iter().zip(&root.keyframes[2..]) {
             assert_eq!(key["pts_ms"], waypoint.pts_ms);
             assert_eq!(key["root_position"], serde_json::json!(waypoint.position));
-            assert_ne!(key["hold"], true);
+            assert_eq!(key["kind"], "model_pose");
+            assert_eq!(key["hold"], true);
             assert_ne!(key["enforce"], true);
         }
 
@@ -3202,18 +3449,15 @@ mod tests {
         assert_eq!(c.seated.as_deref(), Some("chair"));
     }
     #[test]
-    fn small_root_sway_clips_at_desk_but_large_route_errors_remain_blocked() {
+    fn root_validation_rejects_collisions_instead_of_repairing_them() {
         let mut c = ready();
         c.observed.pelvis = [1.2504, 0.79, -1.81];
         let proposed = Vec3::new(1.20, 0.83, -1.80);
         assert!(!c.permits_root(proposed));
-        let resolved = c
-            .resolve_root(proposed)
-            .expect("small boundary sway can be clipped");
-        assert!(c.permits_root(resolved));
-        assert!(resolved.distance(proposed) <= 0.12);
-        assert_eq!(resolved.y, proposed.y);
+        assert!(c.resolve_root(proposed).is_none());
         assert!(c.resolve_root(Vec3::new(0.8, 0.83, -1.8)).is_none());
+        let safe = Vec3::from(c.observed.pelvis);
+        assert_eq!(c.resolve_root(safe), Some(safe));
     }
     #[test]
     fn blocked_destination_and_invalid_input_fail() {

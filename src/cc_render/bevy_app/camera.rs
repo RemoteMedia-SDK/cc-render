@@ -93,7 +93,7 @@ pub(crate) fn camera_fov_deg() -> f32 {
 
 fn camera_defaults() -> (Vec3, Vec3, f32) {
     if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
-        (Vec3::new(7., 17., 9.), Vec3::new(1., 0., -3.), 42.)
+        (Vec3::new(2.8, 1.9, 1.35), Vec3::new(0., 1.15, 0.25), 50.)
     } else {
         (CAMERA_POS, CAMERA_LOOK_AT, CAMERA_FOV_DEG)
     }
@@ -969,7 +969,13 @@ pub(crate) fn follow_avatar_camera(
     mut cam_q: Query<&mut Transform, (With<Camera3d>, Without<DirectionalLight>)>,
     mut anchor: Local<Option<Vec3>>,
 ) {
-    if std::env::var("CC_AVATAR_FOLLOW").ok().as_deref() != Some("1") {
+    // Office previews track the actor by default. Explicit 0 disables it;
+    // non-office renderers retain their previous opt-in behavior.
+    let follow = std::env::var("CC_AVATAR_FOLLOW")
+        .unwrap_or_else(|_| if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
+            "1".into()
+        } else { "0".into() });
+    if follow != "1" {
         return;
     }
     if !bind.captured {
@@ -1050,5 +1056,8 @@ pub(crate) fn follow_avatar_camera(
     }
     // Re-aim. Look-at target also smoothed via the same translation
     // lerp implicitly (since cam_pos drives where Y-up look-at lands).
-    cam_xform.look_at(pelvis_pos, Vec3::Y);
+    let aim = if std::env::var("CC_OFFICE").as_deref() == Ok("1") {
+        pelvis_pos + Vec3::Y * 0.30
+    } else { pelvis_pos };
+    cam_xform.look_at(aim, Vec3::Y);
 }

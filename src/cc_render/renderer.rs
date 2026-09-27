@@ -471,10 +471,10 @@ mod physics_types {
     }
 
     /// Grab-FSM tunables. Defaults match the spec:
-    /// - 5 cm proximity gate for joint formation
+    /// - 5 cm wrist bound PLUS verified solid-shape contact for joint formation
     /// - 2 s pursuit timeout before `failed_grabs("timeout")`
-    /// - 8 cm palm offset along the wrist's local +X (when neither
-    ///   sidecar nor `GrabCmd.palm_offset_override` provides one)
+    /// - historical palm offset retained for source compatibility only; contact
+    ///   grips capture existing relative frames and reject forced overrides
     #[derive(Clone, Debug)]
     pub struct GrabConfig {
         pub proximity_m: f32,

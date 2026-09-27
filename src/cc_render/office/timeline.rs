@@ -39,6 +39,7 @@ pub struct PoseTimeline {
     watermark: u64,
     starved: bool,
     rejected_revision: Option<u64>,
+    rejection: Option<serde_json::Value>,
     pub stale_frames: u64,
     pub underruns: u64,
 }
@@ -48,6 +49,7 @@ impl PoseTimeline {
     }
     pub fn schedule_revision(&mut self, revision: u64, handoff: Option<u64>) {
         if revision > self.revision {
+            self.rejection = None;
             self.queue
                 .retain(|p| handoff.is_some_and(|at| p.pts_ms <= at));
             self.starved = self.queue.is_empty();
@@ -108,9 +110,9 @@ impl PoseTimeline {
             self.epoch = Some((now, self.watermark));
             self.starved = false;
         }
-        if self.queue.len() < 32 {
+        if self.queue.len() < 96 {
             self.queue.push_back(p);
-        } // at most 1.6 seconds at 20 Hz
+        } // Core40 + maximum 2.4s scene prefetch and token margin; bounded to 4.8s
     }
     pub fn sample(&mut self, now: f64) -> Option<SkeletalPose> {
         let (epoch, base) = self.epoch?;
@@ -153,6 +155,18 @@ impl PoseTimeline {
         if permits(&pose) {
             return Some(pose);
         }
+        let diagnostic_pose = |p: &SkeletalPose| serde_json::json!({
+            "pts_ms":p.pts_ms,"root_pos":p.root_pos,"joint_quats_xyzw":p.joint_quats,
+            "stream":p.stream,
+        });
+        self.rejection = Some(serde_json::json!({
+            "session_id":self.session,"generation_revision":self.revision,
+            "rejected_pts_ms":pose.pts_ms,"displayed_pts_ms":previous.as_ref().map_or(0, |p| p.pts_ms),
+            "reason":"office root-path validation rejected the unchanged candidate",
+            "validator":"OfficeController::permits_root",
+            "candidate":diagnostic_pose(&pose),
+            "displayed_before":previous.as_ref().map(diagnostic_pose),
+        }));
         self.displayed = previous;
         self.watermark = self.displayed.as_ref().map_or(0, |p| p.pts_ms);
         self.queue.clear();
@@ -163,8 +177,115 @@ impl PoseTimeline {
     }
 }
 #[cfg(test)]
+#[path = "timeline_live11_tests.rs"]
+mod live11_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_root_rejection_is_visible_without_advancing_committed_state() {
+        use bevy::ecs::system::SystemState;
+        let mut office = super::super::controller::OfficeController::default();
+        office.native_motion_revision = Some(1);
+        office.observed.ready = true;
+        office.observed.pelvis = [1.2504, 0.79, -1.81];
+        let mut safe = pose(0, 1, 0.);
+        safe.root_pos = office.observed.pelvis;
+        let mut blocked = pose(100, 1, 0.);
+        blocked.root_pos = [1.20, 0.83, -1.80];
+        assert!(!office.permits_root(Vec3::from(blocked.root_pos)));
+        let mut timeline = PoseTimeline::default();
+        timeline.insert(safe.clone(), 0.);
+        timeline.insert(blocked, 0.);
+        timeline.sample(0.);
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(75));
+        world.insert_resource(time);
+        world.insert_resource(timeline);
+        world.insert_resource(office);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut system = SystemState::<WorldMotion>::new(&mut world);
+        assert!(system.get_mut(&mut world).receive(&rx).0.is_none());
+        let office = world.resource::<super::super::controller::OfficeController>();
+        assert!(office.motion_error.is_some(), "root rejection must not silently poll forever");
+        let timeline = world.resource::<PoseTimeline>();
+        assert_eq!(timeline.watermark, 0);
+        assert_eq!(timeline.displayed.as_ref().unwrap().root_pos, safe.root_pos);
+        assert_eq!(timeline.displayed.as_ref().unwrap().joint_quats, safe.joint_quats);
+        let diagnostic = timeline.rejection.clone().unwrap();
+        assert_eq!(diagnostic["session_id"], "a");
+        assert_eq!(diagnostic["generation_revision"], 1);
+        assert_eq!(diagnostic["rejected_pts_ms"], 75);
+        assert_eq!(diagnostic["displayed_pts_ms"], 0);
+        assert_eq!(diagnostic["displayed_before"]["root_pos"], serde_json::json!(safe.root_pos));
+        tx.send(Some(pose(200, 1, 99.))).unwrap();
+        for _ in 0..100 {
+            let mut motion = system.get_mut(&mut world);
+            assert!(motion.native_rejected());
+            assert!(motion.receive(&rx).0.is_none());
+        }
+        assert!(rx.is_empty());
+        let timeline = world.resource::<PoseTimeline>();
+        assert_eq!(timeline.watermark, 0);
+        assert_eq!(timeline.rejection.as_ref(), Some(&diagnostic));
+        assert_eq!(timeline.displayed.as_ref().unwrap().root_pos, safe.root_pos);
+    }
+
+    #[test]
+    fn starvation_and_stale_packets_are_not_root_rejections() {
+        let mut t = PoseTimeline::default();
+        t.insert(pose(0, 2, 0.), 0.);
+        t.insert(pose(50, 1, 99.), 0.);
+        assert_eq!(t.stale_frames, 1);
+        t.sample_checked(10., |_| true);
+        assert!(t.starved);
+        assert!(t.rejection.is_none());
+    }
+
+    #[test]
+    fn complete_core40_horizon_survives_prefetch() {
+        let mut t = PoseTimeline::default();
+        for i in 1..=40 {
+            t.insert(pose(i * 50, 1, 0.), 0.);
+        }
+        assert_eq!(t.queue.len(), 40);
+        t.sample(1.35); // displayed 1400 ms; 600 ms remain
+        for i in 41..=80 {
+            t.insert(pose(i * 50, 1, 0.), 1.35);
+        }
+        assert_eq!(t.queue.back().unwrap().pts_ms, 4000);
+        assert_eq!(t.queue.len(), 52);
+    }
+
+    #[test]
+    fn reserved_scene_handoff_keeps_playing_original_prefix() {
+        let mut timeline = PoseTimeline::default();
+        for i in 1..=40 { timeline.insert(pose(i*50, 1, i as f32*0.01), 0.); }
+        timeline.schedule_revision(2, Some(2000));
+        // Simulate slower generation: the new complete block arrives 1.5s
+        // later, but none of its timestamps is late or rewritten.
+        for i in 41..=80 { timeline.insert(pose(i*50, 2, i as f32*0.01), 1.5); }
+        assert_eq!(timeline.queue.len(), 80);
+        let old = timeline.sample(1.5).unwrap();
+        assert_eq!(old.stream.unwrap().generation_revision, 1);
+        assert_eq!(old.pts_ms, 1550);
+        assert_eq!(timeline.sample(1.95).unwrap().pts_ms, 2000);
+        let next = timeline.sample(2.).unwrap();
+        assert_eq!(next.stream.unwrap().generation_revision, 2);
+        assert_eq!(next.pts_ms, 2050);
+    }
+
+    #[test]
+    fn complete_two_block_scene_window_is_not_truncated() {
+        let mut timeline = PoseTimeline::default();
+        for i in 1..=80 { timeline.insert(pose(i*50, 1, 0.), 0.); }
+        assert_eq!(timeline.queue.len(), 80);
+        assert_eq!(timeline.queue.back().unwrap().pts_ms, 4000);
+        assert_eq!(timeline.sample(3.95).unwrap().pts_ms, 4000);
+    }
+
     fn pose(t: u64, rev: u64, x: f32) -> SkeletalPose {
         let mut p = SkeletalPose::rest();
         p.pts_ms = t;
@@ -261,6 +382,10 @@ pub(crate) struct WorldMotion<'w, 's> {
     globals: Query<'w, 's, &'static GlobalTransform>,
 }
 impl WorldMotion<'_, '_> {
+    pub fn native_rejected(&self) -> bool {
+        self.office.as_ref().is_some_and(|o| o.motion_rejection.is_some())
+    }
+
     pub fn failed(&self) -> bool {
         self.office.as_ref().is_some_and(|o| o.motion_error.is_some())
     }
@@ -269,14 +394,23 @@ impl WorldMotion<'_, '_> {
         &mut self,
         rx: &crossbeam_channel::Receiver<Option<SkeletalPose>>,
     ) -> (Option<SkeletalPose>, bool) {
+        if self.native_rejected() {
+            while rx.try_recv().is_ok() {} // Keep the committed state and diagnostic, not incoming poses.
+            return (None, false);
+        }
         if self.failed() {
             *self.timeline = PoseTimeline::default();
             while rx.try_recv().is_ok() {} // discard already queued unsafe poses
             return (None, true);
         }
         if let Some(o) = self.office.as_ref() {
-            self.timeline
-                .schedule_revision(o.revision, o.motion.handoff_pts_ms);
+            if let Some((revision, handoff)) = o.native_scene_handoff {
+                self.timeline.schedule_revision(revision, Some(handoff));
+            } else if let Some(revision) = o.native_motion_revision {
+                self.timeline.schedule_revision(revision, None);
+            } else {
+                self.timeline.schedule_revision(o.revision, o.motion.handoff_pts_ms);
+            }
         }
         let now = self.time.elapsed_secs_f64();
         match rx.try_recv() {
@@ -305,6 +439,18 @@ impl WorldMotion<'_, '_> {
             false
         });
         if let Some(office) = self.office.as_mut() {
+            if office.native_motion_revision.is_some() && office.motion_rejection.is_none() {
+                if let Some(rejection) = self.timeline.rejection.as_ref() {
+                    let error = format!("native root validation rejected session={} revision={} frame={} displayed={}: {}",
+                        rejection["session_id"], rejection["generation_revision"],
+                        rejection["rejected_pts_ms"], rejection["displayed_pts_ms"], rejection["reason"]);
+                    tracing::error!(%error, diagnostic=%rejection, "native motion stopped without repair");
+                    office.motion_error = Some(error);
+                    office.motion_rejection = Some(rejection.clone());
+                    office.motion_ready = false;
+                    office.observed.ready = false;
+                }
+            }
             office.future_root = self.timeline.future_root().filter(|(_, root)| {
                 office.future_handoffs && !office.blocked && office.permits_root(Vec3::from(*root))
             });
@@ -319,9 +465,19 @@ impl WorldMotion<'_, '_> {
             .map_or(Some(proposed), |o| o.resolve_root(proposed));
         let allowed = resolved.is_some();
         if let Some(o) = self.office.as_mut() {
+            o.observed.buffered_until_pts_ms = self.timeline.queue.back().map(|p| p.pts_ms);
             o.observed.stale_frames = self.timeline.stale_frames;
             o.observed.underrun_frames = self.timeline.underruns;
             o.observed.displayed_pts_ms = pose.pts_ms;
+            if allowed {
+                o.observed.native_stream = pose.stream.clone();
+                if let Some(stream) = &pose.stream {
+                    o.native_motion_revision = Some(stream.generation_revision);
+                    if o.native_scene_handoff.is_some_and(|(revision, _)| stream.generation_revision >= revision) {
+                        o.native_scene_handoff = None;
+                    }
+                }
+            }
             o.motion_ready = o.motion_error.is_none();
             if !allowed {
                 o.blocked = true;

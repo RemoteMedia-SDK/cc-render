@@ -43,6 +43,16 @@ pub(crate) fn capsule_from_bone(
     (r, half_h, center)
 }
 
+fn fitted_capsule(bone: &GlobalTransform, joint: Vec3, tip: Vec3) -> Collider {
+    let (radius, _, _) = capsule_from_bone(joint, tip, 0.18, 0.02, 0.12);
+    let inverse = bone.affine().inverse();
+    // Rapier applies the entity's scale to the collider. Preserve world-meter
+    // dimensions under uniform avatar scale; max-axis scaling bounds the radius
+    // for nonuniform parents. This calibration is independent of any action.
+    let scale = bone.compute_transform().scale.abs().max_element().max(1e-6);
+    Collider::capsule(inverse.transform_point3(joint), inverse.transform_point3(tip), radius / scale)
+}
+
 /// One-shot system: when `CC5BindRotations` becomes populated and we
 /// haven't spawned yet, build per-bone kinematic bodies. Sidecar
 /// `body_colliders_override` wins (Some replaces, None disables).
@@ -110,8 +120,7 @@ pub(crate) fn auto_fit_capsules(
                 {
                     cc5_built
                 } else {
-                    let (r, h, _center) = capsule_from_bone(joint, tip, 0.18, 0.02, 0.12);
-                    (Collider::capsule_y(h, r), 0.4)
+                    (fitted_capsule(bone_gt, joint, tip), 0.4)
                 }
             }
         };
@@ -291,6 +300,25 @@ mod tests {
         assert!((h - 0.20).abs() < 1e-5, "half_height = {}", h);
         assert!((r - (0.40 * 0.18)).abs() < 1e-5, "radius = {}", r);
         assert_eq!(c, Vec3::new(0.0, 1.2, 0.0));
+    }
+
+    #[test]
+    fn fitted_capsule_matches_world_bone_endpoints() {
+        for scale in [1., 0.01] {
+            let transform = Transform::from_xyz(1.2, 0.8, -1.7)
+                .with_rotation(Quat::from_euler(EulerRot::XYZ, 0.3, -0.7, 1.1))
+                .with_scale(Vec3::splat(scale));
+            let bone = GlobalTransform::from(transform);
+            let joint = transform.translation;
+            let tip = joint + Vec3::new(-0.07, -0.04, 0.01);
+            let collider = fitted_capsule(&bone, joint, tip);
+            let capsule = collider.as_capsule().unwrap();
+            let segment = capsule.segment();
+            assert!(bone.transform_point(segment.a()).distance(joint) < 1e-5);
+            assert!(bone.transform_point(segment.b()).distance(tip) < 1e-5);
+            let (radius, _, _) = capsule_from_bone(joint, tip, 0.18, 0.02, 0.12);
+            assert!((capsule.radius() * scale - radius).abs() < 1e-6);
+        }
     }
 
     #[test]
