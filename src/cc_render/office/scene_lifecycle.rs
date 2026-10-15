@@ -269,11 +269,17 @@ mod tests {
         let mut task = SceneLifecycle::new(interact(1, "broom", "pick_up"), &scene).unwrap();
         assert_eq!((task.phase_name(), task.caption(&scene).as_str()),
                    ("approach", "A person walks over to a broom standing by the wall."));
-        // Approach: the pelvis must reach the stand zone and stay there.
+        // Approach: the pelvis must reach the stand zone, face the broom and stay there.
         scene.avatar.pelvis = [-1.6, 0.9, 1.9];
+        scene.avatar.heading = std::f32::consts::FRAC_PI_2; // there, but facing along the wall
         displayed(&mut scene, 1, 0);
         assert_eq!(task.observe(&scene), Update::None);
         displayed(&mut scene, 1, 600);
+        assert_eq!(task.observe(&scene), Update::None);
+        scene.avatar.heading = 0.2; // facing the broom (+Z) within 30 degrees
+        displayed(&mut scene, 1, 700);
+        assert_eq!(task.observe(&scene), Update::None);
+        displayed(&mut scene, 1, 1300);
         assert_eq!(task.observe(&scene), Update::PhaseChanged);
         task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
         assert_eq!(task.phase_name(), "reach");

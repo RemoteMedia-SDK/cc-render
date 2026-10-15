@@ -16,6 +16,8 @@ pub const PAIR_SHARE: f32 = 0.8;
 pub const SUPPORT_FRAMES: u32 = 10;
 /// Phases without relations finish once the pelvis is this close to `stand_at` and still.
 pub const STAND_RADIUS_M: f32 = 0.35;
+/// ...and is facing the stand facing (declared, else towards the object) within this.
+pub const STAND_FACING_DEG: f32 = 30.;
 const NO_RELATION_SETTLE_MS: u64 = 1000;
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -175,8 +177,15 @@ impl DeclaredState {
             match &phase.stand_at {
                 Some(stand) => {
                     let near = resolve_zone(owner, &stand.zone, &office.objects, &office.homes).is_some_and(|(z, t)| {
-                        let point = t * Vec3::from(z.center.or(z.a).unwrap_or_default());
-                        Vec2::new(point.x - observation.pelvis[0], point.z - observation.pelvis[2]).length() <= STAND_RADIUS_M
+                        let local = Vec3::from(z.center.unwrap_or_else(|| {
+                            let (a, b) = (Vec3::from(z.a.unwrap_or_default()), Vec3::from(z.b.unwrap_or_default()));
+                            ((a + b) / 2.).to_array()
+                        }));
+                        let point = t * local;
+                        let close = Vec2::new(point.x - observation.pelvis[0], point.z - observation.pelvis[2]).length()
+                            <= STAND_RADIUS_M;
+                        close && stand_facing(stand.facing_deg, &t, point)
+                            .is_none_or(|facing| angle_between(facing, observation.heading) <= STAND_FACING_DEG.to_radians())
                     });
                     if !near { self.stand_since = None; }
                     near && pts.saturating_sub(*self.stand_since.get_or_insert(pts)) >= NO_RELATION_SETTLE_MS / 2
@@ -227,4 +236,19 @@ impl DeclaredState {
             Transition::SupportOn { .. } => None,
         }
     }
+}
+
+/// Heading (0 faces +Z) a stand point asks for: the declared object-local facing,
+/// else towards the object's origin; `None` when standing on the origin itself.
+pub fn stand_facing(facing_deg: Option<f32>, frame: &Transform, point: Vec3) -> Option<f32> {
+    let ahead = match facing_deg {
+        Some(f) => frame.rotation * Vec3::new(f.to_radians().sin(), 0., f.to_radians().cos()),
+        None => frame.translation - point,
+    };
+    (ahead.x * ahead.x + ahead.z * ahead.z > 1e-6).then(|| ahead.x.atan2(ahead.z))
+}
+
+fn angle_between(a: f32, b: f32) -> f32 {
+    let d = a - b;
+    d.sin().atan2(d.cos()).abs()
 }
