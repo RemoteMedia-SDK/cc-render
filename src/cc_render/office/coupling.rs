@@ -114,6 +114,7 @@ pub(crate) fn apply_couplings(
     let held: Vec<String> = office.couplings.iter().map(|c| c.object.clone()).collect();
     let solids = super::support::boxes(&objects.iter().filter(|o| !held.contains(&o.id)).cloned().collect::<Vec<_>>());
     let mut released = Vec::new();
+    let mut placed = Vec::new();
     let mut error = None;
     for coupling in office.couplings.iter_mut() {
         let Some(&entity) = registry.by_id.get(&coupling.object) else { continue };
@@ -133,6 +134,7 @@ pub(crate) fn apply_couplings(
             };
             if let Some(pose) = pose { *transform = pose; }
             *velocity = Velocity::zero();
+            placed.push((coupling.object.clone(), *transform));
             // Put back where it belongs, it stays put; set down onto a surface, physics takes over.
             commands.entity(entity).insert(if onto_home { RigidBody::Fixed } else { RigidBody::Dynamic });
             released.push(coupling.object.clone());
@@ -164,6 +166,15 @@ pub(crate) fn apply_couplings(
         commands.entity(entity).insert(RigidBody::KinematicPositionBased);
     }
     office.couplings.retain(|c| !released.contains(&c.object));
+    // A released object is an obstacle again from this frame on: record where it was put, not
+    // where it was held, before physics publishes its new pose.
+    for (id, pose) in placed {
+        if let Some(object) = office.objects.iter_mut().find(|o| o.id == id) {
+            object.position = pose.translation.to_array();
+            object.rotation_xyzw = Some(pose.rotation.to_array());
+            object.yaw_deg = pose.rotation.to_euler(EulerRot::YXZ).0.to_degrees();
+        }
+    }
     if office.motion_error.is_none() && error.is_some() { office.motion_error = error; }
 }
 
