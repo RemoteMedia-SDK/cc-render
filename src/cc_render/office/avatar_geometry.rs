@@ -144,6 +144,18 @@ impl AvatarGeometry {
             .renderer_geometry_sha256
             .as_ref()
             .ok_or("sampler has no renderer geometry binding")?;
+        Self::load_bound(path, expected, &capability.avatar_sha256, &capability.profile_identity)
+    }
+
+    /// Load read-only geometry with explicit content, avatar and profile bindings.
+    /// Diagnostic callers use the same validation as registered scene samplers;
+    /// this does not authorize a seat or alter motion/collision admission.
+    pub fn load_bound(
+        path: &std::path::Path,
+        expected: &str,
+        avatar: &str,
+        profile: &str,
+    ) -> Result<Self, String> {
         use std::io::Read;
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
         let metadata = file.metadata().map_err(|e| e.to_string())?;
@@ -157,14 +169,10 @@ impl AvatarGeometry {
         let mut hash = hmac_sha256::Hash::new();
         hash.update(&bytes);
         let actual: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
-        if &actual != expected {
+        if actual != expected {
             return Err("renderer geometry content binding mismatch".into());
         }
-        Self::parse(
-            &bytes,
-            &capability.avatar_sha256,
-            &capability.profile_identity,
-        )
+        Self::parse(&bytes, avatar, profile)
     }
 
     fn parse(bytes: &[u8], avatar: &str, profile: &str) -> Result<Self, String> {
@@ -377,6 +385,11 @@ mod tests {
             renderer_geometry_sha256: Some(digest),
         };
         assert!(AvatarGeometry::load(file.path(), &capability).is_ok());
+        let pin = capability.renderer_geometry_sha256.as_deref().unwrap();
+        assert!(AvatarGeometry::load_bound(file.path(), pin, "avatar", "profile").is_ok());
+        assert!(AvatarGeometry::load_bound(file.path(), pin, "wrong", "profile").is_err());
+        assert!(AvatarGeometry::load_bound(file.path(), pin, "avatar", "wrong").is_err());
+        assert!(AvatarGeometry::load_bound(file.path(), "wrong", "avatar", "profile").is_err());
         file.write_all(b" ").unwrap();
         assert!(AvatarGeometry::load(file.path(), &capability).is_err());
         capability.renderer_geometry_sha256 = None;

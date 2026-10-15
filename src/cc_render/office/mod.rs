@@ -1,5 +1,7 @@
 //! Authored office and observed-state action controller. Coordinates are meters, Y-up.
 pub(crate) mod avatar_geometry;
+/// Asset-bound, read-only geometry; this cannot authorize or produce motion.
+pub use avatar_geometry::AvatarGeometry;
 pub mod controller;
 pub mod home;
 mod locomotion;
