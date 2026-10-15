@@ -1,0 +1,672 @@
+{
+ "stove": {
+  "zones": [
+   {
+    "id": "knobs",
+    "type": "box",
+    "center": [
+     0,
+     0.35,
+     0.49
+    ],
+    "half_extents": [
+     0.3,
+     0.06,
+     0.05
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "turn_on_burner",
+    "phases": [
+     {
+      "id": "turn_on",
+      "prompt": "A person reaches out with the right hand and turns a knob on the front of the stove.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "knobs",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.1
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "kitchen_sink": {
+  "zones": [
+   {
+    "id": "front",
+    "type": "point",
+    "center": [
+     0,
+     -0.46,
+     0.8
+    ],
+    "radius": 0.2
+   },
+   {
+    "id": "faucet",
+    "type": "box",
+    "center": [
+     0,
+     0.7,
+     -0.1
+    ],
+    "half_extents": [
+     0.15,
+     0.15,
+     0.25
+    ]
+   },
+   {
+    "id": "basin",
+    "type": "patch",
+    "center": [
+     0,
+     0.48,
+     0
+    ],
+    "half_extents": [
+     0.3,
+     0.1,
+     0.2
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "turn_on_faucet",
+    "phases": [
+     {
+      "id": "turn_on",
+      "prompt": "A person leans over the kitchen sink and turns on the faucet with the right hand.",
+      "stand_at": {
+       "zone": "front"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "faucet",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.1
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "bathroom_vanity": {
+  "zones": [
+   {
+    "id": "front",
+    "type": "point",
+    "center": [
+     -0.75,
+     -0.44,
+     0
+    ],
+    "radius": 0.2
+   },
+   {
+    "id": "basin",
+    "type": "box",
+    "center": [
+     0,
+     0.6,
+     0
+    ],
+    "half_extents": [
+     0.25,
+     0.12,
+     0.28
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "wash_hands",
+    "phases": [
+     {
+      "id": "wash",
+      "prompt": "A person leans over the bathroom sink and washes their hands under the tap.",
+      "stand_at": {
+       "zone": "front"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand",
+         "LeftHand"
+        ],
+        "zone": "basin",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.1
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "television": {
+  "zones": [
+   {
+    "id": "front",
+    "type": "point",
+    "center": [
+     0.6,
+     -0.28,
+     0.75
+    ],
+    "radius": 0.2
+   },
+   {
+    "id": "power",
+    "type": "box",
+    "center": [
+     0.7,
+     0.55,
+     0.12
+    ],
+    "half_extents": [
+     0.15,
+     0.12,
+     0.1
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "turn_on",
+    "phases": [
+     {
+      "id": "turn_on",
+      "prompt": "A person reaches out and presses the power button on the side of the TV.",
+      "stand_at": {
+       "zone": "front"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "power",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.1
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "shower": {
+  "zones": [
+   {
+    "id": "outside",
+    "type": "point",
+    "center": [
+     0.25,
+     -0.06,
+     1.0
+    ],
+    "radius": 0.2
+   },
+   {
+    "id": "valve",
+    "type": "box",
+    "center": [
+     0.55,
+     1.0,
+     0.6
+    ],
+    "half_extents": [
+     0.06,
+     0.1,
+     0.1
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "turn_on_water",
+    "phases": [
+     {
+      "id": "turn_on",
+      "prompt": "A person reaches into the shower and turns on the water valve with the right hand.",
+      "stand_at": {
+       "zone": "outside"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "valve",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.1
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "dining_table": {
+  "zones": [
+   {
+    "id": "place_area",
+    "type": "patch",
+    "center": [
+     0.35,
+     0.42,
+     0
+    ],
+    "half_extents": [
+     0.25,
+     0.1,
+     0.3
+    ]
+   }
+  ]
+ },
+ "plate": {
+  "interactions": [
+   {
+    "id": "place_on_table",
+    "phases": [
+     {
+      "id": "set_down",
+      "prompt": "A person leans over the table and sets the plate down on it.",
+      "stand_at": {
+       "zone": "dining_table/approach"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "dining_table/place_area",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.1
+       }
+      ],
+      "transition": {
+       "kind": "release",
+       "onto": "dining_table/place_area"
+      }
+     }
+    ]
+   },
+   {
+    "id": "place_in_sink",
+    "phases": [
+     {
+      "id": "set_down",
+      "prompt": "A person leans over the kitchen sink and puts the plate in it.",
+      "stand_at": {
+       "zone": "kitchen_sink/front"
+      },
+      "timeout_s": 10,
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "kitchen_sink/basin",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.12
+       }
+      ],
+      "transition": {
+       "kind": "release",
+       "onto": "kitchen_sink/basin"
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "toilet": {
+  "interactions": [
+   {
+    "id": "stand_up",
+    "phases": [
+     {
+      "id": "stand_up",
+      "prompt": "A person stands up from the toilet and steps away.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 15
+     }
+    ]
+   }
+  ]
+ },
+ "dining_chair": {
+  "interactions": [
+   {
+    "id": "stand_up",
+    "phases": [
+     {
+      "id": "stand_up",
+      "prompt": "A person stands up from the chair and steps away.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 15
+     }
+    ]
+   }
+  ]
+ },
+ "living_sofa": {
+  "interactions": [
+   {
+    "id": "stand_up",
+    "phases": [
+     {
+      "id": "stand_up",
+      "prompt": "A person stands up from the sofa and steps away.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 15
+     }
+    ]
+   }
+  ]
+ },
+ "bed": {
+  "interactions": [
+   {
+    "id": "stand_up",
+    "phases": [
+     {
+      "id": "stand_up",
+      "prompt": "A person stands up from the bed and steps away.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 15
+     }
+    ]
+   }
+  ]
+ },
+ "chair": {
+  "interactions": [
+   {
+    "id": "stand_up",
+    "phases": [
+     {
+      "id": "stand_up",
+      "prompt": "A person stands up from the chair and steps away.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 15
+     }
+    ]
+   },
+   {
+    "id": "sit_down",
+    "phases": [
+     {
+      "id": "sit",
+      "prompt": "A person sits down on the chair.",
+      "stand_at": {
+       "zone": "seat"
+      },
+      "relations": [
+       {
+        "kind": "support",
+        "body": "pelvis",
+        "zone": "seat",
+        "window_s": [
+         0,
+         14
+        ],
+        "tolerance_m": 0.15
+       }
+      ],
+      "transition": {
+       "kind": "support_on",
+       "zone": "seat"
+      },
+      "timeout_s": 15
+     }
+    ]
+   }
+  ]
+ },
+ "sofa": {
+  "interactions": [
+   {
+    "id": "stand_up",
+    "phases": [
+     {
+      "id": "stand_up",
+      "prompt": "A person stands up from the sofa and steps away.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "timeout_s": 15
+     }
+    ]
+   }
+  ]
+ },
+ "mug": {
+  "interactions": [
+   {
+    "id": "pick_up",
+    "phases": [
+     {
+      "id": "reach",
+      "prompt": "A person reaches out and picks up the mug by its handle with the right hand.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "grasp",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.08
+       }
+      ],
+      "transition": {
+       "kind": "attach",
+       "anchors": [
+        {
+         "joint": "RightHand",
+         "zone": "grasp"
+        }
+       ]
+      },
+      "timeout_s": 10
+     },
+     {
+      "id": "hold",
+      "prompt": "A person holds a mug in their right hand.",
+      "relations": [
+       {
+        "kind": "hold",
+        "joints": [
+         "RightHand"
+        ],
+        "require": "all",
+        "zone": "grasp",
+        "window_s": [
+         0,
+         2
+        ],
+        "tolerance_m": 0.08
+       }
+      ],
+      "timeout_s": 3
+     }
+    ]
+   }
+  ]
+ },
+ "coffee_table": {
+  "zones": [
+   {
+    "id": "top",
+    "type": "patch",
+    "center": [
+     -0.4,
+     0.22,
+     0
+    ],
+    "half_extents": [
+     0.25,
+     0.08,
+     0.28
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "touch_top",
+    "phases": [
+     {
+      "id": "touch",
+      "prompt": "A person bends down and touches the top of the coffee table with the right hand.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "top",
+        "window_s": [
+         0,
+         9
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.08
+       }
+      ],
+      "timeout_s": 10
+     }
+    ]
+   }
+  ]
+ },
+ "desk": {
+  "zones": [
+   {
+    "id": "end_top",
+    "type": "patch",
+    "center": [
+     0.7,
+     0.38,
+     0
+    ],
+    "half_extents": [
+     0.2,
+     0.1,
+     0.4
+    ]
+   }
+  ],
+  "interactions": [
+   {
+    "id": "rest_hands",
+    "phases": [
+     {
+      "id": "rest",
+      "prompt": "A person stands at the desk and rests both hands flat on the desk top.",
+      "stand_at": {
+       "zone": "approach"
+      },
+      "relations": [
+       {
+        "kind": "hold",
+        "joints": [
+         "LeftHand",
+         "RightHand"
+        ],
+        "require": "all",
+        "zone": "end_top",
+        "window_s": [
+         2,
+         5
+        ],
+        "tolerance_m": 0.08
+       }
+      ],
+      "timeout_s": 8
+     }
+    ]
+   }
+  ]
+ }
+}

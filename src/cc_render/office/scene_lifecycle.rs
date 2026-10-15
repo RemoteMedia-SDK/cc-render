@@ -5,10 +5,10 @@ use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle }
+pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
 impl Phase {
     pub(crate) fn as_str(self) -> &'static str {
-        match self { Self::Arrive => "arrive", Self::Occupy => "occupy", Self::Contact => "contact", Self::Holding => "holding", Self::Settle => "settle" }
+        match self { Self::Arrive => "arrive", Self::Occupy => "occupy", Self::Contact => "contact", Self::Holding => "holding", Self::Settle => "settle", Self::Declared => "declared" }
     }
 }
 #[derive(Debug, PartialEq)]
@@ -21,6 +21,9 @@ pub(crate) struct SceneLifecycle {
     pub complete: bool,
     pub superseded: bool,
     pub pending_phase: Option<Phase>,
+    /// Declared interaction progress and per-phase results (`interact` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub declared: Option<super::declared::DeclaredState>,
     #[serde(skip)] awaiting_revision: bool,
     #[serde(skip)] previous: Option<(u64, [f32;3])>,
     #[serde(skip)] stable_since: Option<u64>,
@@ -40,10 +43,17 @@ impl SceneLifecycle {
             SceneOperation::Sit if !object.dynamic && office.native_seat_profile.is_some()
                 && object.seat_surface_part.and_then(|i| object.parts.get(i)).is_some() => Phase::Contact,
             SceneOperation::Grasp if object.dynamic && (object.grasp.is_some() || object.local_keypoint("grasp").is_some()) => Phase::Contact,
+            SceneOperation::Interact => Phase::Declared,
             _ => return Err("unsupported_capability: lifecycle admission not registered for operation".into()),
         };
-        let required_grips = if outcome.operation == SceneOperation::Grasp { Vec::new() } else { office.occupied_hands.clone() };
-        Ok(Self { goal, phase, complete:false, superseded:false, pending_phase:None,
+        let mut required_grips = if outcome.operation == SceneOperation::Grasp { Vec::new() } else { office.occupied_hands.clone() };
+        // An interaction may release a grip on its own object (e.g. setting a carried plate down).
+        if outcome.operation == SceneOperation::Interact { required_grips.retain(|(_, id)| id != &outcome.target_id); }
+        let declared = match &outcome.interaction {
+            Some(id) if outcome.operation == SceneOperation::Interact => Some(super::declared::DeclaredState::new(object, id)?),
+            _ => None,
+        };
+        Ok(Self { goal, phase, complete:false, superseded:false, pending_phase:None, declared,
             awaiting_revision:false, previous:None, stable_since:None, pursuit_started:None, required_grips })
     }
 
@@ -55,6 +65,7 @@ impl SceneLifecycle {
             return Err("invalid lifecycle generation handoff".into());
         }
         self.phase = self.pending_phase.take().ok_or("missing pending lifecycle phase")?;
+        if let Some(declared) = self.declared.as_mut() { declared.enter(declared.index + 1); }
         self.goal = goal;
         self.awaiting_revision = false;
         self.previous = None;
@@ -63,6 +74,16 @@ impl SceneLifecycle {
     }
 
     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+
+    /// Lifecycle phase name sent with each request: the declared phase id for `interact`.
+    pub(crate) fn phase_name(&self) -> &str {
+        self.declared.as_ref().map_or(self.phase.as_str(), |d| d.phase.as_str())
+    }
+
+    /// Coupling changes queued by declared phases, for the controller.
+    pub(crate) fn take_couplings(&mut self) -> Vec<super::interaction::CouplingCommand> {
+        self.declared.as_mut().map_or_else(Vec::new, |d| std::mem::take(&mut d.couplings))
+    }
 
     /// Arm physics only when this contact revision is actually displayed.
     pub(crate) fn arm_pursuit(&mut self, office: &OfficeSnapshot) -> Option<String> {
@@ -83,6 +104,7 @@ impl SceneLifecycle {
     }
 
     pub(crate) fn caption(&self, office: &OfficeSnapshot) -> String {
+        if let Some(declared) = &self.declared { return declared.prompt().into(); }
         let action = match self.phase {
             Phase::Arrive => "A person walks to a destination",
             Phase::Occupy => "A person stops walking and stands still",
@@ -90,6 +112,7 @@ impl SceneLifecycle {
             Phase::Contact => "A person picks up an object with their right hand and holds it",
             Phase::Settle => "A person sits on a chair",
             Phase::Holding => "A person holds an object in their right hand",
+            Phase::Declared => unreachable!(),
         };
         let carrying = (matches!(self.phase, Phase::Arrive | Phase::Occupy | Phase::Settle)
             || self.goal.scene_outcome().is_some_and(|o| o.operation == SceneOperation::Sit))
@@ -110,6 +133,7 @@ impl SceneLifecycle {
         }
         if self.complete {
             let outcome = self.goal.scene_outcome().unwrap();
+            if outcome.operation == SceneOperation::Interact { return Update::None; }
             if outcome.operation == SceneOperation::Sit && !seat_contact(&self.goal, observation) {
                 return Update::Failed("seated geometric contact lost".into());
             }
@@ -125,6 +149,19 @@ impl SceneLifecycle {
         let Some(object) = office.objects.iter().find(|o| o.id == outcome.target_id) else {
             return Update::Failed("scene target disappeared".into());
         };
+        if let Some(declared) = self.declared.as_mut() {
+            use super::declared::Step;
+            return match declared.observe(office) {
+                Step::Running => Update::None,
+                Step::PhaseDone => {
+                    self.pending_phase = Some(Phase::Declared);
+                    self.awaiting_revision = true;
+                    Update::PhaseChanged
+                }
+                Step::Done => { self.complete = true; Update::Completed }
+                Step::Failed(error) => Update::Failed(error),
+            };
+        }
         let position = observation.pelvis;
         let stable = match self.phase {
             Phase::Arrive | Phase::Occupy => {
@@ -152,7 +189,7 @@ impl SceneLifecycle {
                     distance * 1000. / (pts-old) as f32 <= 0.04
                 })
             }
-            Phase::Settle => return Update::Failed("invalid seat lifecycle operation".into()),
+            Phase::Settle | Phase::Declared => return Update::Failed("invalid seat lifecycle operation".into()),
             Phase::Contact | Phase::Holding => {
                 // Exact requested-object, right-hand physical grip; neither
                 // wrist proximity nor a model's claimed contact counts.
@@ -198,6 +235,129 @@ mod tests {
             "session_id":"test","generation_revision":revision,"pts_ms":0,"seed":42,
             "goal":{"operation":"navigate","target_id":"chair"}})).unwrap()
     }
+    fn interact(revision: u64, target: &str, interaction: &str) -> MotionGoal {
+        let mut value = serde_json::to_value(goal(revision)).unwrap();
+        value["goal"] = serde_json::json!({"operation":"interact","target_id":target,"interaction":interaction});
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn displayed(scene: &mut OfficeSnapshot, revision: u64, pts: u64) {
+        scene.avatar.ready = true; scene.avatar.position_valid = true;
+        scene.avatar.native_stream = Some(StreamIdentity { session_id:"test".into(), generation_revision:revision,
+            skeleton_id:"smpl22".into(), root_mode:"world".into() });
+        scene.avatar.displayed_pts_ms = pts;
+    }
+
+    #[test]
+    fn interact_goals_name_a_declared_interaction() {
+        let scene = OfficeController::default().snapshot();
+        let mut value = serde_json::to_value(goal(1)).unwrap();
+        value["goal"] = serde_json::json!({"operation":"interact","target_id":"broom"});
+        assert!(serde_json::from_value::<MotionGoal>(value.clone()).is_err(), "interaction is required");
+        value["goal"] = serde_json::json!({"operation":"navigate","target_id":"broom","interaction":"pick_up"});
+        assert!(serde_json::from_value::<MotionGoal>(value.clone()).is_err(), "only interact names one");
+        value["goal"] = serde_json::json!({"operation":"interact","target_id":"broom","interaction":"pick up!"});
+        assert!(serde_json::from_value::<MotionGoal>(value).is_err());
+        let error = SceneLifecycle::new(interact(1, "broom", "juggle"), &scene).unwrap_err();
+        assert!(error.contains("unsupported_capability"), "{error}");
+        assert!(SceneLifecycle::new(interact(1, "chair", "pick_up"), &scene).is_err());
+    }
+
+    #[test]
+    fn broom_pick_up_runs_declared_phases_on_observed_joints_and_attaches_both_hands() {
+        let mut scene = OfficeController::default().snapshot();
+        let mut task = SceneLifecycle::new(interact(1, "broom", "pick_up"), &scene).unwrap();
+        assert_eq!((task.phase_name(), task.caption(&scene).as_str()),
+                   ("approach", "A person walks over to a broom standing by the wall."));
+        // Approach: the pelvis must reach the stand zone and stay there.
+        scene.avatar.pelvis = [-1.6, 0.9, 1.9];
+        displayed(&mut scene, 1, 0);
+        assert_eq!(task.observe(&scene), Update::None);
+        displayed(&mut scene, 1, 600);
+        assert_eq!(task.observe(&scene), Update::PhaseChanged);
+        task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
+        assert_eq!(task.phase_name(), "reach");
+        // Reach: only the right wrist on the upper grip is not enough.
+        scene.avatar.wrists = [[-1.0, 1.0, 2.0], [-1.6, 1.0, 2.4]];
+        for pts in [700, 750, 800, 850] {
+            displayed(&mut scene, 2, pts);
+            assert_eq!(task.observe(&scene), Update::None);
+        }
+        scene.avatar.wrists[0] = [-1.55, 0.65, 2.4];
+        let mut update = Update::None;
+        for pts in [900, 950, 1000] {
+            displayed(&mut scene, 2, pts);
+            update = task.observe(&scene);
+        }
+        assert_eq!(update, Update::PhaseChanged);
+        match task.take_couplings().as_slice() {
+            [super::super::interaction::CouplingCommand::Attach { object, anchors, .. }] => {
+                assert_eq!(object, "broom");
+                assert_eq!(anchors[0].0, crate::cc_render::Hand::Right);
+                assert_eq!(anchors[1].0, crate::cc_render::Hand::Left);
+                assert!((anchors[0].1[1] - 0.34).abs() < 1e-3, "grip latched at the wrist height on the handle");
+            }
+            other => panic!("expected one attach, got {other:?}"),
+        }
+        task.bind_generation(interact(3, "broom", "pick_up")).unwrap();
+        assert_eq!(task.phase_name(), "lift");
+        // Lift: hands 0.35 m apart through the whole window.
+        scene.avatar.wrists = [[-1.6, 0.8, 2.0], [-1.6, 1.15, 2.0]];
+        let mut update = Update::None;
+        for pts in (1100..=3700).step_by(100) {
+            displayed(&mut scene, 3, pts);
+            update = task.observe(&scene);
+            if update != Update::None { break; }
+        }
+        assert_eq!(update, Update::Completed);
+        let results = &task.declared.as_ref().unwrap().results;
+        assert_eq!(results.iter().map(|r| (r.phase.as_str(), r.status)).collect::<Vec<_>>(),
+                   [("approach", "passed"), ("reach", "passed"), ("lift", "passed")]);
+    }
+
+    #[test]
+    fn declared_phases_fail_on_timeout_with_per_phase_results() {
+        let mut scene = OfficeController::default().snapshot();
+        let mut task = SceneLifecycle::new(interact(1, "broom", "hold"), &scene).unwrap();
+        scene.avatar.wrists = [[0., 1., 0.], [2., 1., 0.]]; // 2 m apart: not holding anything
+        let mut update = Update::None;
+        for pts in (0..=3200).step_by(100) {
+            displayed(&mut scene, 1, pts);
+            update = task.observe(&scene);
+            if update != Update::None { break; }
+        }
+        assert!(matches!(&update, Update::Failed(e) if e.contains("pair relation")), "{update:?}");
+        let result = &task.declared.as_ref().unwrap().results[0];
+        assert_eq!((result.phase.as_str(), result.status), ("hold", "failed"));
+    }
+
+    #[test]
+    fn stepping_up_authorizes_support_at_phase_start_and_needs_both_feet_on_top() {
+        let mut scene = OfficeController::default().snapshot();
+        let mut task = SceneLifecycle::new(interact(1, "step_stool", "step_up"), &scene).unwrap();
+        assert!(task.take_couplings().is_empty());
+        scene.avatar.pelvis = [-2.4, 0.9, 0.42];
+        displayed(&mut scene, 1, 0);
+        task.observe(&scene);
+        displayed(&mut scene, 1, 600);
+        assert_eq!(task.observe(&scene), Update::PhaseChanged);
+        task.bind_generation(interact(2, "step_stool", "step_up")).unwrap();
+        assert_eq!(task.take_couplings(),
+                   [super::super::interaction::CouplingCommand::SupportOn { object: "step_stool".into() }]);
+        // One foot up, one on the floor: not supported.
+        scene.avatar.feet = [[-2.45, 0.33, 1.0], [-2.35, 0.08, 0.6]];
+        for pts in (700..1500).step_by(50) { displayed(&mut scene, 2, pts); assert_eq!(task.observe(&scene), Update::None); }
+        scene.avatar.feet[1] = [-2.35, 0.33, 1.05];
+        let mut update = Update::None;
+        for pts in (1500..2200).step_by(50) {
+            displayed(&mut scene, 2, pts);
+            update = task.observe(&scene);
+            if update != Update::None { break; }
+        }
+        assert_eq!(update, Update::Completed);
+        assert!(task.take_couplings().is_empty(), "support_on is not repeated when met");
+    }
+
     #[test]
     fn grasp_requires_exact_physical_hand_and_object_and_detects_loss() {
         let mut scene = OfficeController::default().snapshot();

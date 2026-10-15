@@ -324,6 +324,7 @@ impl CcRenderNode {
             let mut operations = Vec::new();
             if let Some((_, capability)) = registered.as_ref() {
                 operations.push("navigate");
+                operations.push("interact");
                 if capability.renderer_geometry_sha256.is_some()
                     && office["native_seat_profile"].as_str() == Some(capability.profile_identity.as_str()) {
                     operations.push("sit");
@@ -373,7 +374,19 @@ impl CcRenderNode {
             self.renderer.grab(super::renderer::GrabCmd { hand: super::renderer::Hand::Right,
                 target, palm_offset_override: None });
         }
+        let forward = |task: &mut super::office::scene_lifecycle::SceneLifecycle| for command in task.take_couplings() {
+            // A physically gripped object is released by the grip itself; it settles under physics.
+            if let super::office::interaction::CouplingCommand::Release { object, .. } = &command {
+                if let Some((hand, _)) = office.occupied_hands.iter().find(|(_, id)| id == object) {
+                    self.renderer.release(*hand);
+                    continue;
+                }
+            }
+            self.renderer.office_command(super::office::controller::OfficeCommand::Couple(command));
+        };
+        forward(task);
         let update = task.observe(office);
+        forward(task);
         let (status, detail) = match update {
             Update::None => return Ok(None),
             Update::PhaseChanged => {
@@ -389,7 +402,8 @@ impl CcRenderNode {
             }
         };
         let event = serde_json::json!({"kind":"motion_goal_status", "goal":task.goal,
-            "phase":task.phase, "status":status,"detail":detail,"displayed_pts_ms":office.avatar.displayed_pts_ms});
+            "phase":task.phase, "status":status,"detail":detail,"displayed_pts_ms":office.avatar.displayed_pts_ms,
+            "interaction":task.declared});
         if status == "failed" { *slot = None; }
         Ok(Some(event))
     }
@@ -997,7 +1011,7 @@ impl AsyncStreamingNode for CcRenderNode {
                     let caption = task.caption(office);
                     let mut signer = self.scene_signer.lock();
                     signer.as_mut().ok_or_else(|| Error::Execution("scene signer unavailable".into()))?.0
-                        .sign(&goal, &snapshot, task.phase.as_str(), &caption, "right").map_err(Error::Execution)?
+                        .sign(&goal, &snapshot, task.phase_name(), &caption, "right").map_err(Error::Execution)?
                 } else { serde_json::to_value(&goal).unwrap() };
                 if let Some(outcome) = goal.scene_outcome().filter(|o| o.operation == super::office::motion_intent::SceneOperation::Sit) {
                     self.renderer.office_command(super::office::controller::OfficeCommand::AuthorizeNativeSeat {

@@ -1,0 +1,94 @@
+[
+  {
+    "id": "broom",
+    "label": "Broom",
+    "position": [-1.6, 0.66, 2.45],
+    "half_extents": [0.08, 0.66, 0.15],
+    "color": [0.62, 0.45, 0.25],
+    "dynamic": true,
+    "approach": [0.0, -0.66, -0.6],
+    "seat": null,
+    "grasp": null,
+    "surface": null,
+    "parts": [
+      {"position": [0.0, -0.62, 0.0], "half_extents": [0.06, 0.04, 0.15], "color": [0.85, 0.72, 0.35]},
+      {"position": [0.0, 0.04, 0.0], "half_extents": [0.015, 0.62, 0.015]}
+    ],
+    "zones": [
+      {"id": "approach", "type": "point", "center": [0.0, -0.66, -0.6], "radius": 0.25},
+      {"id": "grip_upper", "type": "segment", "a": [0.0, 0.2, 0.0], "b": [0.0, 0.5, 0.0], "radius": 0.12, "grip": "power"},
+      {"id": "grip_lower", "type": "segment", "a": [0.0, -0.15, 0.0], "b": [0.0, 0.15, 0.0], "radius": 0.12, "grip": "power"},
+      {"id": "head", "type": "working_point", "center": [0.0, -0.66, 0.0]}
+    ],
+    "interactions": [
+      {"id": "pick_up", "phases": [
+        {"id": "approach", "prompt": "A person walks over to a broom standing by the wall.",
+         "stand_at": {"zone": "approach"}, "timeout_s": 40},
+        {"id": "reach", "prompt": "A person reaches out and grabs the broom handle with both hands.",
+         "stand_at": {"zone": "approach"},
+         "relations": [
+           {"kind": "touch", "joints": ["RightHand"], "zone": "grip_upper", "window_s": [0, 10], "min_frames": 3},
+           {"kind": "touch", "joints": ["LeftHand"], "zone": "grip_lower", "window_s": [0, 10], "min_frames": 3}],
+         "transition": {"kind": "attach", "anchors": [{"joint": "RightHand", "zone": "grip_upper"},
+                                                      {"joint": "LeftHand", "zone": "grip_lower"}]},
+         "timeout_s": 12},
+        {"id": "lift", "prompt": "A person lifts the broom and holds it upright in front of them with both hands.",
+         "relations": [{"kind": "pair", "joints": ["LeftHand", "RightHand"], "distance_m": [0.0, 0.8], "window_s": [0.5, 2.5]}],
+         "timeout_s": 4}
+      ]},
+      {"id": "hold", "phases": [
+        {"id": "hold", "prompt": "A person stands holding a broom upright with both hands.",
+         "relations": [{"kind": "pair", "joints": ["LeftHand", "RightHand"], "distance_m": [0.0, 0.8], "window_s": [0, 3]}],
+         "timeout_s": 5}
+      ]},
+      {"id": "put_back", "phases": [
+        {"id": "approach", "prompt": "A person carries a broom back to the wall, holding it with both hands.",
+         "stand_at": {"zone": "@home/approach"}, "timeout_s": 40},
+        {"id": "place", "prompt": "A person sets the broom back down against the wall and lets go.",
+         "stand_at": {"zone": "@home/approach"},
+         "relations": [{"kind": "touch", "joints": ["RightHand"], "zone": "@home/grip_upper", "window_s": [0, 8], "min_frames": 3}],
+         "transition": {"kind": "release"},
+         "timeout_s": 10}
+      ]}
+    ]
+  },
+  {
+    "id": "step_stool",
+    "label": "Step stool",
+    "position": [-2.4, 0.125, 1.0],
+    "half_extents": [0.25, 0.125, 0.18],
+    "color": [0.3, 0.45, 0.6],
+    "approach": [0.0, -0.125, -0.6],
+    "seat": null,
+    "grasp": null,
+    "surface": null,
+    "parts": [
+      {"position": [0.0, 0.105, 0.0], "half_extents": [0.25, 0.02, 0.18]},
+      {"position": [-0.22, -0.02, 0.0], "half_extents": [0.02, 0.105, 0.17]},
+      {"position": [0.22, -0.02, 0.0], "half_extents": [0.02, 0.105, 0.17]}
+    ],
+    "zones": [
+      {"id": "approach", "type": "point", "center": [0.0, -0.125, -0.6], "radius": 0.25},
+      {"id": "top", "type": "support", "center": [0.0, 0.125, 0.0], "half_extents": [0.23, 0.16, 0.16]},
+      {"id": "landing", "type": "support", "center": [0.0, -0.125, -0.55], "half_extents": [0.3, 0.16, 0.25]}
+    ],
+    "interactions": [
+      {"id": "step_up", "phases": [
+        {"id": "approach", "prompt": "A person walks over to a low step stool.",
+         "stand_at": {"zone": "approach"}, "timeout_s": 40},
+        {"id": "step_up", "prompt": "A person steps up onto a low step stool and stands on top of it.",
+         "stand_at": {"zone": "top", "facing_deg": 0},
+         "relations": [{"kind": "support", "body": "feet", "zone": "top", "window_s": [0, 9], "tolerance_m": 0.03}],
+         "transition": {"kind": "support_on", "zone": "top"},
+         "timeout_s": 10}
+      ]},
+      {"id": "step_down", "phases": [
+        {"id": "step_down", "prompt": "A person steps backward down off a low step stool onto the floor.",
+         "stand_at": {"zone": "landing", "facing_deg": 0},
+         "relations": [{"kind": "support", "body": "feet", "zone": "landing", "window_s": [0, 9], "tolerance_m": 0.03}],
+         "transition": {"kind": "support_off"},
+         "timeout_s": 10}
+      ]}
+    ]
+  }
+]

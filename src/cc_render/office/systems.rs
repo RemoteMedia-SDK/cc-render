@@ -54,6 +54,7 @@ pub fn install(app: &mut App) {
             .filter(|objects| super::validate_objects(objects).is_ok())
         {
             Some(objects) => {
+                controller.homes = super::controller::home_poses(&objects);
                 controller.objects = objects;
                 bundled = false;
             }
@@ -69,6 +70,10 @@ pub fn install(app: &mut App) {
             observe
                 .after(bevy::transform::TransformSystem::TransformPropagate)
                 .after(crate::cc_render::bevy_app::physics::props::publish_scene_state),
+        )
+        .add_systems(
+            PostUpdate,
+            super::coupling::apply_couplings.after(bevy::transform::TransformSystem::TransformPropagate),
         );
 }
 fn spawn_office(

@@ -25,6 +25,15 @@ struct SceneObject {
     navigation_yaw_deg: f32,
     parts: Vec<SolidPart>,
     affordances: BTreeMap<&'static str, Affordance>,
+    /// Declared interaction data (object-local); absent when an object declares none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    zones: Vec<super::interaction::Zone>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    interactions: Vec<super::interaction::Interaction>,
+    /// Authored home pose [x, y, z, qx, qy, qz, qw] for `@home/zone` references
+    /// (objects that declare interactions only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    home: Option<[f32; 7]>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -51,7 +60,9 @@ impl SceneSnapshot {
             return Err("invalid scene snapshot identity".into());
         }
         let objects = office.objects.iter().map(|object| {
-            SceneObject::from_object(object, office.navigation_object_ids.contains(&object.id))
+            let mut exported = SceneObject::from_object(object, office.navigation_object_ids.contains(&object.id))?;
+            if !object.interactions.is_empty() { exported.home = office.homes.get(&object.id).copied(); }
+            Ok::<_, String>(exported)
         }).collect::<Result<Vec<_>, _>>()?;
         Ok(Self { version: 1, session_id: session_id.into(), scene_revision: revision,
             displayed_pts_ms: office.avatar.displayed_pts_ms, floor_y: 0., objects })
@@ -80,6 +91,9 @@ impl SceneObject {
             parts: object.parts.iter().map(|p| SolidPart { position: p.position,
                 half_extents: p.half_extents, shape: if p.cylinder { "cylinder" } else { "box" } }).collect(),
             affordances,
+            zones: object.zones.clone(),
+            interactions: object.interactions.clone(),
+            home: None,
         })
     }
 }
@@ -106,6 +120,26 @@ mod tests {
             + chair["parts"][0]["half_extents"][1].as_f64().unwrap()
             + chair["position"][1].as_f64().unwrap();
         assert!((top - 0.46).abs() < 1e-6);
+    }
+
+    #[test]
+    fn declared_interactions_round_trip_with_their_home_pose_only_when_declared() {
+        let mut controller = OfficeController::default();
+        let office = controller.snapshot();
+        let value = serde_json::to_value(SceneSnapshot::from_office(&office, "test", 2).unwrap()).unwrap();
+        let objects = value["objects"].as_array().unwrap();
+        let broom = objects.iter().find(|o| o["id"] == "broom").unwrap();
+        let parsed: Vec<super::super::interaction::Interaction> =
+            serde_json::from_value(broom["interactions"].clone()).unwrap();
+        assert_eq!(parsed, office.objects.iter().find(|o| o.id == "broom").unwrap().interactions);
+        assert_eq!(broom["home"][0].as_f64().unwrap() as f32, -1.6);
+        let shelf = objects.iter().find(|o| o["id"] == "shelf").unwrap();
+        assert!(shelf.get("home").is_none() && shelf.get("zones").is_none() && shelf.get("interactions").is_none());
+        // The home pose stays authored while the object itself moves.
+        controller.objects.iter_mut().find(|o| o.id == "broom").unwrap().position = [0., 1., 0.];
+        let moved = serde_json::to_value(SceneSnapshot::from_office(&controller.snapshot(), "test", 3).unwrap()).unwrap();
+        let broom = moved["objects"].as_array().unwrap().iter().find(|o| o["id"] == "broom").unwrap();
+        assert_eq!((broom["position"][0].as_f64(), broom["home"][0].as_f64().map(|v| v as f32)), (Some(0.), Some(-1.6)));
     }
 
     #[test]

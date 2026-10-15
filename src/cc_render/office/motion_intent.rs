@@ -34,7 +34,7 @@ struct SemanticGoal {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SceneOperation { Navigate, Grasp, Sit }
+pub enum SceneOperation { Navigate, Grasp, Sit, Interact }
 
 /// Walking speed hint for planned navigation (0.6, 1.0 or 1.4 m/s).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +49,9 @@ pub const MAX_STYLE_CHARS: usize = 160;
 pub struct SceneOutcome {
     pub operation: SceneOperation,
     pub target_id: String,
+    /// Declared interaction on the target; required for, and only for, `interact`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interaction: Option<String>,
     /// Optional manner of movement, used only as the prompt for navigation phases.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
@@ -69,7 +72,11 @@ impl TryFrom<Wire> for MotionGoal {
         let valid_goal = match (&wire.goal, wire.version) {
             (Goal::Semantic(goal), 2) => !goal.description.trim().is_empty() && goal.description.chars().count() <= 2048,
             (Goal::Scene(goal), 3) => !goal.target_id.trim().is_empty() && goal.target_id.chars().count() <= 128
-                && (goal.operation == SceneOperation::Navigate || (goal.style.is_none() && goal.pace.is_none()))
+                && (matches!(goal.operation, SceneOperation::Navigate | SceneOperation::Interact)
+                    || (goal.style.is_none() && goal.pace.is_none()))
+                && (goal.operation == SceneOperation::Interact) == goal.interaction.is_some()
+                && goal.interaction.as_ref().is_none_or(|i| (1..=64).contains(&i.len())
+                    && i.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 && goal.style.as_ref().is_none_or(|style| !style.trim().is_empty()
                     && style.chars().count() <= MAX_STYLE_CHARS && !style.chars().any(char::is_control)),
             _ => false,

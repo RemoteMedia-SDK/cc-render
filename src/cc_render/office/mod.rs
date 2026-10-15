@@ -3,8 +3,11 @@ pub(crate) mod avatar_geometry;
 /// Asset-bound, read-only geometry; this cannot authorize or produce motion.
 pub use avatar_geometry::AvatarGeometry;
 pub mod controller;
+pub mod coupling;
+pub mod declared;
 pub mod home;
 pub mod home_hud;
+pub mod interaction;
 mod locomotion;
 pub(crate) mod native_seat;
 pub mod metadata;
@@ -47,6 +50,11 @@ pub struct OfficeObject {
     pub seat_surface_part: Option<usize>,
     pub grasp: Option<[f32; 3]>,
     pub surface: Option<[f32; 3]>,
+    /// Declared interaction zones (object-local) and interactions; data only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<interaction::Zone>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interactions: Vec<interaction::Interaction>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OfficePart {
@@ -221,9 +229,37 @@ pub fn starter_objects() -> Vec<OfficeObject> {
         serde_json::from_str::<Vec<OfficeObject>>(include_str!("home.json"))
             .expect("bundled home is valid"),
     );
+    // Declared-interaction test props (openspec add-generic-object-interactions).
+    objects.extend(
+        serde_json::from_str::<Vec<OfficeObject>>(include_str!("interaction_props.json"))
+            .expect("bundled interaction props are valid"),
+    );
+    // Declared zones and interactions for bundled furniture, kept apart from its geometry.
+    let overlays: std::collections::BTreeMap<String, InteractionOverlay> =
+        serde_json::from_str(include_str!("interaction_overlays.json")).expect("bundled interaction overlays are valid");
+    for object in &mut objects {
+        if let Some(overlay) = overlays.get(&object.id) {
+            object.zones.extend(overlay.zones.iter().cloned());
+            object.interactions.extend(overlay.interactions.iter().cloned());
+        }
+    }
     objects
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InteractionOverlay {
+    #[serde(default)]
+    zones: Vec<interaction::Zone>,
+    #[serde(default)]
+    interactions: Vec<interaction::Interaction>,
+}
 pub fn validate_objects(objects: &[OfficeObject]) -> Result<(), String> {
+    let zone_of = |object: &str, zone: &str| objects.iter()
+        .any(|o| o.id == object && interaction::all_zones(o).iter().any(|z| z.id == zone));
+    for o in objects {
+        interaction::validate(&o.id, &o.zones, &o.interactions, &zone_of)?;
+    }
     let mut ids = std::collections::HashSet::new();
     for o in objects {
         if o.id.is_empty() || !ids.insert(&o.id) {

@@ -64,6 +64,9 @@ pub enum OfficeCommand {
     InstallNativeSeatGeometry { geometry: std::sync::Arc<super::avatar_geometry::AvatarGeometry> },
     #[serde(skip)]
     AuthorizeNativeSeat { session_id: String, generation_revision: u64, target_id: String },
+    /// Declared-interaction coupling from the scene lifecycle (renderer-owned).
+    #[serde(skip)]
+    Couple(super::interaction::CouplingCommand),
     NativeMotionRevision {
         generation_revision: u64,
     },
@@ -186,6 +189,9 @@ pub struct OfficeSnapshot {
     pub queued: Vec<ActionRequest>,
     pub motion: MotionRequest,
     pub occupied_hands: Vec<(Hand, String)>,
+    pub couplings: Vec<Coupling>,
+    pub support_object: Option<String>,
+    pub homes: std::collections::BTreeMap<String, [f32; 7]>,
 }
 #[derive(Clone, Debug)]
 struct Active {
@@ -258,6 +264,12 @@ pub struct OfficeController {
     /// Seat the native avatar was last measured on. Generated motion may step
     /// away from it (never deeper) until the pelvis clears its native reserve.
     pub leaving_seat: Option<String>,
+    /// Objects attached to hands by declared interactions (posed each frame).
+    pub couplings: Vec<Coupling>,
+    /// Object the avatar is authorized to stand on (support coupling).
+    pub support_object: Option<String>,
+    /// Authored (first observed) pose of every object: position + rotation xyzw.
+    pub homes: std::collections::BTreeMap<String, [f32; 7]>,
     pub standing_surface: Option<super::support::StandingSurface>,
     surface_recovery_at_ms: Option<u64>,
     pub seat_supported: bool,
@@ -312,6 +324,9 @@ impl Default for OfficeController {
             observed: Observation::default(),
             seated: None,
             leaving_seat: None,
+            couplings: Vec::new(),
+            support_object: None,
+            homes: home_poses(&starter_objects()),
             standing_surface: None,
             surface_recovery_at_ms: None,
             seat_supported: false,
@@ -359,6 +374,15 @@ fn action_heading(action: &Active, object: &super::OfficeObject) -> f32 {
     } else {
         object.yaw_deg.to_radians()
     }
+}
+
+/// Authored object poses, the targets of `@home/zone` references and plain releases.
+pub fn home_poses(objects: &[super::OfficeObject]) -> std::collections::BTreeMap<String, [f32; 7]> {
+    objects.iter().map(|o| {
+        let t = o.transform();
+        let (p, q) = (t.translation, t.rotation);
+        (o.id.clone(), [p.x, p.y, p.z, q.x, q.y, q.z, q.w])
+    }).collect()
 }
 
 fn hand_index(hand: Option<Hand>) -> usize {
@@ -489,6 +513,28 @@ fn placement_supported(surface: &OfficeObject, prop: &super::super::renderer::Pr
                 && local.z <= position[2] + half[2] - 0.02
         })
 }
+/// An object attached to one or more hands by a declared interaction. The
+/// renderer poses it from the anchor wrists each frame (see systems::apply_couplings).
+#[derive(Clone, Debug, Serialize)]
+pub struct Coupling {
+    pub object: String,
+    /// Hand, object-local grip point and grip hint; the first anchor is primary.
+    pub anchors: Vec<(Hand, [f32; 3], Option<super::interaction::Grip>)>,
+    /// Sliding attach: keep the object on this world height (support plane).
+    pub slide_height: Option<f32>,
+    /// Pending release: `Some(None)` returns home, `Some(Some(zone))` places onto it.
+    pub release: Option<Option<String>>,
+    #[serde(skip)]
+    pub latch: Option<CouplingLatch>,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct CouplingLatch {
+    pub object_rotation: Quat,
+    pub primary_rotation: Quat,
+    pub previous_primary: Quat,
+    pub object_height: f32,
+}
+
 impl OfficeController {
     fn event(&mut self, id: &str, status: Status, detail: impl Into<String>) {
         self.sequence += 1;
@@ -511,6 +557,7 @@ impl OfficeController {
                     self.native_seat = Some(super::native_seat::NativeSeatAdmission::new(geometry));
                 }
             }
+            OfficeCommand::Couple(command) => self.apply_coupling(command),
             OfficeCommand::AuthorizeNativeSeat { session_id, generation_revision, target_id } => {
                 let result = self.native_seat.as_mut().ok_or_else(|| "native seat calibration unavailable".to_string())
                     .and_then(|admission| admission.authorize(super::native_seat::SeatScope { session_id, generation_revision, target_id }));
@@ -2120,6 +2167,48 @@ impl OfficeController {
         }
     }
 
+    /// Remember each object's first observed (authored) pose as its home.
+    pub fn remember_homes(&mut self) {
+        for (id, pose) in home_poses(&self.objects) {
+            self.homes.entry(id).or_insert(pose);
+        }
+    }
+
+    fn apply_coupling(&mut self, command: super::interaction::CouplingCommand) {
+        use super::interaction::CouplingCommand as C;
+        match command {
+            C::Attach { object, anchors, slide_on } => {
+                if self.couplings.iter().any(|c| c.object == object
+                    || c.anchors.iter().any(|(h, ..)| anchors.iter().any(|(a, ..)| a == h))) {
+                    self.motion_error = Some(format!("cannot attach {object}: object or hand already coupled"));
+                    return;
+                }
+                let slide_height = slide_on.and_then(|reference| self.objects.iter().find(|o| o.id == object)
+                    .and_then(|owner| super::interaction::resolve_zone(owner, &reference, &self.objects, &self.homes))
+                    .map(|(zone, t)| (t * Vec3::from(zone.center.unwrap_or_default())).y));
+                self.couplings.push(Coupling { object, anchors, slide_height, release: None, latch: None });
+            }
+            C::Release { object, onto } => match self.couplings.iter_mut().find(|c| c.object == object) {
+                Some(coupling) => coupling.release = Some(onto),
+                None => self.motion_error = Some(format!("cannot release {object}: not coupled")),
+            },
+            C::SupportOn { object } => self.support_object = Some(object),
+            C::SupportOff { object } => {
+                if self.support_object.as_deref() == Some(object.as_str()) {
+                    self.support_object = None;
+                    // Stepping off: leave the support the same way as a seat.
+                    self.leaving_seat = Some(object);
+                }
+            }
+        }
+    }
+
+    /// Hands currently holding a coupled object, with the grip hint used.
+    pub fn coupled_hands(&self) -> Vec<(Hand, Option<super::interaction::Grip>)> {
+        self.couplings.iter().filter(|c| c.release.is_none())
+            .flat_map(|c| c.anchors.iter().map(|(h, _, g)| (*h, *g))).collect()
+    }
+
     pub(crate) fn record_native_pose(&mut self, pose: &super::super::renderer::SkeletalPose) {
         self.observed.native_seat = self.native_seat_candidate.clone();
         if let Some(evidence) = &self.native_seat_candidate {
@@ -2159,7 +2248,9 @@ impl OfficeController {
             .objects
             .iter()
             .filter(|o| validated_seat != Some(o.id.as_str()) && self.seat_transition() != Some(o.id.as_str())
-                && push.is_none_or(|plan| plan.id != o.id))
+                && push.is_none_or(|plan| plan.id != o.id)
+                && !(reserve == NATIVE_ROOT_RESERVE_M && self.support_object.as_deref() == Some(o.id.as_str()))
+                && !self.couplings.iter().any(|c| c.object == o.id))
             .collect();
         // Generated motion standing up from the seat it was measured on (a bed it sat
         // on, say) may move away from that seat but never deeper into it. Any other
@@ -2181,6 +2272,7 @@ impl OfficeController {
                 .objects
                 .iter()
                 .filter(|o| !self.held.iter().any(|(_, id)| id == &o.id)
+                    && !self.couplings.iter().any(|c| c.object == o.id)
                     && !self.active.iter().any(|a| a.push.as_ref().is_some_and(|p| p.id == o.id)))
                 .cloned()
                 .collect::<Vec<_>>(),
@@ -2255,6 +2347,9 @@ impl OfficeController {
             active: self.active.iter().map(|a| a.request.clone()).collect(),
             queued: self.pending.iter().cloned().collect(),
             motion: self.motion.clone(),
+            couplings: self.couplings.clone(),
+            support_object: self.support_object.clone(),
+            homes: self.homes.clone(),
         }
     }
 }

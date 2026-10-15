@@ -392,14 +392,17 @@ pub(crate) fn grasp_fingers(
         }
         let rest = *rests.entry(entity).or_insert(transform.rotation);
         let held = office.held.iter().any(|(h, _)| *h == hand);
-        let curl = if held {
-            if name.as_str().contains("Thumb") {
-                0.35
-            } else {
-                0.8
-            }
-        } else {
-            0.
+        // Declared couplings choose the grip pose from the zone's grip hint.
+        let coupled = office.coupled_hands().into_iter().find(|(h, _)| *h == hand).map(|(_, g)| g);
+        let thumb = name.as_str().contains("Thumb");
+        let index = name.as_str().contains("Index");
+        use super::interaction::Grip;
+        let curl = match coupled {
+            Some(Some(Grip::PalmTop)) => if thumb { 0.1 } else { 0.25 },
+            Some(Some(Grip::Pinch)) => if thumb { 0.5 } else if index { 0.7 } else { 0.15 },
+            Some(_) => if thumb { 0.45 } else { 1.0 }, // power grip around a handle
+            None if held => if thumb { 0.35 } else { 0.8 },
+            None => 0.,
         };
         transform.rotation = rest
             * Quat::from_rotation_z(if hand == crate::cc_render::renderer::Hand::Left {
