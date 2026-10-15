@@ -367,7 +367,7 @@ mod tests {
         let declared = |id: &str| objects.iter().find(|o| o.id == id).unwrap().interactions.iter()
             .map(|i| i.id.clone()).collect::<Vec<_>>();
         assert_eq!(declared("broom"), ["pick_up", "hold", "put_back"]);
-        assert_eq!(declared("plate"), ["place_on_table", "place_in_sink"]);
+        assert_eq!(declared("plate"), ["pick_up", "place_on_table", "place_in_sink"]);
         assert_eq!(declared("toilet"), ["stand_up"]);
         assert!(declared("shelf").is_empty());
     }

@@ -1741,7 +1741,7 @@ mod realtime_speech_tests {
         let signature: String = hmac_sha256::HMAC::mac(payload.as_bytes(), [9;32]).iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(envelope["signature"], signature);
         assert!(renderer.commands.lock().iter().any(|c| matches!(c,
-            OfficeCommand::NativeSceneHandoff { generation_revision:2, history_pts_ms:4000 })));
+            OfficeCommand::NativeSceneHandoff { generation_revision:2, history_pts_ms:3800 })));
         assert!(!renderer.commands.lock().iter().any(|c| matches!(c,
             OfficeCommand::NativeMotionRevision { generation_revision:2 })));
         drop(outputs);

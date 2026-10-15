@@ -11,6 +11,9 @@ impl Phase {
         match self { Self::Arrive => "arrive", Self::Occupy => "occupy", Self::Contact => "contact", Self::Holding => "holding", Self::Settle => "settle", Self::Declared => "declared" }
     }
 }
+/// Navigation completes inside the approach region once the pelvis is slower than this.
+pub(crate) const ARRIVAL_SPEED_M_S: f32 = 0.6;
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum Update { None, PhaseChanged, Completed, Failed(String) }
 
@@ -165,17 +168,19 @@ impl SceneLifecycle {
         let position = observation.pelvis;
         let stable = match self.phase {
             Phase::Arrive | Phase::Occupy => {
+                // Arrival completes the goal while she is still easing in, so the next
+                // step can follow without a separate stand-still revision.
                 let region = object.approach_position();
                 let inside = ((position[0]-region[0]).powi(2)+(position[2]-region[2]).powi(2)).sqrt() <= 0.25;
-                if self.phase == Phase::Arrive && inside {
-                    self.pending_phase = Some(Phase::Occupy);
-                    self.awaiting_revision = true;
-                    return Update::PhaseChanged;
-                }
-                inside && self.previous.is_some_and(|(old, p)| {
+                let easing = self.previous.is_some_and(|(old, p)| {
                     let distance = ((position[0]-p[0]).powi(2)+(position[2]-p[2]).powi(2)).sqrt();
-                    distance * 1000. / (pts-old) as f32 <= 0.04
-                })
+                    distance * 1000. / (pts-old) as f32 <= ARRIVAL_SPEED_M_S
+                });
+                if inside && easing {
+                    self.complete = true;
+                    return Update::Completed;
+                }
+                false
             }
             Phase::Contact | Phase::Settle if outcome.operation == SceneOperation::Sit => {
                 let contact = seat_contact(&self.goal, observation);
@@ -196,9 +201,9 @@ impl SceneLifecycle {
                 let held = office.occupied_hands.iter().any(|(hand, id)|
                     *hand == crate::cc_render::Hand::Right && id == &outcome.target_id);
                 if self.phase == Phase::Contact && held {
-                    self.pending_phase = Some(Phase::Holding);
-                    self.awaiting_revision = true;
-                    return Update::PhaseChanged;
+                    // The physical grip is the outcome; holding on is checked from here on.
+                    self.complete = true;
+                    return Update::Completed;
                 }
                 if self.phase == Phase::Contact && self.pursuit_started.is_some_and(|at| pts.saturating_sub(at) >= 2200) {
                     return Update::Failed("requested contact grip was not acquired".into());
@@ -385,38 +390,34 @@ mod tests {
         assert_eq!(task.observe(&scene), Update::None);
         scene.avatar.displayed_pts_ms = 50;
         scene.occupied_hands = vec![(crate::cc_render::Hand::Right, target)];
-        assert_eq!(task.observe(&scene), Update::PhaseChanged);
-        assert_eq!(task.phase, Phase::Contact); // Keep old generation policy until handoff.
-        assert_eq!(task.pending_phase, Some(Phase::Holding));
-        value["generation_revision"] = 2.into();
-        task.bind_generation(serde_json::from_value(value).unwrap()).unwrap();
-        scene.avatar.native_stream.as_mut().unwrap().generation_revision = 2;
+        // The grip is the outcome: no separate holding revision before the next step.
+        assert_eq!(task.observe(&scene), Update::Completed);
+        assert!(task.complete && task.pending_phase.is_none());
+        scene.avatar.displayed_pts_ms = 100;
         scene.occupied_hands.clear();
         assert_eq!(task.observe(&scene), Update::Failed("requested physical grip lost".into()));
-        assert!(!task.complete);
     }
 
     #[test]
-    fn completion_requires_new_displayed_revision_and_sustained_observations() {
+    fn navigation_completes_on_displayed_arrival_while_easing_in() {
         let mut scene = OfficeController::default().snapshot();
         scene.avatar.ready = true; scene.avatar.position_valid = true;
-        scene.avatar.pelvis = scene.objects.iter().find(|o| o.id == "chair").unwrap().approach_position();
+        let arrival = scene.objects.iter().find(|o| o.id == "chair").unwrap().approach_position();
+        scene.avatar.pelvis = [arrival[0], arrival[1], arrival[2] + 0.6];
         let mut task = SceneLifecycle::new(goal(1), &scene).unwrap();
         assert_eq!(task.observe(&scene), Update::None); // No displayed native evidence.
         scene.avatar.native_stream = Some(StreamIdentity {session_id:"test".into(),
             generation_revision:1,skeleton_id:"smpl22".into(),root_mode:"world".into()});
-        assert_eq!(task.observe(&scene), Update::PhaseChanged);
-        scene.avatar.displayed_pts_ms = 1000;
-        assert_eq!(task.observe(&scene), Update::None); // Not a timer-driven phase.
-        task.bind_generation(goal(2)).unwrap();
-        assert_eq!(task.observe(&scene), Update::None); // Old pose still displayed.
-        scene.avatar.native_stream.as_mut().unwrap().generation_revision = 2;
-        for pts in [1000, 1100, 1200, 1300] {
-            scene.avatar.displayed_pts_ms = pts;
-            assert_eq!(task.observe(&scene), Update::None);
-        }
-        scene.avatar.displayed_pts_ms = 1400;
+        assert_eq!(task.observe(&scene), Update::None); // Outside the approach region.
+        // Striding through the region at 1.2 m/s does not count as arriving.
+        scene.avatar.pelvis = [arrival[0], arrival[1], arrival[2] + 0.12];
+        scene.avatar.displayed_pts_ms = 400;
+        assert_eq!(task.observe(&scene), Update::None);
+        // Easing in (0.4 m/s) inside the region completes, with no stand-still revision.
+        scene.avatar.pelvis = [arrival[0], arrival[1], arrival[2] + 0.04];
+        scene.avatar.displayed_pts_ms = 600;
         assert_eq!(task.observe(&scene), Update::Completed);
+        assert!(task.complete && task.pending_phase.is_none());
     }
 
     #[test]
