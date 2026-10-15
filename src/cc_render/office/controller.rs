@@ -255,6 +255,9 @@ pub struct OfficeController {
     pub objects: Vec<OfficeObject>,
     pub observed: Observation,
     pub seated: Option<String>,
+    /// Seat the native avatar was last measured on. Generated motion may step
+    /// away from it (never deeper) until the pelvis clears its native reserve.
+    pub leaving_seat: Option<String>,
     pub standing_surface: Option<super::support::StandingSurface>,
     surface_recovery_at_ms: Option<u64>,
     pub seat_supported: bool,
@@ -308,6 +311,7 @@ impl Default for OfficeController {
             objects: starter_objects(),
             observed: Observation::default(),
             seated: None,
+            leaving_seat: None,
             standing_surface: None,
             surface_recovery_at_ms: None,
             seat_supported: false,
@@ -2118,6 +2122,14 @@ impl OfficeController {
 
     pub(crate) fn record_native_pose(&mut self, pose: &super::super::renderer::SkeletalPose) {
         self.observed.native_seat = self.native_seat_candidate.clone();
+        if let Some(evidence) = &self.native_seat_candidate {
+            self.leaving_seat = Some(evidence.target_id.clone());
+        } else if let Some(id) = self.leaving_seat.clone() {
+            let pelvis = Vec2::new(pose.root_pos[0], pose.root_pos[2]);
+            let clear = self.navigation_scene().objects.iter().find(|o| o.id == id)
+                .is_none_or(|o| o.footprint.distance(pelvis) >= NATIVE_ROOT_RESERVE_M);
+            if clear { self.leaving_seat = None; }
+        }
         self.native_previous_pose = Some(pose.clone());
     }
 
@@ -2143,14 +2155,25 @@ impl OfficeController {
             if separation < 0.22 || lateral > 0.65 { return false; }
         }
         let scene = self.navigation_scene();
-        let polygons: Vec<_> = scene
+        let checked: Vec<_> = scene
             .objects
             .iter()
             .filter(|o| validated_seat != Some(o.id.as_str()) && self.seat_transition() != Some(o.id.as_str())
                 && push.is_none_or(|plan| plan.id != o.id))
+            .collect();
+        // Generated motion standing up from the seat it was measured on (a bed it sat
+        // on, say) may move away from that seat but never deeper into it. Any other
+        // object, and planning, keep the strict visibility rule.
+        let leaving = |o: &&super::metadata::SceneObject| reserve == NATIVE_ROOT_RESERVE_M
+            && self.leaving_seat.as_deref() == Some(o.id.as_str()) && o.footprint.distance(start) < reserve;
+        let polygons: Vec<_> = checked
+            .iter()
+            .filter(|o| !leaving(o))
             .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve)))
             .collect();
-        super::pathfinder::visible(start, end, &polygons)
+        checked.iter().filter(|o| leaving(o))
+            .all(|o| o.footprint.distance(end) >= o.footprint.distance(start) - 1e-4)
+            && super::pathfinder::visible(start, end, &polygons)
     }
     pub fn navigation_scene(&self) -> super::metadata::SceneMetadata {
         scene_metadata(
@@ -3526,6 +3549,17 @@ mod tests {
         let chair = c.objects.iter().find(|o| o.id == "chair").unwrap().position;
         let proposed = Vec3::new(chair[0], 0.83, chair[2]);
         assert!(!c.permits_native_root(proposed));
+        // Starting inside the chair's native reserve, leaving is allowed only for the
+        // seat the avatar was measured on; never deeper; planning keeps the strict rule.
+        let saved = c.observed.pelvis;
+        c.observed.pelvis = [chair[0] + 0.45, 0.83, chair[2]];
+        assert!(!c.permits_native_root(Vec3::new(chair[0] + 0.52, 0.83, chair[2])), "only a measured seat");
+        c.leaving_seat = Some("chair".into());
+        assert!(c.permits_native_root(Vec3::new(chair[0] + 0.52, 0.83, chair[2])));
+        assert!(!c.permits_native_root(Vec3::new(chair[0] + 0.40, 0.83, chair[2])));
+        assert!(!c.permits_root(Vec3::new(chair[0] + 0.52, 0.83, chair[2])));
+        c.leaving_seat = None;
+        c.observed.pelvis = saved;
         assert!(c.resolve_root(proposed).is_none());
         assert!(c.resolve_root(Vec3::new(0.8, 0.83, -1.8)).is_none());
         let safe = Vec3::from(c.observed.pelvis);

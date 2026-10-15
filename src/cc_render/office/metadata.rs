@@ -80,6 +80,23 @@ impl Footprint {
 
     /// Inflated polygon in CCW order (XZ plane). Used by the visibility
     /// graph as obstacle vertices. Inflation = avatar_radius + small margin.
+    /// Ground distance from `p` to the footprint (0 inside), using the same
+    /// square-cornered geometry as `inflated_polygon` (L-inf for rectangles).
+    pub fn distance(&self, p: Vec2) -> f32 {
+        match self {
+            Footprint::Circle { center_xz, radius } => {
+                ((p - Vec2::new(center_xz[0], center_xz[1])).length() - radius).max(0.0)
+            }
+            Footprint::Rect { center_xz, size, yaw_deg } => {
+                let d = p - Vec2::new(center_xz[0], center_xz[1]);
+                let (sin, cos) = yaw_deg.to_radians().sin_cos();
+                // Inverse of inflated_polygon's local -> world rotation.
+                let local = Vec2::new(cos * d.x + sin * d.y, -sin * d.x + cos * d.y);
+                (local.x.abs() - size[0] / 2.0).max(local.y.abs() - size[1] / 2.0).max(0.0)
+            }
+        }
+    }
+
     pub fn inflated_polygon(&self, inflation: f32) -> Vec<Vec2> {
         match self {
             Footprint::Circle { center_xz, radius } => {
