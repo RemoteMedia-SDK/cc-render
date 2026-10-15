@@ -107,7 +107,8 @@ fn main() -> anyhow::Result<()> {
         "-c:v","libx264","-f","null","-"]).status()?;
     anyhow::ensure!(codec_check.success(), "explicit replay encoder preflight failed");
     std::env::set_var("CC_OFFICE","1");
-    std::env::set_var("CC_AVATAR_FOLLOW","1");
+    // Follow by default; an explicit CC_AVATAR_FOLLOW=0 keeps a fixed world camera.
+    if std::env::var_os("CC_AVATAR_FOLLOW").is_none() { std::env::set_var("CC_AVATAR_FOLLOW","1"); }
     let renderer=CcRenderer::spawn(RendererConfig {
         glb_path:args[1].clone().into(),arkit_map_path:args[2].clone().into(),
         width:512,height:512,fps:30,physics:Some(PhysicsConfig::default()),..Default::default()
