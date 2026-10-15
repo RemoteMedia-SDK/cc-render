@@ -204,22 +204,34 @@ fn furniture_push_force(plan: &PushForceIntent, center: Vec3, velocity: Vec3,
         * plan.intensity.clamp(0.2, 1.0)
 }
 
-/// A last-line CC5 FK guard, independent of the source-model gate. Source
-/// checks happen before playback; this also catches retarget/contact defects.
-fn extreme_body_deformation(pelvis: Vec3, neck: Vec3, head: Vec3, posture: &str) -> Option<String> {
+/// Torso (pelvis -> neck) tilt from world up beyond which the CC5 body is upside
+/// down. Generated ARDY motion reaches ~113 degrees in a deep forward fold (head
+/// 0.26 m below the pelvis, picking something off a low table); a retarget or
+/// calibration flip puts the torso near 180 degrees.
+const CC5_TORSO_UPSIDE_DOWN_DEG: f32 = 150.;
+
+/// A last-line CC5 FK guard against retarget and skinning defects, independent
+/// of the source-model gate. It rejects bodies that no real pose produces
+/// (non-finite, scattered, stretched, through the floor, upside down), not poses
+/// that are merely unusual: deep bends, folds, crouches and lying down all pass.
+/// It reads only the observed body, never the controller's posture label, which
+/// describes the requested action rather than the pose on screen.
+fn extreme_body_deformation(pelvis: Vec3, neck: Vec3, head: Vec3) -> Option<String> {
     if !pelvis.is_finite() || !neck.is_finite() || !head.is_finite() {
         return Some("extreme_deformation: non-finite CC5 body position".into());
     }
-    if matches!(posture, "standing" | "standing_on_surface" | "seated")
-        && (head.y - pelvis.y < 0.05 || neck.y - pelvis.y < 0.02)
-    {
-        return Some(format!("extreme_deformation: CC5 torso inverted (head {:.3} m, neck {:.3} m above pelvis)",
-            head.y - pelvis.y, neck.y - pelvis.y));
+    if neck.distance(pelvis) < 0.05 {
+        return Some("extreme_deformation: CC5 torso collapsed (neck at pelvis)".into());
+    }
+    let tilt = (neck - pelvis).angle_between(Vec3::Y).to_degrees();
+    if !tilt.is_finite() || tilt > CC5_TORSO_UPSIDE_DOWN_DEG {
+        return Some(format!(
+            "extreme_deformation: CC5 torso upside down ({tilt:.0} degrees from upright)"));
     }
     None
 }
 
-fn extreme_skeleton_deformation(joints: &[Vec3; 22], posture: &str) -> Option<String> {
+fn extreme_skeleton_deformation(joints: &[Vec3; 22]) -> Option<String> {
     let pelvis = joints[0];
     if joints.iter().any(|joint| !joint.is_finite()) {
         return Some("extreme_deformation: non-finite CC5 joint".into());
@@ -235,21 +247,20 @@ fn extreme_skeleton_deformation(joints: &[Vec3; 22], posture: &str) -> Option<St
     {
         return Some("extreme_deformation: CC5 limb penetrates floor".into());
     }
-    extreme_body_deformation(pelvis, joints[12], joints[15], posture)
+    extreme_body_deformation(pelvis, joints[12], joints[15])
 }
 
-fn extreme_head_rotation(neck_delta: Quat, head_delta: Quat, posture: &str) -> Option<String> {
+/// Head-on-neck rotation is anatomical, so it applies in every pose.
+fn extreme_head_rotation(neck_delta: Quat, head_delta: Quat) -> Option<String> {
     if !neck_delta.is_finite() || !head_delta.is_finite()
         || neck_delta.length_squared() < 0.5 || head_delta.length_squared() < 0.5
     {
         return Some("extreme_deformation: invalid CC5 head rotation".into());
     }
-    if matches!(posture, "standing" | "standing_on_surface" | "seated") {
-        let relative = (neck_delta.inverse() * head_delta).normalize();
-        let degrees = 2. * relative.w.abs().clamp(0., 1.).acos().to_degrees();
-        if degrees > 85. {
-            return Some(format!("extreme_deformation: CC5 head twisted {degrees:.1} degrees relative to neck"));
-        }
+    let relative = (neck_delta.inverse() * head_delta).normalize();
+    let degrees = 2. * relative.w.abs().clamp(0., 1.).acos().to_degrees();
+    if degrees > 85. {
+        return Some(format!("extreme_deformation: CC5 head twisted {degrees:.1} degrees relative to neck"));
     }
     None
 }
@@ -324,14 +335,14 @@ fn observe(
             entity.and_then(|e| globals.get(e).ok()).map(|gt| gt.translation())
         ).collect();
         let error = match joints.and_then(|j| j.try_into().ok()) {
-            Some(joints) => extreme_skeleton_deformation(&joints, &office.motion.posture)
+            Some(joints) => extreme_skeleton_deformation(&joints)
                 .or_else(|| extreme_bone_stretch(&joints, &bind.rest_bone_lengths))
                 .or_else(|| {
                     let neck = globals.get(bind.entities[12]?).ok()?.rotation()
                         * bind.calibrated_world[12].inverse();
                     let head = globals.get(bind.entities[15]?).ok()?.rotation()
                         * bind.calibrated_world[15].inverse();
-                    extreme_head_rotation(neck, head, &office.motion.posture)
+                    extreme_head_rotation(neck, head)
                 }),
             None => Some("extreme_deformation: missing CC5 joint".into()),
         };
@@ -450,16 +461,23 @@ mod heading_tests {
     use super::*;
 
     #[test]
-    fn cc5_extreme_body_pose_is_an_immediate_failure() {
-        let hips = Vec3::new(0., 0.6, 0.);
-        assert!(extreme_body_deformation(hips, Vec3::new(0.3, 0.55, 0.),
-            Vec3::new(0.5, 0.52, 0.), "standing").unwrap().contains("extreme_deformation"));
-        assert!(extreme_body_deformation(hips, Vec3::new(0., 1.15, 0.),
-            Vec3::new(0., 1.3, 0.), "standing").is_none());
-        assert!(extreme_body_deformation(hips, Vec3::new(0.3, 0.55, 0.),
-            Vec3::new(0.5, 0.52, 0.), "lying").is_none());
-        assert!(extreme_body_deformation(hips, Vec3::splat(f32::NAN),
-            Vec3::Y, "lying").is_some());
+    fn cc5_torso_check_rejects_upside_down_bodies_not_deep_bends() {
+        let hips = Vec3::new(0., 0.9, 0.);
+        let pose = |tilt_deg: f32| {
+            let dir = Vec3::new(tilt_deg.to_radians().sin(), tilt_deg.to_radians().cos(), 0.);
+            (hips + dir * 0.5, hips + dir * 0.7)
+        };
+        // Upright, a forward bend over a low table (head 3 cm above the pelvis,
+        // the frame that stopped the coffee-table pickup), a deep fold with the
+        // head 0.26 m below the pelvis, and lying flat are all real poses.
+        for tilt in [0., 82., 113., 90.] {
+            let (neck, head) = pose(tilt);
+            assert!(extreme_body_deformation(hips, neck, head).is_none(), "tilt {tilt}");
+        }
+        let (neck, head) = pose(170.);
+        assert!(extreme_body_deformation(hips, neck, head).unwrap().contains("upside down"));
+        assert!(extreme_body_deformation(hips, Vec3::splat(f32::NAN), Vec3::Y).is_some());
+        assert!(extreme_body_deformation(hips, hips, Vec3::Y).unwrap().contains("collapsed"));
     }
 
     #[test]
@@ -469,25 +487,23 @@ mod heading_tests {
         joints[15].y = 1.4;
         for index in [4, 5, 7, 8, 10, 11] { joints[index].y = 0.02; }
         joints[20].y = -0.08; // mild floor contact is not a failure
-        assert!(extreme_skeleton_deformation(&joints, "lying").is_none());
+        assert!(extreme_skeleton_deformation(&joints).is_none());
         joints[10].y = -0.25;
-        assert!(extreme_skeleton_deformation(&joints, "lying").unwrap().contains("penetrates floor"));
+        assert!(extreme_skeleton_deformation(&joints).unwrap().contains("penetrates floor"));
         joints[10].y = 0.02;
         joints[21].x = 3.;
-        assert!(extreme_skeleton_deformation(&joints, "standing").unwrap().contains("body envelope"));
+        assert!(extreme_skeleton_deformation(&joints).unwrap().contains("body envelope"));
         joints[21].x = f32::NAN;
-        assert!(extreme_skeleton_deformation(&joints, "standing").unwrap().contains("non-finite"));
+        assert!(extreme_skeleton_deformation(&joints).unwrap().contains("non-finite"));
     }
 
     #[test]
     fn cc5_head_twist_fails_without_waiting_for_torso_position_to_invert() {
         let normal = Quat::from_rotation_y(25_f32.to_radians());
-        assert!(extreme_head_rotation(Quat::IDENTITY, normal, "standing_on_surface").is_none());
+        assert!(extreme_head_rotation(Quat::IDENTITY, normal).is_none());
         let twisted = Quat::from_rotation_y(100_f32.to_radians());
-        assert!(extreme_head_rotation(Quat::IDENTITY, twisted, "standing_on_surface")
-            .unwrap().contains("head twisted"));
-        assert!(extreme_head_rotation(Quat::IDENTITY, twisted, "lying").is_none());
-        assert!(extreme_head_rotation(Quat::from_xyzw(0., 0., 0., 0.), normal, "standing").is_some());
+        assert!(extreme_head_rotation(Quat::IDENTITY, twisted).unwrap().contains("head twisted"));
+        assert!(extreme_head_rotation(Quat::from_xyzw(0., 0., 0., 0.), normal).is_some());
     }
 
     #[test]
