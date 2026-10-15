@@ -4,6 +4,7 @@ pub(super) mod assets;
 pub(super) mod camera;
 pub(super) mod capture;
 pub(super) mod gpu_select;
+mod hud;
 pub(super) mod joint_debug;
 pub(super) mod overrides;
 pub(super) mod pose;
@@ -287,6 +288,7 @@ pub(super) fn run(
     despawn_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<PropId>,
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
+    hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
 ) {
     let glb_path = match config.glb_path.canonicalize() {
         Ok(p) => p,
@@ -471,7 +473,9 @@ pub(super) fn run(
     .init_resource::<FaceBones>()
     .insert_resource(JointDebugConfig::from_env())
     .init_resource::<JointLabelsSpawned>()
-    .add_systems(Startup, (setup_scene, configure_gizmo_overlay))
+    .insert_resource(hud::HomeHudRx(hud_rx))
+    .add_systems(Startup, (setup_scene, configure_gizmo_overlay, hud::spawn_home_hud))
+    .add_systems(Update, hud::update_home_hud)
     .add_systems(
         Update,
         (

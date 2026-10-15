@@ -1,7 +1,7 @@
 //! `CcRenderNode` — streaming-pipeline wrapper around [`super::CcRenderer`].
 //!
 //! Consumes JSON envelopes (`kind = "blendshapes" | "skeletal_pose" |
-//! "barge_in" | "motion_goal"`) on its reactive input path and emits
+//! "barge_in" | "motion_goal" | "home_hud"`) on its reactive input path and emits
 //! `RuntimeData::Video` frames from `tick()` —
 //! `pacing_nature() = ClockedToOutboundMedia` with a wall fallback at
 //! `config.fps`. The Bevy thread free-runs and produces frames; the
@@ -480,6 +480,12 @@ impl CcRenderNode {
                     }
                     *slot = Some((signer, capability));
                 }
+                Ok(true)
+            }
+            Some("home_hud") => {
+                // Display-only producer state; never scheduling or motion input.
+                let hud = super::office::home_hud::parse(value).map_err(Error::Execution)?;
+                self.renderer.home_hud(hud);
                 Ok(true)
             }
             Some("motion_tick") => {
@@ -1524,8 +1530,12 @@ mod realtime_speech_tests {
         miss_capture: AtomicBool,
         office: parking_lot::Mutex<Option<super::super::office::controller::OfficeSnapshot>>,
         commands: parking_lot::Mutex<Vec<super::super::office::controller::OfficeCommand>>,
+        huds: parking_lot::Mutex<Vec<Option<super::super::office::home_hud::HomeHud>>>,
     }
     impl Renderer for MockRenderer {
+        fn home_hud(&self, hud: Option<super::super::office::home_hud::HomeHud>) {
+            self.huds.lock().push(hud);
+        }
         fn scene_state(&self) -> super::super::renderer::SceneState {
             super::super::renderer::SceneState { office: self.office.lock().clone(), ..Default::default() }
         }
@@ -1573,6 +1583,26 @@ mod realtime_speech_tests {
         assert!(node.scene_signer.lock().is_some());
         value["scene_sampler"]["server_instance"] = "2".repeat(32).into();
         assert!(node.accept_motion_control(&RuntimeData::Json(value)).is_err());
+    }
+
+    #[test]
+    fn home_hud_is_display_only_and_closed() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(CcRenderConfig::default(), renderer.clone());
+        let hud = super::super::office::home_hud::fixture();
+        assert!(node.accept_motion_control(&RuntimeData::Json(hud.clone())).unwrap());
+        assert!(node.accept_motion_control(&RuntimeData::Json(
+            serde_json::json!({"kind":"home_hud","version":1,"hud":null}))).unwrap());
+        let mut invalid = hud;
+        invalid["hud"]["goal"] = serde_json::json!({"operation":"sit","target_id":"chair"});
+        assert!(node.accept_motion_control(&RuntimeData::Json(invalid)).is_err());
+        let huds = renderer.huds.lock();
+        assert_eq!(huds.len(), 2);
+        assert!(huds[0].is_some() && huds[1].is_none());
+        // Overlay state never becomes a goal, lifecycle or office command.
+        assert!(node.motion_driver.lock().current_goal().is_none());
+        assert!(node.scene_task.lock().is_none() && node.scene_delivery.lock().pending.is_none());
+        assert!(renderer.commands.lock().is_empty());
     }
 
     fn node_with_pending_scene() -> (CcRenderNode, serde_json::Value) {

@@ -233,6 +233,30 @@ mod tests {
     }
 
     #[test]
+    fn home_seats_reference_a_supporting_slab_below_the_seat_anchor() {
+        let objects = starter_objects();
+        let seats: Vec<_> = objects.iter().filter(|o| o.seat.is_some()).collect();
+        for id in ["dining_chair", "living_sofa", "bed", "toilet"] {
+            assert!(seats.iter().any(|o| o.id == id), "{id} must be sittable");
+        }
+        for object in seats {
+            let part = object
+                .seat_surface_part
+                .and_then(|i| object.parts.get(i))
+                .unwrap_or_else(|| panic!("{} lacks a seat surface part", object.id));
+            // Same slab and inset rules as scene_context and native seat measurement.
+            assert!(!part.cylinder && part.half_extents[1] < part.half_extents[0].min(part.half_extents[2]));
+            assert!(part.half_extents[0] > 0.025 && part.half_extents[2] > 0.025);
+            let seat = object.seat.unwrap();
+            let top = part.position[1] + part.half_extents[1];
+            assert!((0.0..=0.30).contains(&(seat[1] - top)), "{} seat anchor height", object.id);
+            for axis in [0, 2] {
+                assert!((seat[axis] - part.position[axis]).abs() < part.half_extents[axis], "{} seat anchor footprint", object.id);
+            }
+        }
+    }
+
+    #[test]
     fn part_materials_are_optional_and_validated() {
         let mut objects = starter_objects();
         assert!(objects

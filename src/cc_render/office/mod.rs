@@ -4,6 +4,7 @@ pub(crate) mod avatar_geometry;
 pub use avatar_geometry::AvatarGeometry;
 pub mod controller;
 pub mod home;
+pub mod home_hud;
 mod locomotion;
 pub(crate) mod native_seat;
 pub mod metadata;

@@ -176,6 +176,8 @@ pub trait Renderer: Send + Sync {
         0
     }
     fn office_command(&self, _cmd: super::office::controller::OfficeCommand) {}
+    /// Display-only overlay state; `None` hides the panel.
+    fn home_hud(&self, _hud: Option<super::office::home_hud::HomeHud>) {}
     fn spawn_prop(&self, _cmd: PropCmd) {}
     fn despawn_prop(&self, _id: PropId) {}
     fn grab(&self, _cmd: GrabCmd) {}
@@ -213,6 +215,7 @@ pub struct CcRenderer {
     despawn_cmd_tx: tokio::sync::mpsc::UnboundedSender<PropId>,
     grab_cmd_tx: tokio::sync::mpsc::UnboundedSender<GrabOrRelease>,
     scene_state_rx: tokio::sync::watch::Receiver<SceneState>,
+    hud_tx: watch::Sender<Option<super::office::home_hud::HomeHud>>,
 }
 
 impl Renderer for CcRenderer {
@@ -247,6 +250,9 @@ impl Renderer for CcRenderer {
     }
     fn despawn_prop(&self, id: PropId) {
         let _ = self.despawn_cmd_tx.send(id);
+    }
+    fn home_hud(&self, hud: Option<super::office::home_hud::HomeHud>) {
+        Self::home_hud(self, hud);
     }
     fn grab(&self, cmd: GrabCmd) {
         let _ = self.grab_cmd_tx.send(GrabOrRelease::Grab(cmd));
@@ -304,6 +310,7 @@ impl CcRenderer {
         let (grab_cmd_tx, grab_cmd_rx) = tokio::sync::mpsc::unbounded_channel::<GrabOrRelease>();
         let (scene_state_tx, scene_state_rx) =
             tokio::sync::watch::channel::<SceneState>(SceneState::default());
+        let (hud_tx, hud_rx) = watch::channel(None);
 
         let cfg = Arc::clone(&config);
         let join = thread::Builder::new()
@@ -321,6 +328,7 @@ impl CcRenderer {
                     despawn_cmd_rx,
                     grab_cmd_rx,
                     scene_state_tx,
+                    hud_rx,
                 );
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
@@ -337,7 +345,13 @@ impl CcRenderer {
             despawn_cmd_tx,
             grab_cmd_tx,
             scene_state_rx,
+            hud_tx,
         })
+    }
+
+    /// Replace the display-only home overlay (latest wins); `None` hides it.
+    pub fn home_hud(&self, hud: Option<super::office::home_hud::HomeHud>) {
+        let _ = self.hud_tx.send(hud);
     }
 
     /// Has the Bevy app finished spawning the GLB scene, captured
@@ -614,6 +628,7 @@ fn run_bevy_app(
     despawn_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<PropId>,
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
+    hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
 ) {
     super::bevy_app::run(
         config,
@@ -626,5 +641,6 @@ fn run_bevy_app(
         despawn_cmd_rx,
         grab_cmd_rx,
         scene_state_tx,
+        hud_rx,
     );
 }
