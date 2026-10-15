@@ -94,6 +94,17 @@ fn hand_transform(bind: &CC5BindRotations, globals: &Query<&GlobalTransform>, ha
         .and_then(|e| globals.get(e).ok()).map(|g| g.compute_transform())
 }
 
+/// Where on a placement zone (zone-local) an object set down from `local` comes to rest:
+/// the nearest point on the zone's surface that keeps an object of footprint radius
+/// `radius` inside its edges (the centre line when the zone is smaller than that).
+pub fn placement_point(zone: &super::interaction::Zone, local: Vec3, radius: f32) -> Vec3 {
+    let center = Vec3::from(zone.center.unwrap_or_default());
+    let half = Vec3::from(zone.half_extents.unwrap_or([0.; 3]));
+    let room = |h: f32| (h - radius).max(0.);
+    Vec3::new(local.x.clamp(center.x - room(half.x), center.x + room(half.x)), center.y,
+              local.z.clamp(center.z - room(half.z), center.z + room(half.z)))
+}
+
 /// Lowest object-local y of the object's solids (its resting surface).
 fn lowest_local_y(object: &super::OfficeObject) -> f32 {
     if object.parts.is_empty() { return -object.half_extents[1]; }
@@ -126,7 +137,8 @@ pub(crate) fn apply_couplings(
                 None => homes.get(&coupling.object).map(|h| Transform::from_translation(Vec3::new(h[0], h[1], h[2]))
                     .with_rotation(Quat::from_xyzw(h[3], h[4], h[5], h[6]))),
                 Some(reference) => super::interaction::resolve_zone(object, &reference, &objects, &homes).map(|(zone, t)| {
-                    let surface = t * Vec3::from(zone.center.unwrap_or_default());
+                    let surface = t * placement_point(&zone, t.rotation.inverse() * (transform.translation - t.translation),
+                                                      object.half_extents[0].max(object.half_extents[2]));
                     let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
                     Transform::from_translation(surface - Vec3::Y * lowest_local_y(object) + Vec3::Y * 0.002)
                         .with_rotation(Quat::from_rotation_y(yaw))
@@ -152,8 +164,11 @@ pub(crate) fn apply_couplings(
         // Held objects do not pass through furniture or walls: when the hands would push
         // one through, it keeps its rotation and follows the primary hand, else it stops.
         // Only a deep penetration that cannot be avoided is an error.
+        // Pressed into a surface (a mug lowered onto the desk) it rides up onto it instead.
         let kept = Transform::from_translation(anchors[0].0 - previous.rotation * anchors[0].2).with_rotation(previous.rotation);
-        *transform = match [desired, kept].into_iter().find(|pose| held_hit(object, pose, &solids, HELD_CONTACT_M).is_none()) {
+        let lifted = (1..=HELD_LIFT_STEPS).map(|i| desired.with_translation(desired.translation + Vec3::Y * 0.01 * i as f32));
+        *transform = match std::iter::once(desired).chain(lifted).chain([kept])
+            .find(|pose| held_hit(object, pose, &solids, HELD_CONTACT_M).is_none()) {
             Some(pose) => pose,
             None => {
                 if let Some(owner) = held_hit(object, &previous, &solids, HELD_PENETRATION_M) {
@@ -181,6 +196,8 @@ pub(crate) fn apply_couplings(
 /// Contact a held object may not make (m into another solid), and the depth that is an error.
 pub const HELD_CONTACT_M: f32 = 0.005;
 pub const HELD_PENETRATION_M: f32 = 0.05;
+/// A held object pressed into a surface may ride up on it by up to this many centimetres.
+pub const HELD_LIFT_STEPS: u32 = 8;
 
 /// The other object a held object's solids pass more than `depth` into at `pose`.
 fn held_hit<'a>(object: &super::OfficeObject, pose: &Transform, solids: &'a [super::support::ColliderBox],
@@ -268,6 +285,24 @@ mod tests {
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
         assert!(held_hit(broom, &grazing, &solids, HELD_CONTACT_M).is_some());
         assert!(held_hit(broom, &grazing, &solids, HELD_PENETRATION_M).is_none(), "2 cm of contact is tolerated");
+        // A mug pressed 3.5 cm into the desk top is clear of it once raised by the lift allowance.
+        let mug = objects.iter().find(|o| o.id == "mug").unwrap();
+        let desk = super::super::support::boxes(&objects.iter().filter(|o| o.id == "desk").cloned().collect::<Vec<_>>());
+        let pressed = Transform::from_translation(Vec3::new(0.74, 0.80, -1.9));
+        assert_eq!(held_hit(mug, &pressed, &desk, HELD_CONTACT_M), Some("desk"));
+        let raised = pressed.with_translation(pressed.translation + Vec3::Y * 0.01 * HELD_LIFT_STEPS as f32);
+        assert!(held_hit(mug, &raised, &desk, HELD_CONTACT_M).is_none());
+    }
+
+    #[test]
+    fn set_down_lands_inside_the_placement_zone_not_where_the_hand_let_go() {
+        let zone: super::super::interaction::Zone = serde_json::from_value(serde_json::json!({
+            "id":"place_area","type":"patch","center":[0.35,0.42,0.0],"half_extents":[0.25,0.1,0.3]})).unwrap();
+        // Released 0.36 m off-centre towards the table edge (live run): pulled in to fit a 0.17 m plate.
+        let p = placement_point(&zone, Vec3::new(0.36, 0.53, -0.36), 0.17);
+        assert!(p.distance(Vec3::new(0.36, 0.42, -0.13)) < 1e-5, "{p:?}");
+        let q = placement_point(&zone, Vec3::new(0.0, 0.5, 0.0), 0.17);
+        assert!(q.distance(Vec3::new(0.27, 0.42, 0.0)) < 1e-5, "{q:?}");
     }
 
     #[test]

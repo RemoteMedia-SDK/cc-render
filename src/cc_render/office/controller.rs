@@ -2190,6 +2190,10 @@ impl OfficeController {
             }
             C::Release { object, onto } => match self.couplings.iter_mut().find(|c| c.object == object) {
                 Some(coupling) => coupling.release = Some(onto),
+                // A physically gripped object let go onto a zone: settle it there too.
+                None if onto.is_some() && self.objects.iter().any(|o| o.id == object) =>
+                    self.couplings.push(Coupling { object, anchors: Vec::new(), slide_height: None,
+                                                   release: Some(onto), latch: None }),
                 None => self.motion_error = Some(format!("cannot release {object}: not coupled")),
             },
             C::SupportOn { object } => self.support_object = Some(object),

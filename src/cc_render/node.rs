@@ -376,10 +376,10 @@ impl CcRenderNode {
         }
         let forward = |task: &mut super::office::scene_lifecycle::SceneLifecycle| for command in task.take_couplings() {
             // A physically gripped object is released by the grip itself; it settles under physics.
-            if let super::office::interaction::CouplingCommand::Release { object, .. } = &command {
+            if let super::office::interaction::CouplingCommand::Release { object, onto } = &command {
                 if let Some((hand, _)) = office.occupied_hands.iter().find(|(_, id)| id == object) {
                     self.renderer.release(*hand);
-                    continue;
+                    if onto.is_none() { continue; } // let go in place; otherwise also set it down on the zone
                 }
             }
             self.renderer.office_command(super::office::controller::OfficeCommand::Couple(command));
