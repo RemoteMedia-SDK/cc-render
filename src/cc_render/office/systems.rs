@@ -73,7 +73,8 @@ pub fn install(app: &mut App) {
         )
         .add_systems(
             PostUpdate,
-            super::coupling::apply_couplings.after(bevy::transform::TransformSystem::TransformPropagate),
+            // After `observe`: its physics sync still carries the pre-release pose this frame.
+            super::coupling::apply_couplings.after(bevy::transform::TransformSystem::TransformPropagate).after(observe),
         );
 }
 fn spawn_office(
