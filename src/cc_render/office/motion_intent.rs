@@ -36,11 +36,24 @@ struct SemanticGoal {
 #[serde(rename_all = "snake_case")]
 pub enum SceneOperation { Navigate, Grasp, Sit }
 
+/// Walking speed hint for planned navigation (0.6, 1.0 or 1.4 m/s).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pace { Slow, Normal, Brisk }
+
+/// Longest accepted caller `style` (plain-text manner of movement).
+pub const MAX_STYLE_CHARS: usize = 160;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SceneOutcome {
     pub operation: SceneOperation,
     pub target_id: String,
+    /// Optional manner of movement, used only as the prompt for navigation phases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pace: Option<Pace>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -55,7 +68,10 @@ impl TryFrom<Wire> for MotionGoal {
     fn try_from(wire: Wire) -> Result<Self, Self::Error> {
         let valid_goal = match (&wire.goal, wire.version) {
             (Goal::Semantic(goal), 2) => !goal.description.trim().is_empty() && goal.description.chars().count() <= 2048,
-            (Goal::Scene(goal), 3) => !goal.target_id.trim().is_empty() && goal.target_id.chars().count() <= 128,
+            (Goal::Scene(goal), 3) => !goal.target_id.trim().is_empty() && goal.target_id.chars().count() <= 128
+                && (goal.operation == SceneOperation::Navigate || (goal.style.is_none() && goal.pace.is_none()))
+                && goal.style.as_ref().is_none_or(|style| !style.trim().is_empty()
+                    && style.chars().count() <= MAX_STYLE_CHARS && !style.chars().any(char::is_control)),
             _ => false,
         };
         if !valid_goal
@@ -271,6 +287,26 @@ mod tests {
         }
         value["goal"]["operation"] = "teleport".into();
         assert!(serde_json::from_value::<MotionGoal>(value).is_err());
+    }
+
+    #[test]
+    fn scene_v3_accepts_optional_style_and_pace_only_within_limits() {
+        let mut value = request();
+        value["version"] = 3.into();
+        value["goal"] = serde_json::json!({"operation":"navigate", "target_id":"bed",
+            "style":"A person waddles like a duck with bent knees and feet turned out.", "pace":"slow"});
+        let goal: MotionGoal = serde_json::from_value(value.clone()).unwrap();
+        let outcome = goal.scene_outcome().unwrap();
+        assert_eq!(outcome.pace, Some(Pace::Slow));
+        assert_eq!(serde_json::to_value(goal).unwrap(), value, "style and pace are forwarded unchanged");
+        for (key, bad) in [("style", serde_json::json!("")), ("style", serde_json::json!("x".repeat(MAX_STYLE_CHARS + 1))),
+                           ("style", serde_json::json!("walk\nnow")), ("pace", serde_json::json!("sprint")),
+                           ("style", serde_json::json!(3))] {
+            let mut invalid = value.clone(); invalid["goal"][key] = bad;
+            assert!(serde_json::from_value::<MotionGoal>(invalid).is_err(), "{key}");
+        }
+        let mut grasp = value.clone(); grasp["goal"]["operation"] = "grasp".into();
+        assert!(serde_json::from_value::<MotionGoal>(grasp).is_err(), "style/pace apply only to navigate");
     }
 
     #[test]
