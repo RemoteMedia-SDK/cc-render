@@ -11,6 +11,13 @@ use furniture_push::PushPlan;
 use surface_actions::SurfaceJump;
 
 const FLOOR_GRASP_MAX_Y: f32 = 0.20;
+/// Pelvis clearance from furniture footprints used for planning and goal checks.
+const PLANNING_ROOT_RESERVE_M: f32 = 0.35;
+/// Pelvis clearance that generated native motion must keep. Smaller than the
+/// planning reserve on purpose: the office is game-like, so a model root that
+/// drifts a few centimetres into the planning margin plays on. Only a pelvis
+/// close enough for the body to pass into furniture rejects the candidate.
+const NATIVE_ROOT_RESERVE_M: f32 = 0.20;
 const KNEEL_TRANSITION_MS: u64 = 2000;
 const KNEEL_SUPPORT_MS: u64 = 2400;
 const FLOOR_CONTACT_MS: u64 = 4000;
@@ -2088,7 +2095,7 @@ impl OfficeController {
     /// Accept an unchanged model root or reject the entire candidate frame.
     /// Validation must never manufacture a collision-safe or seat-supported pose.
     pub fn resolve_root(&mut self, proposed: Vec3) -> Option<Vec3> {
-        self.permits_root(proposed).then_some(proposed)
+        self.permits_native_root(proposed).then_some(proposed)
     }
 
     pub(crate) fn resolve_native_pose(&mut self, pose: &super::super::renderer::SkeletalPose) -> Option<Vec3> {
@@ -2100,7 +2107,9 @@ impl OfficeController {
             None => self.resolve_root(root),
             Some(Err(error)) => { self.motion_error = Some(error); None }
             Some(Ok(evidence)) => {
-                if !self.permits_root_with_validated_seat(root, Some(&evidence.target_id)) { return None; }
+                if !self.permits_root_with_validated_seat(root, Some(&evidence.target_id), NATIVE_ROOT_RESERVE_M) {
+                    return None;
+                }
                 self.native_seat_candidate = Some(evidence);
                 Some(root)
             }
@@ -2113,10 +2122,15 @@ impl OfficeController {
     }
 
     pub fn permits_root(&self, position: Vec3) -> bool {
-        self.permits_root_with_validated_seat(position, None)
+        self.permits_root_with_validated_seat(position, None, PLANNING_ROOT_RESERVE_M)
     }
 
-    fn permits_root_with_validated_seat(&self, position: Vec3, validated_seat: Option<&str>) -> bool {
+    /// Root check for generated native motion (see [`NATIVE_ROOT_RESERVE_M`]).
+    pub fn permits_native_root(&self, position: Vec3) -> bool {
+        self.permits_root_with_validated_seat(position, None, NATIVE_ROOT_RESERVE_M)
+    }
+
+    fn permits_root_with_validated_seat(&self, position: Vec3, validated_seat: Option<&str>, reserve: f32) -> bool {
         if let Some(permitted) = self.permits_surface_root(position) { return permitted; }
         let start = Vec2::new(self.observed.pelvis[0], self.observed.pelvis[2]);
         let end = Vec2::new(position.x, position.z);
@@ -2134,7 +2148,7 @@ impl OfficeController {
             .iter()
             .filter(|o| validated_seat != Some(o.id.as_str()) && self.seat_transition() != Some(o.id.as_str())
                 && push.is_none_or(|plan| plan.id != o.id))
-            .map(|o| (o.id.clone(), o.footprint.inflated_polygon(0.35)))
+            .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve)))
             .collect();
         super::pathfinder::visible(start, end, &polygons)
     }
@@ -3503,8 +3517,15 @@ mod tests {
     fn root_validation_rejects_collisions_instead_of_repairing_them() {
         let mut c = ready();
         c.observed.pelvis = [1.2504, 0.79, -1.81];
-        let proposed = Vec3::new(1.20, 0.83, -1.80);
-        assert!(!c.permits_root(proposed));
+        // A 5 cm drift into the chair's planning margin is minor: planning still
+        // refuses it, but generated native motion plays on unchanged.
+        let minor = Vec3::new(1.20, 0.83, -1.80);
+        assert!(!c.permits_root(minor));
+        assert_eq!(c.resolve_root(minor), Some(minor));
+        // Walking into the chair itself is still rejected, never repaired.
+        let chair = c.objects.iter().find(|o| o.id == "chair").unwrap().position;
+        let proposed = Vec3::new(chair[0], 0.83, chair[2]);
+        assert!(!c.permits_native_root(proposed));
         assert!(c.resolve_root(proposed).is_none());
         assert!(c.resolve_root(Vec3::new(0.8, 0.83, -1.8)).is_none());
         let safe = Vec3::from(c.observed.pelvis);

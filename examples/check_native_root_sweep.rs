@@ -62,7 +62,7 @@ fn check(value: &serde_json::Value) -> anyhow::Result<serde_json::Value> {
     for (index, segment) in input.roots.windows(2).enumerate() {
         // The source start is read-only validator context, not a written/rendered pose.
         controller.observed.pelvis = segment[0];
-        if !controller.permits_root(Vec3::from_array(segment[1])) {
+        if !controller.permits_native_root(Vec3::from_array(segment[1])) {
             return Ok(serde_json::json!({"permitted":false, "first_rejected_segment":index}));
         }
     }

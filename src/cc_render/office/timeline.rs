@@ -195,8 +195,9 @@ mod tests {
         let mut safe = pose(0, 1, 0.);
         safe.root_pos = office.observed.pelvis;
         let mut blocked = pose(100, 1, 0.);
-        blocked.root_pos = [1.20, 0.83, -1.80];
-        assert!(!office.permits_root(Vec3::from(blocked.root_pos)));
+        let chair = office.objects.iter().find(|o| o.id == "chair").unwrap().position;
+        blocked.root_pos = [chair[0], 0.83, chair[2]];
+        assert!(!office.permits_native_root(Vec3::from(blocked.root_pos)));
         let mut timeline = PoseTimeline::default();
         timeline.insert(safe.clone(), 0.);
         timeline.insert(blocked, 0.);
@@ -454,7 +455,7 @@ impl WorldMotion<'_, '_> {
                 }
             }
             office.future_root = self.timeline.future_root().filter(|(_, root)| {
-                office.future_handoffs && !office.blocked && office.permits_root(Vec3::from(*root))
+                office.future_handoffs && !office.blocked && office.permits_native_root(Vec3::from(*root))
             });
         }
         (pose, false)
