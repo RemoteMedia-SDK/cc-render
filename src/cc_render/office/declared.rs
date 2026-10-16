@@ -57,9 +57,16 @@ pub struct DeclaredState {
     #[serde(skip)] hold_inside: Vec<u32>,
     #[serde(skip)] stand_since: Option<u64>,
     #[serde(skip)] pub(crate) couplings: Vec<CouplingCommand>,
+    /// `hands: either` phases: whether the generated hands took the grips crossed from the
+    /// declaration (locked when a hand first nears a grip; `None` until then).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hands_swapped: Option<bool>,
 }
 
 pub enum Step { Running, PhaseDone, Done, Failed(String) }
+
+/// A `hands: either` phase locks its hand pairing once a hand is this close to a hand zone.
+pub const HAND_CHOICE_LOCK_M: f32 = 0.25;
 
 impl DeclaredState {
     pub fn new(object: &super::OfficeObject, interaction: &str) -> Result<Self, String> {
@@ -67,7 +74,8 @@ impl DeclaredState {
             .ok_or_else(|| format!("unsupported_capability: {} declares no interaction {interaction}", object.id))?;
         let mut state = Self { interaction: interaction.into(), index: 0, phase: String::new(), results: Vec::new(),
             progress: Vec::new(), declaration, object: object.id.clone(), started: None, last_pts: None,
-            touch_counts: Vec::new(), hold_inside: Vec::new(), stand_since: None, couplings: Vec::new() };
+            touch_counts: Vec::new(), hold_inside: Vec::new(), stand_since: None, couplings: Vec::new(),
+            hands_swapped: None };
         state.enter(0);
         Ok(state)
     }
@@ -84,6 +92,7 @@ impl DeclaredState {
         self.started = None;
         self.last_pts = None;
         self.stand_since = None;
+        self.hands_swapped = None;
         self.progress = phase.relations.iter().map(|r| RelationProgress {
             kind: match r { Relation::Touch { .. } => "touch", Relation::Hold { .. } => "hold",
                             Relation::Support { .. } => "support", Relation::Pair { .. } => "pair" },
@@ -109,13 +118,37 @@ impl DeclaredState {
         self.last_pts = Some(pts);
         let start = *self.started.get_or_insert(pts);
         let elapsed = pts.saturating_sub(start) as f32 / 1000.;
-        let phase = self.current().clone();
+        let declared = self.current().clone();
         let Some(owner) = office.objects.iter().find(|o| o.id == self.object) else {
             return self.fail(elapsed, "interaction object disappeared".into());
         };
         let joint = |j| observed_joint(j, &observation.wrists, &observation.feet, observation.pelvis);
         let distance = |zone: &str, at: Vec3| resolve_zone(owner, zone, &office.objects, &office.homes)
             .map(|(z, t)| zone_distance(&z, &t, at));
+        if declared.hands == Some(super::interaction::HandChoice::Either) && self.hands_swapped.is_none() {
+            // The hands' own approach picks the pairing: lock it, the nearer way round, once a
+            // hand is close to one of the phase's hand zones.
+            let hand_zones = |p: &InteractionPhase| -> Vec<(super::interaction::Joint, String)> {
+                p.relations.iter().flat_map(|r| match r {
+                    Relation::Touch { joints, zone, .. } | Relation::Hold { joints, zone, .. } =>
+                        joints.iter().filter(|j| hand(**j).is_some()).map(|j| (*j, zone.clone())).collect::<Vec<_>>(),
+                    _ => Vec::new(),
+                }).collect()
+            };
+            let cost = |p: &InteractionPhase| hand_zones(p).iter()
+                .filter_map(|(j, z)| distance(z, joint(*j))).sum::<f32>();
+            let nearest = hand_zones(&declared).iter().flat_map(|(_, z)| {
+                [super::interaction::Joint::LeftHand, super::interaction::Joint::RightHand]
+                    .map(|j| distance(z, joint(j)).unwrap_or(f32::INFINITY))
+            }).fold(f32::INFINITY, f32::min);
+            if nearest <= HAND_CHOICE_LOCK_M {
+                self.hands_swapped = Some(cost(&declared.swapped_hands()) < cost(&declared));
+                for counts in &mut self.touch_counts { counts.iter_mut().for_each(|c| *c = 0); }
+                self.hold_inside.iter_mut().for_each(|c| *c = 0);
+                for p in &mut self.progress { p.frames = 0; p.inside = 0; p.met = false; p.best_distance_m = None; }
+            }
+        }
+        let phase = if self.hands_swapped == Some(true) { declared.swapped_hands() } else { declared };
         for (i, relation) in phase.relations.iter().enumerate() {
             let [t0, t1] = relation.window_s();
             if elapsed < t0 || self.progress[i].met { continue; }

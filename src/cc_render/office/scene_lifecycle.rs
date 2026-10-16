@@ -269,6 +269,39 @@ mod tests {
     }
 
     #[test]
+    fn the_hands_own_approach_picks_which_grip_each_takes() {
+        let mut scene = OfficeController::default().snapshot();
+        let mut task = SceneLifecycle::new(interact(1, "broom", "pick_up"), &scene).unwrap();
+        scene.avatar.pelvis = [-1.6, 0.9, 1.9];
+        scene.avatar.heading = 0.;
+        displayed(&mut scene, 1, 0);
+        task.observe(&scene);
+        displayed(&mut scene, 1, 700);
+        assert_eq!(task.observe(&scene), Update::PhaseChanged);
+        task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
+        assert_eq!(task.phase_name(), "reach");
+        // Her LEFT hand goes high and her right hand low: crossed from the declaration.
+        scene.avatar.wrists = [[-1.62, 1.15, 2.4], [-1.58, 0.75, 2.4]];
+        let mut update = Update::None;
+        for pts in [800, 850, 900] {
+            displayed(&mut scene, 2, pts);
+            update = task.observe(&scene);
+        }
+        assert_eq!(update, Update::PhaseChanged, "the crossed pairing is accepted, not failed");
+        assert_eq!(task.declared.as_ref().unwrap().hands_swapped, Some(true), "reported: the hands crossed the declaration");
+        match task.take_couplings().as_slice() {
+            [super::super::interaction::CouplingCommand::Attach { anchors, .. }] => {
+                // The upper grip went to the left hand, the lower to the right.
+                assert_eq!(anchors[0].0, crate::cc_render::Hand::Left);
+                assert!((anchors[0].1[1] - 0.49).abs() < 1e-3);
+                assert_eq!(anchors[1].0, crate::cc_render::Hand::Right);
+                assert!((anchors[1].1[1] - 0.09).abs() < 1e-3);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
     fn broom_pick_up_runs_declared_phases_on_observed_joints_and_attaches_both_hands() {
         let mut scene = OfficeController::default().snapshot();
         let mut task = SceneLifecycle::new(interact(1, "broom", "pick_up"), &scene).unwrap();

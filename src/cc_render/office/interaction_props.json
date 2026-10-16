@@ -134,7 +134,8 @@
      },
      {
       "id": "reach",
-      "prompt": "A person reaches out and grabs the broom handle with both hands.",
+      "prompt": "A person reaches out and grabs the broom handle with both hands, one hand high on the handle and the other lower.",
+      "hands": "either",
       "stand_at": {
        "zone": "approach"
       },
@@ -181,7 +182,7 @@
      },
      {
       "id": "lift",
-      "prompt": "A person lifts the broom and holds it upright in front of them with both hands.",
+      "prompt": "A person lifts the broom and holds it upright in front of them, one hand high on the handle and the other lower.",
       "relations": [
        {
         "kind": "pair",
@@ -208,7 +209,7 @@
     "phases": [
      {
       "id": "hold",
-      "prompt": "A person stands holding a broom upright with both hands.",
+      "prompt": "A person stands holding a broom upright, one hand high on the handle and the other lower.",
       "relations": [
        {
         "kind": "pair",
@@ -235,7 +236,7 @@
     "phases": [
      {
       "id": "approach",
-      "prompt": "A person carries a broom back to the wall, holding it with both hands.",
+      "prompt": "A person carries a broom back to the wall, one hand high on the handle and the other lower.",
       "stand_at": {
        "zone": "@home/approach"
       },
@@ -244,6 +245,7 @@
      {
       "id": "place",
       "prompt": "A person sets the broom back down against the wall and lets go.",
+      "hands": "either",
       "stand_at": {
        "zone": "@home/approach"
       },

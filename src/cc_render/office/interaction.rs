@@ -101,11 +101,19 @@ pub struct StandAt {
     pub facing_deg: Option<f32>,
 }
 
+/// A phase whose hand assignment is interchangeable: the generated motion's own hands pick
+/// which grip each takes (openspec add-conforming-hand-grasps).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HandChoice { Either }
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InteractionPhase {
     pub id: String,
     pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hands: Option<HandChoice>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stand_at: Option<StandAt>,
     #[serde(default)]
@@ -349,6 +357,32 @@ pub fn validate(object_id: &str, zones: &[Zone], interactions: &[Interaction],
         }
     }
     Ok(())
+}
+
+impl Joint {
+    /// The other hand (feet and pelvis are unchanged).
+    pub fn mirrored(self) -> Self {
+        match self { Self::LeftHand => Self::RightHand, Self::RightHand => Self::LeftHand, other => other }
+    }
+}
+
+impl InteractionPhase {
+    /// This phase with its left and right hands exchanged in every relation and anchor.
+    pub fn swapped_hands(&self) -> Self {
+        let mut phase = self.clone();
+        for relation in &mut phase.relations {
+            match relation {
+                Relation::Touch { joints, .. } | Relation::Hold { joints, .. } =>
+                    joints.iter_mut().for_each(|j| *j = j.mirrored()),
+                Relation::Pair { joints, .. } => joints.iter_mut().for_each(|j| *j = j.mirrored()),
+                Relation::Support { .. } => {}
+            }
+        }
+        if let Some(Transition::Attach { anchors, .. }) = &mut phase.transition {
+            anchors.iter_mut().for_each(|a| a.joint = a.joint.mirrored());
+        }
+        phase
+    }
 }
 
 /// Observed joint positions (world) for a relation joint.
