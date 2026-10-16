@@ -280,7 +280,12 @@ mod tests {
         assert_eq!(task.observe(&scene), Update::PhaseChanged);
         task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
         assert_eq!(task.phase_name(), "reach");
-        // Her LEFT hand goes high and her right hand low: crossed from the declaration.
+        // Her hands first come in the declared way round (right high), near but not on the grips...
+        scene.avatar.wrists = [[-1.45, 0.75, 2.2], [-1.75, 1.15, 2.2]];
+        displayed(&mut scene, 2, 750);
+        assert_eq!(task.observe(&scene), Update::None);
+        // ...then the LEFT hand takes the high grip and the right the low one: crossed from the
+        // declaration, as the motion service's corrections chose. That pairing is accepted.
         scene.avatar.wrists = [[-1.62, 1.15, 2.4], [-1.58, 0.75, 2.4]];
         let mut update = Update::None;
         for pts in [800, 850, 900] {

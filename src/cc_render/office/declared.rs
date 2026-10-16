@@ -57,16 +57,15 @@ pub struct DeclaredState {
     #[serde(skip)] hold_inside: Vec<u32>,
     #[serde(skip)] stand_since: Option<u64>,
     #[serde(skip)] pub(crate) couplings: Vec<CouplingCommand>,
-    /// `hands: either` phases: whether the generated hands took the grips crossed from the
-    /// declaration (locked when a hand first nears a grip; `None` until then).
+    /// `hands: either` phases: whether the hands took the grips crossed from the declaration
+    /// (both pairings are tracked; the first one satisfied is taken; `None` until then).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hands_swapped: Option<bool>,
+    /// The mirrored pairing's counters while both are being tracked.
+    #[serde(skip)] mirror: Option<(Vec<RelationProgress>, Vec<Vec<u32>>, Vec<u32>)>,
 }
 
 pub enum Step { Running, PhaseDone, Done, Failed(String) }
-
-/// A `hands: either` phase locks its hand pairing once a hand is this close to a hand zone.
-pub const HAND_CHOICE_LOCK_M: f32 = 0.25;
 
 impl DeclaredState {
     pub fn new(object: &super::OfficeObject, interaction: &str) -> Result<Self, String> {
@@ -75,7 +74,7 @@ impl DeclaredState {
         let mut state = Self { interaction: interaction.into(), index: 0, phase: String::new(), results: Vec::new(),
             progress: Vec::new(), declaration, object: object.id.clone(), started: None, last_pts: None,
             touch_counts: Vec::new(), hold_inside: Vec::new(), stand_since: None, couplings: Vec::new(),
-            hands_swapped: None };
+            hands_swapped: None, mirror: None };
         state.enter(0);
         Ok(state)
     }
@@ -93,6 +92,7 @@ impl DeclaredState {
         self.last_pts = None;
         self.stand_since = None;
         self.hands_swapped = None;
+        self.mirror = None;
         self.progress = phase.relations.iter().map(|r| RelationProgress {
             kind: match r { Relation::Touch { .. } => "touch", Relation::Hold { .. } => "hold",
                             Relation::Support { .. } => "support", Relation::Pair { .. } => "pair" },
@@ -125,87 +125,31 @@ impl DeclaredState {
         let joint = |j| observed_joint(j, &observation.wrists, &observation.feet, observation.pelvis);
         let distance = |zone: &str, at: Vec3| resolve_zone(owner, zone, &office.objects, &office.homes)
             .map(|(z, t)| zone_distance(&z, &t, at));
-        if declared.hands == Some(super::interaction::HandChoice::Either) && self.hands_swapped.is_none() {
-            // The hands' own approach picks the pairing: lock it, the nearer way round, once a
-            // hand is close to one of the phase's hand zones.
-            let hand_zones = |p: &InteractionPhase| -> Vec<(super::interaction::Joint, String)> {
-                p.relations.iter().flat_map(|r| match r {
-                    Relation::Touch { joints, zone, .. } | Relation::Hold { joints, zone, .. } =>
-                        joints.iter().filter(|j| hand(**j).is_some()).map(|j| (*j, zone.clone())).collect::<Vec<_>>(),
-                    _ => Vec::new(),
-                }).collect()
-            };
-            let cost = |p: &InteractionPhase| hand_zones(p).iter()
-                .filter_map(|(j, z)| distance(z, joint(*j))).sum::<f32>();
-            let nearest = hand_zones(&declared).iter().flat_map(|(_, z)| {
-                [super::interaction::Joint::LeftHand, super::interaction::Joint::RightHand]
-                    .map(|j| distance(z, joint(j)).unwrap_or(f32::INFINITY))
-            }).fold(f32::INFINITY, f32::min);
-            if nearest <= HAND_CHOICE_LOCK_M {
-                self.hands_swapped = Some(cost(&declared.swapped_hands()) < cost(&declared));
-                for counts in &mut self.touch_counts { counts.iter_mut().for_each(|c| *c = 0); }
-                self.hold_inside.iter_mut().for_each(|c| *c = 0);
-                for p in &mut self.progress { p.frames = 0; p.inside = 0; p.met = false; p.best_distance_m = None; }
+        // `hands: either`: both pairings are tracked; whichever the hands satisfy first is taken.
+        let either = declared.hands == Some(super::interaction::HandChoice::Either);
+        let mirrored = declared.swapped_hands();
+        let mut failure = Self::step_relations(&declared, elapsed, &joint, &distance,
+                                               &mut self.progress, &mut self.touch_counts, &mut self.hold_inside);
+        if either {
+            let (progress, touches, holds) = self.mirror.get_or_insert_with(|| (
+                self.progress.iter().map(|p| RelationProgress { kind: p.kind, zone: p.zone.clone(), ..Default::default() }).collect(),
+                self.touch_counts.iter().map(|c| vec![0; c.len()]).collect(), vec![0; self.hold_inside.len()]));
+            let mirrored_failure = Self::step_relations(&mirrored, elapsed, &joint, &distance, progress, touches, holds);
+            if !progress.is_empty() && progress.iter().all(|p| p.met) && !self.progress.iter().all(|p| p.met) {
+                // The mirrored pairing is the one the hands took.
+                let (progress, touches, holds) = self.mirror.take().unwrap();
+                (self.progress, self.touch_counts, self.hold_inside) = (progress, touches, holds);
+                self.hands_swapped = Some(true);
             }
+            failure = match (failure, mirrored_failure) { (Some(a), Some(_)) => Some(a), _ => None };
         }
-        let phase = if self.hands_swapped == Some(true) { declared.swapped_hands() } else { declared };
-        for (i, relation) in phase.relations.iter().enumerate() {
-            let [t0, t1] = relation.window_s();
-            if elapsed < t0 || self.progress[i].met { continue; }
-            let window_closed = elapsed > t1;
-            let progress = &mut self.progress[i];
-            if !window_closed { progress.frames += 1; }
-            match relation {
-                Relation::Touch { joints, zone, min_frames, tolerance_m, .. } => {
-                    if window_closed { continue; }
-                    for (k, j) in joints.iter().enumerate() {
-                        let Some(d) = distance(zone, joint(*j)) else { continue };
-                        progress.best_distance_m = Some(progress.best_distance_m.map_or(d, |b| b.min(d)));
-                        if d <= *tolerance_m { self.touch_counts[i][k] += 1; }
-                    }
-                    progress.inside = self.touch_counts[i].iter().copied().min().unwrap_or(0);
-                    progress.met = progress.inside >= *min_frames;
-                }
-                Relation::Hold { joints, require, zone, tolerance_m, .. } => {
-                    if !window_closed {
-                        let inside: Vec<bool> = joints.iter().map(|j| distance(zone, joint(*j)).is_some_and(|d| {
-                            progress.best_distance_m = Some(progress.best_distance_m.map_or(d, |b| b.min(d)));
-                            d <= *tolerance_m })).collect();
-                        let ok = match require { Require::All => inside.iter().all(|x| *x), Require::Any => inside.iter().any(|x| *x) };
-                        if ok { self.hold_inside[i] += 1; }
-                        progress.inside = self.hold_inside[i];
-                    } else {
-                        progress.met = progress.frames > 0 && progress.inside as f32 >= HOLD_SHARE * progress.frames as f32;
-                    }
-                }
-                Relation::Support { body, zone, tolerance_m, .. } => {
-                    if window_closed { continue; }
-                    let joints: &[super::interaction::Joint] = match body {
-                        super::interaction::Body::Feet => &[super::interaction::Joint::LeftFoot, super::interaction::Joint::RightFoot],
-                        super::interaction::Body::Pelvis => &[super::interaction::Joint::Hips],
-                    };
-                    // Ankles sit above the sole: a foot is supported within the zone's thickness band.
-                    let worst = joints.iter().filter_map(|j| distance(zone, joint(*j))).fold(0f32, f32::max);
-                    progress.best_distance_m = Some(progress.best_distance_m.map_or(worst, |b| b.min(worst)));
-                    progress.inside = if worst <= *tolerance_m { progress.inside + 1 } else { 0 };
-                    progress.met = progress.inside >= SUPPORT_FRAMES;
-                }
-                Relation::Pair { joints, distance_m: [lo, hi], .. } => {
-                    if !window_closed {
-                        let d = joint(joints[0]).distance(joint(joints[1]));
-                        progress.best_distance_m = Some(d);
-                        if (*lo..=*hi).contains(&d) { progress.inside += 1; }
-                    } else {
-                        progress.met = progress.frames > 0 && progress.inside as f32 >= PAIR_SHARE * progress.frames as f32;
-                    }
-                }
-            }
-            if window_closed && !self.progress[i].met {
-                let p = &self.progress[i];
-                return self.fail(elapsed, format!("{} relation on {} not met ({} of {} frames)",
-                    p.kind, if p.zone.is_empty() { "hands" } else { &p.zone }, p.inside, p.frames));
-            }
+        if let Some(detail) = failure {
+            return self.fail(elapsed, detail);
         }
+        if either && self.hands_swapped.is_none() && self.progress.iter().all(|p| p.met) {
+            self.hands_swapped = Some(false);
+        }
+        let phase = if self.hands_swapped == Some(true) { mirrored } else { declared };
         let done = if phase.relations.is_empty() {
             match &phase.stand_at {
                 Some(stand) => {
@@ -243,6 +187,71 @@ impl DeclaredState {
         }
         self.finish("passed", elapsed, None);
         if self.has_next() { Step::PhaseDone } else { Step::Done }
+    }
+
+    /// One displayed frame of `phase`'s relations into these counters; the failure detail
+    /// when a relation's window closed unmet.
+    fn step_relations(phase: &InteractionPhase, elapsed: f32, joint: &dyn Fn(super::interaction::Joint) -> Vec3,
+                      distance: &dyn Fn(&str, Vec3) -> Option<f32>, all: &mut [RelationProgress],
+                      touch_counts: &mut [Vec<u32>], hold_inside: &mut [u32]) -> Option<String> {
+        for (i, relation) in phase.relations.iter().enumerate() {
+            let [t0, t1] = relation.window_s();
+            if elapsed < t0 || all[i].met { continue; }
+            let window_closed = elapsed > t1;
+            let progress = &mut all[i];
+            if !window_closed { progress.frames += 1; }
+            match relation {
+                Relation::Touch { joints, zone, min_frames, tolerance_m, .. } => {
+                    if window_closed { continue; }
+                    for (k, j) in joints.iter().enumerate() {
+                        let Some(d) = distance(zone, joint(*j)) else { continue };
+                        progress.best_distance_m = Some(progress.best_distance_m.map_or(d, |b| b.min(d)));
+                        if d <= *tolerance_m { touch_counts[i][k] += 1; }
+                    }
+                    progress.inside = touch_counts[i].iter().copied().min().unwrap_or(0);
+                    progress.met = progress.inside >= *min_frames;
+                }
+                Relation::Hold { joints, require, zone, tolerance_m, .. } => {
+                    if !window_closed {
+                        let inside: Vec<bool> = joints.iter().map(|j| distance(zone, joint(*j)).is_some_and(|d| {
+                            progress.best_distance_m = Some(progress.best_distance_m.map_or(d, |b| b.min(d)));
+                            d <= *tolerance_m })).collect();
+                        let ok = match require { Require::All => inside.iter().all(|x| *x), Require::Any => inside.iter().any(|x| *x) };
+                        if ok { hold_inside[i] += 1; }
+                        progress.inside = hold_inside[i];
+                    } else {
+                        progress.met = progress.frames > 0 && progress.inside as f32 >= HOLD_SHARE * progress.frames as f32;
+                    }
+                }
+                Relation::Support { body, zone, tolerance_m, .. } => {
+                    if window_closed { continue; }
+                    let joints: &[super::interaction::Joint] = match body {
+                        super::interaction::Body::Feet => &[super::interaction::Joint::LeftFoot, super::interaction::Joint::RightFoot],
+                        super::interaction::Body::Pelvis => &[super::interaction::Joint::Hips],
+                    };
+                    // Ankles sit above the sole: a foot is supported within the zone's thickness band.
+                    let worst = joints.iter().filter_map(|j| distance(zone, joint(*j))).fold(0f32, f32::max);
+                    progress.best_distance_m = Some(progress.best_distance_m.map_or(worst, |b| b.min(worst)));
+                    progress.inside = if worst <= *tolerance_m { progress.inside + 1 } else { 0 };
+                    progress.met = progress.inside >= SUPPORT_FRAMES;
+                }
+                Relation::Pair { joints, distance_m: [lo, hi], .. } => {
+                    if !window_closed {
+                        let d = joint(joints[0]).distance(joint(joints[1]));
+                        progress.best_distance_m = Some(d);
+                        if (*lo..=*hi).contains(&d) { progress.inside += 1; }
+                    } else {
+                        progress.met = progress.frames > 0 && progress.inside as f32 >= PAIR_SHARE * progress.frames as f32;
+                    }
+                }
+            }
+            if window_closed && !all[i].met {
+                let p = &all[i];
+                return Some(format!("{} relation on {} not met ({} of {} frames)",
+                    p.kind, if p.zone.is_empty() { "hands" } else { &p.zone }, p.inside, p.frames));
+            }
+        }
+        None
     }
 
     fn fail(&mut self, elapsed: f32, detail: String) -> Step {
