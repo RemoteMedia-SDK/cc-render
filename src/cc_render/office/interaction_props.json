@@ -97,34 +97,6 @@
     }
    },
    {
-    "id": "grip_lower",
-    "type": "segment",
-    "a": [
-     0.0,
-     0.02,
-     0.0
-    ],
-    "b": [
-     0.0,
-     0.16,
-     0.0
-    ],
-    "radius": 0.08,
-    "grip": "power",
-    "palm": {
-     "LeftHand": [
-      -1.0,
-      0.0,
-      0.0
-     ],
-     "RightHand": [
-      1.0,
-      0.0,
-      0.0
-     ]
-    }
-   },
-   {
     "id": "head",
     "type": "working_point",
     "center": [
@@ -148,7 +120,7 @@
      },
      {
       "id": "reach",
-      "prompt": "A person reaches out and grips the broom handle with both hands, one hand above the other.",
+      "prompt": "A person reaches out and grabs the broom handle.",
       "hands": "either",
       "stand_at": {
        "zone": "approach"
@@ -166,19 +138,6 @@
         ],
         "min_frames": 3,
         "tolerance_m": 0.03
-       },
-       {
-        "kind": "touch",
-        "joints": [
-         "LeftHand"
-        ],
-        "zone": "grip_lower",
-        "window_s": [
-         0,
-         10
-        ],
-        "min_frames": 3,
-        "tolerance_m": 0.03
        }
       ],
       "transition": {
@@ -187,10 +146,6 @@
         {
          "joint": "RightHand",
          "zone": "grip_upper"
-        },
-        {
-         "joint": "LeftHand",
-         "zone": "grip_lower"
         }
        ]
       },
@@ -198,24 +153,7 @@
      },
      {
       "id": "lift",
-      "prompt": "A person lifts the broom and holds it upright in front of them with both hands, one above the other.",
-      "relations": [
-       {
-        "kind": "pair",
-        "joints": [
-         "LeftHand",
-         "RightHand"
-        ],
-        "distance_m": [
-         0.0,
-         0.8
-        ],
-        "window_s": [
-         0.5,
-         2.5
-        ]
-       }
-      ],
+      "prompt": "A person picks up the broom and holds it upright.",
       "timeout_s": 4
      }
     ]
@@ -225,24 +163,7 @@
     "phases": [
      {
       "id": "hold",
-      "prompt": "A person stands holding a broom upright with both hands, one above the other.",
-      "relations": [
-       {
-        "kind": "pair",
-        "joints": [
-         "LeftHand",
-         "RightHand"
-        ],
-        "distance_m": [
-         0.0,
-         0.8
-        ],
-        "window_s": [
-         0,
-         3
-        ]
-       }
-      ],
+      "prompt": "A person stands holding a broom upright.",
       "timeout_s": 5
      }
     ]
@@ -252,7 +173,7 @@
     "phases": [
      {
       "id": "approach",
-      "prompt": "A person carries a broom back to the wall, holding it with both hands, one above the other.",
+      "prompt": "A person carries a broom back to the wall.",
       "stand_at": {
        "zone": "@home/approach"
       },

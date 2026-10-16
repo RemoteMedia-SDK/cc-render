@@ -23,8 +23,6 @@ struct HeldObject {
     joint: &'static str,
     object: String,
     zone: String,
-    /// Object-local grip point the hand latched (two hands keep their spacing from these).
-    anchor: [f32; 3],
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -82,7 +80,7 @@ impl SceneSnapshot {
             c.anchors.iter().filter_map(move |(hand, point, grip)| {
                 let zone = super::hand::grip_zone(object?, *point, (*grip)?)?;
                 Some(HeldObject { joint: if *hand == crate::cc_render::Hand::Left { "LeftHand" } else { "RightHand" },
-                                  object: c.object.clone(), zone: zone.id, anchor: *point })
+                                  object: c.object.clone(), zone: zone.id })
             })
         }).collect();
         Ok(Self { version: 1, session_id: session_id.into(), scene_revision: revision,

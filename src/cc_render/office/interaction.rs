@@ -47,6 +47,10 @@ pub struct Zone {
     /// It turns with the object.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palm: Option<PalmSide>,
+    /// A `power` handle whose object must stay upright while carried (a mug's contents):
+    /// the motion service keeps the holding hand's wrap axis vertical.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub upright: bool,
 }
 
 /// A grip's palm direction: one for either hand, or one per hand (each wraps from its side).
@@ -190,6 +194,9 @@ impl Zone {
                 return bad("palm facing requires a power grip on a segment and a direction across it");
             }
         }
+        if self.upright && !(self.grip == Some(Grip::Power) && self.kind == ZoneKind::Segment) {
+            return bad("upright carry requires a power grip on a segment");
+        }
         Ok(())
     }
 
@@ -260,7 +267,7 @@ pub fn all_zones(object: &super::OfficeObject) -> Vec<Zone> {
     let mut zones = object.zones.clone();
     let mut add = |zone: Zone| if !zones.iter().any(|z| z.id == zone.id) { zones.push(zone) };
     let point = |id: &str, c: [f32; 3], r: f32| Zone { id: id.into(), kind: ZoneKind::Point, center: Some(c),
-        radius: Some(r), a: None, b: None, half_extents: None, grip: None, palm: None };
+        radius: Some(r), a: None, b: None, half_extents: None, grip: None, palm: None, upright: false };
     add(point("approach", object.local_keypoint("approach").map_or(object.approach, |t| t.translation.to_array()), 0.25));
     if let Some(c) = object.local_keypoint("grasp").map(|t| t.translation.to_array()).or(object.grasp) {
         add(point("grasp", c, 0.02));
@@ -268,7 +275,8 @@ pub fn all_zones(object: &super::OfficeObject) -> Vec<Zone> {
     if let Some(part) = object.seat_surface_part.and_then(|i| object.parts.get(i)) {
         add(Zone { id: "seat".into(), kind: ZoneKind::Support,
             center: Some([part.position[0], part.position[1] + part.half_extents[1], part.position[2]]),
-            radius: None, a: None, b: None, half_extents: Some([part.half_extents[0], 0.05, part.half_extents[2]]), grip: None, palm: None });
+            radius: None, a: None, b: None, half_extents: Some([part.half_extents[0], 0.05, part.half_extents[2]]), grip: None, palm: None,
+            upright: false });
     }
     zones
 }
@@ -434,6 +442,11 @@ mod tests {
     fn zone_geometry_measures_distance_in_the_object_frame() {
         let handle = zone(serde_json::json!({"id":"grip","type":"segment","a":[0.,0.4,0.],"b":[0.,1.2,0.],"radius":0.03,"grip":"power"}));
         handle.validate().unwrap();
+        // Only a power handle can be carried upright.
+        zone(serde_json::json!({"id":"h","type":"segment","a":[0.,0.,0.],"b":[0.,0.1,0.],"radius":0.03,"grip":"power",
+                                "upright":true})).validate().unwrap();
+        assert!(zone(serde_json::json!({"id":"t","type":"support","center":[0.,0.3,0.],"half_extents":[0.2,0.05,0.15],
+                                        "upright":true})).validate().is_err());
         assert_eq!(handle.distance_local(Vec3::new(0.02, 0.8, 0.)), 0.);
         assert!((handle.distance_local(Vec3::new(0.13, 0.8, 0.)) - 0.10).abs() < 1e-5);
         assert!((handle.distance_local(Vec3::new(0., 1.5, 0.)) - 0.27).abs() < 1e-5);
