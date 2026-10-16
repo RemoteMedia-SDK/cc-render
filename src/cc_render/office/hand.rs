@@ -639,21 +639,27 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_broom_is_grabbed_by_one_hand_from_its_own_side() {
+    fn the_broom_is_grabbed_with_both_hands_apart_from_their_own_sides() {
         let props: Vec<serde_json::Value> = serde_json::from_str(include_str!("interaction_props.json")).unwrap();
         let broom = props.iter().find(|p| p["id"] == "broom").unwrap();
         let grip = |id: &str| -> Zone {
             serde_json::from_value(broom["zones"].as_array().unwrap().iter().find(|z| z["id"] == id).unwrap().clone()).unwrap()
         };
-        let upper = grip("grip_upper");
-        // The grabbing hand wraps the stick from its own side, palm onto it: right from -X, left from +X.
-        assert_eq!(upper.palm, Some(super::super::interaction::PalmSide::PerHand { left: [-1., 0., 0.], right: [1., 0., 0.] }));
-        assert!(upper.validate().is_ok());
-        // Only the grab is constrained: the broom attaches to the grabbing hand alone and the
-        // phases after it declare no relations, so the motion plays out with it in hand.
+        let (upper, lower) = (grip("grip_upper"), grip("grip_lower"));
+        // Nearest points of the two grips: hands never latch closer than the two-hand span
+        // (where the stick would switch to one-hand rigid).
+        let gap = Vec3::from(upper.a.unwrap()).distance(Vec3::from(lower.b.unwrap()));
+        assert!(gap >= 0.26, "grips {gap} m apart");
+        for zone in [&upper, &lower] {
+            // Each hand wraps the stick from its own side, palm onto it: right from -X, left from +X.
+            assert_eq!(zone.palm, Some(super::super::interaction::PalmSide::PerHand { left: [-1., 0., 0.], right: [1., 0., 0.] }));
+            assert!(zone.validate().is_ok());
+        }
+        // Only the grab is constrained: both hands latch, and the phases after it declare no
+        // relations, so the motion plays out with the broom in both hands.
         let interactions = broom["interactions"].as_array().unwrap();
         let reach = &interactions[0]["phases"][1];
-        assert_eq!(reach["transition"]["anchors"].as_array().unwrap().len(), 1);
+        assert_eq!(reach["transition"]["anchors"].as_array().unwrap().len(), 2);
         for (interaction, phase) in [(0, 2), (1, 0), (2, 0)] {
             assert!(interactions[interaction]["phases"][phase].get("relations").is_none());
         }

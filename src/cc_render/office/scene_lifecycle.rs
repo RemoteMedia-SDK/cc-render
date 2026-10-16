@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn whichever_hand_reaches_the_grip_grabs_the_broom() {
+    fn the_hands_own_approach_picks_which_grip_each_takes() {
         let mut scene = OfficeController::default().snapshot();
         let mut task = SceneLifecycle::new(interact(1, "broom", "pick_up"), &scene).unwrap();
         scene.avatar.pelvis = [-1.6, 0.9, 1.9];
@@ -280,32 +280,34 @@ mod tests {
         assert_eq!(task.observe(&scene), Update::PhaseChanged);
         task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
         assert_eq!(task.phase_name(), "reach");
-        // Her hands first come near but not onto the grip...
-        scene.avatar.wrists = [[-1.45, 0.75, 2.2], [-1.75, 1.0, 2.2]];
+        // Her hands first come in the declared way round (right high), near but not on the grips...
+        scene.avatar.wrists = [[-1.45, 0.75, 2.2], [-1.75, 1.15, 2.2]];
         displayed(&mut scene, 2, 750);
         assert_eq!(task.observe(&scene), Update::None);
-        // ...then the LEFT hand takes it, though the declaration names the right: accepted.
-        scene.avatar.wrists = [[-1.62, 1.15, 2.4], [-1.58, 0.75, 2.2]];
+        // ...then the LEFT hand takes the high grip and the right the low one: crossed from the
+        // declaration, as the motion service's corrections chose. That pairing is accepted.
+        scene.avatar.wrists = [[-1.62, 1.15, 2.4], [-1.58, 0.75, 2.4]];
         let mut update = Update::None;
         for pts in [800, 850, 900] {
             displayed(&mut scene, 2, pts);
             update = task.observe(&scene);
         }
-        assert_eq!(update, Update::PhaseChanged, "the other hand's grab is accepted, not failed");
-        assert_eq!(task.declared.as_ref().unwrap().hands_swapped, Some(true), "reported: the other hand grabbed");
+        assert_eq!(update, Update::PhaseChanged, "the crossed pairing is accepted, not failed");
+        assert_eq!(task.declared.as_ref().unwrap().hands_swapped, Some(true), "reported: the hands crossed the declaration");
         match task.take_couplings().as_slice() {
             [super::super::interaction::CouplingCommand::Attach { anchors, .. }] => {
-                // The broom hangs from the grabbing hand alone.
-                assert_eq!(anchors.len(), 1);
+                // The upper grip went to the left hand, the lower to the right.
                 assert_eq!(anchors[0].0, crate::cc_render::Hand::Left);
                 assert!((anchors[0].1[1] - 0.49).abs() < 1e-3);
+                assert_eq!(anchors[1].0, crate::cc_render::Hand::Right);
+                assert!((anchors[1].1[1] - 0.09).abs() < 1e-3);
             }
             other => panic!("{other:?}"),
         }
     }
 
     #[test]
-    fn broom_pick_up_runs_declared_phases_on_observed_joints_and_attaches_the_grabbing_hand() {
+    fn broom_pick_up_runs_declared_phases_on_observed_joints_and_attaches_both_hands() {
         let mut scene = OfficeController::default().snapshot();
         let mut task = SceneLifecycle::new(interact(1, "broom", "pick_up"), &scene).unwrap();
         assert_eq!((task.phase_name(), task.caption(&scene).as_str()),
@@ -324,13 +326,13 @@ mod tests {
         assert_eq!(task.observe(&scene), Update::PhaseChanged);
         task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
         assert_eq!(task.phase_name(), "reach");
-        // Reach: neither wrist on the grip yet.
-        scene.avatar.wrists = [[-1.0, 1.0, 2.0], [-1.6, 1.4, 2.0]];
+        // Reach: only the right wrist on the upper grip is not enough.
+        scene.avatar.wrists = [[-1.0, 1.0, 2.0], [-1.6, 1.15, 2.4]];
         for pts in [700, 750, 800, 850] {
             displayed(&mut scene, 2, pts);
             assert_eq!(task.observe(&scene), Update::None);
         }
-        scene.avatar.wrists[1] = [-1.6, 1.15, 2.4];
+        scene.avatar.wrists[0] = [-1.55, 0.75, 2.4];
         let mut update = Update::None;
         for pts in [900, 950, 1000] {
             displayed(&mut scene, 2, pts);
@@ -340,15 +342,15 @@ mod tests {
         match task.take_couplings().as_slice() {
             [super::super::interaction::CouplingCommand::Attach { object, anchors, .. }] => {
                 assert_eq!(object, "broom");
-                assert_eq!(anchors.len(), 1, "only the grabbing hand holds it");
                 assert_eq!(anchors[0].0, crate::cc_render::Hand::Right);
+                assert_eq!(anchors[1].0, crate::cc_render::Hand::Left);
                 assert!((anchors[0].1[1] - 0.49).abs() < 1e-3, "grip latched at the wrist height on the handle");
             }
             other => panic!("expected one attach, got {other:?}"),
         }
         task.bind_generation(interact(3, "broom", "pick_up")).unwrap();
         assert_eq!(task.phase_name(), "lift");
-        // Lift: no relation; the motion plays out with the broom in hand.
+        // Lift: no relation; the motion plays out with the broom in both hands.
         scene.avatar.wrists = [[-1.2, 0.9, 2.0], [-1.6, 1.15, 2.0]];
         let mut update = Update::None;
         for pts in (1100..=3700).step_by(100) {
