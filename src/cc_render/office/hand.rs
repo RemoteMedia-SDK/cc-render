@@ -296,9 +296,15 @@ pub fn seat(grip: Grip, zone: &Zone, object: &super::OfficeObject, palm: &PalmFr
             let held = latch.rotation * axis;
             let along = palm.lateral * if held.dot(palm.lateral) >= 0. { 1. } else { -1. };
             let mut rotation = Quat::from_rotation_arc(held, along) * latch.rotation;
-            // A body off the segment (a mug) goes beyond the knuckles, not into the palm.
+            // A declared palm direction sets the roll: the hand wraps from that side of the handle.
+            // Otherwise a body off the segment (a mug) goes beyond the knuckles, not into the palm.
             let body = -g - axis * (-g).dot(axis);
-            if body.length() > 0.02 {
+            if let Some(palm_local) = zone.palm.map(Vec3::from) {
+                let from = (rotation * (palm_local - axis * palm_local.dot(axis))).normalize();
+                let to = (palm.normal - along * palm.normal.dot(along)).normalize();
+                let angle = along.dot(from.cross(to)).atan2(from.dot(to));
+                rotation = Quat::from_axis_angle(along, angle) * rotation;
+            } else if body.length() > 0.02 {
                 let from = (rotation * body).normalize();
                 let to = (palm.forward - along * palm.forward.dot(along)).normalize();
                 let angle = along.dot(from.cross(to)).atan2(from.dot(to));
@@ -629,6 +635,40 @@ pub(crate) mod tests {
         for i in 1..5 {
             assert!(angles[i].iter().sum::<f32>() < 0.6, "{} curled under the plate: {:?}", FINGERS[i], angles[i]);
         }
+    }
+
+    #[test]
+    fn the_broom_grips_keep_two_hands_apart_and_face_inward() {
+        let props: Vec<serde_json::Value> = serde_json::from_str(include_str!("interaction_props.json")).unwrap();
+        let broom = props.iter().find(|p| p["id"] == "broom").unwrap();
+        let grip = |id: &str| -> Zone {
+            serde_json::from_value(broom["zones"].as_array().unwrap().iter().find(|z| z["id"] == id).unwrap().clone()).unwrap()
+        };
+        let (upper, lower) = (grip("grip_upper"), grip("grip_lower"));
+        // Nearest points of the two grips, less both reach tolerances: hands never latch closer
+        // than the 0.2 m two-hand span (where the stick would switch to one-hand rigid).
+        let gap = Vec3::from(upper.a.unwrap()).distance(Vec3::from(lower.b.unwrap()));
+        assert!(gap >= 0.26, "grips {gap} m apart");
+        for zone in [&upper, &lower] {
+            // Both palms face +Z onto the stick: she approaches from the broom's -Z side.
+            assert_eq!(zone.palm, Some([0., 0., 1.]));
+            assert!(zone.validate().is_ok());
+        }
+        let mut bad = upper.clone();
+        bad.grip = Some(Grip::PalmTop);
+        assert!(bad.validate().is_err(), "palm facing needs a power grip");
+        let mut along = upper.clone();
+        along.palm = Some([0., 1., 0.]);
+        assert!(along.validate().is_err(), "a palm direction along the handle says nothing");
+        // A one-hand seat turns the handle so the declared side faces the palm.
+        let rig = right_hand();
+        let stick: super::super::OfficeObject = serde_json::from_value(serde_json::json!({"id":"broom","label":"b",
+            "position":[0.,0.,0.],"half_extents":[0.1,0.66,0.15],"color":[1.,1.,1.],"dynamic":true,"approach":[0.,0.,-0.6],
+            "parts":broom["parts"].clone()})).unwrap();
+        let latch = Transform::from_translation(rig.palm.grip(0.015))
+            .with_rotation(Quat::from_rotation_arc(Vec3::Y, rig.palm.lateral) * Quat::from_rotation_y(2.5));
+        let seated = seat(Grip::Power, &upper, &stick, &rig.palm, &latch).unwrap();
+        assert!((seated.rotation * Vec3::Z).dot(rig.palm.normal) > 0.999);
     }
 
     #[test]

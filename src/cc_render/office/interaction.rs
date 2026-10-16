@@ -42,6 +42,10 @@ pub struct Zone {
     pub half_extents: Option<[f32; 3]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grip: Option<Grip>,
+    /// Object-local direction a `power` grip's palm faces at the grasp point (across the
+    /// handle): which side of the handle the hand wraps from. It turns with the object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palm: Option<[f32; 3]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,6 +149,13 @@ impl Zone {
         if self.grip.is_some() && !matches!(self.kind, ZoneKind::Segment | ZoneKind::Point | ZoneKind::Box | ZoneKind::Patch) {
             return bad("grip hint requires a graspable zone");
         }
+        if let Some(palm) = self.palm {
+            let (palm, axis) = (Vec3::from(palm), Vec3::from(self.b.unwrap_or_default()) - Vec3::from(self.a.unwrap_or_default()));
+            if !(self.grip == Some(Grip::Power) && self.kind == ZoneKind::Segment) || !palm.is_finite()
+                || palm.length() < 1e-3 || palm.normalize().cross(axis.normalize_or_zero()).length() < 0.5 {
+                return bad("palm facing requires a power grip on a segment and a direction across it");
+            }
+        }
         Ok(())
     }
 
@@ -215,7 +226,7 @@ pub fn all_zones(object: &super::OfficeObject) -> Vec<Zone> {
     let mut zones = object.zones.clone();
     let mut add = |zone: Zone| if !zones.iter().any(|z| z.id == zone.id) { zones.push(zone) };
     let point = |id: &str, c: [f32; 3], r: f32| Zone { id: id.into(), kind: ZoneKind::Point, center: Some(c),
-        radius: Some(r), a: None, b: None, half_extents: None, grip: None };
+        radius: Some(r), a: None, b: None, half_extents: None, grip: None, palm: None };
     add(point("approach", object.local_keypoint("approach").map_or(object.approach, |t| t.translation.to_array()), 0.25));
     if let Some(c) = object.local_keypoint("grasp").map(|t| t.translation.to_array()).or(object.grasp) {
         add(point("grasp", c, 0.02));
@@ -223,7 +234,7 @@ pub fn all_zones(object: &super::OfficeObject) -> Vec<Zone> {
     if let Some(part) = object.seat_surface_part.and_then(|i| object.parts.get(i)) {
         add(Zone { id: "seat".into(), kind: ZoneKind::Support,
             center: Some([part.position[0], part.position[1] + part.half_extents[1], part.position[2]]),
-            radius: None, a: None, b: None, half_extents: Some([part.half_extents[0], 0.05, part.half_extents[2]]), grip: None });
+            radius: None, a: None, b: None, half_extents: Some([part.half_extents[0], 0.05, part.half_extents[2]]), grip: None, palm: None });
     }
     zones
 }

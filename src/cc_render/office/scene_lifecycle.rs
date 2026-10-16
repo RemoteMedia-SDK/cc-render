@@ -289,12 +289,12 @@ mod tests {
         task.bind_generation(interact(2, "broom", "pick_up")).unwrap();
         assert_eq!(task.phase_name(), "reach");
         // Reach: only the right wrist on the upper grip is not enough.
-        scene.avatar.wrists = [[-1.0, 1.0, 2.0], [-1.6, 1.0, 2.4]];
+        scene.avatar.wrists = [[-1.0, 1.0, 2.0], [-1.6, 1.15, 2.4]];
         for pts in [700, 750, 800, 850] {
             displayed(&mut scene, 2, pts);
             assert_eq!(task.observe(&scene), Update::None);
         }
-        scene.avatar.wrists[0] = [-1.55, 0.65, 2.4];
+        scene.avatar.wrists[0] = [-1.55, 0.75, 2.4];
         let mut update = Update::None;
         for pts in [900, 950, 1000] {
             displayed(&mut scene, 2, pts);
@@ -306,7 +306,7 @@ mod tests {
                 assert_eq!(object, "broom");
                 assert_eq!(anchors[0].0, crate::cc_render::Hand::Right);
                 assert_eq!(anchors[1].0, crate::cc_render::Hand::Left);
-                assert!((anchors[0].1[1] - 0.34).abs() < 1e-3, "grip latched at the wrist height on the handle");
+                assert!((anchors[0].1[1] - 0.49).abs() < 1e-3, "grip latched at the wrist height on the handle");
             }
             other => panic!("expected one attach, got {other:?}"),
         }
