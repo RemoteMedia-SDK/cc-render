@@ -33,6 +33,8 @@ pub struct FingerRig {
     pub tip: Vec3,
     pub radius: f32,
     pub limits: [f32; 3],
+    /// Local axis (signed) whose positive rotation closes this finger.
+    pub axis: Vec3,
 }
 
 impl FingerRig {
@@ -40,7 +42,7 @@ impl FingerRig {
         // The last bone has no child: its tip continues 0.75 of its own length along the bone axis.
         let tip = Vec3::Y * rest[2].translation.length() * 0.75;
         Self { rest, tip, radius: if thumb { 0.009 } else { 0.008 },
-               limits: if thumb { THUMB_LIMITS } else { FLEX_LIMITS } }
+               limits: if thumb { THUMB_LIMITS } else { FLEX_LIMITS }, axis: Vec3::Z }
     }
 
     /// Joint positions (bones 1..3) and fingertip in hand space at the given flexion.
@@ -55,10 +57,11 @@ impl FingerRig {
         points
     }
 
-    /// Bone `k`'s local transform flexed by `angle`.
+    /// Bone `k`'s local transform closed by `angle` (`flex` scales the finger's axis: the
+    /// rig's closing sign while the axes are being read, 1 afterwards).
     pub fn posed(&self, flex: f32, k: usize, angle: f32) -> Transform {
         let mut local = self.rest[k];
-        local.rotation = local.rotation * Quat::from_rotation_z(flex * angle);
+        local.rotation = local.rotation * Quat::from_axis_angle(self.axis, flex * angle);
         local
     }
 }
@@ -112,7 +115,19 @@ impl HandRig {
         let normal = (moved * flex).normalize();
         let across = fingers[1].rest[0].translation - fingers[4].rest[0].translation;
         let lateral = reject(reject(across, forward), normal).normalize();
-        Self { fingers, flex, palm: PalmFrame { wrist: Vec3::ZERO, knuckles, forward, lateral, normal } }
+        let palm = PalmFrame { wrist: Vec3::ZERO, knuckles, forward, lateral, normal };
+        let mut fingers = fingers;
+        for finger in &mut fingers[1..] { finger.axis = Vec3::Z * flex; }
+        // The thumb's bones are oriented differently: it closes about whichever local axis
+        // brings its tip across the palm towards the grip (opposition), read from the rig.
+        let grip = palm.grip(0.015);
+        let thumb = &fingers[0];
+        let candidates = [Vec3::X, -Vec3::X, Vec3::Z, -Vec3::Z];
+        fingers[0].axis = *candidates.iter().min_by(|a, b| {
+            let reach = |axis: Vec3| FingerRig { axis, ..thumb.clone() }.chain(1., [0.6; 3])[3].distance(grip);
+            reach(**a).total_cmp(&reach(**b))
+        }).unwrap();
+        Self { fingers, flex: 1., palm }
     }
 }
 
@@ -522,6 +537,10 @@ pub(crate) mod tests {
         assert!(rig.fingers[0].rest[0].translation.dot(p.normal) > 0.);
         // The index knuckle is on the +lateral side of the pinky knuckle.
         assert!((rig.fingers[1].rest[0].translation - rig.fingers[4].rest[0].translation).dot(p.lateral) > 0.03);
+        // The thumb closes across the palm towards the grip (opposition), not away from it.
+        let thumb = &rig.fingers[0];
+        let (open, shut) = (thumb.chain(rig.flex, [0.; 3])[3], thumb.chain(rig.flex, [0.6; 3])[3]);
+        assert!(shut.distance(p.grip(0.015)) < open.distance(p.grip(0.015)) - 0.04, "thumb closes away: {open:?} -> {shut:?}");
         // Closing moves every fingertip towards the palm side.
         for finger in &rig.fingers[1..] {
             let (open, shut) = (finger.chain(rig.flex, [0.; 3])[3], finger.chain(rig.flex, [0.5; 3])[3]);
