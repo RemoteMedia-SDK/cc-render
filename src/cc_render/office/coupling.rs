@@ -41,11 +41,11 @@ fn fit_rotation(local: &[Vec3], world: &[Vec3]) -> Quat {
     Quat::from_xyzw(q[1], q[2], q[3], q[0]).normalize()
 }
 
-/// Grips closer than this on the object cannot steer it; the primary hand holds it rigidly.
+/// Hands closer together than this cannot steer the object; the primary hand holds it rigidly.
 pub const MIN_TWO_HAND_SPAN_M: f32 = 0.2;
 
 /// Object pose from anchor wrists `(position, rotation, object-local grip point)`,
-/// primary first. One anchor (or two grips closer than [`MIN_TWO_HAND_SPAN_M`]):
+/// primary first. One anchor (or two hands closer than [`MIN_TWO_HAND_SPAN_M`]):
 /// rigid to the primary hand from the latch. Two: the grip line follows the line
 /// between the hands as an unoriented axis (minimal swing from the current
 /// rotation, never flipping the object end over end) and roll follows the
@@ -55,7 +55,9 @@ pub const MIN_TWO_HAND_SPAN_M: f32 = 0.2;
 pub fn coupled_pose(anchors: &[(Vec3, Quat, Vec3)], current: Quat, latch: &mut CouplingLatch,
                     slide: bool) -> Transform {
     let (p0, q0, g0) = anchors[0];
-    let rigid = anchors.len() == 1 || (anchors.len() == 2 && anchors[1].2.distance(g0) < MIN_TWO_HAND_SPAN_M);
+    // The hands' own spacing decides: the secondary hand may slide along its grip, so grips
+    // close together on a stick still steer it when the hands are apart.
+    let rigid = anchors.len() == 1 || (anchors.len() == 2 && anchors[1].0.distance(p0) < MIN_TWO_HAND_SPAN_M);
     let mut rotation = match anchors.len() {
         _ if rigid => q0 * latch.primary_rotation.inverse() * latch.object_rotation,
         2 => {
@@ -293,13 +295,26 @@ mod tests {
     }
 
     #[test]
-    fn grips_too_close_together_hold_the_object_rigidly_in_the_primary_hand() {
+    fn hands_too_close_together_hold_the_object_rigidly_in_the_primary_hand() {
         let mut l = latch(Quat::IDENTITY, Quat::IDENTITY);
-        let (g0, g1) = (Vec3::new(0., 0.19, 0.), Vec3::new(0., 0.135, 0.));
-        let pose = coupled_pose(&[(Vec3::new(1., 1., 1.), Quat::IDENTITY, g0), (Vec3::new(1.5, 1., 1.), Quat::IDENTITY, g1)],
+        let (g0, g1) = (Vec3::new(0., 0.4, 0.), Vec3::new(0., 0., 0.));
+        let pose = coupled_pose(&[(Vec3::new(1., 1., 1.), Quat::IDENTITY, g0), (Vec3::new(1.05, 1., 1.), Quat::IDENTITY, g1)],
                                 Quat::IDENTITY, &mut l, false);
-        assert!(pose.rotation.dot(Quat::IDENTITY).abs() > 0.9999, "the far-off second wrist does not swing it");
+        assert!(pose.rotation.dot(Quat::IDENTITY).abs() > 0.9999, "two hands 5 cm apart do not swing it");
         assert!((pose * g0).distance(Vec3::new(1., 1., 1.)) < 1e-4);
+    }
+
+    #[test]
+    fn grips_close_on_a_stick_still_run_it_through_both_hands() {
+        let mut l = latch(Quat::IDENTITY, Quat::IDENTITY);
+        // Grips 5.5 cm apart on the stick's axis, hands 0.5 m apart: the stick runs through both.
+        let (g0, g1) = (Vec3::new(0., 0.19, 0.), Vec3::new(0., 0.135, 0.));
+        let (p0, p1) = (Vec3::new(1., 1., 1.), Vec3::new(1.5, 1., 1.));
+        let pose = coupled_pose(&[(p0, Quat::IDENTITY, g0), (p1, Quat::IDENTITY, g1)], Quat::IDENTITY, &mut l, false);
+        assert!((pose * g0).distance(p0) < 1e-4);
+        let axis = pose.rotation * Vec3::Y;
+        let off = (p1 - p0) - axis * (p1 - p0).dot(axis);
+        assert!(off.length() < 1e-4, "the second hand is {off:?} off the stick");
     }
 
     #[test]
