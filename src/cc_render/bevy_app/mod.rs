@@ -8,6 +8,7 @@ mod hud;
 pub(super) mod joint_debug;
 pub(super) mod overrides;
 pub(super) mod pose;
+pub(crate) mod twist;
 mod skinning;
 mod visibility;
 
@@ -470,6 +471,7 @@ pub(super) fn run(
     .init_resource::<ReadyMonitor>()
     .init_resource::<PoseAnimation>()
     .init_resource::<CC5BindRotations>()
+    .init_resource::<twist::ForearmRigs>()
     .init_resource::<FaceBones>()
     .insert_resource(JointDebugConfig::from_env())
     .init_resource::<JointLabelsSpawned>()
@@ -485,6 +487,7 @@ pub(super) fn run(
             skinning::normalize_avatar_skin_weights,
             start_pose_animation,
             capture_cc5_bind_rotations,
+            twist::capture_forearm_rigs.after(capture_cc5_bind_rotations),
             // Face-bone capture: cache jaw + eye bone entities + their
             // bind-pose rotations once. Cheap, gated on captured flag.
             capture_face_bones,
@@ -525,6 +528,14 @@ pub(super) fn run(
     // don't overwrite the head/jaw/eye chain. Reads PoseWatchRx
     // (latest-wins watch) so it sees the freshest A2F weights even
     // when Bevy renders faster than the gate paces them.
+    // Forearm twist bones share the hand's roll (the retarget never moves them), after the
+    // body pose and before propagation.
+    .add_systems(
+        PostUpdate,
+        twist::distribute_forearm_twist
+            .after(apply_skeletal_pose)
+            .before(TransformSystem::TransformPropagate),
+    )
     .add_systems(
         PostUpdate,
         apply_arkit_face_bones
