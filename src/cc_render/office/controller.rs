@@ -542,6 +542,10 @@ pub struct CouplingLatch {
     /// One-hand seated grip: (object in hand space at latch, seated pose, grip, blend
     /// progress 0..1). Progress only advances while seating is allowed.
     pub seat: Option<(Transform, Transform, super::interaction::Grip, f32)>,
+    /// Two hands: held rigidly by the primary hand (hands too close to steer), and the
+    /// frames left blending back to the line between the hands after that ends.
+    pub rigid: bool,
+    pub settle_frames: u8,
 }
 
 impl OfficeController {

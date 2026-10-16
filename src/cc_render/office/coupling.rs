@@ -41,8 +41,12 @@ fn fit_rotation(local: &[Vec3], world: &[Vec3]) -> Quat {
     Quat::from_xyzw(q[1], q[2], q[3], q[0]).normalize()
 }
 
-/// Hands closer together than this cannot steer the object; the primary hand holds it rigidly.
-pub const MIN_TWO_HAND_SPAN_M: f32 = 0.2;
+/// Hands closer together than this cannot steer the object; the primary hand holds it rigidly
+/// until they are [`TWO_HAND_RESUME_M`] apart again (no toggling around one threshold).
+pub const MIN_TWO_HAND_SPAN_M: f32 = 0.15;
+pub const TWO_HAND_RESUME_M: f32 = 0.25;
+/// Frames over which the object blends back to the hand line when the hands spread again.
+pub const TWO_HAND_SETTLE_FRAMES: u8 = 8;
 
 /// Object pose from anchor wrists `(position, rotation, object-local grip point)`,
 /// primary first. One anchor (or two hands closer than [`MIN_TWO_HAND_SPAN_M`]):
@@ -56,8 +60,19 @@ pub fn coupled_pose(anchors: &[(Vec3, Quat, Vec3)], current: Quat, latch: &mut C
                     slide: bool) -> Transform {
     let (p0, q0, g0) = anchors[0];
     // The hands' own spacing decides: the secondary hand may slide along its grip, so grips
-    // close together on a stick still steer it when the hands are apart.
-    let rigid = anchors.len() == 1 || (anchors.len() == 2 && anchors[1].0.distance(p0) < MIN_TWO_HAND_SPAN_M);
+    // close together on a stick still steer it when the hands are apart. Entering rigid keeps
+    // the object where it is relative to the primary hand; leaving it blends back to the line.
+    if anchors.len() == 2 {
+        let span = anchors[1].0.distance(p0);
+        if !latch.rigid && span < MIN_TWO_HAND_SPAN_M {
+            latch.rigid = true;
+            (latch.primary_rotation, latch.object_rotation) = (q0, current);
+        } else if latch.rigid && span > TWO_HAND_RESUME_M {
+            latch.rigid = false;
+            latch.settle_frames = TWO_HAND_SETTLE_FRAMES;
+        }
+    }
+    let rigid = anchors.len() == 1 || (anchors.len() == 2 && latch.rigid);
     let mut rotation = match anchors.len() {
         _ if rigid => q0 * latch.primary_rotation.inverse() * latch.object_rotation,
         2 => {
@@ -76,6 +91,10 @@ pub fn coupled_pose(anchors: &[(Vec3, Quat, Vec3)], current: Quat, latch: &mut C
                           &anchors.iter().map(|a| a.0).collect::<Vec<_>>()),
     };
     latch.previous_primary = q0;
+    if latch.settle_frames > 0 && !rigid {
+        latch.settle_frames -= 1;
+        rotation = current.slerp(rotation, 0.3).normalize();
+    }
     if slide {
         let (yaw, _, _) = rotation.to_euler(EulerRot::YXZ);
         rotation = Quat::from_rotation_y(yaw);
@@ -189,7 +208,8 @@ pub(crate) fn apply_couplings(
                 _ => None,
             };
             CouplingLatch { object_rotation: transform.rotation, primary_rotation: anchors[0].1,
-                            previous_primary: anchors[0].1, object_height: transform.translation.y, seat }
+                            previous_primary: anchors[0].1, object_height: transform.translation.y, seat,
+                            rigid: false, settle_frames: 0 }
         });
         let previous = *transform;
         if let Some((_, seat, grip, progress)) = latch.seat.as_mut() {
@@ -272,7 +292,7 @@ mod tests {
 
     fn latch(object: Quat, hand: Quat) -> CouplingLatch {
         CouplingLatch { object_rotation: object, primary_rotation: hand, previous_primary: hand, object_height: 0.1,
-                        seat: None }
+                        seat: None, rigid: false, settle_frames: 0 }
     }
 
     #[test]
@@ -303,6 +323,30 @@ mod tests {
                                 Quat::IDENTITY, &mut l, false);
         assert!(pose.rotation.dot(Quat::IDENTITY).abs() > 0.9999, "two hands 5 cm apart do not swing it");
         assert!((pose * g0).distance(Vec3::new(1., 1., 1.)) < 1e-4);
+    }
+
+    #[test]
+    fn hands_meeting_and_parting_never_snap_the_stick() {
+        let mut l = latch(Quat::IDENTITY, Quat::IDENTITY);
+        let (g0, g1) = (Vec3::new(0., 0.5, 0.), Vec3::new(0., 0.1, 0.));
+        let pose = |p1: Vec3, current: Quat, l: &mut CouplingLatch|
+            coupled_pose(&[(Vec3::new(0., 1.2, 0.), Quat::IDENTITY, g0), (p1, Quat::IDENTITY, g1)], current, l, false);
+        let mut r = pose(Vec3::new(0., 0.8, 0.), Quat::IDENTITY, &mut l).rotation;
+        // The lower hand slides up beside the upper one (12 cm apart, level): no snap to horizontal.
+        let close = pose(Vec3::new(0.12, 1.2, 0.), r, &mut l).rotation;
+        assert!(close.angle_between(r) < 1e-4, "entering rigid keeps the stick where it is");
+        assert!(l.rigid);
+        // 20 cm apart: still rigid (hysteresis), still no change.
+        r = close;
+        assert!(pose(Vec3::new(0., 1.0, 0.), r, &mut l).rotation.angle_between(r) < 1e-4);
+        // Apart again (40 cm below): it eases back to the hand line rather than jumping.
+        let first = pose(Vec3::new(0.1, 0.8, 0.), r, &mut l).rotation;
+        assert!(!l.rigid);
+        let target = Quat::from_rotation_arc(Vec3::Y, (Vec3::new(0., 1.2, 0.) - Vec3::new(0.1, 0.8, 0.)).normalize());
+        assert!(first.angle_between(r) < target.angle_between(r) * 0.5, "blended, not snapped");
+        let mut q = first;
+        for _ in 0..TWO_HAND_SETTLE_FRAMES { q = pose(Vec3::new(0.1, 0.8, 0.), q, &mut l).rotation; }
+        assert!((q * Vec3::Y).dot(target * Vec3::Y) > 0.99, "settled on the hand line");
     }
 
     #[test]
