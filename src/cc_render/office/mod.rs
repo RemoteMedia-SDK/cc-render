@@ -5,6 +5,7 @@ pub use avatar_geometry::AvatarGeometry;
 pub mod controller;
 pub mod coupling;
 pub mod declared;
+pub mod hand;
 pub mod home;
 pub mod home_hud;
 pub mod interaction;

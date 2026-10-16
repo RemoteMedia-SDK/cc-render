@@ -190,6 +190,9 @@ pub struct OfficeSnapshot {
     pub motion: MotionRequest,
     pub occupied_hands: Vec<(Hand, String)>,
     pub couplings: Vec<Coupling>,
+    /// What each holding hand is doing: seat error and finger closure (openspec add-conforming-hand-grasps).
+    #[serde(default)]
+    pub grasps: Vec<super::hand::GraspReport>,
     pub support_object: Option<String>,
     pub homes: std::collections::BTreeMap<String, [f32; 7]>,
 }
@@ -266,6 +269,8 @@ pub struct OfficeController {
     pub leaving_seat: Option<String>,
     /// Objects attached to hands by declared interactions (posed each frame).
     pub couplings: Vec<Coupling>,
+    /// What each holding hand is doing: seat error and finger closure (openspec add-conforming-hand-grasps).
+    pub grasps: Vec<super::hand::GraspReport>,
     /// Object the avatar is authorized to stand on (support coupling).
     pub support_object: Option<String>,
     /// Authored (first observed) pose of every object: position + rotation xyzw.
@@ -325,6 +330,7 @@ impl Default for OfficeController {
             seated: None,
             leaving_seat: None,
             couplings: Vec::new(),
+            grasps: Vec::new(),
             support_object: None,
             homes: home_poses(&starter_objects()),
             standing_surface: None,
@@ -533,6 +539,9 @@ pub struct CouplingLatch {
     pub primary_rotation: Quat,
     pub previous_primary: Quat,
     pub object_height: f32,
+    /// One-hand seated grip: (object in hand space at latch, seated pose, grip, blend
+    /// progress 0..1). Progress only advances while seating is allowed.
+    pub seat: Option<(Transform, Transform, super::interaction::Grip, f32)>,
 }
 
 impl OfficeController {
@@ -2352,6 +2361,7 @@ impl OfficeController {
             queued: self.pending.iter().cloned().collect(),
             motion: self.motion.clone(),
             couplings: self.couplings.clone(),
+            grasps: self.grasps.clone(),
             support_object: self.support_object.clone(),
             homes: self.homes.clone(),
         }

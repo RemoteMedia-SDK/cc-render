@@ -319,7 +319,7 @@
     "phases": [
      {
       "id": "pick_up",
-      "prompt": "A person reaches out and picks up the plate by its rim with the right hand.",
+      "prompt": "A person reaches out, picks up the plate and balances it on the palm of the right hand.",
       "stand_at": {
        "zone": "approach"
       },
@@ -329,7 +329,7 @@
         "joints": [
          "RightHand"
         ],
-        "zone": "grasp",
+        "zone": "underside",
         "window_s": [
          0,
          9
@@ -343,7 +343,7 @@
        "anchors": [
         {
          "joint": "RightHand",
-         "zone": "grasp"
+         "zone": "underside"
         }
        ]
       },
@@ -414,6 +414,23 @@
       }
      }
     ]
+   }
+  ],
+  "zones": [
+   {
+    "id": "underside",
+    "type": "patch",
+    "center": [
+     0.0,
+     -0.015,
+     0.0
+    ],
+    "half_extents": [
+     0.17,
+     0.08,
+     0.17
+    ],
+    "grip": "palm_top"
    }
   ]
  },
@@ -565,7 +582,7 @@
         "joints": [
          "RightHand"
         ],
-        "zone": "grasp",
+        "zone": "handle",
         "window_s": [
          0,
          9
@@ -579,7 +596,7 @@
        "anchors": [
         {
          "joint": "RightHand",
-         "zone": "grasp"
+         "zone": "handle"
         }
        ]
       },
@@ -595,7 +612,7 @@
          "RightHand"
         ],
         "require": "all",
-        "zone": "grasp",
+        "zone": "handle",
         "window_s": [
          0,
          2
@@ -606,6 +623,24 @@
       "timeout_s": 3
      }
     ]
+   }
+  ],
+  "zones": [
+   {
+    "id": "handle",
+    "type": "segment",
+    "a": [
+     0.082,
+     -0.03,
+     0.0
+    ],
+    "b": [
+     0.082,
+     0.03,
+     0.0
+    ],
+    "radius": 0.08,
+    "grip": "power"
    }
   ]
  },

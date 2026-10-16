@@ -105,12 +105,9 @@ pub fn placement_point(zone: &super::interaction::Zone, local: Vec3, radius: f32
               local.z.clamp(center.z - room(half.z), center.z + room(half.z)))
 }
 
-/// Lowest object-local y of the object's solids (its resting surface).
-fn lowest_local_y(object: &super::OfficeObject) -> f32 {
-    if object.parts.is_empty() { return -object.half_extents[1]; }
-    object.parts.iter().map(|p| p.position[1] - p.half_extents[1]).fold(f32::INFINITY, f32::min)
-}
+use super::hand::lowest_local_y;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_couplings(
     mut commands: Commands,
     mut office: ResMut<OfficeController>,
@@ -118,9 +115,15 @@ pub(crate) fn apply_couplings(
     globals: Query<&GlobalTransform>,
     registry: Res<PropRegistry>,
     mut props: Query<(&mut Transform, &mut Velocity), With<Prop>>,
+    rigs: Option<Res<super::hand::HandRigs>>,
+    mut held_in_hand: ResMut<super::hand::HeldInHand>,
+    time: Res<Time>,
 ) {
     office.remember_homes();
+    *held_in_hand = super::hand::HeldInHand::default();
     if office.couplings.is_empty() { return; }
+    let dt = time.delta_secs();
+    let palm = |hand: Hand| rigs.as_ref().and_then(|r| r.get(hand)).map(|c| c.rig.palm);
     let (objects, homes) = (office.objects.clone(), office.homes.clone());
     let held: Vec<String> = office.couplings.iter().map(|c| c.object.clone()).collect();
     let solids = super::support::boxes(&objects.iter().filter(|o| !held.contains(&o.id)).cloned().collect::<Vec<_>>());
@@ -152,15 +155,54 @@ pub(crate) fn apply_couplings(
             released.push(coupling.object.clone());
             continue;
         }
-        let anchors: Vec<(Vec3, Quat, Vec3)> = coupling.anchors.iter()
-            .filter_map(|(hand, grip, _)| hand_transform(&bind, &globals, *hand).map(|w| (w.translation, w.rotation, Vec3::from(*grip))))
-            .collect();
-        if anchors.len() != coupling.anchors.len() { continue; }
-        let latch = coupling.latch.get_or_insert(CouplingLatch {
-            object_rotation: transform.rotation, primary_rotation: anchors[0].1,
-            previous_primary: anchors[0].1, object_height: transform.translation.y });
+        let hands: Vec<Transform> = coupling.anchors.iter()
+            .filter_map(|(hand, ..)| hand_transform(&bind, &globals, *hand)).collect();
+        if hands.len() != coupling.anchors.len() { continue; }
+        let zones: Vec<Option<super::interaction::Zone>> = coupling.anchors.iter()
+            .map(|(_, point, grip)| grip.and_then(|g| super::hand::grip_zone(object, *point, g))).collect();
+        // Two or more hands hold a power grip at their palm grip points, not their wrists.
+        let anchors: Vec<(Vec3, Quat, Vec3)> = coupling.anchors.iter().zip(&hands).zip(&zones)
+            .map(|(((hand, point, grip), w), zone)| {
+                let at = match (coupling.anchors.len() > 1, grip, zone, palm(*hand)) {
+                    (true, Some(super::interaction::Grip::Power), Some(zone), Some(palm)) =>
+                        *w * palm.grip(super::hand::grip_radius(object, zone)),
+                    _ => w.translation,
+                };
+                // A power grip holds the handle's axis, not wherever the wrist latched inside the
+                // zone's reach tolerance.
+                let point = match (grip, zone) {
+                    (Some(super::interaction::Grip::Power), Some(z)) => z.axis_point(Vec3::from(*point)),
+                    _ => Vec3::from(*point),
+                };
+                (at, w.rotation, point)
+            }).collect();
+        let latch = coupling.latch.get_or_insert_with(|| {
+            // A one-hand grip with a hint seats the object in the palm (openspec add-conforming-hand-grasps).
+            let seat = match (coupling.anchors.as_slice(), zones.first(), palm(coupling.anchors[0].0)) {
+                ([(_, _, Some(grip))], Some(Some(zone)), Some(palm)) => {
+                    let latched = super::hand::in_hand(&hands[0], &*transform);
+                    super::hand::seat(*grip, zone, object, &palm, &latched).map(|seat| (latched, seat, *grip, 0.))
+                }
+                _ => None,
+            };
+            CouplingLatch { object_rotation: transform.rotation, primary_rotation: anchors[0].1,
+                            previous_primary: anchors[0].1, object_height: transform.translation.y, seat }
+        });
         let previous = *transform;
-        let desired = coupled_pose(&anchors, transform.rotation, latch, coupling.slide_height.is_some());
+        if let Some((_, seat, grip, progress)) = latch.seat.as_mut() {
+            // A plate goes onto the palm only once the palm faces up and the seated plate is clear
+            // of the counter; until then it stays as gripped.
+            let allowed = *grip != super::interaction::Grip::PalmTop
+                || (palm(coupling.anchors[0].0).is_some_and(|p| (hands[0].rotation * p.normal).y >= SEAT_PALM_UP_COS)
+                    && held_hit(object, &(hands[0] * *seat), &solids, HELD_CONTACT_M).is_none());
+            let step = dt / super::hand::SEAT_BLEND_S;
+            *progress = (*progress + if allowed { step } else { -step }).clamp(0., 1.);
+        }
+        let desired = match latch.seat {
+            Some((latched, seat, _, progress)) if coupling.slide_height.is_none() =>
+                hands[0] * super::hand::seat_blend(&latched, &seat, progress * super::hand::SEAT_BLEND_S),
+            _ => coupled_pose(&anchors, transform.rotation, latch, coupling.slide_height.is_some()),
+        };
         // Held objects do not pass through furniture or walls: when the hands would push
         // one through, it keeps its rotation and follows the primary hand, else it stops.
         // Only a deep penetration that cannot be avoided is an error.
@@ -179,6 +221,9 @@ pub(crate) fn apply_couplings(
         };
         *velocity = Velocity::zero();
         commands.entity(entity).insert(RigidBody::KinematicPositionBased);
+        for ((hand, ..), w) in coupling.anchors.iter().zip(&hands) {
+            held_in_hand.set(*hand, coupling.object.clone(), super::hand::in_hand(w, &*transform));
+        }
     }
     office.couplings.retain(|c| !released.contains(&c.object));
     // A released object is an obstacle again from this frame on: record where it was put, not
@@ -193,6 +238,8 @@ pub(crate) fn apply_couplings(
     if office.motion_error.is_none() && error.is_some() { office.motion_error = error; }
 }
 
+/// A `palm_top` object is seated only while the palm faces up within 60 degrees.
+pub const SEAT_PALM_UP_COS: f32 = 0.5;
 /// Contact a held object may not make (m into another solid), and the depth that is an error.
 pub const HELD_CONTACT_M: f32 = 0.005;
 pub const HELD_PENETRATION_M: f32 = 0.05;
@@ -221,7 +268,8 @@ mod tests {
     use super::*;
 
     fn latch(object: Quat, hand: Quat) -> CouplingLatch {
-        CouplingLatch { object_rotation: object, primary_rotation: hand, previous_primary: hand, object_height: 0.1 }
+        CouplingLatch { object_rotation: object, primary_rotation: hand, previous_primary: hand, object_height: 0.1,
+                        seat: None }
     }
 
     #[test]

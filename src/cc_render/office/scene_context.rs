@@ -12,6 +12,17 @@ pub struct SceneSnapshot {
     displayed_pts_ms: u64,
     floor_y: f32,
     objects: Vec<SceneObject>,
+    /// Objects held by declared couplings through a grip zone: what the hand must keep
+    /// doing with its palm (openspec add-conforming-hand-grasps). Absent when none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    held: Vec<HeldObject>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct HeldObject {
+    joint: &'static str,
+    object: String,
+    zone: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -64,8 +75,16 @@ impl SceneSnapshot {
             if !object.interactions.is_empty() { exported.home = office.homes.get(&object.id).copied(); }
             Ok::<_, String>(exported)
         }).collect::<Result<Vec<_>, _>>()?;
+        let held = office.couplings.iter().filter(|c| c.release.is_none()).flat_map(|c| {
+            let object = office.objects.iter().find(|o| o.id == c.object);
+            c.anchors.iter().filter_map(move |(hand, point, grip)| {
+                let zone = super::hand::grip_zone(object?, *point, (*grip)?)?;
+                Some(HeldObject { joint: if *hand == crate::cc_render::Hand::Left { "LeftHand" } else { "RightHand" },
+                                  object: c.object.clone(), zone: zone.id })
+            })
+        }).collect();
         Ok(Self { version: 1, session_id: session_id.into(), scene_revision: revision,
-            displayed_pts_ms: office.avatar.displayed_pts_ms, floor_y: 0., objects })
+            displayed_pts_ms: office.avatar.displayed_pts_ms, floor_y: 0., objects, held })
     }
 }
 

@@ -175,6 +175,19 @@ impl Zone {
 }
 
 impl Zone {
+    /// The point on a segment zone's axis nearest `p` (other zones: `p` itself).
+    pub fn axis_point(&self, p: Vec3) -> Vec3 {
+        match (self.kind, self.a, self.b) {
+            (ZoneKind::Segment, Some(a), Some(b)) => {
+                let (a, b) = (Vec3::from(a), Vec3::from(b));
+                let length = a.distance(b);
+                if length < 1e-6 { return a; }
+                a + (b - a) / length * (p - a).dot((b - a) / length).clamp(0., length)
+            }
+            _ => p,
+        }
+    }
+
     /// Nearest object-local point inside the zone (a grip latches here).
     pub fn nearest_local(&self, p: Vec3) -> Vec3 {
         let center = Vec3::from(self.center.unwrap_or_default());
