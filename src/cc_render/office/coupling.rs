@@ -183,7 +183,8 @@ pub(crate) fn apply_couplings(
             let seat = match (coupling.anchors.as_slice(), zones.first(), palm(coupling.anchors[0].0)) {
                 ([(_, _, Some(grip))], Some(Some(zone)), Some(palm)) => {
                     let latched = super::hand::in_hand(&hands[0], &*transform);
-                    super::hand::seat(*grip, zone, object, &palm, &latched).map(|seat| (latched, seat, *grip, 0.))
+                    super::hand::seat(*grip, zone, object, &palm, &latched, coupling.anchors[0].0)
+                        .map(|seat| (latched, seat, *grip, 0.))
                 }
                 _ => None,
             };

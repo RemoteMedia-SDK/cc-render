@@ -43,9 +43,33 @@ pub struct Zone {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grip: Option<Grip>,
     /// Object-local direction a `power` grip's palm faces at the grasp point (across the
-    /// handle): which side of the handle the hand wraps from. It turns with the object.
+    /// handle): which side of the handle the hand wraps from, for both hands or per hand.
+    /// It turns with the object.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub palm: Option<[f32; 3]>,
+    pub palm: Option<PalmSide>,
+}
+
+/// A grip's palm direction: one for either hand, or one per hand (each wraps from its side).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PalmSide {
+    Either([f32; 3]),
+    PerHand {
+        #[serde(rename = "LeftHand")] left: [f32; 3],
+        #[serde(rename = "RightHand")] right: [f32; 3],
+    },
+}
+
+impl PalmSide {
+    pub fn for_hand(&self, hand: crate::cc_render::Hand) -> [f32; 3] {
+        match *self {
+            Self::Either(v) => v,
+            Self::PerHand { left, right } => if hand == crate::cc_render::Hand::Left { left } else { right },
+        }
+    }
+    fn directions(&self) -> Vec<[f32; 3]> {
+        match *self { Self::Either(v) => vec![v], Self::PerHand { left, right } => vec![left, right] }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,10 +181,12 @@ impl Zone {
         if self.grip.is_some() && !matches!(self.kind, ZoneKind::Segment | ZoneKind::Point | ZoneKind::Box | ZoneKind::Patch) {
             return bad("grip hint requires a graspable zone");
         }
-        if let Some(palm) = self.palm {
-            let (palm, axis) = (Vec3::from(palm), Vec3::from(self.b.unwrap_or_default()) - Vec3::from(self.a.unwrap_or_default()));
-            if !(self.grip == Some(Grip::Power) && self.kind == ZoneKind::Segment) || !palm.is_finite()
-                || palm.length() < 1e-3 || palm.normalize().cross(axis.normalize_or_zero()).length() < 0.5 {
+        if let Some(side) = self.palm {
+            let axis = Vec3::from(self.b.unwrap_or_default()) - Vec3::from(self.a.unwrap_or_default());
+            let across = |palm: Vec3| palm.is_finite() && palm.length() >= 1e-3
+                && palm.normalize().cross(axis.normalize_or_zero()).length() >= 0.5;
+            if !(self.grip == Some(Grip::Power) && self.kind == ZoneKind::Segment)
+                || !side.directions().into_iter().all(|v| across(Vec3::from(v))) {
                 return bad("palm facing requires a power grip on a segment and a direction across it");
             }
         }

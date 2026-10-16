@@ -280,7 +280,8 @@ pub fn grip_radius(object: &super::OfficeObject, zone: &Zone) -> f32 {
 /// The seated grip: the object's pose in hand space for `grip` on `zone`, chosen
 /// closest to `latch` (the object's pose in hand space when it latched). `None`
 /// keeps the latch pose (`pinch`, or a zone the grip cannot seat).
-pub fn seat(grip: Grip, zone: &Zone, object: &super::OfficeObject, palm: &PalmFrame, latch: &Transform) -> Option<Transform> {
+pub fn seat(grip: Grip, zone: &Zone, object: &super::OfficeObject, palm: &PalmFrame, latch: &Transform,
+            hand: super::super::renderer::Hand) -> Option<Transform> {
     match grip {
         Grip::Power => {
             let (a, b) = (Vec3::from(zone.a?), Vec3::from(zone.b?));
@@ -299,7 +300,7 @@ pub fn seat(grip: Grip, zone: &Zone, object: &super::OfficeObject, palm: &PalmFr
             // A declared palm direction sets the roll: the hand wraps from that side of the handle.
             // Otherwise a body off the segment (a mug) goes beyond the knuckles, not into the palm.
             let body = -g - axis * (-g).dot(axis);
-            if let Some(palm_local) = zone.palm.map(Vec3::from) {
+            if let Some(palm_local) = zone.palm.map(|side| Vec3::from(side.for_hand(hand))) {
                 let from = (rotation * (palm_local - axis * palm_local.dot(axis))).normalize();
                 let to = (palm.normal - along * palm.normal.dot(along)).normalize();
                 let angle = along.dot(from.cross(to)).atan2(from.dot(to));
@@ -570,7 +571,7 @@ pub(crate) mod tests {
         // Latched 3 cm off the palm and turned 40 degrees off the wrap axis.
         let latch = Transform::from_translation(rig.palm.grip(0.015) + rig.palm.normal * 0.03 - Vec3::Y * 0.3)
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, rig.palm.lateral) * Quat::from_rotation_z(0.7));
-        let seated = seat(Grip::Power, &grip, &broom, &rig.palm, &latch).unwrap();
+        let seated = seat(Grip::Power, &grip, &broom, &rig.palm, &latch, crate::cc_render::Hand::Right).unwrap();
         // The stick's axis lies along the wrap axis, through the palm grip point.
         let axis = seated.rotation * Vec3::Y;
         assert!(axis.dot(rig.palm.lateral).abs() > 0.999);
@@ -596,7 +597,7 @@ pub(crate) mod tests {
         // Latched near the handle's lower end: the hand still centres on it.
         let latch = Transform::from_translation(rig.palm.grip(0.01) + rig.palm.forward * 0.03 + rig.palm.lateral * 0.03)
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, -rig.palm.lateral) * Quat::from_rotation_y(2.0));
-        let seated = seat(Grip::Power, &handle, &mug, &rig.palm, &latch).unwrap();
+        let seated = seat(Grip::Power, &handle, &mug, &rig.palm, &latch, crate::cc_render::Hand::Right).unwrap();
         assert!((seated * Vec3::new(0.082, 0., 0.)).distance(rig.palm.grip(0.0085)) < 1e-3, "not centred on the handle");
         let body = seated.translation; // the mug's origin is its body's centre
         let handle_point = seated * Vec3::new(0.082, 0., 0.);
@@ -629,7 +630,7 @@ pub(crate) mod tests {
                                             "half_extents":[0.1,0.01,0.1],"grip":"palm_top"}));
         let latch = Transform::from_translation(rig.palm.palm() + rig.palm.normal * 0.05)
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, rig.palm.normal) * Quat::from_rotation_x(0.4));
-        let seated = seat(Grip::PalmTop, &under, &plate, &rig.palm, &latch).unwrap();
+        let seated = seat(Grip::PalmTop, &under, &plate, &rig.palm, &latch, crate::cc_render::Hand::Right).unwrap();
         assert!((seated.rotation * Vec3::Y).dot(rig.palm.normal) > 0.999);
         let angles = close_hand(&rig, &plate, &seated);
         for i in 1..5 {
@@ -650,15 +651,15 @@ pub(crate) mod tests {
         let gap = Vec3::from(upper.a.unwrap()).distance(Vec3::from(lower.b.unwrap()));
         assert!(gap >= 0.26, "grips {gap} m apart");
         for zone in [&upper, &lower] {
-            // Both palms face +Z onto the stick: she approaches from the broom's -Z side.
-            assert_eq!(zone.palm, Some([0., 0., 1.]));
+            // Each hand wraps the stick from its own side, palm onto it: right from -X, left from +X.
+            assert_eq!(zone.palm, Some(super::super::interaction::PalmSide::PerHand { left: [-1., 0., 0.], right: [1., 0., 0.] }));
             assert!(zone.validate().is_ok());
         }
         let mut bad = upper.clone();
         bad.grip = Some(Grip::PalmTop);
         assert!(bad.validate().is_err(), "palm facing needs a power grip");
         let mut along = upper.clone();
-        along.palm = Some([0., 1., 0.]);
+        along.palm = Some(super::super::interaction::PalmSide::Either([0., 1., 0.]));
         assert!(along.validate().is_err(), "a palm direction along the handle says nothing");
         // A one-hand seat turns the handle so the declared side faces the palm.
         let rig = right_hand();
@@ -667,8 +668,8 @@ pub(crate) mod tests {
             "parts":broom["parts"].clone()})).unwrap();
         let latch = Transform::from_translation(rig.palm.grip(0.015))
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, rig.palm.lateral) * Quat::from_rotation_y(2.5));
-        let seated = seat(Grip::Power, &upper, &stick, &rig.palm, &latch).unwrap();
-        assert!((seated.rotation * Vec3::Z).dot(rig.palm.normal) > 0.999);
+        let seated = seat(Grip::Power, &upper, &stick, &rig.palm, &latch, crate::cc_render::Hand::Right).unwrap();
+        assert!((seated.rotation * Vec3::X).dot(rig.palm.normal) > 0.999);
     }
 
     #[test]
