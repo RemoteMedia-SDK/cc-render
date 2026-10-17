@@ -4,6 +4,23 @@ Open [the progress gallery](../../artifacts/toronto-condo/index.html) in a brows
 
 ## Additive condo outfit
 
+The isolated scene-conditioning profile for v13 is
+`scenes/toronto_condo/calibration-v13/profile.json`, with its corresponding
+`renderer-geometry.json`. It includes the original body/heel calibration and both
+garment skins. Its exact avatar hash differs from the original shared SDK profile;
+use the matching profile when configuring a scene-conditioned service. It has
+been exported and checked but is not installed by the standard capture driver.
+
+`package_outfit_calibration.py SOURCE_PROFILE_DIR ORIGINAL_AVATAR OUTFIT CORE_BIND OUTPUT_DIR`
+rebuilds an additive outfit profile in a new directory, rejecting overwritten
+outputs, changed original assets and mismatched original calibration. It verifies
+and preserves the original contact patches and exports the extended hierarchy
+and added meshes. The profile covers body, heels and added garments; it does not
+add other original hair/eye meshes or morph deformation to collision admission.
+`check_avatar_calibration.py PROFILE PACKETS OUTPUT --avatar OUTFIT` checks its
+native-packet parity and writes a fixture for the Rust
+`exported_native_geometry_matches_python` test using `CC_GEOMETRY_FIXTURE`.
+
 The selected outfit is a cream sleeveless knit top and charcoal trousers.
 `build_outfit.py` authors garment meshes in Blender and `outfit_package.py`
 appends them as separate skinned nodes to a new avatar GLB. It retains every

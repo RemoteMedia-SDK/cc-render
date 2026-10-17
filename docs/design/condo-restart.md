@@ -1,5 +1,18 @@
 # Condo restart checkpoint
 
+Checkpoint 192 prepares an isolated outfit-bound calibration at
+`scenes/toronto_condo/calibration-v13/profile.json`. It is ready for the approved
+scene-conditioning integration, but is not installed into the running service.
+The exporter verifies additive asset preservation and original calibration
+parity, retains verified contact patches, and adds both garment skins and the
+full 121-node hierarchy. The shared SDK calibration is untouched.
+All 240 seed-189 native frames pass CPU world/root parity; six frames also pass
+the existing Rust exported-geometry test. Nine surfaces over five frames give
+413,335 checked skin vertices with maximum difference 8.89e-16 m. Evidence is in
+`artifacts/toronto-condo-captures/calibration192/`. No new screenshot was needed
+for this read-only calibration export. The interaction proposal still awaits
+owner approval; this checkpoint does not implement it.
+
 Checkpoint 191 prepares the cross-repository implementation proposal at
 `../remotemedia-sdk-office-main/openspec/changes/add-articulated-scene-interactions/`.
 Strict OpenSpec validation passes. It covers context v2, observed physical

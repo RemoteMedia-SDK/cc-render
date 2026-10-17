@@ -1,0 +1,99 @@
+{
+  "scope": "Bind an additive outfit to independently checked, read-only FK/skin geometry.\n\nKeeps the original contact calibration only after byte-preservation and numeric\nparity checks. Exports the actual extended hierarchy and both garment surfaces.\nNo motion, avatar files or input profiles are modified.\n",
+  "preservation": {
+    "original_json_entries_preserved": true,
+    "original_binary_prefix_preserved": true,
+    "original_binary_bytes": 116228124,
+    "original_binary_sha256": "db70762e3f1accbe3b695568d50aacbb233403884099ae980778c9553a8c40cf",
+    "added_meshes": 2,
+    "garments": [
+      {
+        "name": "Condo cream knit top",
+        "vertices": 15780,
+        "triangles": 31200,
+        "maximum_weight_sum_error": 1.1920928955078125e-07,
+        "degenerate_triangles": 0
+      },
+      {
+        "name": "Condo charcoal trousers",
+        "vertices": 6509,
+        "triangles": 12646,
+        "maximum_weight_sum_error": 1.1920928955078125e-07,
+        "degenerate_triangles": 0
+      }
+    ],
+    "textures": [
+      {
+        "size": [
+          256,
+          256
+        ],
+        "mode": "RGB"
+      },
+      {
+        "size": [
+          256,
+          256
+        ],
+        "mode": "RGB"
+      }
+    ],
+    "mutation_rejections": 2,
+    "source_sha256": "23060843839654603f26d7aae6a955cf09c86bb2b39de8bf70bfc5e70d1062a9",
+    "variant_sha256": "aaca98681c5c1e950be0830503d8803e8c00d33932e7c49a891559ca94e564c7",
+    "limits": "Asset integrity only; not visual fit, cloth collision or interaction certification."
+  },
+  "profile_identity": "7d821e39966c7e518d9bd9d6f9e8a9fbab2e57f0791bd1696679fef1d09f51ef",
+  "hierarchy_nodes": 121,
+  "surfaces": [
+    [
+      "High_Heels",
+      0
+    ],
+    [
+      "CC_Base_Body",
+      0
+    ],
+    [
+      "CC_Base_Body",
+      1
+    ],
+    [
+      "CC_Base_Body",
+      2
+    ],
+    [
+      "CC_Base_Body",
+      3
+    ],
+    [
+      "CC_Base_Body",
+      4
+    ],
+    [
+      "CC_Base_Body",
+      5
+    ],
+    [
+      "Condo cream knit top",
+      0
+    ],
+    [
+      "Condo charcoal trousers",
+      0
+    ]
+  ],
+  "original_arrays_verified": true,
+  "seat_patch_vertices_verified": true,
+  "inputs": {
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb": "23060843839654603f26d7aae6a955cf09c86bb2b39de8bf70bfc5e70d1062a9",
+    "/home/acidhax/dev/personal/remotemedia/cc-render/scenes/toronto_condo/beautiful_assistant.condo-outfit-v13.glb": "aaca98681c5c1e950be0830503d8803e8c00d33932e7c49a891559ca94e564c7",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/ardy/ardy/assets/skeletons/cskel27/skin_standard.npz": "4ed2b1ea33a997d7777a59d74ec2312b52af2276331048c954441f5f44f6e58b",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.scene-calibration/profile.json": "074ca43d30bb5cdfc3052d8fcd949997c6816ab52bb5c984f18620ae6a11f991",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.scene-calibration/geometry.npz": "6aa3f8d5a1aaca50200c9d16c7ea28a1f6eac38d2beb2cdabea022442d727ab3",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.scene-calibration/seat-patches.npz": "149879b0f3c7a85ee76b019845d7ec435d90a12a06768685c6ce594c51cdc361",
+    "/home/acidhax/dev/personal/remotemedia/cc-render/scripts/condo/package_outfit_calibration.py": "0e71b9eb79f6b1a9296d51880dc3ec0f8ca09f9f0bec5111c4ce12049183bcea",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/heel_contact_foundation.py": "d9771338f1903fb198cae7176bba9e741c1e552dc6995ba2f04c94b69c483f24"
+  },
+  "limits": "Body, heels and added garments only; other existing meshes and morph deformation are excluded. Static calibration is not manipulation, physical support or live playback certification."
+}

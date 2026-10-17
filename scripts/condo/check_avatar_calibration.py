@@ -15,17 +15,17 @@ from scene_conditioning.profile import AvatarProfile
 from scene_conditioning.avatar_geometry import AvatarGeometry
 
 
-def check(profile_path, packets_path, output):
+def check(profile_path, packets_path, output, avatar=ASSET):
     output.mkdir(parents=True, exist_ok=False)
     manifest = json.loads(profile_path.read_text())
-    profile = AvatarProfile.load(profile_path, ASSET, manifest['core_bind_id'])
+    profile = AvatarProfile.load(profile_path, avatar, manifest['core_bind_id'])
     geometry = AvatarGeometry(profile, dtype=torch.float64)
     packets = [json.loads(line) for line in packets_path.read_text().splitlines()]
     rotations = torch.tensor([p['source_global_rot_mats'] for p in packets], dtype=torch.float64)
     roots = torch.tensor([p['root_pos'] for p in packets], dtype=torch.float64)
     with torch.inference_mode():
         world = geometry.world(rotations, roots).numpy()
-    rig = Rig(ASSET)
+    rig = Rig(avatar)
     patches = profile.arrays('seat_patches')
     maximum = 0.
     fixtures = []
@@ -46,7 +46,7 @@ def check(profile_path, packets_path, output):
                'profile': profile.identity, 'frames': fixtures}
     (output / 'renderer-parity-fixture.json').write_text(json.dumps(fixture) + '\n')
     result = {'packets': len(packets), 'maximum_world_matrix_difference': maximum,
-              'root_coordinates_preserved': True, 'avatar_sha256': sha(ASSET),
+              'root_coordinates_preserved': True, 'avatar_sha256': sha(avatar),
               'packets_sha256': sha(packets_path), 'profile_identity': profile.identity,
               'renderer_geometry_sha256': sha(asset), 'rust_fixture_frames': len(fixtures)}
     (output / 'profile-parity.json').write_text(json.dumps(result, indent=2) + '\n')
@@ -58,5 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('profile', type=Path)
     parser.add_argument('packets', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--avatar', type=Path, default=ASSET)
     args = parser.parse_args()
-    check(args.profile, args.packets, args.output)
+    check(args.profile, args.packets, args.output, args.avatar)
