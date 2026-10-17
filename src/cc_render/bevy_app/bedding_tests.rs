@@ -92,6 +92,7 @@ fn authored_bedding_layers_drape_together_in_the_live_scene() {
     pose_clock(&mut app, 1000);
     app.update();
     let mut tail_speed = 0.0f64;
+    let mut last: Vec<ClothSnapshot> = Vec::new();
     let started = std::time::Instant::now();
     for tick in 0..=600 {
         if tick > 0 {
@@ -100,6 +101,7 @@ fn authored_bedding_layers_drape_together_in_the_live_scene() {
         }
         let snapshots = app.world().resource::<ClothObservations>().0.clone();
         assert_eq!(snapshots.len(), 3);
+        let previous = std::mem::replace(&mut last, snapshots.clone());
         let mut geometry = observe_layers(&mut app, &package);
         geometry["frame"] = tick.into();
         geometry["observations"] = serde_json::to_value(&snapshots).unwrap();
@@ -124,7 +126,9 @@ fn authored_bedding_layers_drape_together_in_the_live_scene() {
                 snapshot.error
             );
             assert_eq!(snapshot.simulated_ticks, tick);
-            assert_eq!(snapshot.surface_revision, tick);
+            if let Some(before) = previous.iter().find(|s| s.id == snapshot.id) {
+                super::assert_publication(before, snapshot);
+            }
             assert_eq!(
                 snapshot.surface_position_sha256,
                 snapshot.mesh_position_sha256

@@ -14,10 +14,114 @@ struct Layout {
     triangles: Vec<[usize; 3]>,
 }
 
+/// A settled batch costs nothing until something can disturb it.
+///
+/// Sleep: every particle stays within `REST_DRIFT_M` of where a quiet window
+/// began, and every end-of-tick speed stays below `REST_SPEED_M_S`, for
+/// `REST_SECONDS` of simulated time. The coupled layers rest together.
+/// Wake: any grip, a different gravity or fixed-collider snapshot, or a layer
+/// surface published outside this batch. Resting zeroes the (already
+/// sub-threshold) velocities; it never moves a particle or skips a failure.
+struct Rest {
+    asleep: bool,
+    quiet_seconds: f64,
+    anchor: Vec<DVec3>,
+    inputs: u64,
+    revisions: Vec<u64>,
+}
+
+const REST_SECONDS: f64 = 0.5;
+const REST_DRIFT_M: f64 = 5e-3;
+const REST_SPEED_M_S: f64 = 0.02;
+
+impl Rest {
+    fn new() -> Self {
+        Self {
+            asleep: false,
+            quiet_seconds: 0.,
+            anchor: Vec::new(),
+            inputs: 0,
+            revisions: Vec::new(),
+        }
+    }
+
+    fn inputs(layers: &[ClothLayerStep<'_>], gravity: DVec3) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        gravity.to_array().map(f64::to_bits).hash(&mut hasher);
+        for layer in layers {
+            layer.colliders.len().hash(&mut hasher);
+            for c in layer.colliders {
+                c.center.to_array().map(f64::to_bits).hash(&mut hasher);
+                c.rotation.to_array().map(f64::to_bits).hash(&mut hasher);
+                c.half_extents
+                    .to_array()
+                    .map(f64::to_bits)
+                    .hash(&mut hasher);
+                [c.border, c.friction].map(f64::to_bits).hash(&mut hasher);
+            }
+        }
+        hasher.finish()
+    }
+
+    /// A disturbed batch needs a whole new quiet window before resting.
+    fn wake(&mut self) {
+        if self.asleep {
+            self.asleep = false;
+            self.quiet_seconds = 0.;
+            self.anchor.clear();
+        }
+    }
+
+    fn holds(&self, layers: &[ClothLayerStep<'_>], inputs: u64) -> bool {
+        self.asleep
+            && inputs == self.inputs
+            && layers.iter().all(|l| l.grips.is_empty())
+            && layers
+                .iter()
+                .map(|l| l.solver.surface.revision())
+                .eq(self.revisions.iter().copied())
+    }
+
+    fn observe(&mut self, layers: &mut [ClothLayerStep<'_>], dt: f64, inputs: u64) {
+        self.asleep = false;
+        let positions = layers.iter().flat_map(|l| l.solver.positions.iter());
+        let quiet = self.anchor.len()
+            == layers
+                .iter()
+                .map(|l| l.solver.positions.len())
+                .sum::<usize>()
+            && layers.iter().all(|l| l.grips.is_empty())
+            && positions
+                .clone()
+                .zip(&self.anchor)
+                .all(|(p, a)| p.distance_squared(*a) <= REST_DRIFT_M * REST_DRIFT_M)
+            && layers
+                .iter()
+                .flat_map(|l| l.solver.velocities.iter())
+                .all(|v| v.length_squared() <= REST_SPEED_M_S * REST_SPEED_M_S);
+        if !quiet {
+            self.anchor = positions.copied().collect();
+            self.quiet_seconds = 0.;
+            return;
+        }
+        self.quiet_seconds += dt;
+        if self.quiet_seconds + 1e-9 >= REST_SECONDS {
+            for layer in layers.iter_mut() {
+                layer.solver.velocities.fill(DVec3::ZERO);
+            }
+            self.asleep = true;
+            self.inputs = inputs;
+            self.revisions = layers.iter().map(|l| l.solver.surface.revision()).collect();
+        }
+    }
+}
+
 pub(crate) struct ClothBatch {
     layout: Vec<Layout>,
     triangles: Vec<[usize; 3]>,
     contacts: SelfCollisionTopology,
+    rest: Rest,
     #[cfg(test)]
     energy_probe: energy::EnergyProbe,
 }
@@ -43,6 +147,7 @@ impl ClothBatch {
             #[cfg(test)]
             energy_probe: energy::EnergyProbe::from_environment(),
             contacts: SelfCollisionTopology::new(&triangles),
+            rest: Rest::new(),
             layout,
             triangles,
         })
@@ -137,6 +242,12 @@ impl ClothBatch {
         Ok(())
     }
 
+    /// The batch is at rest and its last published surfaces stand.
+    #[cfg(test)]
+    pub(crate) fn resting(&self) -> bool {
+        self.rest.asleep
+    }
+
     pub(crate) fn step(
         &mut self,
         layers: &mut [ClothLayerStep<'_>],
@@ -144,6 +255,13 @@ impl ClothBatch {
         gravity: DVec3,
     ) -> Result<(), ClothError> {
         self.validate(layers, dt, gravity)?;
+        let inputs = Rest::inputs(layers, gravity);
+        if self.rest.holds(layers, inputs) {
+            #[cfg(test)]
+            crate::cc_render::cloth_profile::count("resting_ticks", 1);
+            return Ok(());
+        }
+        self.rest.wake();
         // Every material gets at least its requested integration resolution.
         let substeps = layers
             .iter()
@@ -263,6 +381,7 @@ impl ClothBatch {
             "commit",
             self.commit_layers(layers, &positions, &velocities, &mut constraints)
         )?;
+        self.rest.observe(layers, dt, inputs);
         #[cfg(test)]
         self.energy_probe.finish_tick();
         Ok(())

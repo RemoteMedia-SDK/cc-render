@@ -47,22 +47,23 @@ fn layered_app_at(heights: [f32; 2]) -> App {
 #[test]
 fn live_layers_collide_and_publish_synchronized_meshes() {
     let mut app = layered_app();
+    let mut previous = app.world().resource::<ClothObservations>().0.clone();
     for tick in 1..=120 {
         pose_clock(&mut app, 1000 + (tick * 1000 + 59) / 60);
         app.update();
         let observations = &app.world().resource::<ClothObservations>().0;
         assert_eq!(observations.len(), 2);
-        for snapshot in observations {
+        for (snapshot, before) in observations.iter().zip(&previous) {
             assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
             assert_eq!(snapshot.simulated_ticks, tick);
-            assert_eq!(snapshot.surface_revision, tick);
-            assert_eq!(
-                snapshot.surface_position_sha256,
-                snapshot.mesh_position_sha256
-            );
+            super::assert_publication(before, snapshot);
+            // Coupled layers rest together.
+            assert_eq!(snapshot.status, observations[0].status);
         }
         assert!(observations[1].bounds_min[1] - observations[0].bounds_max[1] >= 0.001999);
+        previous = observations.clone();
     }
+    assert!(previous.iter().all(|s| s.status == "resting"));
     let before = app.world().resource::<ClothObservations>().0.clone();
     assert!((before[0].bounds_min[1] - 0.001).abs() < 1e-6);
     assert!((before[1].bounds_min[1] - 0.003).abs() < 1e-6);

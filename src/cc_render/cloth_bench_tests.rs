@@ -137,6 +137,7 @@ fn bench_authored_cloth_ticks() {
                     "window_max_speed": window_speed,
                     "window_max_stretch": window_stretch,
                     "window_max_drift_over_30_ticks": window_drift,
+                    "resting": batch.resting(),
                     "phases_ms": phases.iter().map(|(k, v)| (k.to_string(), serde_json::json!({
                         "ms": v.seconds * 1e3, "calls": v.calls, "items": v.items
                     }))).collect::<serde_json::Map<_, _>>(),

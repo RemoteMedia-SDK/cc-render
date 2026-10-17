@@ -50,6 +50,34 @@ fn pose_clock(app: &mut App, pts: u64) {
     office.observed.displayed_pts_ms = pts;
 }
 
+/// Publication contract between two observations of one layer. A running
+/// update publishes one new surface revision per simulated tick. A resting
+/// update advances simulated time but keeps the settled surface: same
+/// revision, same positions, same mesh. Resting is entered only after
+/// running, and a batch that falls asleep inside a multi-tick update has
+/// published at most one revision fewer than its ticks.
+fn assert_publication(previous: &ClothSnapshot, current: &ClothSnapshot) {
+    let ticks = current.simulated_ticks - previous.simulated_ticks;
+    let published = current.surface_revision - previous.surface_revision;
+    assert_eq!(
+        current.surface_position_sha256, current.mesh_position_sha256,
+        "{current:?}"
+    );
+    match current.status.as_str() {
+        "running" => assert!(published >= 1 && published <= ticks, "{current:?}"),
+        "resting" => {
+            assert!(ticks >= 1, "{current:?}");
+            assert_eq!(published, 0, "{current:?}");
+            assert_eq!(
+                current.surface_position_sha256, previous.surface_position_sha256,
+                "{current:?}"
+            );
+            assert_eq!(current.max_speed_m_s, 0., "{current:?}");
+        }
+        status => panic!("unexpected cloth status {status}: {current:?}"),
+    }
+}
+
 #[test]
 fn cloth_ecs_mesh_follows_solver_and_stalls_with_committed_motion_clock() {
     let mut app = app();
@@ -60,23 +88,28 @@ fn cloth_ecs_mesh_follows_solver_and_stalls_with_committed_motion_clock() {
     app.update();
     let mut tail_speed = 0.0f64;
     let mut snapshots = Vec::new();
+    let mut previous = app.world().resource::<ClothObservations>().0[0].clone();
     for frame in 1..=600 {
         pose_clock(&mut app, 100000 + frame * 1000 / 30);
         app.update();
         let snapshot = app.world().resource::<ClothObservations>().0[0].clone();
         assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
-        assert_eq!(
-            snapshot.surface_position_sha256,
-            snapshot.mesh_position_sha256
-        );
+        assert_publication(&previous, &snapshot);
+        if previous.status == "resting" {
+            // Nothing here can disturb a settled sheet once it rests.
+            assert_eq!(snapshot.status, "resting");
+        }
         if frame > 585 {
             tail_speed = tail_speed.max(snapshot.max_speed_m_s);
         }
+        previous = snapshot.clone();
         snapshots.push(snapshot);
     }
     let final_state = snapshots.last().unwrap();
     assert_eq!(final_state.simulated_ticks, 1200);
-    assert_eq!(final_state.surface_revision, 1200);
+    // The settled sheet sleeps: it stops publishing well before 20 s.
+    assert_eq!(final_state.status, "resting");
+    assert!(final_state.surface_revision < 1200);
     assert_ne!(
         final_state.surface_position_sha256,
         initial.surface_position_sha256
@@ -122,7 +155,7 @@ fn cloth_ecs_mesh_follows_solver_and_stalls_with_committed_motion_clock() {
     app.update();
     assert_eq!(
         app.world().resource::<ClothObservations>().0[0].surface_revision,
-        1200
+        final_state.surface_revision
     );
 }
 

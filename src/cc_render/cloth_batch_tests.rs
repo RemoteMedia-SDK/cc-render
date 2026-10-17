@@ -268,7 +268,70 @@ fn three_distinct_layers_stack_at_their_authored_radii() {
             .positions
             .iter()
             .all(|p| (p.y - expected_y).abs() < 1e-6));
-        assert_eq!(cloth.surface.revision(), 1800);
+        // The settled stack sleeps: it stops publishing long before 30 s.
+        assert!(cloth.surface.revision() < 1800);
         assert!(cloth.max_speed() < 0.001);
     }
+    assert!(batch.resting());
+}
+
+#[test]
+fn settled_layers_sleep_without_publishing_and_wake_on_any_disturbance() {
+    let mut sheet = patch(0.0006, 0.5, 0.001, 24);
+    let slab = |y: f32| {
+        [FixedClothCollider::new(
+            SharedShape::cuboid(2., 0.1, 2.),
+            Isometry::translation(0., y - 0.1, 0.),
+            0.5,
+        )
+        .unwrap()]
+    };
+    let mut batch = ClothBatch::new(&[&sheet]).unwrap();
+    let mut step =
+        |batch: &mut ClothBatch, sheet: &mut ClothSolver, floor: &[FixedClothCollider]| {
+            batch
+                .step(
+                    &mut [ClothLayerStep {
+                        solver: sheet,
+                        colliders: floor,
+                        grips: &mut [],
+                    }],
+                    1. / 60.,
+                    -DVec3::Y * 9.81,
+                )
+                .unwrap()
+        };
+    let floor = slab(0.);
+    let mut ticks = 0;
+    while !batch.resting() {
+        step(&mut batch, &mut sheet, &floor);
+        ticks += 1;
+        assert!(ticks <= 120, "a sheet lying on a floor must come to rest");
+    }
+    // Asleep: time advances, nothing is simulated or published.
+    let (revision, positions) = (sheet.surface.revision(), sheet.positions.clone());
+    assert!(sheet.velocities.iter().all(|v| *v == DVec3::ZERO));
+    for _ in 0..120 {
+        step(&mut batch, &mut sheet, &floor);
+    }
+    assert!(batch.resting());
+    assert_eq!(sheet.surface.revision(), revision);
+    assert_eq!(sheet.positions, positions);
+    // A changed collider snapshot wakes it: the floor drops away.
+    let lowered = slab(-0.01);
+    step(&mut batch, &mut sheet, &lowered);
+    assert!(!batch.resting());
+    assert_eq!(sheet.surface.revision(), revision + 1);
+    assert!(sheet.positions.iter().all(|p| p.y < 0.0006));
+    // Back at rest on the lower floor, a surface published outside the
+    // batch also wakes it rather than being silently ignored.
+    while !batch.resting() {
+        step(&mut batch, &mut sheet, &lowered);
+    }
+    let moved: Vec<_> = sheet.positions.iter().map(|p| p.as_vec3()).collect();
+    sheet.surface.update_positions(moved).unwrap();
+    let revision = sheet.surface.revision();
+    step(&mut batch, &mut sheet, &lowered);
+    assert!(!batch.resting());
+    assert_eq!(sheet.surface.revision(), revision + 1);
 }
