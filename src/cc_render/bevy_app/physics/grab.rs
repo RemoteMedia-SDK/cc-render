@@ -9,7 +9,8 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use super::body_colliders::BodyBoneCollider;
-use super::contact_grasp::{capture_articulated_joint, capture_joint, ARTICULATED_GRIP_SLIP_M};
+use super::contact_grasp::{capture_articulated_joint, capture_joint, ARTICULATED_GRIP_MAX_SPEED_M_S,
+    ARTICULATED_GRIP_SLIP_M};
 use super::props::{Prop, PropRegistry};
 use crate::cc_render::renderer::{GrabFailure, GrabOrRelease, Hand, PropId};
 
@@ -131,6 +132,7 @@ pub(crate) fn handle_grab_cmds(
     physics: Query<&RapierContext>,
     stored_cfg: Res<super::StoredPhysicsConfig>,
     mut awake: Local<Vec<Entity>>,
+    mut last_wrist: Local<HashMap<Hand, Vec3>>,
 ) {
     let dt = time.delta_secs();
     let proximity_m = stored_cfg.0.grab.proximity_m;
@@ -193,6 +195,13 @@ pub(crate) fn handle_grab_cmds(
             reach.map_or(proximity_m, |(_, within)| within),
             timeout_secs,
         );
+        // A hand closes on a jointed part's handle only once at rest on it, not sweeping past.
+        if let (FsmTransition::Attach { target }, Some(previous)) = (&trans, last_wrist.get(&hand)) {
+            let jointed_target = prop_registry.by_id.get(target).is_some_and(|e| jointed.contains(*e));
+            if jointed_target && dt > 0. && wrist.distance(*previous) / dt > ARTICULATED_GRIP_MAX_SPEED_M_S {
+                trans = FsmTransition::NoChange;
+            }
+        }
         // A jointed part held back at its limit while the hand goes on: the hand slips off.
         if let (FsmTransition::NoChange, GrabState::Attached { target, prop_entity, grip_entity }) = (&trans, state) {
             // The hand's drift from its grip point, in the part's frame. Sliding along a handle bar
@@ -214,6 +223,7 @@ pub(crate) fn handle_grab_cmds(
             }
         }
         transitions.push((hand, trans));
+        last_wrist.insert(hand, wrist);
     }
 
     // Apply transitions (immutable phase done; safe to mut-borrow fsms).

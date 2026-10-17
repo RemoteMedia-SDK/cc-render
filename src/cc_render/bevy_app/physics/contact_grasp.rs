@@ -40,6 +40,8 @@ pub(super) const ARTICULATED_GRIP_MAX_FORCE_N: f32 = 150.;
 /// or pressing into the part is not drift. Generated hands sway several centimetres about a
 /// held bar, and nothing repositions them.
 pub(super) const ARTICULATED_GRIP_SLIP_M: f32 = 0.12;
+/// A hand moving faster than this is sweeping past a jointed part's handle, not closing on it.
+pub(super) const ARTICULATED_GRIP_MAX_SPEED_M_S: f32 = 0.25;
 
 /// The grip on a jointed part, captured where the wrist touches it: a force-limited spring at the
 /// wrist, free to turn. A kinematic hand with a rigid grip would overpower the part's joint and

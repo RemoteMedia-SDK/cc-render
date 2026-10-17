@@ -250,3 +250,33 @@ fn a_gripped_drawer_follows_the_hand_on_its_rail_and_the_hand_slips_off_pulling_
     app.update();
     assert_eq!(app.world().get::<Sleeping>(upper).map(|s| s.normalized_linear_threshold), Some(Sleeping::default().normalized_linear_threshold));
 }
+
+#[test]
+fn a_drawer_pressed_shut_stays_shut_when_let_go() {
+    let (mut app, grab, wrist, upper, _) = drawers();
+    let travel = |app: &App| app.world().get::<Transform>(upper).unwrap().translation.x;
+    for frame in 1..=40 {
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.219 - 0.004 * frame as f32;
+        app.update();
+    }
+    grab.send(GrabOrRelease::Release(Hand::Right)).unwrap();
+    for _ in 0..60 { app.update(); }
+    assert!(travel(&app).abs() < 0.01, "drawer kicked open to {}", travel(&app));
+}
+
+#[test]
+fn a_hand_sweeping_past_a_drawer_handle_does_not_grip_it_until_at_rest() {
+    let (mut app, grab, wrist, _, _) = drawers();
+    grab.send(GrabOrRelease::Release(Hand::Right)).unwrap();
+    app.update();
+    grab.send(GrabOrRelease::Grab(GrabCmd { hand: Hand::Right, target: "upper".into(),
+        palm_offset_override: None })).unwrap();
+    // Down across the drawer front at 0.6 m/s, in contact all the way.
+    for frame in 0..8 {
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.y = 0.84 - 0.01 * frame as f32;
+        app.update();
+        assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Pursuing { .. }), "frame {frame}");
+    }
+    for _ in 0..3 { app.update(); }
+    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
+}
