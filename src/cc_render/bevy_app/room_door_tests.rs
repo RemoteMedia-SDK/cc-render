@@ -3,23 +3,30 @@ use super::*;
 
 #[test]
 fn bedroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry() {
-    verify_room_door("scene-doors.json", "bedroom_door", "CC_ROOM_DOOR_TRACE");
+    verify_room_door("scene-doors.json", "bedroom_door", "CC_ROOM_DOOR_TRACE", Vec3::new(0.78, 1.04, -0.5));
 }
 
 #[test]
 fn bathroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry() {
-    verify_room_door("scene-bathroom-door.json", "bathroom_door", "CC_BATHROOM_DOOR_TRACE");
+    verify_room_door("scene-bathroom-door.json", "bathroom_door", "CC_BATHROOM_DOOR_TRACE", Vec3::new(0.78, 1.04, -0.5));
 }
 
-fn verify_room_door(manifest: &str, mechanism_id: &str, trace_key: &str) {
+#[test]
+fn condo_entry_door_obstructs_opens_releases_closes_and_publishes_current_geometry() {
+    verify_room_door("scene-entry-door.json", "condo_entry_door", "CC_ENTRY_DOOR_TRACE", Vec3::new(-0.65, 1.04, 0.45));
+}
+
+fn verify_room_door(manifest: &str, mechanism_id: &str, trace_key: &str, blocker_offset: Vec3) {
     let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("scenes/toronto_condo").join(manifest)).unwrap();
     let index = package.mechanisms.iter().position(|m| m.id == mechanism_id).unwrap();
     let mechanism = &package.mechanisms[index];
     assert!(!package.static_solids().any(|s| s.id == mechanism.replaces_solid));
     assert!(package.cloths[0].collision_fixed_parts.contains(&mechanism.parts[0].id));
-    let (mut app, mechanism) = fixture_for(package, index);
-    let doors = door_entities(&mut app);
+    let indices: Vec<_> = (0..package.mechanisms.len()).collect();
+    let (mut app, mechanisms) = fixture_for_indices(package, &indices);
+    let mechanism = mechanisms[index].clone();
+    let doors = super::kitchen_drawers::bank_entities(&mut app, &mechanism);
     assert_eq!(doors.len(), 1);
     let door = doors[0];
     let mut trace = Vec::new();
@@ -27,7 +34,7 @@ fn verify_room_door(manifest: &str, mechanism_id: &str, trace_key: &str) {
     for phase in 0..6 {
         if phase == 1 {
             blocker = Some(app.world_mut().spawn((RigidBody::Fixed, Collider::cuboid(0.08, 0.3, 0.06),
-                Transform::from_translation(Vec3::from(mechanism.placement)+Vec3::new(0.78, 1.04, -0.5)))).id());
+                Transform::from_translation(Vec3::from(mechanism.placement)+blocker_offset))).id());
         }
         if phase == 2 { app.world_mut().despawn(blocker.take().unwrap()); }
         let torque = match phase { 1 | 2 => 8., 4 => -8., _ => 0. };

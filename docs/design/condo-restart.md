@@ -7,6 +7,17 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 198 adds the inward-opening entry door. Latest opt-in package:
+`scene-entry-door.json` (45 parts, 31 passive joints). Its retained frame matches
+source coordinates; observed open/closed poses respectively clear/block the
+70 cm by 190 cm doorway envelope. All 339 Rust library tests pass (two ignored);
+the unchanged Python ownership source-text test still fails. Gallery 198 adds
+authoring, recorded hinge animation and assembled placement. All explicitly
+requested rigid furniture parts now have passive joints. Remaining required
+work is sheet self/moving/fast collision and separate interacting duvet layers;
+see the concrete cloth integration gaps following checkpoint 198 in
+`condo-manipulation.md`. Optional mechanical realism remains unassessed.
+
 Checkpoint 197 adds three hollow upper cabinets with passive 0–90 degree hinges.
 The latest opt-in package is `scene-upper-cabinets.json`; it contains 43 parts
 and 30 joints. Twelve loose shelf objects and 48 drawer objects stay contained

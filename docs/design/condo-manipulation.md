@@ -11,7 +11,8 @@ items open until their actual assets/runtime behavior and evidence are verified.
   island for 16 loaded drawers and 48 contents over ten cycles (checkpoint 196).
 - Upper cabinets: three hollow cases with passive hinged doors and six loaded
   shelf levels verified alongside moving drawers (checkpoint 197).
-- Entry door: movable geometry and joint pending.
+- Entry door: inward-opening passive hinge, retained frame and observed doorway
+  clearance verified (checkpoint 198).
 - Bed sheets: self-collision, moving-object collision and fast-motion collision
   protection pending; separate duvet layers remain unfinished.
 - Contents and durability: loaded drawers, shelf contents, repeated cycles and
@@ -25,6 +26,68 @@ Current scope: **physics and movable condo parts only**. The owner replaced the
 former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
+
+## Checkpoint 198 — condo entry door
+
+Latest opt-in package: `scene-entry-door.json`. Mechanism `condo_entry_door`
+replaces the original static `entry_door` aggregate and its six source nodes.
+Fixed part `entry_door_frame` preserves both jambs, the lintel and transom at
+their original coordinates. Moving part `entry_door_leaf` has a +Y passive
+hinge, 0–90 degree limits and estimated 25 kg mass. The 1.005 m by 2.22 m leaf
+has thickness and frame clearances, with two rigid handle meshes
+`entry_door_pull_room` and `entry_door_pull_outside`. No grip zones, latch,
+rotating levers or closer have been added.
+
+The conservative full swing check passes 82,355 comparisons with at least
+4.61 mm separation after the angular movement allowance and 1 mm reserve.
+The 1,080 recorded physics frames pass 491,400 room comparisons with a 10 mm
+minimum gap. Diagnostic torque tests verify obstruction, opening, release,
+closing, settling and current joint/bounds publication. The shared room-door
+fixture now includes every mechanism in each tested scene; bedroom and bathroom
+door regressions also pass with their original obstruction locations.
+
+`check_entry_passage.py` checks a 70 cm wide, 190 cm high envelope swept through
+the threshold using the observed door poses. The closed panel blocks it; the
+open door clears it by at least 86 mm after the 1 mm reserve. This is a geometric
+doorway check, not generated-body traversal or exterior hallway floor support.
+
+The assembled capture verifies 69 asset hashes, 45 loaded parts and 31 passive
+joints over 120 frames. All 339 Rust library tests pass (two ignored); the
+unchanged Python source-text ownership test fails and six others pass. The
+room-test helper's new obstruction-offset argument has three updated callers
+and no incompatible calls. Structural review still flags the similar test
+wrappers and recent edits to shared fixtures; no blanket acknowledgment was
+used. Gallery 198a is authoring, 198b an 18-second recorded physics animation,
+and 198c assembled placement. Evidence: `artifacts/toronto-condo-captures/entry198/`.
+
+### Next: cloth collision and separate duvet layers
+
+Current-state review confirms three concrete integration gaps:
+
+- `cloth_solver.rs::step_with_grips` predicts particles, projects springs, then
+  calls discrete fixed particle/triangle contacts in `cloth_collision.rs`.
+  Fast-motion protection must cover swept vertex/face and edge contacts, not
+  merely increase substeps or check endpoint penetration. Add crossing tests
+  where both endpoint configurations are separated before claiming coverage.
+  The installed Parry 0.17.6 already provides linear shape casts and
+  `cast_shapes_nonlinear` for rigid translation/rotation; reuse those where
+  applicable. Deforming triangles and inter-layer contacts still need their
+  own treatment, and cast status/initial overlap must be handled explicitly.
+- `scene_cloth.rs::colliders` admits static solids and fixed mechanism parts
+  only. `LiveCloth` caches those colliders at spawn. Moving-object collision
+  needs observed collider poses over each simulated interval, including
+  rotation, and must preserve physical response without writing avatar poses.
+  Cloth currently catches up to committed motion timestamps while Rapier uses
+  its own interpolated fixed timestep. Verify time alignment and pause/catch-up
+  behavior rather than applying a final rigid pose to all historical cloth ticks.
+- Each cloth runs in an independent `LiveCloth` solver. Separate duvet layers
+  need collision between layers as well as within a layer, with nonadjacent
+  vertex/face and edge/edge checks, topology exclusions and a spatial broad phase.
+  A second render mesh alone does not satisfy this requirement. Verify folding,
+  compression, release/settling and mesh/solver correspondence in rendered tests.
+
+These are outstanding implementation and acceptance requirements. The current
+rigid-mechanism checkpoint does not certify any of them.
 
 ## Checkpoint 197 — upper cabinets and loaded shelves
 

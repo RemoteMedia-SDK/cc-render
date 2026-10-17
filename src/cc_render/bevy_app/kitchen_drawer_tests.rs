@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) fn furnished_fixture() -> (App, Vec<SceneMechanism>) {
     let scene = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("scenes/toronto_condo/scene-upper-cabinets.json")).unwrap();
+        .join("scenes/toronto_condo/scene-entry-door.json")).unwrap();
     let indices: Vec<_> = (0..scene.mechanisms.len()).collect();
     fixture_for_indices(scene, &indices)
 }
