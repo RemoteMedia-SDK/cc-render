@@ -7,8 +7,17 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
-Checkpoint 196 adds a hollow desk drawer to `scene-desk-drawer.json`, now the
-latest opt-in package. Its passive rail travels 35 cm along -X; the source
+Checkpoint 197 adds three hollow upper cabinets with passive 0–90 degree hinges.
+The latest opt-in package is `scene-upper-cabinets.json`; it contains 43 parts
+and 30 joints. Twelve loose shelf objects and 48 drawer objects stay contained
+through ten simultaneous hinge/rail cycles. All 338 Rust library tests pass
+(two ignored); the pre-existing Python source-text check still fails. Gallery
+197 includes authoring, a recorded hinge animation and assembled placement.
+Remaining required physics: entry door, sheet self/moving/fast collision and
+separate duvet layers; optional realism remains unassessed.
+
+Checkpoint 196 adds a hollow desk drawer to `scene-desk-drawer.json`.
+Its passive rail travels 35 cm along -X; the source
 desktop/frame/cable organizer are retained. All 16 kitchen/island/desk drawers
 pass ten simultaneous cycles with 48 loose contents. All 336 Rust library tests
 pass (two ignored); the unchanged Python source-text ownership check still

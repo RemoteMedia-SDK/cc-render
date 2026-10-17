@@ -9,11 +9,13 @@ items open until their actual assets/runtime behavior and evidence are verified.
   45 loose contents through ten simultaneous cycles (checkpoint 195).
 - Desk drawer: hollow tray on a 35 cm passive rail, checked with the kitchen and
   island for 16 loaded drawers and 48 contents over ten cycles (checkpoint 196).
-- Upper cabinets and entry door: movable geometry and joints pending.
+- Upper cabinets: three hollow cases with passive hinged doors and six loaded
+  shelf levels verified alongside moving drawers (checkpoint 197).
+- Entry door: movable geometry and joint pending.
 - Bed sheets: self-collision, moving-object collision and fast-motion collision
   protection pending; separate duvet layers remain unfinished.
-- Contents and durability: loaded drawers, repeated cycles and simultaneous
-  rails now covered; shelf contents and broader load coverage remain open.
+- Contents and durability: loaded drawers, shelf contents, repeated cycles and
+  simultaneous hinges/rails covered by bounded tests; broader loads remain open.
 - Optional realism: assess latches, soft-close behavior, door closers and
   improved mass/friction calibration after the core mechanics are reliable.
 
@@ -23,6 +25,48 @@ Current scope: **physics and movable condo parts only**. The owner replaced the
 former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
+
+## Checkpoint 197 — upper cabinets and loaded shelves
+
+Latest opt-in package: `scene-upper-cabinets.json`, extending the desk package.
+Mechanism `upper_cabinets` replaces the nine original upper-unit nodes and the
+solid `kitchen_upper` envelope. Fixed part `upper_cabinet_shell` contains three
+hollow cases with bottom and middle storage shelves; the original outer case
+dimensions are retained. Moving parts `upper_cabinet_door_0` through `_2` each
+have an estimated 4.5 kg mass, a +Y passive hinge and 0–90 degree limits. The
+leaves sit 15 mm farther forward than the static fronts for thickness clearance.
+Each has its own `_pull` mesh. Grip zones remain the functionality agent's work.
+
+The conservative full hinge sweep passes 114,030 box comparisons with a minimum
+14.7 mm separating gap after the angular movement bound and 1 mm reserve.
+All 720 observed solver frames pass 453,600 fixed-room comparisons with an
+18 mm minimum gap. The diagnostic sequence verifies an obstructed door, opening,
+release, closing, settling and current published geometry/joint observations.
+The recorded render is 12 seconds at 10 fps, sampled directly from 60 Hz physics.
+
+The new durability fixture places a 0.5 kg box and 1 kg cylinder on each of six
+shelf levels, alongside the existing 48 drawer contents. After settling, the
+shelf contents receive a small lateral impulse. Three upper doors and sixteen
+loaded kitchen/island/desk drawers cycle simultaneously ten times over 4,920
+physics steps. Every step checks the full enclosing boxes of all twelve shelf
+contents for support/containment and checks the drawer-content centers. Shelf
+contents finish below 0.01 m/s. These are bounded diagnostic loads and cycles,
+not arbitrary-load or lifetime certification. The video shows the separate
+hinge/obstruction test; it does not depict this contents fixture.
+
+All 338 Rust library tests pass (two ignored). The unchanged Python source-text
+ownership check still fails; its other six tests pass. Torque and mixed-load
+helpers reduce test complexity; structural review still flags similar phase
+test structure and recent edits to reused drawer fixtures. Those findings are
+retained without blanket acknowledgments. The name-based test map does not
+recognize the full test-module paths; the complete executed suite covers them.
+
+The assembled capture checks 67 asset hashes, 43 mechanism parts and 30 passive
+joints over 120 frames. Gallery 197a shows authoring, 197b the opening/closing
+recording and 197c the assembled condo. Evidence is under
+`artifacts/toronto-condo-captures/upper197/`. No production motion or interaction
+code changed. Entry-door articulation, sheet collision and duvet layers remain
+the next required work; optional mechanical realism remains unassessed.
 
 ## Checkpoint 196 — desk drawer and expanded simultaneous loads
 

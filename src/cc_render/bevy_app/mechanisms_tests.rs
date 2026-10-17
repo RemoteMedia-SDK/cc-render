@@ -61,6 +61,9 @@ mod kitchen_drawers;
 #[path = "desk_drawer_tests.rs"]
 mod desk_drawer;
 
+#[path = "upper_cabinet_tests.rs"]
+mod upper_cabinets;
+
 #[path = "cabinet_tests.rs"]
 mod cabinets;
 

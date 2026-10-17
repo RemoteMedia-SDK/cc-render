@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) fn furnished_fixture() -> (App, Vec<SceneMechanism>) {
     let scene = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("scenes/toronto_condo/scene-desk-drawer.json")).unwrap();
+        .join("scenes/toronto_condo/scene-upper-cabinets.json")).unwrap();
     let indices: Vec<_> = (0..scene.mechanisms.len()).collect();
     fixture_for_indices(scene, &indices)
 }
@@ -86,7 +86,7 @@ fn kitchen_and_island_drawers_obstruct_open_release_and_close() {
     }
 }
 
-struct Contents {
+pub(super) struct Contents {
     drawer: Entity,
     body: Entity,
     bounds_center: Vec3,
@@ -99,7 +99,7 @@ fn loaded_bank(m: &SceneMechanism) -> bool {
     matches!(m.id.as_str(), "kitchen_drawers" | "island_drawers" | "desk_drawer")
 }
 
-fn load_drawers(app: &mut App, mechanisms: &[SceneMechanism]) -> Vec<Contents> {
+pub(super) fn load_drawers(app: &mut App, mechanisms: &[SceneMechanism]) -> Vec<Contents> {
     let mut contents = Vec::new();
     for m in mechanisms.iter().filter(|m| loaded_bank(m)) {
         for e in bank_entities(app, m) {
@@ -122,7 +122,7 @@ fn load_drawers(app: &mut App, mechanisms: &[SceneMechanism]) -> Vec<Contents> {
     contents
 }
 
-fn assert_contents(app: &App, contents: &[Contents], settled: bool) {
+pub(super) fn assert_contents(app: &App, contents: &[Contents], settled: bool) {
     for c in contents {
         let drawer = app.world().get::<Transform>(c.drawer).unwrap();
         let body = app.world().get::<Transform>(c.body).unwrap();
@@ -154,18 +154,22 @@ fn wait_contents_settled(app: &mut App, contents: &[Contents]) -> usize {
     panic!("contents never sustained 30 quiet frames within the 10-second total settling window");
 }
 
+pub(super) fn apply_loaded_force(app: &mut App, contents: &[Contents], phase: usize) {
+    for c in contents.iter().step_by(3) {
+        let force = match phase { 0 => c.axis*25., 2 => -c.axis*25., _ => Vec3::ZERO };
+        app.world_mut().entity_mut(c.drawer).insert(ExternalForce { force, ..default() });
+    }
+}
+
 fn drive_loaded_phase(app: &mut App, contents: &[Contents], phase: usize) {
     for _ in 0..120 {
-        for c in contents.iter().step_by(3) {
-            let force = match phase { 0 => c.axis*25., 2 => -c.axis*25., _ => Vec3::ZERO };
-            app.world_mut().entity_mut(c.drawer).insert(ExternalForce { force, ..default() });
-        }
+        apply_loaded_force(app, contents, phase);
         app.update();
         assert_contents(app, contents, false);
     }
 }
 
-fn assert_loaded_drawers(app: &mut App, mechanisms: &[SceneMechanism], phase: usize, cycle: usize) {
+pub(super) fn assert_loaded_drawers(app: &mut App, mechanisms: &[SceneMechanism], phase: usize, cycle: usize) {
     for m in mechanisms.iter().filter(|m| loaded_bank(m)) {
         let drawers = bank_entities(app, m);
         for e in &drawers {
