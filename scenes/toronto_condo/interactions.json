@@ -58,10 +58,38 @@
     ]
    },
    {
+    "id": "push_shut",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.261,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.261,
+     0.096,
+     0.2
+    ]
+   },
+   {
     "id": "front",
     "type": "point",
     "center": [
-     0.98,
+     0.933,
      -0.695,
      0.0
     ],
@@ -78,7 +106,7 @@
       "stand_at": {
        "zone": "@home/front"
       },
-      "prompt": "A person reaches out with one hand and grips the handle of the drawer in front of them.",
+      "prompt": "A person reaches out with their {hand} hand and grips the handle of the drawer in front of them at waist height.",
       "relations": [
        {
         "kind": "touch",
@@ -106,7 +134,7 @@
      {
       "id": "pull",
       "hands": "either",
-      "prompt": "A person pulls the drawer open towards themselves.",
+      "prompt": "A person holds the drawer handle in their {hand} hand and pulls the drawer open towards themselves.",
       "relations": [
        {
         "kind": "touch",
@@ -129,7 +157,7 @@
      },
      {
       "id": "release",
-      "prompt": "A person lets go of the drawer handle and stands up straight.",
+      "prompt": "A person lets go of the drawer handle with their {hand} hand and stands up straight.",
       "transition": {
        "kind": "release"
       },
@@ -146,7 +174,7 @@
       "stand_at": {
        "zone": "@home/front"
       },
-      "prompt": "A person reaches out with one hand and grips the handle of the drawer in front of them.",
+      "prompt": "A person reaches out with their {hand} hand and grips the handle of the drawer in front of them at waist height.",
       "relations": [
        {
         "kind": "touch",
@@ -174,14 +202,14 @@
      {
       "id": "push",
       "hands": "either",
-      "prompt": "A person pushes the drawer closed.",
+      "prompt": "A person holds the drawer handle in their {hand} hand and pushes the drawer closed.",
       "relations": [
        {
         "kind": "touch",
         "joints": [
          "RightHand"
         ],
-        "zone": "@home/pull",
+        "zone": "@home/push_shut",
         "window_s": [
          0,
          8
@@ -197,7 +225,7 @@
      },
      {
       "id": "release",
-      "prompt": "A person lets go of the drawer handle and stands up straight.",
+      "prompt": "A person lets go of the drawer handle with their {hand} hand and stands up straight.",
       "transition": {
        "kind": "release"
       },
@@ -266,10 +294,38 @@
     ]
    },
    {
+    "id": "push_shut",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.261,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.261,
+     0.096,
+     0.2
+    ]
+   },
+   {
     "id": "front",
     "type": "point",
     "center": [
-     0.98,
+     0.933,
      -0.435,
      0.0
     ],
@@ -286,7 +342,7 @@
       "stand_at": {
        "zone": "@home/front"
       },
-      "prompt": "A person reaches out with one hand and grips the handle of the drawer in front of them.",
+      "prompt": "A person bends their knees and crouches down, then grips the handle of the low drawer in front of them with their {hand} hand.",
       "relations": [
        {
         "kind": "touch",
@@ -314,7 +370,7 @@
      {
       "id": "pull",
       "hands": "either",
-      "prompt": "A person pulls the drawer open towards themselves.",
+      "prompt": "A person crouching in front of a low drawer pulls it open towards themselves with their {hand} hand.",
       "relations": [
        {
         "kind": "touch",
@@ -337,7 +393,7 @@
      },
      {
       "id": "release",
-      "prompt": "A person lets go of the drawer handle and stands up straight.",
+      "prompt": "A person lets go of the low drawer's handle with their {hand} hand and stands up from the crouch.",
       "transition": {
        "kind": "release"
       },
@@ -354,7 +410,7 @@
       "stand_at": {
        "zone": "@home/front"
       },
-      "prompt": "A person reaches out with one hand and grips the handle of the drawer in front of them.",
+      "prompt": "A person bends their knees and crouches down, then grips the handle of the low drawer in front of them with their {hand} hand.",
       "relations": [
        {
         "kind": "touch",
@@ -382,14 +438,14 @@
      {
       "id": "push",
       "hands": "either",
-      "prompt": "A person pushes the drawer closed.",
+      "prompt": "A person crouching in front of a low drawer pushes it closed with their {hand} hand.",
       "relations": [
        {
         "kind": "touch",
         "joints": [
          "RightHand"
         ],
-        "zone": "@home/pull",
+        "zone": "@home/push_shut",
         "window_s": [
          0,
          8
@@ -405,7 +461,7 @@
      },
      {
       "id": "release",
-      "prompt": "A person lets go of the drawer handle and stands up straight.",
+      "prompt": "A person lets go of the low drawer's handle with their {hand} hand and stands up from the crouch.",
       "transition": {
        "kind": "release"
       },

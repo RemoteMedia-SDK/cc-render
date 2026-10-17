@@ -105,9 +105,11 @@ pub(super) fn has_handle_contact(context: &RapierContext, wrist: Entity, object:
         .ok().flatten().is_some_and(|contact| contact.dist <= HANDLE_WRAP_M)
 }
 
-/// A wrist on a handle bar sits this far from it: the palm's grip point is about 6.5 cm along
-/// the fingers and 2.7 cm off the palm (SDK `GRIP_REACH_M`, `GRIP_LIFT_M`).
-pub(super) const HANDLE_REACH_M: f32 = 0.10;
+/// A wrist on a handle bar sits within this of it: the palm's grip point is about 6.5 cm along
+/// the fingers and 2.7 cm off the palm (SDK `GRIP_REACH_M`, `GRIP_LIFT_M`), and the fingers,
+/// some 18 cm from the wrist to their tips, still close around a bar a few cm further out
+/// (generated wrists hold their planned grasp to within about 4 cm).
+pub(super) const HANDLE_REACH_M: f32 = 0.12;
 
 /// While the hand actually touches the target (a prop with a handle box: the handle): the point
 /// its reach is judged to, and how far that may be. A prop with a handle box: the nearest point on the bar, within
