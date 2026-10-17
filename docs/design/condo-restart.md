@@ -1,5 +1,17 @@
 # Condo restart checkpoint
 
+Checkpoint 191 prepares the cross-repository implementation proposal at
+`../remotemedia-sdk-office-main/openspec/changes/add-articulated-scene-interactions/`.
+Strict OpenSpec validation passes. It covers context v2, observed physical
+grip/release, geometry-grounded open/close, outcome checks and real-time video
+acceptance. SDK OpenSpec instructions require owner approval before implementing
+this new capability; approval is pending. No new motion exception is requested.
+Preflight also found that the existing shared scene-calibration profile binds a
+different avatar hash than the condo outfit. Preserve the dirty shared files;
+export an isolated profile from the actual outfit before scene-conditioned runs.
+Evidence: `artifacts/toronto-condo-captures/scene191/profile-preflight.json`.
+No new generation or screenshot was produced in checkpoint 191.
+
 Latest: checkpoint 190 adds read-only articulation observations to each constrained
 prop: parent, world anchors/axis, signed angle or travel, limits, motor flag and
 backend registration. All 328 library tests pass (two ignored), including actual
