@@ -173,15 +173,16 @@ impl SelfCollisionTopology {
     ) -> Result<(), ClothError> {
         fixed_contacts(particles, layers)?;
         for iteration in 0..512 {
-            // Difficult coupled contacts get a 1 micrometre projection reserve.
+            // Start with a 0.4 micrometre projection reserve; difficult coupled
+            // contacts get 1 micrometre after 64 passes.
             // This is not an acceptance slop: the unpadded feature distance and
             // complete swept path must still certify the original thickness.
-            let reserve = if iteration < 64 { 0. } else { 1e-6 };
+            let reserve = if iteration < 64 { 4e-7 } else { 1e-6 };
             if !self.project_layers(particles, triangles, layers, reserve)? {
                 return Ok(());
             }
             fixed_contacts(particles, layers)?;
-            if reserve > 0. && self.resolved(particles, triangles, layers)? {
+            if self.resolved(particles, triangles, layers)? {
                 return Ok(());
             }
         }

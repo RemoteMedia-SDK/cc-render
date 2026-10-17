@@ -29,6 +29,69 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 203 — finer bedding integration (incomplete)
+
+`prepare_bedding_layers.py` now authors 48 integration substeps for all three
+layers. Meshes, masses, thicknesses, compliance and acceptance limits are
+unchanged. Regenerated authoring metadata matches the scene and script hashes.
+The resolution-only baseline passes the former tick-23 strain failure (about
+2.6% fitted stretch there), but fails at tick 138 with
+`swept cloth contact could not be resolved conservatively`. Its wall time is
+1,873.24 seconds for 2.3 simulated seconds. This is neither settled nor ready
+for interactive use. Evidence: `cloth203/substeps48.log` and `.ndjson`.
+
+The current contact solver begins with a 0.4 micrometre projection reserve and
+retains the 1 micrometre reserve after 64 passes. Every accepted step still has
+to certify the original unpadded separation and swept path; the 10 nm numerical
+acceptance tolerance, 15% stretch limit and independent geometry gates remain
+unchanged. The 44 focused solver checks, including resting height and the
+submicrometre-overlap rejection, pass. The final remaining-library run passes
+377 tests, two ignored, with the full-bed test running separately. Python is
+still six passes plus its unchanged source-text ownership failure.
+
+The first current-reserve full test ended after 435.94 seconds on a trace-write
+`StorageFull` error. A preview export failed on the same disk exhaustion; its
+truncated image and log were retained. After space recovered, only the terminal
+run was restarted, using `substeps48-reserve400-retry.ndjson` and `.log`. It was
+last verified live as host PID 313957, tool session 15011. Consult current
+process state and terminal logs, not this historical PID alone. The earlier
+resolution-only baseline is terminal. Do not launch duplicate runs because
+observation takes a long time. Source/state snapshots are in
+`cloth203/active-runs.json`. Full ten-second acceptance remains unproven.
+
+Two rejected performance experiments were removed: a crate optimization override
+preserved the first 19 full records but showed no speed improvement in the
+concurrent comparison; a flat-support shortcut changed the trajectory starting
+at tick 12. Their logs remain in `cloth203/`. The 0.1 micrometre early-reserve
+comparison also passed its observed prefix and was intentionally stopped before
+the current comparison. None of these partial runs is a full test pass.
+Ripwire quality/edit checks still cannot obtain a baseline, including an
+unsandboxed attempt; no clean structural-tool result is claimed.
+
+Gallery `20261017T091525Z-203-finer-bedding-physics-with-settling-pending` replays
+eight exact mesh samples at ticks 0, 6, …, 42 (0.0–0.7 s) from the current
+reserve's passing prefix. Three stills and the full eight-frame video decode;
+input hashes and every mesh coordinate/time sample match. This is explicitly
+incomplete progress. The source run's later disk-full failure is archived with
+the preview. The successful render is `cloth203/preview-prefix-v2/`.
+
+Next investigate the fixed swept-contact failure, preserving failed evidence.
+`cloth_sweep.rs::project_swept_triangle` projects all three corners onto one
+impact supporting plane. Whether that overconstrains cloth wrapping around a
+curved support is an open hypothesis, not an established cause. Also inspect
+the fixed-contact convergence/certification boundary: `fixed_contacts` does not
+report whether it moved vertices before self-contact's stopping decision. Add
+failure-local geometry/interval diagnostics before another long reproduction.
+
+Moving-body integration is separately unfinished. The inspected Rapier setup
+uses Bevy-time interpolated steps; cloth uses committed displayed PTS. Cloth
+advance currently has no explicit dependency on Rapier writeback. It is not
+valid to label a current render transform with content PTS and use it during
+cloth catch-up. Establish a common interval or a validated clock mapping,
+retain physical pose histories, and cover translation and rotation with swept
+contact. Full authored folding/compression/release and optional mechanical
+realism remain open. The physics goal stays active.
+
 ## Checkpoint 202 — authored bedding and support contacts (incomplete)
 
 The opt-in `scenes/toronto_condo/scene-bedding.json` adds an independent fitted

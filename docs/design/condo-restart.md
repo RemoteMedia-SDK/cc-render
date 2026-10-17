@@ -7,6 +7,22 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 203 is **work in progress**. Bedding authoring now requests 48
+substeps instead of 24. The resolution-only baseline passed the old tick-23
+strain failure, then failed swept fixed-surface contact at tick 138 (2.3 s),
+after 1,873.24 s wall time. It is terminal; do not keep waiting on PID 297842.
+The current solver starts with a 0.4 micrometre projection reserve, retaining
+the original gap/swept acceptance certificate. Its first full run ended on a
+trace-write disk-full error, not a physics assertion. The retry was confirmed
+live as PID 313957 / tool session 15011; verify current process state and
+`cloth203/substeps48-reserve400-retry.log` before waiting or restarting.
+`cloth203/active-runs.json` records the latest snapshot; it is not proof of
+liveness. The other Rust tests pass (377, two ignored), and Python retains its
+existing source-text failure. Gallery 203 shows only a passing 0.0–0.7 s prefix.
+Full settling, fast-contact robustness, practical performance, moving-body
+collision and manipulation evidence remain open. See checkpoint 203 below in
+`condo-manipulation.md` for the next contact investigation.
+
 Checkpoint 202 is **work in progress**, not accepted bedding physics. The opt-in
 `scene-bedding.json` authors separate fitted/top/duvet meshes; additive cloth
 bindings are now allowed. Interior-face support reactions, a mass-weighted
