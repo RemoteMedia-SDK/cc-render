@@ -44,6 +44,9 @@ fn fixture_for(package: ScenePackage, mechanism_index: usize) -> (App, SceneMech
 #[path = "drawer_tests.rs"]
 mod drawers;
 
+#[path = "vanity_tests.rs"]
+mod vanity;
+
 #[path = "cabinet_tests.rs"]
 mod cabinets;
 

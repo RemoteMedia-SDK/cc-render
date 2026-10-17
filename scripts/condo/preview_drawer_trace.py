@@ -40,11 +40,11 @@ def configure_animation(scene, output):
     scene.render.use_persistent_data = True
 
 
-def encode_animation(output, shots):
+def encode_animation(output, shots, fps=30):
     for ordinal in (0, len(shots)//2, len(shots)-1):
         shutil.copy2(output / shots[ordinal]['file'], output / f'preview-{ordinal:04d}.png')
     subprocess.run([
-        '/usr/bin/ffmpeg', '-v', 'error', '-n', '-framerate', '30',
+        '/usr/bin/ffmpeg', '-v', 'error', '-n', '-framerate', str(fps),
         '-i', str(output / 'frames/%04d.png'), '-vf',
         "drawtext=text='Recorded physics demonstration - no avatar manipulation':"
         'fontcolor=white:fontsize=20:box=1:boxcolor=black@0.7:x=16:y=h-40',
@@ -52,7 +52,8 @@ def encode_animation(output, shots):
         '-movflags', '+faststart', str(output / 'view.mp4')], check=True)
 
 
-def preview(trace_path, output, asset=ASSET, frames=(119, 359, 479, 839), animation=False):
+def preview(trace_path, output, asset=ASSET, frames=(119, 359, 479, 839), animation=False, fps=30):
+    assert fps in (10, 15, 30), 'Frame rate must divide the 60 Hz physics trace'
     output.mkdir(parents=True, exist_ok=False)
     trace = json.loads(trace_path.read_text())
     inputs = [{'path':str(p), 'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
@@ -61,7 +62,7 @@ def preview(trace_path, output, asset=ASSET, frames=(119, 359, 479, 839), animat
     scene = bpy.context.scene
     if animation:
         # Diagnostic traces use 60 Hz. Preserve timing without interpolation.
-        frames = range(0, len(trace['frames']), 2)
+        frames = range(0, len(trace['frames']), 60//fps)
         configure_animation(scene, output)
     block = box('Observed diagnostic obstruction', (0, 0, 0), (.7, .05, .23),
                 material('Diagnostic obstruction', (.4, .12, .025), .7), scene.collection)
@@ -87,9 +88,9 @@ def preview(trace_path, output, asset=ASSET, frames=(119, 359, 479, 839), animat
         bpy.ops.render.render(write_still=True)
         shots.append({'file':name, 'frame':index, 'phase':sample['phase'], 'observed':sample})
     if animation:
-        encode_animation(output, shots)
+        encode_animation(output, shots, fps)
     report = {'scope':__doc__, 'screenshots':shots,
-              'inputs':inputs,
+              'inputs':inputs, 'fps':fps if animation else None,
               'limits':['Diagnostic test forces only; no generated avatar manipulation.',
                         'Rendering recorded rigid poses does not certify hand contact.']}
     (output / 'capture.json').write_text(json.dumps(report, indent=2)+'\n')
@@ -102,7 +103,9 @@ if __name__ == '__main__':
     parser.add_argument('output', type=Path)
     parser.add_argument('--asset', type=Path, default=ASSET)
     parser.add_argument('--frames', type=int, nargs='+', default=(119, 359, 479, 839))
-    parser.add_argument('--animation', action='store_true', help='Render the full 60 Hz trace as a 30 fps video')
+    parser.add_argument('--animation', action='store_true', help='Render the full 60 Hz trace as a video')
+    parser.add_argument('--fps', type=int, choices=(10, 15, 30), default=30,
+                        help='Animation frame rate; preserves physical time without interpolation')
     args = parser.parse_args(sys.argv[sys.argv.index('--')+1:])
-    preview(args.trace.resolve(), args.output.resolve(), args.asset.resolve(), args.frames, args.animation)
+    preview(args.trace.resolve(), args.output.resolve(), args.asset.resolve(), args.frames, args.animation, args.fps)
     os._exit(0)

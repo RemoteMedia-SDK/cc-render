@@ -1,0 +1,498 @@
+{
+  "id": "vanity_drawers",
+  "placement": [
+    -5.58,
+    0,
+    -2.83
+  ],
+  "replaces_solid": "vanity",
+  "replaces_nodes": [
+    "Bathroom detail vanity back",
+    "Bathroom detail vanity bottom",
+    "Bathroom detail vanity drawer",
+    "Bathroom detail vanity drawer.001",
+    "Bathroom detail vanity finger rail",
+    "Bathroom detail vanity finger rail.001",
+    "Bathroom detail vanity side",
+    "Bathroom detail vanity side.001",
+    "Bathroom detail folded hand towel",
+    "Bathroom detail towel rail"
+  ],
+  "parts": [
+    {
+      "id": "vanity_shell",
+      "geometry": "interaction-authoring/vanity/vanity_shell.glb",
+      "sha256": "cd9e498866042bdcb2b71c966c615e99a8e1f575689df0f842026693ccd83d19",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "vanity_bottom",
+          "position": [
+            0.0,
+            0.30000001192092896,
+            -0.0
+          ],
+          "half_extents": [
+            0.325,
+            0.0175,
+            0.55
+          ]
+        },
+        {
+          "id": "vanity_back",
+          "position": [
+            -0.3100000023841858,
+            0.5600000023841858,
+            -0.0
+          ],
+          "half_extents": [
+            0.0125,
+            0.26,
+            0.55
+          ]
+        },
+        {
+          "id": "vanity_side_-0.54",
+          "position": [
+            0.0,
+            0.5600000023841858,
+            0.5400000214576721
+          ],
+          "half_extents": [
+            0.325,
+            0.26,
+            0.0125
+          ]
+        },
+        {
+          "id": "vanity_side_0.54",
+          "position": [
+            0.0,
+            0.5600000023841858,
+            -0.5400000214576721
+          ],
+          "half_extents": [
+            0.325,
+            0.26,
+            0.0125
+          ]
+        },
+        {
+          "id": "vanity_retained_counter",
+          "position": [
+            0.02,
+            0.86,
+            0.0
+          ],
+          "half_extents": [
+            0.36,
+            0.0225,
+            0.58
+          ]
+        },
+        {
+          "id": "vanity_retained_basin",
+          "position": [
+            0.07,
+            0.781,
+            -0.02
+          ],
+          "half_extents": [
+            0.2205,
+            0.106,
+            0.29
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vanity_lower_drawer",
+      "geometry": "interaction-authoring/vanity/vanity_lower_drawer.glb",
+      "sha256": "7e1cedca99c52375427f0b561fb932e340ecf6c308a426bb1456d28bfd1e3fef",
+      "position": [
+        0.0,
+        0.435,
+        0.0
+      ],
+      "mass_kg": 5.0,
+      "colliders": [
+        {
+          "id": "vanity_lower_drawer_front",
+          "position": [
+            0.34200000762939453,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.013,
+            0.121,
+            0.535
+          ]
+        },
+        {
+          "id": "vanity_lower_drawer_pull",
+          "position": [
+            0.3580000102519989,
+            0.09600001573562622,
+            -0.0
+          ],
+          "half_extents": [
+            0.006,
+            0.006,
+            0.45
+          ]
+        },
+        {
+          "id": "vanity_lower_drawer_bin_0_floor",
+          "position": [
+            0.009999999776482582,
+            -0.09799998998641968,
+            -0.0
+          ],
+          "half_extents": [
+            0.28,
+            0.008,
+            0.52
+          ]
+        },
+        {
+          "id": "vanity_lower_drawer_bin_0_side_-1",
+          "position": [
+            0.009999999776482582,
+            -0.018000006675720215,
+            0.5120000243186951
+          ],
+          "half_extents": [
+            0.28,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "vanity_lower_drawer_bin_0_side_1",
+          "position": [
+            0.009999999776482582,
+            -0.018000006675720215,
+            -0.5120000243186951
+          ],
+          "half_extents": [
+            0.28,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "vanity_lower_drawer_bin_0_end_-0.262",
+          "position": [
+            -0.2619999945163727,
+            -0.018000006675720215,
+            -0.0
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.504
+          ]
+        },
+        {
+          "id": "vanity_lower_drawer_bin_0_end_0.282",
+          "position": [
+            0.28200000524520874,
+            -0.018000006675720215,
+            -0.0
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.504
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "prismatic",
+        "parent": "vanity_shell",
+        "parent_anchor": [
+          0.0,
+          0.435,
+          0.0
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          1,
+          0,
+          0
+        ],
+        "limits_m": [
+          0,
+          0.4
+        ]
+      },
+      "handle_region": {
+        "mesh": "vanity_lower_drawer_pull",
+        "centre": [
+          0.3580000102519989,
+          0.09600001573562622,
+          -0.0
+        ],
+        "half_extents": [
+          0.006,
+          0.006,
+          0.45
+        ]
+      }
+    },
+    {
+      "id": "vanity_upper_drawer",
+      "geometry": "interaction-authoring/vanity/vanity_upper_drawer.glb",
+      "sha256": "810c1bbff83a58ef2f6e36bc72e1e92394e178817d88053a5dafef69822f3158",
+      "position": [
+        0.0,
+        0.695,
+        0.0
+      ],
+      "mass_kg": 5.0,
+      "colliders": [
+        {
+          "id": "vanity_upper_drawer_front",
+          "position": [
+            0.34200000762939453,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.013,
+            0.121,
+            0.535
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_pull",
+          "position": [
+            0.3580000102519989,
+            0.09600001573562622,
+            -0.0
+          ],
+          "half_extents": [
+            0.006,
+            0.006,
+            0.45
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_0_floor",
+          "position": [
+            0.009999999776482582,
+            -0.09799998998641968,
+            0.4300000071525574
+          ],
+          "half_extents": [
+            0.28,
+            0.008,
+            0.09
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_0_side_-1",
+          "position": [
+            0.009999999776482582,
+            -0.018000006675720215,
+            0.5120000243186951
+          ],
+          "half_extents": [
+            0.28,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_0_side_1",
+          "position": [
+            0.009999999776482582,
+            -0.018000006675720215,
+            0.3479999899864197
+          ],
+          "half_extents": [
+            0.28,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_0_end_-0.262",
+          "position": [
+            -0.2619999945163727,
+            -0.018000006675720215,
+            0.4300000071525574
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.074
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_0_end_0.282",
+          "position": [
+            0.28200000524520874,
+            -0.018000006675720215,
+            0.4300000071525574
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.074
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_1_floor",
+          "position": [
+            0.009999999776482582,
+            -0.09799998998641968,
+            -0.4300000071525574
+          ],
+          "half_extents": [
+            0.28,
+            0.008,
+            0.09
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_1_side_-1",
+          "position": [
+            0.009999999776482582,
+            -0.018000006675720215,
+            -0.3479999899864197
+          ],
+          "half_extents": [
+            0.28,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_1_side_1",
+          "position": [
+            0.009999999776482582,
+            -0.018000006675720215,
+            -0.5120000243186951
+          ],
+          "half_extents": [
+            0.28,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_1_end_-0.262",
+          "position": [
+            -0.2619999945163727,
+            -0.018000006675720215,
+            -0.4300000071525574
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.074
+          ]
+        },
+        {
+          "id": "vanity_upper_drawer_bin_1_end_0.282",
+          "position": [
+            0.28200000524520874,
+            -0.018000006675720215,
+            -0.4300000071525574
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.074
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "prismatic",
+        "parent": "vanity_shell",
+        "parent_anchor": [
+          0.0,
+          0.695,
+          0.0
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          1,
+          0,
+          0
+        ],
+        "limits_m": [
+          0,
+          0.4
+        ]
+      },
+      "handle_region": {
+        "mesh": "vanity_upper_drawer_pull",
+        "centre": [
+          0.3580000102519989,
+          0.09600001573562622,
+          -0.0
+        ],
+        "half_extents": [
+          0.006,
+          0.006,
+          0.45
+        ]
+      }
+    },
+    {
+      "id": "vanity_wall_towel",
+      "geometry": "interaction-authoring/vanity/vanity_wall_towel.glb",
+      "sha256": "6d271f1746c78d10f8b58faf0928ce4461bec71343b1695cf5a0b7554dc5f8f3",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "vanity_accessory_0",
+          "position": [
+            -2.515000343322754,
+            0.6000000238418579,
+            -2.5
+          ],
+          "half_extents": [
+            0.010999917984008789,
+            0.14999999105930328,
+            0.16000008583068848
+          ]
+        },
+        {
+          "id": "vanity_accessory_1",
+          "position": [
+            2.6825244426727295,
+            1.2999999523162842,
+            0.03000042587518692
+          ],
+          "half_extents": [
+            0.02247476577758789,
+            0.006657421588897705,
+            0.19700002670288086
+          ]
+        }
+      ]
+    }
+  ]
+}

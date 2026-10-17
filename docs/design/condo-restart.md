@@ -1,5 +1,23 @@
 # Condo restart checkpoint
 
+Latest scope (2026-10-17): the owner paused the broader goal and requested
+**physics and movable condo parts only; stop avatar work**. Do not resume avatar
+generation, interaction routing or calibration as part of this physics checkpoint.
+The owner assigned handle grip zones and the physical grip/pull-or-push/release
+phase lifecycle to a separate agent. This workstream owns authored geometry,
+collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
+
+Checkpoint 194 adds two passive vanity drawers with 40 cm travel in
+`scenes/toronto_condo/scene-vanity-drawers.json`, now the latest opt-in scene.
+The upper drawer has separate bins around the recessed basin; the lower tray
+holds a loose 200 g cube through opening and closing in the physics fixture.
+The formerly obstructing towel/rail is moved to the opposite bathroom wall,
+with separate accessory bounds replacing the overly broad shared collider.
+All 332 Rust library tests pass (two ignored). Swept and observed-pose clearance
+checks pass; Python retains its existing source-text failure. Evidence and
+the recorded physics preview are under `artifacts/toronto-condo-captures/vanity194/`
+and gallery 194. No avatar subsystem was changed.
+
 Latest owner direction (2026-10-17): **disable scene conditioning and use the
 `interact` function**. This supersedes the earlier scene-conditioned gesture
 direction and approval request. The SDK proposal is withdrawn; do not implement

@@ -1,5 +1,55 @@
 # Condo manipulation: current priority
 
+Current scope: **physics and movable condo parts only**, per the owner's latest
+instruction. Avatar work is deferred and the broader goal is paused.
+The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
+to a separate agent. This workstream should not edit that functionality.
+
+Physics integration handoff: the latest scene is `scene-vanity-drawers.json`.
+Its new moving IDs are `vanity_lower_drawer` and `vanity_upper_drawer`, each with
+parent `vanity_shell`, world-aligned axis `[1, 0, 0]`, and limits `[0, 0.40]` m.
+The wall-mounted towel is a separate fixed part, `vanity_wall_towel`.
+Existing `handle_region` entries are authoring metadata for the functionality
+agent to review; they do not certify a grip. Published articulation observations
+use the existing checkpoint-190 contract. Mechanism part positions use the
+authored origin; published prop transforms use the collider-bounds center.
+
+## Checkpoint 194 — vanity drawers and loose contents
+
+`scene-vanity-drawers.json` extends the bathroom-door package. Two estimated
+5 kg drawers move along passive X rails with 0–40 cm limits. The lower tray
+has a full open cavity; the upper drawer uses two side bins to clear the
+retained basin. The cabinet bottom/back/sides remain fixed. Counter and basin
+collision envelopes conservatively reserve their solid volume; the basin is
+not a usable hollow sink. Rails have no motor, latch or soft-close mechanism.
+
+The first clearance and solver checks found that the original static towel
+rail and hanging towel obstructed the fronts. The authoring script relocates
+their actual meshes to the opposite bathroom wall in a separate fixed part.
+Soap remains on the counter. Per-item accessory bounds replace the original
+aggregate collider. The front panels gained 3 mm clearance; assertions and
+solver settings were not weakened. Failed check and setup logs are retained locally.
+
+The exact swept-volume check passes 1,805 comparisons with a 3 mm reserved
+minimum gap. The 840-step physics trace passes 1,516,200 fixed-room comparisons
+with a 4 mm minimum gap. The diagnostic fixture checks transverse loads,
+obstructed upper travel, both end stops, release, closing and current bounds.
+A separate loose-content test drops a 200 g, 8 cm cube onto the lower tray,
+opens and closes it under diagnostic loads, checks support height throughout,
+and checks containment at the settled endpoints.
+The cube returns to approximately its starting position without a coupling.
+These probes establish the tested geometry and loads, not arbitrary contents.
+
+All 332 Rust library tests pass, two ignored. Python has six passes and its
+existing ownership source-text failure. Structural review retains explicit
+fixture/assembly similarities, the new fixture's branch count, historical
+render-source duplication and preview-helper churn. The animation helper adds
+an optional 10/15/30 fps setting (default remains 30), sampling original 60 Hz
+poses at the matching interval without interpolation or changing physical time.
+The 194 video is a 14-second, 15 fps physics demonstration. Its isolated studio
+omits the retained basin/counter; the condo integration view includes them.
+No avatar behavior or SDK code changed in this checkpoint.
+
 Latest owner direction, 2026-10-17: **scene conditioning is disabled in the
 interaction plan; use the `interact` function**. This supersedes checkpoint 189's
 gesture direction. The SDK scene-conditioned proposal is withdrawn, not waiting
