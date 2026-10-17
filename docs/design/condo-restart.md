@@ -7,6 +7,23 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 205 adds a **moving-rigid-object continuous collision query**, not yet
+live moving-object cloth response. `cloth_moving_sweep.rs` handles a linearly
+deforming face against translating/rotating cuboids and rounded cuboids, including
+offset pivots and full rotations. Angular curvature is included in interval
+separation bounds; contact velocity includes the angular contribution. Eight
+focused moving-query tests pass. The preceding complete cloth run passed 52
+tests (one ignored); its final added orientation test passed separately.
+Python retains its existing failure. Runtime collision response, shared timing,
+physical substep histories, and two-way rigid-body coupling remain unimplemented.
+
+Both bedding runs below were verified live during this checkpoint. The original
+retry has complete trace through tick 228 (3.8 s) without errors; the instrumented
+run has identical observations at shared logged ticks 0, 16 and 60. No failed
+query has been captured yet. These are passing prefixes, not ten-second settling
+acceptance. Logs/reports for the new query are under `cloth205/`. See checkpoint
+205 in `condo-manipulation.md` for its exact assumptions and integration gaps.
+
 Checkpoint 204 adds **test-only fixed-sweep failure capture and replay**; it does
 not change physical response or resolve full-bed acceptance. Set
 `CC_CLOTH_FAILURE_DIR` to an existing directory before running the bedding test.

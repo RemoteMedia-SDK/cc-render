@@ -6,6 +6,9 @@ use super::*;
 #[path = "cloth_sweep_diagnostics.rs"]
 mod diagnostics;
 
+#[path = "cloth_moving_sweep.rs"]
+pub(super) mod moving;
+
 struct Witness {
     point: DVec3,
     normal: DVec3,

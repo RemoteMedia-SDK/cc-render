@@ -29,6 +29,69 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 205 — translating and rotating collider queries (incomplete)
+
+`cloth_moving_sweep.rs` adds a continuous triangle query in the fixed collider's
+initial coordinate frame. A supplied physical interval describes linear motion
+of a pivot and an explicit world-space axis-angle rotation about that pivot.
+The explicit angle preserves full turns which endpoint quaternions cannot
+identify. The cloth triangle may deform linearly during that same interval.
+Supported object geometry remains cuboids and rounded cuboids.
+
+Relative face trajectories are curved under rotation. With relative position
+`f(t) = R(-t)(a + bt)`, the implementation bounds speed by `|b| + w|a+bt|` and
+acceleration by `w*w|a+bt| + 2*w|b|`. The maximum endpoint reach bounds the norm
+of the linear term throughout the interval. Time-ordered subdivision uses the
+resulting `acceleration * interval_width^2 / 8` chord deviation when certifying
+a separating plane. Unresolved intervals fail explicitly. Contact results
+include fraction, world witness, normal and separation; surface-point velocity
+includes translation plus angular velocity crossed with the pivot offset.
+
+Eight focused tests pass: a moving thin slab crossing a stationary face while
+all vertices miss; a rotating bar crossing with identical full-turn endpoints;
+an offset collider orbiting its pivot; common-translation invariance; a clear
+rotating path and invalid input; finite-difference validation of angular plus
+linear surface velocity; first contact of a deforming face; and invariance
+under an arbitrary rotation/translation of the complete world. The preceding
+full focused cloth run passed 52 tests and ignored the manual replay; the final
+world-orientation regression was then added and all eight moving tests passed.
+Python retains six passes and its existing source-text failure. Logs and quality
+reports: `artifacts/toronto-condo-captures/cloth205/`.
+
+This is a collision-query building block, **not live moving-object response**.
+It does not move particles, emit impulses, or update object/character transforms.
+There is no production caller yet. Its interval must represent actual physical
+motion with constant pivot translation and rotation axis/rate; interpolated
+render transforms or a frame spanning multiple changing velocities are not a
+valid substitute. No new rendered interaction is claimed.
+
+The installed Rapier 0.28 `RapierContext::step_simulation` source confirms that
+interpolated mode may execute multiple outer ticks and multiple physical
+substeps within one Bevy update. Its internal executed-step counter is not
+returned, and render interpolation retains only the final outer step's start.
+Cloth still advances on displayed content PTS. Consequently, simply running
+cloth after Rapier writeback and labelling those poses with PTS would not supply
+the required collision history. Next integration must provide a common physics
+interval and intermediate physical motion, then couple moving contact response
+with self/fixed contact and verify release/settling. Cloth-induced rigid-body
+impulses and changing angular motion remain open as well.
+
+The original full-bed retry remains live (PID 313957/session 15011), with
+complete trace through tick 228 and no errors at this checkpoint. The
+instrumented run remains live (PID 322265/session 10900), with identical complete
+observations at logged ticks 0, 16 and 60; no failure file yet. Recheck actual
+liveness rather than relying on this snapshot. Ten-second settling and runtime
+performance acceptance remain pending.
+
+Quality was compared against an isolated source-only copy of HEAD fc34915. Its
+remaining findings include the intentionally unwired query types, Rust tests
+misclassified as dead code, similar translation fixtures, and a constructor
+clone (`bar` versus the older `rounded` fixture) which gates the report. Those
+construct different shapes and dimensions using the same factory idiom; they
+were not merged into an unrelated abstraction or acknowledged to hide the gate.
+The static test gate also does not recognize these Rust tests. These reports
+are nonclean; executed test evidence is recorded separately.
+
 ## Checkpoint 204 — exact fixed-sweep failure reproduction (incomplete)
 
 `cloth_sweep_diagnostics.rs` is compiled only for tests. Failed particle and
