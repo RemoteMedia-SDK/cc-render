@@ -7,11 +7,13 @@ items open until their actual assets/runtime behavior and evidence are verified.
 
 - Kitchen and island drawers: 15 passive rails implemented and checked with
   45 loose contents through ten simultaneous cycles (checkpoint 195).
-- Upper cabinets, desk drawer and entry door: movable geometry and joints pending.
+- Desk drawer: hollow tray on a 35 cm passive rail, checked with the kitchen and
+  island for 16 loaded drawers and 48 contents over ten cycles (checkpoint 196).
+- Upper cabinets and entry door: movable geometry and joints pending.
 - Bed sheets: self-collision, moving-object collision and fast-motion collision
   protection pending; separate duvet layers remain unfinished.
-- Contents and durability: expand beyond the vanity cube to loaded drawers,
-  shelf contents, repeated cycles and simultaneous mechanisms.
+- Contents and durability: loaded drawers, repeated cycles and simultaneous
+  rails now covered; shelf contents and broader load coverage remain open.
 - Optional realism: assess latches, soft-close behavior, door closers and
   improved mass/friction calibration after the core mechanics are reliable.
 
@@ -21,6 +23,43 @@ Current scope: **physics and movable condo parts only**. The owner replaced the
 former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
+
+## Checkpoint 196 — desk drawer and expanded simultaneous loads
+
+Latest opt-in package: `scene-desk-drawer.json`, extending the kitchen package.
+Moving part `desk_drawer` has parent `desk_shell`, axis `[-1, 0, 0]`, 0–0.35 m
+travel and an estimated empty mass of 2.5 kg. Its `_pull` mesh is available for
+the functionality agent; no grip zones or interaction phases were added here.
+
+The source desktop, frame and cable organizer retain their evaluated positions.
+The old solid drawer case becomes a hollow shell. The moving tray is narrower
+to clear the frame leg, with a fixed side filler preserving the outer case.
+An initial failed clearance check found tray contacts with the side and cable
+organizer; the final tray is narrower and shallower. Failed previews and the
+original settling failure remain in gallery 196a. Shared retained-mesh import
+was extracted without changing the kitchen's 23 or island's seven retained
+colliders or replacement-node lists; a Blender regression comparison passes.
+
+The full travel envelope passes 700 fixed-box comparisons with at least 8 mm
+clearance after a 1 mm reserve. All 840 recorded solver frames pass 588,000
+fixed-room comparisons, with approximately 9 mm minimum gap. Diagnostic tests
+check transverse loads, an obstruction at 18 cm, opening, passive release,
+closing and published joint/bounds observations. The rail has no motor.
+
+The loaded fixture now drives 16 kitchen/island/desk drawers simultaneously,
+each carrying a sphere, cylinder and box totaling 2 kg. Ten cycles pass over
+5,644 physics steps; longest measured settling interval is 4.567 seconds.
+Containment checks cover content centers and support height, not arbitrary
+loads or full shape containment. All 336 Rust library tests pass (two ignored).
+The unchanged Python ownership source-text test still fails; six others pass.
+Structural review reports no gating quality regressions. Its name-based test
+map misses test-module/macro paths, so the executed full Rust suite, Blender
+comparison and scene-specific clearance checks provide the verification.
+
+The assembled capture verifies 63 asset hashes, 39 parts and 27 passive joints
+across 120 frames. Gallery 196b records opening/obstruction/closing at actual
+physics timing; 196c shows the desk in the condo. Evidence and the rejected
+authoring attempts are under `artifacts/toronto-condo-captures/desk196/`.
 
 ## Checkpoint 195 — kitchen/island rails and loaded cycling
 

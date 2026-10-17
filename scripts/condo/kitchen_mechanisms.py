@@ -19,14 +19,16 @@ def retain_shell(kind, base):
     """Copy retained source geometry and its per-mesh bounds into a fixed part."""
     group = 'kitchen_cabinetry' if kind == 'kitchen' else 'island_cabinet'
     omitted = ('drawer front', 'drawer pull') if kind == 'kitchen' else ('island body', 'island drawer', 'island pull')
-    fixed = assembly(kind+'_drawer_shell', (0, 0, 0), None)
-    names = []
-    for obj in list(bpy.data.objects):
-        if obj.get('kitchen_group') != group:
-            continue
-        names.append(obj.name)
-        if any(obj.name.startswith('Kitchen detail '+n) for n in omitted):
-            continue
+    objects = [obj for obj in bpy.data.objects if obj.get('kitchen_group') == group]
+    retained = [obj for obj in objects
+                if not any(obj.name.startswith('Kitchen detail '+n) for n in omitted)]
+    return retain_objects(kind+'_drawer_shell', base, retained), [obj.name for obj in objects]
+
+
+def retain_objects(name, base, objects):
+    """Preserve evaluated source transforms when rebasing retained fixed geometry."""
+    fixed = assembly(name, (0, 0, 0), None)
+    for obj in objects:
         fixed['collection'].objects.link(obj)
         bpy.context.view_layer.update()
         obj.matrix_world = Matrix.Translation(-Vector(base)) @ obj.matrix_world
@@ -39,8 +41,8 @@ def retain_shell(kind, base):
         fixed['meshes'].append(obj)
         fixed['colliders'].append({'id':obj.name, 'position':runtime((high+low)/2),
             'half_extents':[half.x, half.z, half.y]})
-    assert names and fixed['meshes']
-    return fixed, names
+    assert fixed['meshes']
+    return fixed
 
 
 def tray(part, name, center, size, material):

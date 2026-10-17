@@ -7,7 +7,18 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
-Checkpoint 195 adds nine kitchen and six island drawers to the latest opt-in
+Checkpoint 196 adds a hollow desk drawer to `scene-desk-drawer.json`, now the
+latest opt-in package. Its passive rail travels 35 cm along -X; the source
+desktop/frame/cable organizer are retained. All 16 kitchen/island/desk drawers
+pass ten simultaneous cycles with 48 loose contents. All 336 Rust library tests
+pass (two ignored); the unchanged Python source-text ownership check still
+fails. Gallery 196 retains failed authoring, a recorded physics animation and
+the assembled condo capture (39 parts, 27 passive joints). Remaining scope:
+upper cabinets, entry door, cloth collisions/duvet layers, shelf contents and
+optional mechanical realism. The functionality agent still owns grip zones
+and interaction phase transitions.
+
+Checkpoint 195 adds nine kitchen and six island drawers to the preceding opt-in
 `scenes/toronto_condo/scene-kitchen-drawers.json`. Both banks use passive 40 cm
 rails. Forty-five loose spheres/cylinders/boxes (2 kg per drawer) pass ten
 simultaneous open/close cycles, with measured settling up to 5.083 seconds.

@@ -1,14 +1,14 @@
 //! Real exported kitchen/island geometry, passive diagnostic loads and loose contents.
 use super::*;
 
-fn kitchen_fixture() -> (App, Vec<SceneMechanism>) {
+pub(super) fn furnished_fixture() -> (App, Vec<SceneMechanism>) {
     let scene = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("scenes/toronto_condo/scene-kitchen-drawers.json")).unwrap();
+        .join("scenes/toronto_condo/scene-desk-drawer.json")).unwrap();
     let indices: Vec<_> = (0..scene.mechanisms.len()).collect();
     fixture_for_indices(scene, &indices)
 }
 
-fn bank_entities(app: &mut App, mechanism: &SceneMechanism) -> Vec<Entity> {
+pub(super) fn bank_entities(app: &mut App, mechanism: &SceneMechanism) -> Vec<Entity> {
     door_entities(app).into_iter().filter(|e| {
         let id = &app.world().get::<Prop>(*e).unwrap().id;
         mechanism.parts.iter().any(|p| &p.id == id)
@@ -17,12 +17,13 @@ fn bank_entities(app: &mut App, mechanism: &SceneMechanism) -> Vec<Entity> {
 
 #[test]
 fn retained_kitchen_geometry_and_vanity_accessories_keep_source_coordinates() {
-    let (_, mechanisms) = kitchen_fixture();
+    let (_, mechanisms) = furnished_fixture();
     for (bank, part, shape, expected) in [
         ("kitchen_drawers", "kitchen_drawer_shell", "Kitchen detail base back", [-5.935, 0.52, 0.175]),
         ("kitchen_drawers", "kitchen_drawer_shell", "Kitchen detail cutout worktop", [-5.55, 0.93, 0.175]),
         ("island_drawers", "island_drawer_shell", "Kitchen detail island stone top", [-3.55, 0.94, 0.]),
         ("vanity_drawers", "vanity_wall_towel", "vanity_accessory_0", [-2.891, 1.17, -2.80]),
+        ("desk_drawer", "desk_shell", "Workspace detail oak desktop", [1.52, 0.76, -3.2]),
     ] {
         let m = mechanisms.iter().find(|m| m.id == bank).unwrap();
         let p = m.parts.iter().find(|p| p.id == part).unwrap();
@@ -47,7 +48,7 @@ fn assert_bank_phase(phase: usize, states: &[serde_json::Value], blocked: &str) 
 #[test]
 fn kitchen_and_island_drawers_obstruct_open_release_and_close() {
     for bank in ["kitchen_drawers", "island_drawers"] {
-        let (mut app, mechanisms) = kitchen_fixture();
+        let (mut app, mechanisms) = furnished_fixture();
         let m = mechanisms.iter().find(|m| m.id == bank).unwrap();
         let drawers = bank_entities(&mut app, m);
         assert_eq!(drawers.len(), if bank == "kitchen_drawers" { 9 } else { 6 });
@@ -94,9 +95,13 @@ struct Contents {
     axis: Vec3,
 }
 
+fn loaded_bank(m: &SceneMechanism) -> bool {
+    matches!(m.id.as_str(), "kitchen_drawers" | "island_drawers" | "desk_drawer")
+}
+
 fn load_drawers(app: &mut App, mechanisms: &[SceneMechanism]) -> Vec<Contents> {
     let mut contents = Vec::new();
-    for m in mechanisms.iter().filter(|m| m.id == "kitchen_drawers" || m.id == "island_drawers") {
+    for m in mechanisms.iter().filter(|m| loaded_bank(m)) {
         for e in bank_entities(app, m) {
             let id = &app.world().get::<Prop>(e).unwrap().id;
             let part = m.parts.iter().find(|p| &p.id == id).unwrap();
@@ -161,11 +166,13 @@ fn drive_loaded_phase(app: &mut App, contents: &[Contents], phase: usize) {
 }
 
 fn assert_loaded_drawers(app: &mut App, mechanisms: &[SceneMechanism], phase: usize, cycle: usize) {
-    for m in mechanisms.iter().filter(|m| m.id == "kitchen_drawers" || m.id == "island_drawers") {
+    for m in mechanisms.iter().filter(|m| loaded_bank(m)) {
         let drawers = bank_entities(app, m);
         for e in &drawers {
             let state = super::drawers::drawer_state(app, m, *e);
-            let expected = if phase < 2 { 0.4 } else { 0. };
+            let part = m.parts.iter().find(|p| p.id == state["id"]).unwrap();
+            let limits = part.joint.as_ref().unwrap().limits_m.unwrap();
+            let expected = if phase < 2 { limits[1] } else { limits[0] } as f64;
             assert!((state["travel_m"].as_f64().unwrap()-expected).abs() < 0.003,
                 "cycle {cycle} phase {phase}: {state}");
         }
@@ -174,10 +181,10 @@ fn assert_loaded_drawers(app: &mut App, mechanisms: &[SceneMechanism], phase: us
 }
 
 #[test]
-fn kitchen_and_island_loaded_drawers_survive_ten_simultaneous_cycles() {
-    let (mut app, mechanisms) = kitchen_fixture();
+fn loaded_kitchen_island_and_desk_drawers_survive_ten_simultaneous_cycles() {
+    let (mut app, mechanisms) = furnished_fixture();
     let contents = load_drawers(&mut app, &mechanisms);
-    assert_eq!(contents.len(), 45);
+    assert_eq!(contents.len(), 48);
     for _ in 0..120 { app.update(); }
     assert_contents(&app, &contents, true);
     let mut extra_steps = 0;
@@ -195,6 +202,6 @@ fn kitchen_and_island_loaded_drawers_survive_ten_simultaneous_cycles() {
             assert_loaded_drawers(&mut app, &mechanisms, phase, cycle);
         }
     }
-    eprintln!("KITCHEN_DURABILITY_PASS drawers=15 contents=45 load_per_drawer_kg=2 cycles=10 physics_steps={} longest_settle_seconds={}",
+    eprintln!("DRAWER_DURABILITY_PASS drawers=16 contents=48 load_per_drawer_kg=2 cycles=10 physics_steps={} longest_settle_seconds={}",
         4920+extra_steps, longest_settle as f32/60.);
 }

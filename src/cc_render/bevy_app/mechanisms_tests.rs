@@ -58,6 +58,9 @@ mod vanity;
 #[path = "kitchen_drawer_tests.rs"]
 mod kitchen_drawers;
 
+#[path = "desk_drawer_tests.rs"]
+mod desk_drawer;
+
 #[path = "cabinet_tests.rs"]
 mod cabinets;
 
