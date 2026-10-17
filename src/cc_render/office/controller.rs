@@ -192,6 +192,9 @@ pub struct OfficeSnapshot {
     pub queued: Vec<ActionRequest>,
     pub motion: MotionRequest,
     pub occupied_hands: Vec<(Hand, String)>,
+    /// Observed travel (m) of each prismatic part's passive rail, by object id.
+    #[serde(default)]
+    pub articulation: std::collections::BTreeMap<String, f32>,
     pub couplings: Vec<Coupling>,
     /// What each holding hand is doing: seat error and finger closure (openspec add-conforming-hand-grasps).
     #[serde(default)]
@@ -298,6 +301,8 @@ pub struct OfficeController {
     pub motion: MotionRequest,
     seen: std::collections::HashSet<String>,
     pub held: Vec<(Hand, String)>,
+    /// Observed rail travel of prismatic parts (physics `PropSnapshot.articulation`).
+    pub articulation: std::collections::BTreeMap<String, f32>,
     held_since_ms: [Option<u64>; 2],
     /// Acquired world grip expressed relative to the body's heading at pickup.
     held_grip_rotations: [Option<Quat>; 2],
@@ -365,6 +370,7 @@ impl Default for OfficeController {
                 heading: None,
             },
             held: vec![],
+            articulation: Default::default(),
             held_since_ms: [None; 2],
             held_grip_rotations: [None; 2],
             session,
@@ -2220,6 +2226,8 @@ impl OfficeController {
                 None => self.motion_error = Some(format!("cannot release {object}: not coupled")),
             },
             C::SupportOn { object } => self.support_object = Some(object),
+            // A physical grip goes to the renderer's grab, never through declared couplings.
+            C::Grip { object, .. } => self.motion_error = Some(format!("grip on {object} is a physical command")),
             C::SupportOff { object } => {
                 if self.support_object.as_deref() == Some(object.as_str()) {
                     self.support_object = None;
@@ -2355,6 +2363,7 @@ impl OfficeController {
             timeline_edit_ids: self.timeline_layers.keys().cloned().collect(),
             earliest_edit_pts_ms: self.motion_start().0,
             occupied_hands: self.held.clone(),
+            articulation: self.articulation.clone(),
             objects: self.objects.clone(),
             world_keypoints: self
                 .objects

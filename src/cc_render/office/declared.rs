@@ -19,6 +19,10 @@ pub const STAND_RADIUS_M: f32 = 0.35;
 /// ...and is facing the stand facing (declared, else towards the object) within this.
 pub const STAND_FACING_DEG: f32 = 30.;
 const NO_RELATION_SETTLE_MS: u64 = 1000;
+/// A grip request not yet observed is asked again after this (the renderer's pursuit times out at 2 s).
+pub const GRIP_RETRY_MS: u64 = 2500;
+/// A travel phase passes after this many consecutive frames inside its range.
+pub const TRAVEL_FRAMES: u32 = 5;
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct RelationProgress {
@@ -38,6 +42,9 @@ pub struct PhaseResult {
     pub status: &'static str,
     pub elapsed_s: f32,
     pub relations: Vec<RelationProgress>,
+    /// Observed joint travel of the object when the phase ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub travel_m: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
@@ -63,6 +70,13 @@ pub struct DeclaredState {
     pub hands_swapped: Option<bool>,
     /// The mirrored pairing's counters while both are being tracked.
     #[serde(skip)] mirror: Option<(Vec<RelationProgress>, Vec<Vec<u32>>, Vec<u32>)>,
+    /// Observed joint travel of the object (prismatic parts), when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub travel_m: Option<f32>,
+    /// The hand holding the object by a `grip` phase, until a `release` phase lets go.
+    #[serde(skip)] grip: Option<crate::cc_render::Hand>,
+    #[serde(skip)] grip_requested: Option<u64>,
+    #[serde(skip)] travel_run: u32,
 }
 
 pub enum Step { Running, PhaseDone, Done, Failed(String) }
@@ -74,7 +88,7 @@ impl DeclaredState {
         let mut state = Self { interaction: interaction.into(), index: 0, phase: String::new(), results: Vec::new(),
             progress: Vec::new(), declaration, object: object.id.clone(), started: None, last_pts: None,
             touch_counts: Vec::new(), hold_inside: Vec::new(), stand_since: None, couplings: Vec::new(),
-            hands_swapped: None, mirror: None };
+            hands_swapped: None, mirror: None, travel_m: None, grip: None, grip_requested: None, travel_run: 0 };
         state.enter(0);
         Ok(state)
     }
@@ -93,6 +107,8 @@ impl DeclaredState {
         self.stand_since = None;
         self.hands_swapped = None;
         self.mirror = None;
+        self.grip_requested = None;
+        self.travel_run = 0;
         self.progress = phase.relations.iter().map(|r| RelationProgress {
             kind: match r { Relation::Touch { .. } => "touch", Relation::Hold { .. } => "hold",
                             Relation::Support { .. } => "support", Relation::Pair { .. } => "pair" },
@@ -107,7 +123,7 @@ impl DeclaredState {
 
     fn finish(&mut self, status: &'static str, elapsed_s: f32, detail: Option<String>) {
         self.results.push(PhaseResult { phase: self.phase.clone(), status, elapsed_s,
-            relations: self.progress.clone(), detail });
+            relations: self.progress.clone(), travel_m: self.travel_m, detail });
     }
 
     /// Evaluate one displayed frame of the current phase's revision.
@@ -143,14 +159,26 @@ impl DeclaredState {
             }
             failure = match (failure, mirrored_failure) { (Some(a), Some(_)) => Some(a), _ => None };
         }
-        if let Some(detail) = failure {
+        // A travel phase's relations only guide the motion: a closed window does not fail it.
+        if let Some(detail) = failure.filter(|_| declared.travel.is_none()) {
             return self.fail(elapsed, detail);
         }
+        // A gripped handle stays gripped until its release phase lets go.
+        if let Some(hand) = self.grip {
+            if !office.occupied_hands.iter().any(|(h, id)| *h == hand && id == &self.object) {
+                return self.fail(elapsed, format!("grip on {} lost", self.object));
+            }
+        }
+        self.travel_m = office.articulation.get(&self.object).copied();
         if either && self.hands_swapped.is_none() && self.progress.iter().all(|p| p.met) {
             self.hands_swapped = Some(false);
         }
         let phase = if self.hands_swapped == Some(true) { mirrored } else { declared };
-        let done = if phase.relations.is_empty() {
+        let done = if let Some(range) = &phase.travel {
+            // Sustained observed travel: the part moved only through the gripped hand.
+            self.travel_run = if self.travel_m.is_some_and(|t| range.contains(t)) { self.travel_run + 1 } else { 0 };
+            self.travel_run >= TRAVEL_FRAMES
+        } else if phase.relations.is_empty() {
             match &phase.stand_at {
                 Some(stand) => {
                     let near = resolve_zone(owner, &stand.zone, &office.objects, &office.homes).is_some_and(|(z, t)| {
@@ -172,17 +200,44 @@ impl DeclaredState {
         } else {
             self.progress.iter().all(|p| p.met)
         };
+        let done = done && match &phase.transition {
+            // The grip is requested once the hand reaches the handle; the phase passes only when
+            // the renderer reports it held (admitted on actual contact), asking again after a
+            // timed-out pursuit.
+            Some(Transition::Grip { anchor }) => {
+                let hand = hand(anchor.joint).expect("validated grip hand");
+                let held = office.occupied_hands.iter().any(|(h, id)| *h == hand && id == &self.object);
+                if held {
+                    self.grip = Some(hand);
+                } else if self.grip_requested.is_none_or(|t| pts.saturating_sub(t) >= GRIP_RETRY_MS) {
+                    self.couplings.push(CouplingCommand::Grip { object: self.object.clone(), hand });
+                    self.grip_requested = Some(pts);
+                }
+                held
+            }
+            _ => true,
+        };
         if !done {
             if elapsed > phase.timeout_s {
                 let pending: Vec<String> = self.progress.iter().filter(|p| !p.met)
                     .map(|p| format!("{} {} ({} of {} frames, best {:.3} m)", p.kind, p.zone, p.inside, p.frames,
                                      p.best_distance_m.unwrap_or(f32::NAN))).collect();
-                return self.fail(elapsed, format!("phase {} timed out after {:.1} s: {}", self.phase, phase.timeout_s,
-                    if pending.is_empty() { "stand_at not reached".into() } else { pending.join("; ") }));
+                let missing = if let Some(range) = &phase.travel {
+                    format!("travel {} m outside {:?}..{:?}", self.travel_m.map_or("unknown".into(), |t| format!("{t:.3}")),
+                            range.min_m, range.max_m)
+                } else if !pending.is_empty() {
+                    pending.join("; ")
+                } else if matches!(phase.transition, Some(Transition::Grip { .. })) {
+                    "grip not acquired".into()
+                } else {
+                    "stand_at not reached".into()
+                };
+                return self.fail(elapsed, format!("phase {} timed out after {:.1} s: {missing}", self.phase, phase.timeout_s));
             }
             return Step::Running;
         }
         if let Some(command) = self.transition(&phase, owner, office) {
+            if matches!(command, CouplingCommand::Release { .. }) { self.grip = None; }
             self.couplings.push(command);
         }
         self.finish("passed", elapsed, None);
@@ -275,7 +330,7 @@ impl DeclaredState {
             }
             Transition::Release { onto } => Some(CouplingCommand::Release { object, onto: onto.clone() }),
             Transition::SupportOff => Some(CouplingCommand::SupportOff { object }),
-            Transition::SupportOn { .. } => None,
+            Transition::SupportOn { .. } | Transition::Grip { .. } => None,
         }
     }
 }

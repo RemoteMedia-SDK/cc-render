@@ -378,6 +378,12 @@ impl CcRenderNode {
                 target, palm_offset_override: None });
         }
         let forward = |task: &mut super::office::scene_lifecycle::SceneLifecycle| for command in task.take_couplings() {
+            // A declared grip is the renderer's contact grip: admitted only on actual contact.
+            if let super::office::interaction::CouplingCommand::Grip { object, hand } = &command {
+                self.renderer.grab(super::renderer::GrabCmd { hand: *hand, target: object.clone(),
+                    palm_offset_override: None });
+                continue;
+            }
             // A physically gripped object is released by the grip itself; it settles under physics.
             if let super::office::interaction::CouplingCommand::Release { object, onto } = &command {
                 if let Some((hand, _)) = office.occupied_hands.iter().find(|(_, id)| id == object) {
