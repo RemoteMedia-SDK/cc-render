@@ -616,7 +616,32 @@ mod physics_types {
         pub aabb_min: [f32; 3],
         pub aabb_max: [f32; 3],
         pub grasp_world: Option<[[f32; 4]; 4]>,
+        /// Observed permanent hinge/rail in the same world frame as `transform`.
+        /// Temporary hand grips are separate child joints and never appear here.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub articulation: Option<ArticulationSnapshot>,
         pub loading: bool,
+    }
+
+    #[derive(Clone, Debug, serde::Serialize)]
+    pub struct ArticulationSnapshot {
+        pub parent_id: PropId,
+        pub registered: bool,
+        pub parent_anchor_world: [f32; 3],
+        pub child_anchor_world: [f32; 3],
+        pub axis_world: [f32; 3],
+        pub motor_enabled: bool,
+        #[serde(flatten)]
+        pub state: ArticulationCoordinate,
+    }
+
+    /// Raw signed coordinates, including solver overtravel; never clamped to limits.
+    /// Revolute angles use Rapier's principal range [-pi, pi].
+    #[derive(Clone, Debug, serde::Serialize)]
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    pub enum ArticulationCoordinate {
+        Revolute { angle_rad: f32, limits_rad: Option<[f32; 2]> },
+        Prismatic { travel_m: f32, limits_m: Option<[f32; 2]> },
     }
 
     #[derive(Clone, Debug, serde::Serialize)]

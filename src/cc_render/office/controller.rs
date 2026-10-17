@@ -2499,7 +2499,7 @@ mod tests {
         assert_eq!(c.active[0].stage, Stage::Execute);
         assert!(c.push_force_intent().is_some());
         world.props.push(PropSnapshot { id: "chair".into(), transform: Mat4::from_translation(Vec3::new(0., 0.23, 0.8)).to_cols_array_2d(),
-            aabb_min: [0.; 3], aabb_max: [0.; 3], grasp_world: None, loading: false });
+            aabb_min: [0.; 3], aabb_max: [0.; 3], grasp_world: None, articulation: None, loading: false });
         c.observed.displayed_pts_ms = 4800;
         c.advance(&world);
         assert_eq!(c.active[0].stage, Stage::Execute, "animated feet alone cannot move furniture");
@@ -2551,7 +2551,7 @@ mod tests {
             id: "mug".into(), transform: [[0.; 4]; 4],
             aabb_min: [anchor[0] - 0.04, 0.70, anchor[2] - 0.04],
             aabb_max: [anchor[0] + 0.04, 0.78, anchor[2] + 0.04],
-            grasp_world: None, loading: false,
+            grasp_world: None, articulation: None, loading: false,
         });
         for pts in (1050..=1500).step_by(50) {
             // Face pose PTS can remain zero throughout body-motion playback.

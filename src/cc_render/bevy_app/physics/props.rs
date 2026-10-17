@@ -354,7 +354,7 @@ pub(crate) fn publish_scene_state(
     cloth: Option<Res<super::super::cloth::ClothObservations>>,
     tx: Option<Res<SceneStateTx>>,
     mut registry: ResMut<PropRegistry>,
-    props: Query<(Entity, &Prop, &GlobalTransform)>,
+    props: Query<(Entity, &Prop, &GlobalTransform, Option<&ImpulseJoint>, Option<&RapierImpulseJointHandle>)>,
     colliders: Query<(&Collider, &GlobalTransform)>,
     children: Query<&Children>,
     fsms: Res<super::grab::GrabFsms>,
@@ -374,7 +374,7 @@ pub(crate) fn publish_scene_state(
         return;
     }
     let mut snapshots = Vec::new();
-    for (entity, prop, gt) in props.iter() {
+    for (entity, prop, gt, joint, registered_joint) in props.iter() {
         let t = gt.compute_transform();
         let mat = transform_to_4x4(&t);
         // Authored office props and GLB meshes have child colliders. A zero
@@ -401,6 +401,10 @@ pub(crate) fn publish_scene_state(
             aabb_min,
             aabb_max,
             grasp_world: prop.grasp_local.map(|local| mat_mul_4x4(mat, local)),
+            articulation: joint.and_then(|joint| {
+                let (_, parent, pose, ..) = props.get(joint.parent).ok()?;
+                super::articulation::observe(&joint.data, (parent, pose), gt, registered_joint.is_some())
+            }),
             loading: prop.loading,
         });
     }

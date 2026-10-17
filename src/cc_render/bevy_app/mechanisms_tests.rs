@@ -81,6 +81,39 @@ fn assert_current_snapshots(app: &App, mechanism: &SceneMechanism, doors: &[Enti
         }
         assert!(min.distance(Vec3::from(published.aabb_min)) < 1e-4);
         assert!(max.distance(Vec3::from(published.aabb_max)) < 1e-4);
+        assert_joint_snapshot(app, part, *entity, published);
+    }
+    assert!(state.props.iter().filter(|p| mechanism.parts.iter()
+        .any(|part| part.id == p.id && part.joint.is_none())).all(|p| p.articulation.is_none()));
+}
+
+fn assert_joint_snapshot(app: &App, part: &MechanismPart, entity: Entity,
+    published: &crate::cc_render::renderer::PropSnapshot) {
+    use crate::cc_render::renderer::ArticulationCoordinate;
+    let observed = published.articulation.as_ref().expect("permanent joint facts");
+    let authored = part.joint.as_ref().unwrap();
+    let joint = app.world().get::<ImpulseJoint>(entity).unwrap();
+    let parent = app.world().get::<Transform>(joint.parent).unwrap();
+    let child = app.world().get::<Transform>(entity).unwrap();
+    assert_eq!(observed.parent_id, authored.parent);
+    assert!(observed.registered);
+    assert!(!observed.motor_enabled);
+    let a = parent.transform_point(joint.data.as_ref().local_anchor1());
+    let b = child.transform_point(joint.data.as_ref().local_anchor2());
+    let axis = parent.rotation * Vec3::from(authored.axis);
+    assert!(a.distance(Vec3::from(observed.parent_anchor_world)) < 1e-5);
+    assert!(b.distance(Vec3::from(observed.child_anchor_world)) < 1e-5);
+    assert!(axis.distance(Vec3::from(observed.axis_world)) < 1e-5);
+    match observed.state {
+        ArticulationCoordinate::Revolute { angle_rad, limits_rad } => {
+            assert_eq!(limits_rad, authored.limits_rad);
+            let yaw = (parent.rotation.inverse() * child.rotation).to_euler(EulerRot::YXZ).0;
+            assert!((angle_rad-yaw).abs() < 1e-4);
+        }
+        ArticulationCoordinate::Prismatic { travel_m, limits_m } => {
+            assert_eq!(limits_m, authored.limits_m);
+            assert!((travel_m-(b-a).dot(axis)).abs() < 1e-5);
+        }
     }
 }
 

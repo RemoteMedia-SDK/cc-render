@@ -8,6 +8,7 @@ pub(crate) mod cc5_json;
 pub(crate) mod debug_overlay;
 pub(crate) mod grab;
 mod contact_grasp;
+mod articulation;
 #[cfg(test)]
 mod grip_lifecycle_tests;
 pub(crate) mod props;

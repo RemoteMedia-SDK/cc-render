@@ -1,6 +1,15 @@
 # Condo restart checkpoint
 
-Latest: checkpoint 189 preserves a text-only door-gesture baseline in the gallery
+Latest: checkpoint 190 adds read-only articulation observations to each constrained
+prop: parent, world anchors/axis, signed angle or travel, limits, motor flag and
+backend registration. All 328 library tests pass (two ignored), including actual
+mechanism open/block/close fixtures and rotated-parent/overtravel observations.
+A rebuilt live capture publishes all eight passive joints across 120 frames,
+with maximum geometry error 3.05e-7 m and unchanged avatar replay. Evidence and
+video are in `articulation190/` and gallery 190. These facts are not yet included
+in the signed SDK scene context; physical grip/lifecycle integration remains next.
+
+Checkpoint 189 preserves a text-only door-gesture baseline in the gallery
 as **Failed: approach prerequisite**. All 240 native packets were displayed
 unchanged, but the closest observed wrist remained 4.60 m from the handle and
 the door did not travel. No grab intent was armed. This is not a grip-failure

@@ -28,7 +28,7 @@ fn observed_door(mechanism: &SceneMechanism, degrees: f32) -> PropSnapshot {
     let part = mechanism.parts.iter().find(|p| p.id == "fridge_main_door").unwrap();
     let rotation = Quat::from_rotation_y(degrees.to_radians());
     let position = Vec3::from(mechanism.placement) + Vec3::from(part.position) + rotation * part.bounds().0;
-    PropSnapshot { id: part.id.clone(), loading: false, grasp_world: None,
+    PropSnapshot { id: part.id.clone(), loading: false, grasp_world: None, articulation: None,
         transform: Mat4::from_rotation_translation(rotation, position).to_cols_array_2d(),
         aabb_min: [0.; 3], aabb_max: [0.; 3] }
 }
@@ -97,7 +97,7 @@ fn observed_drawer_translation_keeps_held_obstacle_and_invalidates_preview() {
     assert_eq!(part.id, "bedside_upper_drawer");
     let position = Vec3::from(mechanism.placement) + Vec3::from(part.position)
         + part.bounds().0 + Vec3::Z * 0.4;
-    let prop = PropSnapshot { id:part.id.clone(), loading:false, grasp_world:None,
+    let prop = PropSnapshot { id:part.id.clone(), loading:false, grasp_world:None, articulation:None,
         transform:Mat4::from_translation(position).to_cols_array_2d(),
         aabb_min:[0.; 3], aabb_max:[0.; 3] };
     assert!(!controller.update_prop_observations(&[prop]));
@@ -150,7 +150,7 @@ fn verify_door_passage(manifest: &str, part_id: &str, start: [f32; 3], goal: [f3
     let observed = |offset: Transform| {
         let position = Vec3::from(mechanism.placement) + Vec3::from(part.position)
             + offset.translation + offset.rotation*part.bounds().0;
-        PropSnapshot { id:part.id.clone(), loading:false, grasp_world:None,
+        PropSnapshot { id:part.id.clone(), loading:false, grasp_world:None, articulation:None,
             transform:Mat4::from_rotation_translation(offset.rotation, position).to_cols_array_2d(),
             aabb_min:[0.; 3], aabb_max:[0.; 3] }
     };

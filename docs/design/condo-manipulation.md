@@ -13,6 +13,44 @@ triangle/mattress penetration in the lift/release fixture. Runtime hand
 contact observations are available in checkpoint 182; grasp admission and
 avatar handling remain unfinished. See the progress gallery.
 
+## Checkpoint 190: observed articulation facts
+
+`PropSnapshot.articulation` now publishes the permanent hinge or rail attached
+to that prop. It records its parent ID, physics registration, both world-space
+anchors, parent axis, enabled motor status, signed angle/travel and limits with
+explicit radians/metres. Values use the same observed transforms as the prop and
+handle. They are never clamped to limits, so solver overshoot remains visible.
+Revolute angles use Rapier's principal [-pi, pi] convention. Fixed objects and
+temporary child hand grips do not appear as articulated props.
+
+This observer has immutable access to joint/transform data. It adds no actuator,
+body-motion conditioning or grip admission. The physics fixtures now compare
+published joint facts against actual mechanism transforms during opening,
+obstruction, release and closing. Additional tests cover a rotated parent,
+negative signed angles, overtravel outside limits and unregistered joints.
+
+All 328 library tests pass, two ignored. The rebuilt condo renderer published
+960 observations across its eight passive joints in 120 captured frames; an
+independent manifest/transform comparison measured maximum anchor/axis error
+3.05e-7. All 240 unchanged seed-189 packets were delivered, root interpolation
+error stayed below 8.48e-8 m, and the video decoded. This is observation evidence,
+not a successful door manipulation: the replay still never reaches the handle.
+Gallery 190 preserves the capture and audits. The preview again compresses
+twelve seconds of native motion into four encoded seconds.
+
+The Python suite retains its pre-existing source-text ownership failure (six
+passes, one failure); no ownership gate changed. Ripwire still reports artifact
+clones, existing module-size findings and publisher churn, and does not resolve
+the ECS test edges. Its gates are not claimed green; full Rust tests and the live
+capture provide the actual execution evidence.
+
+Next: carry these observations into the signed scene context with coordinated
+Rust/Python schema validation, connect articulated interaction transitions to
+physical contact grips, and feed back observed grip/release and joint state.
+The current SDK context parser still rejects unknown fields; do not send this
+new field into it without updating and testing that contract. The public goal
+continues to describe an outcome, not a wrist or root track.
+
 ## Checkpoint 189: scene-conditioned gesture direction
 
 User steering, 2026-10-17: probably use the scene-conditioned gesture. Keep
