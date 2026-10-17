@@ -7,6 +7,37 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 208 **rejects and reverts** a four-pass spring/contact experiment.
+The production solver is restored byte-for-byte to checkpoint 207. The candidate
+used accumulated damped XPBD multipliers (equation 26, https://mmacklin.com/xpbd.pdf),
+reset each substep, with grips projected only on the final pass. Materials,
+geometry, substeps and acceptance limits were unchanged.
+
+Early energy improved: fitted-only two-second total fell from 16.172291 J to
+8.099315 J; three-layer tick-16 total fell from 388.089327 J to 100.459527 J.
+However, the unchanged live single-sheet 20-second check **failed settling**:
+0.080120034 m/s against 0.05 m/s. Do not reapply four passes as an accepted fix.
+The 62 solver tests passed (two ignored), and all three live tick-16 mesh hashes
+matched the isolated diagnostic. These narrower passes do not override the live
+failure. Six grip tests passed before the incomplete suite was stopped.
+
+The experimental full-bed run (session 26770 / PID 356819) and grip run (63942 /
+359244) were deliberately terminated after this regression, both exit 101.
+A prior accidental duplicate (22624 / 356919) was also terminated. Do not wait on
+these handles or relabel their prefixes as complete. The restored single-sheet check
+(session 44387) finished successfully: tail maximum 0.004849106 m/s against
+0.05 m/s, 55.15 wall seconds. Its log is `cloth208/restored-live.log`. All runs
+from this checkpoint are terminal.
+`cloth208/run-status.json` records the exact terminal states and saved prefix.
+
+Evidence is under `artifacts/toronto-condo-captures/cloth208/`, including the exact
+`rejected-four-pass.patch`, energy traces, full-bed prefix, failing live log,
+source hashes, parity checks and quality reports. Gallery 208b records the
+rejection; 208c adds the restored-baseline passing comparison. No new rendered bedding
+acceptance is claimed. Next investigate contact/material energy inconsistency;
+extra passes alone improved early energy but regressed live settling. The full
+physics goal remains open, including moving-body integration and bedding layers.
+
 Checkpoint 207 adds test-only substep energy measurements and an ignored authored
 bedding probe. Physics, materials and acceptance limits are unchanged. The batch
 prediction loop is separated from per-layer spring projection; all three meshes

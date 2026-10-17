@@ -29,6 +29,54 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 208 — four-pass experiment rejected after live settling failure
+
+Tested four alternating spring/contact passes with accumulated damped XPBD
+multipliers (equation 26 of https://mmacklin.com/xpbd.pdf). Multipliers reset every
+physical substep; acquired grip constraints ran only on the final pass. Materials,
+geometry, integration substeps and all acceptance thresholds stayed unchanged.
+A new unequal-mass spring regression verified that repeated projections preserve
+axial compliance and damping. Pending constraint state and atomic publication
+were factored into helpers; source-only quality reported zero gating regressions,
+with a six-parameter helper and false-positive unused type/test findings.
+
+| Diagnostic endpoint | Previous total energy | Four-pass total energy | Initial energy |
+| --- | ---: | ---: | ---: |
+| Fitted sheet alone, 2 s | 16.172291 J | 8.099315 J | 2.587458 J |
+| Three layers, tick 16 (0.267 s) | 388.089327 J | 100.459527 J | 25.464395 J |
+
+Despite this early energy reduction, the unchanged live single-sheet 20-second
+test failed its settling gate: **0.08012003406952077 m/s versus 0.05 m/s**.
+Fifteen other live checks passed. The 62 isolated solver tests passed (two ignored),
+and final refactored live meshes exactly matched the pre-refactor diagnostic at
+tick 16. Those checks are weaker than the observed live regression. Six grip
+checks passed, but the remaining long grip test was deliberately stopped after
+rejection. The experimental full-bed run was also stopped; its saved prefix is
+not a ten-second settling result. A mistakenly broad filter had started another
+full-bed run earlier; that duplicate was separately identified and stopped.
+All stopped logs and exit-101 outcomes are retained.
+
+**Disposition: all four experimental source files were restored byte-for-byte
+to checkpoint 207.** No solver change from this experiment is shipped. The exact
+patch remains in `cloth208/rejected-four-pass.patch` for reproduction, with its
+SHA-256 in `run-status.json`. The fresh restored-baseline live check passes at **0.004849106 m/s**,
+confirming the four-pass regression. Session 44387 is terminal, exit zero;
+`restored-live.log` retains the 55.15-second run. All checkpoint runs are terminal. Existing Python ownership-text
+failure is unchanged (six pass, one failure); no test was weakened.
+
+Evidence: `artifacts/toronto-condo-captures/cloth208/`: energy traces and
+`energy-comparison.json`, `fitted-final-substep.json`, `refactor-live-parity.json`,
+all test/quality logs, rejected patch and the partial full-bed mesh trace.
+Gallery 208b marks the rejection; 208c plots rejected versus restored live
+settling and supersedes the earlier Prototype entry.
+The chart records a genuine energy improvement but does not prove stable bedding.
+At the fitted-only final substep, each four-pass contact projection still adds
+about 0.14 J after material projection removes energy; this suggests unresolved
+coupling, not proof of a particular contact bug. Next inspect that mechanism
+before increasing pass count or changing materials. Complete bedding settling,
+moving-object response, inter-layer friction, authored duvet construction and
+practical performance remain open.
+
 ## Checkpoint 207 — substep energy localization (incomplete)
 
 `cloth_energy_probe.rs` measures mass-weighted kinetic, gravitational and spring
