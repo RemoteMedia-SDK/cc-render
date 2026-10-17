@@ -1,0 +1,271 @@
+{
+  "id": "balcony_slider",
+  "placement": [
+    0,
+    0,
+    5
+  ],
+  "replaces_solid": "south_glass_pane_002",
+  "replaces_nodes": [
+    "South glass pane.002"
+  ],
+  "parts": [
+    {
+      "id": "balcony_retained_pane",
+      "geometry": "interaction-authoring/balcony-slider/balcony_retained_pane.glb",
+      "sha256": "57e9ac991d63d723bcd0a65a944f69f6a8127af986e1a0e4e12134c14cd31de3",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "balcony_original_right_glass",
+          "position": [
+            3.0,
+            1.4500000476837158,
+            -0.0
+          ],
+          "half_extents": [
+            0.97,
+            1.42,
+            0.0075
+          ]
+        }
+      ]
+    },
+    {
+      "id": "balcony_fixed_panel",
+      "geometry": "interaction-authoring/balcony-slider/balcony_fixed_panel.glb",
+      "sha256": "76951b3c64d5ae5fca633878b386f43f84fac4e83d97974160d1c9b07fe168b1",
+      "position": [
+        1.0,
+        1.5,
+        0.02
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "balcony_fixed_panel_glass",
+          "position": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.93,
+            1.32,
+            0.0075
+          ]
+        },
+        {
+          "id": "balcony_fixed_panel_stile_-1",
+          "position": [
+            -0.9549999833106995,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.025,
+            1.37,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_fixed_panel_rail_-1",
+          "position": [
+            0.0,
+            -1.3450000286102295,
+            -0.0
+          ],
+          "half_extents": [
+            0.93,
+            0.025,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_fixed_panel_stile_1",
+          "position": [
+            0.9550000429153442,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.025,
+            1.37,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_fixed_panel_rail_1",
+          "position": [
+            0.0,
+            1.3450000286102295,
+            -0.0
+          ],
+          "half_extents": [
+            0.93,
+            0.025,
+            0.0275
+          ]
+        }
+      ]
+    },
+    {
+      "id": "balcony_sliding_door",
+      "geometry": "interaction-authoring/balcony-slider/balcony_sliding_door.glb",
+      "sha256": "73225cad28613b0bdc79d26f37c3346fb1efa178c5b64dfccc3111285256a3e3",
+      "position": [
+        -1.0,
+        1.5,
+        -0.1
+      ],
+      "mass_kg": 45.0,
+      "colliders": [
+        {
+          "id": "balcony_sliding_door_glass",
+          "position": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.93,
+            1.32,
+            0.0075
+          ]
+        },
+        {
+          "id": "balcony_sliding_door_stile_-1",
+          "position": [
+            -0.9550000429153442,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.025,
+            1.37,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_sliding_door_rail_-1",
+          "position": [
+            0.0,
+            -1.3450000286102295,
+            -0.0
+          ],
+          "half_extents": [
+            0.93,
+            0.025,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_sliding_door_stile_1",
+          "position": [
+            0.9549999833106995,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.025,
+            1.37,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_sliding_door_rail_1",
+          "position": [
+            0.0,
+            1.3450000286102295,
+            -0.0
+          ],
+          "half_extents": [
+            0.93,
+            0.025,
+            0.0275
+          ]
+        },
+        {
+          "id": "balcony_interior_pull",
+          "position": [
+            -0.8600000143051147,
+            -0.41999995708465576,
+            -0.08000000566244125
+          ],
+          "half_extents": [
+            0.0125,
+            0.16,
+            0.0125
+          ]
+        },
+        {
+          "id": "balcony_pull_mount_0.94",
+          "position": [
+            -0.8600000143051147,
+            -0.5600000023841858,
+            -0.05000000447034836
+          ],
+          "half_extents": [
+            0.0125,
+            0.0125,
+            0.0225
+          ]
+        },
+        {
+          "id": "balcony_pull_mount_1.22",
+          "position": [
+            -0.8600000143051147,
+            -0.2799999713897705,
+            -0.05000000447034836
+          ],
+          "half_extents": [
+            0.0125,
+            0.0125,
+            0.0225
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "prismatic",
+        "parent": "balcony_retained_pane",
+        "parent_anchor": [
+          -1.0,
+          1.5,
+          -0.1
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          1,
+          0,
+          0
+        ],
+        "limits_m": [
+          0,
+          2.0
+        ]
+      },
+      "handle_region": {
+        "mesh": "balcony_interior_pull",
+        "centre": [
+          -0.8600000143051147,
+          -0.41999995708465576,
+          -0.08000000566244125
+        ],
+        "half_extents": [
+          0.0125,
+          0.16,
+          0.0125
+        ]
+      }
+    }
+  ]
+}

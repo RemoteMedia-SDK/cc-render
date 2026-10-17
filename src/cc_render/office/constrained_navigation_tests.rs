@@ -122,6 +122,55 @@ fn declared_kinematic_attachment_is_rejected_for_a_hinged_part() {
 }
 
 #[test]
+fn bedroom_door_controls_passage_in_the_complete_condo_without_moving_avatar() {
+    verify_door_passage("scene-doors.json", "bedroom_door_leaf",
+        [2.85, 0., -0.55], [2.85, 0., -1.85],
+        Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)));
+}
+
+#[test]
+fn balcony_slider_controls_full_condo_passage_without_moving_avatar() {
+    verify_door_passage("scene-balcony-slider.json", "balcony_sliding_door",
+        [-1., 0., 4.2], [-1., 0., 5.65], Transform::from_xyz(2., 0., 0.));
+}
+
+fn verify_door_passage(manifest: &str, part_id: &str, start: [f32; 3], goal: [f32; 3], open: Transform) {
+    // Read-only geometry observations; actual joint response is tested separately.
+    let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scenes/toronto_condo").join(manifest)).unwrap();
+    let mechanism = package.mechanisms.iter().find(|m| m.parts.iter().any(|p| p.id == part_id)).unwrap().clone();
+    let mut app = App::new();
+    app.insert_resource(package);
+    super::super::systems::install(&mut app);
+    let mut controller = app.world_mut().remove_resource::<OfficeController>().unwrap();
+    let motion = serde_json::to_value(&controller.motion).unwrap();
+    let revision = controller.revision;
+    assert_eq!(snapshot(&controller).generate_waypoint(start, goal).unwrap_err().code(), "no_path");
+    let part = mechanism.parts.iter().find(|p| p.id == part_id).unwrap();
+    let observed = |offset: Transform| {
+        let position = Vec3::from(mechanism.placement) + Vec3::from(part.position)
+            + offset.translation + offset.rotation*part.bounds().0;
+        PropSnapshot { id:part.id.clone(), loading:false, grasp_world:None,
+            transform:Mat4::from_rotation_translation(offset.rotation, position).to_cols_array_2d(),
+            aabb_min:[0.; 3], aabb_max:[0.; 3] }
+    };
+    controller.held.push((Hand::Right, part.id.clone()));
+    assert!(!controller.update_prop_observations(&[observed(open)]));
+    let opened = snapshot(&controller);
+    let frozen = serde_json::to_value(&opened).unwrap();
+    let path = opened.generate_waypoint(start, goal).unwrap();
+    assert!(opened.waypoint_geometry_is_current(&path).unwrap());
+    assert!(opened.office.as_ref().unwrap().navigation_object_ids.contains(&part.id));
+    assert_eq!(serde_json::to_value(&opened).unwrap(), frozen);
+    assert!(!controller.update_prop_observations(&[observed(Transform::IDENTITY)]));
+    let closed = snapshot(&controller);
+    assert!(!closed.waypoint_geometry_is_current(&path).unwrap());
+    assert_eq!(closed.generate_waypoint(start, goal).unwrap_err().code(), "no_path");
+    assert_eq!(controller.revision, revision);
+    assert_eq!(serde_json::to_value(&controller.motion).unwrap(), motion);
+}
+
+#[test]
 fn legacy_coupling_cannot_reposition_or_freeze_a_body_with_a_permanent_joint() {
     use bevy_rapier3d::prelude::*;
     use crate::cc_render::bevy_app::{physics::props::{Prop, PropRegistry}, pose::CC5BindRotations};

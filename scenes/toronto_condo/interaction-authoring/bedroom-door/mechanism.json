@@ -1,0 +1,154 @@
+{
+  "id": "bedroom_door",
+  "placement": [
+    2.27,
+    0,
+    -1.2
+  ],
+  "replaces_solid": "bedroom_door_jamb",
+  "replaces_nodes": [
+    "Bedroom door jamb"
+  ],
+  "parts": [
+    {
+      "id": "bedroom_hinge_jamb",
+      "geometry": "interaction-authoring/bedroom-door/bedroom_hinge_jamb.glb",
+      "sha256": "5af2119cf59afdfb73228b3fbc666d76986bee8bb8d5c36dc5774762e835f557",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "bedroom_retained_jamb",
+          "position": [
+            -0.15000000596046448,
+            1.4500000476837158,
+            -0.0
+          ],
+          "half_extents": [
+            0.12,
+            1.45,
+            0.07
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bedroom_door_leaf",
+      "geometry": "interaction-authoring/bedroom-door/bedroom_door_leaf.glb",
+      "sha256": "10c2e8df4b9446b2f5c177a9f0b66877e5a4ccf5e260cf7ce35add52d8fea702",
+      "position": [
+        0.0,
+        1.44,
+        0.0
+      ],
+      "mass_kg": 20.0,
+      "colliders": [
+        {
+          "id": "bedroom_door_panel",
+          "position": [
+            0.5600000023841858,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.56,
+            1.41,
+            0.0175
+          ]
+        },
+        {
+          "id": "bedroom_lever_mount_-1",
+          "position": [
+            0.9700000286102295,
+            -0.40000009536743164,
+            0.027499999850988388
+          ],
+          "half_extents": [
+            0.0225,
+            0.045,
+            0.01
+          ]
+        },
+        {
+          "id": "bedroom_lever_-1",
+          "position": [
+            0.9200000166893005,
+            -0.40000009536743164,
+            0.05000000074505806
+          ],
+          "half_extents": [
+            0.07,
+            0.009,
+            0.008
+          ]
+        },
+        {
+          "id": "bedroom_lever_mount_1",
+          "position": [
+            0.9700000286102295,
+            -0.40000009536743164,
+            -0.027499999850988388
+          ],
+          "half_extents": [
+            0.0225,
+            0.045,
+            0.01
+          ]
+        },
+        {
+          "id": "bedroom_lever_1",
+          "position": [
+            0.9200000166893005,
+            -0.40000009536743164,
+            -0.05000000074505806
+          ],
+          "half_extents": [
+            0.07,
+            0.009,
+            0.008
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "revolute",
+        "parent": "bedroom_hinge_jamb",
+        "parent_anchor": [
+          0.0,
+          1.44,
+          0.0
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "limits_rad": [
+          0,
+          1.5707963267948966
+        ]
+      },
+      "handle_region": {
+        "mesh": "bedroom_lever_-1",
+        "centre": [
+          0.9200000166893005,
+          -0.40000009536743164,
+          0.05000000074505806
+        ],
+        "half_extents": [
+          0.07,
+          0.009,
+          0.008
+        ]
+      }
+    }
+  ]
+}

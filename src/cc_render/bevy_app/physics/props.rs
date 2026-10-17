@@ -459,19 +459,29 @@ fn mat_mul_4x4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     (Mat4::from_cols_array_2d(&a) * Mat4::from_cols_array_2d(&b)).to_cols_array_2d()
 }
 
-/// World-space AABB for a prop. Walks the 8 corners of the collider's
-/// local AABB through the prop's full GlobalTransform (covers rotation
-/// + non-uniform scale, which `Aabb::transform_by(&Isometry)` would
-/// drop).
+/// Transform each leaf shape's bounds before merging compound parts. Rotating
+/// one enclosing local box overstates asymmetric doors at partial hinge angles.
+/// Retain the full affine transform, including non-uniform scale.
 fn world_aabb_from_collider(collider: &Collider, gt: &GlobalTransform) -> ([f32; 3], [f32; 3]) {
-    let local = collider.raw.compute_local_aabb();
-    let m = gt.compute_matrix();
     let mut mn = Vec3::splat(f32::INFINITY);
     let mut mx = Vec3::splat(f32::NEG_INFINITY);
-    for v in local.vertices().iter() {
-        let world = m.transform_point3(Vec3::new(v.x, v.y, v.z));
-        mn = mn.min(world);
-        mx = mx.max(world);
+    let mut pending = vec![(collider.raw.as_ref(), gt.compute_matrix())];
+    while let Some((shape, matrix)) = pending.pop() {
+        if let Some(compound) = shape.as_compound() {
+            for (pose, child) in compound.shapes() {
+                let q = pose.rotation.quaternion();
+                let t = pose.translation.vector;
+                let local = Mat4::from_rotation_translation(
+                    Quat::from_xyzw(q.i, q.j, q.k, q.w), Vec3::new(t.x, t.y, t.z));
+                pending.push((child.as_ref(), matrix * local));
+            }
+        } else {
+            for v in shape.compute_local_aabb().vertices() {
+                let world = matrix.transform_point3(Vec3::new(v.x, v.y, v.z));
+                mn = mn.min(world);
+                mx = mx.max(world);
+            }
+        }
     }
     (mn.to_array(), mx.to_array())
 }
@@ -521,5 +531,23 @@ mod tests {
         assert!((mn[0] + sqrt2_half).abs() < 1e-4);
         assert!((mx[1] - 0.5).abs() < 1e-5);
         assert!((mn[1] + 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rotated_compound_bounds_merge_parts_without_filling_empty_corners() {
+        let child = Collider::cuboid(0.1, 0.2, 0.1);
+        let collider = Collider::compound(vec![
+            (Vec3::new(-1., 0., -1.), Quat::IDENTITY, child.clone()),
+            (Vec3::new(1., 0., 1.), Quat::IDENTITY, child),
+        ]);
+        let gt = GlobalTransform::from(Transform {
+            translation: Vec3::new(2., 3., 4.),
+            rotation: Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
+            scale: Vec3::new(2., 1., 2.),
+        });
+        let (lo, hi) = world_aabb_from_collider(&collider, &gt);
+        let root2 = std::f32::consts::SQRT_2;
+        assert!(Vec3::from(lo).distance(Vec3::new(2.-2.2*root2, 2.8, 4.-0.2*root2)) < 1e-5);
+        assert!(Vec3::from(hi).distance(Vec3::new(2.+2.2*root2, 3.2, 4.+0.2*root2)) < 1e-5);
     }
 }

@@ -98,7 +98,17 @@ pub struct PlaybackCursor {
 impl PlaybackCursor {
     pub fn feed(&mut self, renderer: &impl Renderer, poses: &[SkeletalPose], elapsed_ms: u64) {
         // Pace transport only. Never change source timestamps or pose coordinates.
-        while self.sent < poses.len() && poses[self.sent].pts_ms <= elapsed_ms + 500 {
+        let Some(first) = poses.first() else { return };
+        let state = renderer.scene_state();
+        let observed = state.office.as_ref().filter(|office|
+            office.avatar.native_stream.as_ref().is_some_and(|stream|
+                first.stream.as_ref().is_some_and(|source| stream.session_id == source.session_id)))
+            .map_or(first.pts_ms, |office| office.avatar.displayed_pts_ms);
+        // GPU/encoder backpressure can make wall time outrun playback. Keep
+        // the prefetch bounded by the observed clock so no source frames are
+        // silently lost to PoseTimeline's bounded future queue.
+        let deadline = elapsed_ms.saturating_add(500).min(observed.saturating_add(500));
+        while self.sent < poses.len() && poses[self.sent].pts_ms <= deadline {
             let previous = self.sent.checked_sub(1).map(|index| &poses[index]);
             if !self.prepare_revision(renderer, previous, &poses[self.sent]) {
                 break;
@@ -182,23 +192,24 @@ mod tests {
         assert!(!handoff_ready(&state, &poses[1]));
     }
 
+    use cc_render_plugin::cc_render::renderer::{ArkitPose, RenderedFrame};
+    use std::sync::Mutex;
+    #[derive(Default)]
+    struct Recorder {
+        state: Mutex<SceneState>,
+        commands: Mutex<Vec<OfficeCommand>>,
+        packets: Mutex<Vec<SkeletalPose>>,
+    }
+    impl Renderer for Recorder {
+        fn push_pose(&self, _: ArkitPose) {}
+        fn push_skeletal_pose(&self, pose: Option<SkeletalPose>) { self.packets.lock().unwrap().push(pose.unwrap()); }
+        fn drain_frames(&self, _: &mut Vec<RenderedFrame>) {}
+        fn office_command(&self, command: OfficeCommand) { self.commands.lock().unwrap().push(command); }
+        fn scene_state(&self) -> SceneState { self.state.lock().unwrap().clone() }
+    }
+
     #[test]
     fn new_revision_packets_wait_for_applied_command_acknowledgement() {
-        use cc_render_plugin::cc_render::renderer::{ArkitPose, RenderedFrame};
-        use std::sync::Mutex;
-        #[derive(Default)]
-        struct Recorder {
-            state: Mutex<SceneState>,
-            commands: Mutex<Vec<OfficeCommand>>,
-            packets: Mutex<Vec<SkeletalPose>>,
-        }
-        impl Renderer for Recorder {
-            fn push_pose(&self, _: ArkitPose) {}
-            fn push_skeletal_pose(&self, pose: Option<SkeletalPose>) { self.packets.lock().unwrap().push(pose.unwrap()); }
-            fn drain_frames(&self, _: &mut Vec<RenderedFrame>) {}
-            fn office_command(&self, command: OfficeCommand) { self.commands.lock().unwrap().push(command); }
-            fn scene_state(&self) -> SceneState { self.state.lock().unwrap().clone() }
-        }
         let poses = validate(&[packet(1, 50), packet(1, 100), packet(2, 150), packet(2, 200)]).unwrap();
         let renderer = Recorder::default();
         let mut replay = PlaybackCursor::default();
@@ -219,4 +230,31 @@ mod tests {
         assert!(recorded.iter().zip(&poses).all(|(a,b)|
             a.pts_ms == b.pts_ms && a.root_pos == b.root_pos && a.joint_quats == b.joint_quats));
     }
+    #[test]
+    fn slow_capture_bounds_prefetch_without_losing_or_rewriting_source_packets() {
+        let raw: Vec<_> = (1..=436).map(|i| {
+            let mut p = packet(1, i*50);
+            p["root_pos"] = serde_json::json!([i as f32*0.001, 1., 0.]);
+            p
+        }).collect();
+        let poses = validate(&raw).unwrap();
+        let renderer = Recorder::default();
+        let mut replay = PlaybackCursor::default();
+        replay.feed(&renderer, &poses, 60_000);
+        assert_eq!(replay.sent, 11, "wall time must not fill the future queue before playback starts");
+        let mut office = cc_render_plugin::cc_render::office::controller::OfficeController::default().snapshot();
+        office.avatar.native_stream = poses[0].stream.clone();
+        renderer.state.lock().unwrap().office = Some(office);
+        for pts in (250..=21_800).step_by(250) {
+            renderer.state.lock().unwrap().office.as_mut().unwrap().avatar.displayed_pts_ms = pts;
+            replay.feed(&renderer, &poses, 60_000);
+            let recorded = renderer.packets.lock().unwrap();
+            assert!(recorded.iter().filter(|p| p.pts_ms > pts).count() <= 10);
+        }
+        let recorded = renderer.packets.lock().unwrap();
+        assert_eq!(recorded.len(), poses.len());
+        assert!(recorded.iter().zip(&poses).all(|(a,b)|
+            a.pts_ms == b.pts_ms && a.root_pos == b.root_pos && a.joint_quats == b.joint_quats));
+    }
+
 }

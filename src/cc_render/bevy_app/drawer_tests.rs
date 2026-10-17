@@ -6,22 +6,26 @@ fn package() -> ScenePackage {
         .join("scenes/toronto_condo/scene-drawers.json")).unwrap()
 }
 
-fn drawer_state(app: &App, mechanism: &SceneMechanism, entity: Entity) -> serde_json::Value {
+pub(super) fn drawer_state(app: &App, mechanism: &SceneMechanism, entity: Entity) -> serde_json::Value {
     let prop = app.world().get::<Prop>(entity).unwrap();
     let part = mechanism.parts.iter().find(|p| p.id == prop.id).unwrap();
     let pose = app.world().get::<Transform>(entity).unwrap();
     let origin = pose.translation - pose.rotation * part.bounds().0;
     let rest = Vec3::from(mechanism.placement) + Vec3::from(part.position);
     let delta = origin - rest;
-    assert!(delta.x.abs() < 0.003 && delta.y.abs() < 0.003, "rail transverse drift {delta:?}");
+    let joint = part.joint.as_ref().unwrap();
+    let axis = Vec3::from(joint.axis);
+    let travel = delta.dot(axis);
+    let [lo, hi] = joint.limits_m.unwrap();
+    assert!((delta-axis*travel).length() < 0.003, "rail transverse drift {delta:?}");
     assert!(pose.rotation.angle_between(Quat::IDENTITY) < 0.005, "rail rotation");
-    assert!((-0.003..=0.403).contains(&delta.z), "rail travel {}", delta.z);
+    assert!((lo-0.003..=hi+0.003).contains(&travel), "rail travel {travel}");
     serde_json::json!({"id":prop.id,"position":origin.to_array(),
-        "rotation_xyzw":pose.rotation.to_array(),"travel_m":delta.z,
+        "rotation_xyzw":pose.rotation.to_array(),"travel_m":travel,
         "speed_m_s":app.world().get::<Velocity>(entity).unwrap().linvel.length()})
 }
 
-fn obstruction_state(app: &App, entity: Option<Entity>) -> serde_json::Value {
+pub(super) fn obstruction_state(app: &App, entity: Option<Entity>) -> serde_json::Value {
     let Some(entity) = entity else { return serde_json::Value::Null; };
     let pose = app.world().get::<Transform>(entity).unwrap();
     let shape = app.world().get::<Collider>(entity).unwrap().raw.as_cuboid().unwrap();

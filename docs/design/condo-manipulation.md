@@ -4,8 +4,9 @@ User direction, 2026-10-16: pause visual detail work and prioritize fridge,
 drawers, cabinets, doors and **bed sheets** that the avatar can manipulate.
 The condo scene goal remains intact. Lighting and reflection polish are deferred.
 
-Current opt-in package: `scene-cloth.json` combines the passive fridge with a
-live top-sheet solver and split bed collision shapes. Grasping/manipulation by
+Current opt-in package: `scene-doors.json` combines the passive fridge,
+bedside drawers, entry cabinet doors, bedroom door, live top-sheet solver and split bed
+collision shapes. Grasping/manipulation by
 the avatar is still unverified. Checkpoint 180 adds a solver contact-clamp
 prototype; checkpoint 181 adds triangle contact and clears the measured
 triangle/mattress penetration in the lift/release fixture. Runtime hand
@@ -753,6 +754,97 @@ no sheet contact; beautiful_assistant is outside this bedroom camera view.
 The video fully decodes. Both mechanics renders and the bedroom recording
 are archived in the project progress gallery as prototypes.
 
+## Checkpoint 186: entry cabinet and accurate bounds at partial hinge angles
+
+The entry storage block is replaced with a hollow oak carcass, a divider, six
+shelves and two separately hinged door/handle assemblies in `scene-cabinet.json`.
+The left door uses -90–0 degrees and the right uses 0–90 degrees. There are no
+motors or exported opening animations. Door masses are initial estimates and
+the ideal hinges have no latch. Six original visual nodes and the old aggregate
+collider are replaced. The cloth's fixed-collider references now use the shell;
+moving door/cloth coupling remains unsupported.
+
+The conservative room sweep performs 143,352 box-pair checks, with angular
+inter-sample movement bounds plus a 1 mm reserve. Minimum separating gap is
+8.05 mm; independently moving door envelopes retain a 5.85 mm X gap. An inserted
+block is correctly rejected. In the actual Rapier fixture, diagnostic torques
+open both doors to 90 degrees, an obstruction stops the left door at 29.13
+degrees, removing it permits full opening, and both doors release, close and
+settle. This is mechanism evidence, not generated avatar manipulation.
+
+The partial-angle fixture exposed an observation bug: published compound AABBs
+rotated a single enclosing local box, filling empty corners between the panel
+and handle. Bounds now transform each compound leaf before merging. The existing
+exact-published-bounds assertion remains unchanged, and a rotated/scaled compound
+regression verifies the fix. No body motion or physics actuator was added.
+
+The library suite passes 322 tests with two ignored. Final exported assets pass
+the two cabinet tests again; their 720-frame physics trace is byte-identical to
+the full-suite run. Python retains its existing source-text ownership failure
+(six pass). Failed manifest validation, the partial-angle bounds failure and
+the re-export digest review are preserved under
+`artifacts/toronto-condo-captures/cabinet186/`.
+
+The quality delta remains nonclean. New reported duplication includes explicit
+cabinet dimensions and separate fixture phase assertions; the shared assembly,
+panel, export and studio helpers are reused. The test driver and the enclosing
+Rust test module also exceed descriptive size/complexity heuristics. These
+findings are retained for review, not suppressed or used to weaken acceptance.
+
+The rebuilt entry-camera capture records 120 frames with all nine mechanism
+parts registered and all six constrained parts retained as navigation obstacles.
+Observed bounds match transformed component boxes within 4.04e-7 m; all 33 asset
+hashes match. The cloth clock/mesh audit passes through 1,303 ticks, with zero
+observed particle penetration and tail maximum speed 0.01458 m/s. Native root
+interpolation error stays below 8.67e-8 m; hand observations report no sheet
+contact. The video fully decodes. The avatar is outside this camera view and
+the cabinet remains unforced and closed; opening evidence comes only from the
+separate diagnostic physics fixture. Both are archived as prototypes.
+
+## Checkpoint 187: bedroom passage controlled by a passive door
+
+The bedroom opening now has a separate full-height door leaf with lever geometry
+on both faces and a 0–90-degree inward hinge. The existing jamb is preserved as
+a fixed mechanism part, replacing its original collider and visual node. The
+mass is an estimate; the hinge is ideal, the levers do not rotate, and there is
+no latch. The current single-region grasp schema exposes only the room-side
+lever. The bathroom and balcony leaves remain unfinished.
+
+The full-condo navigation fixture proves that the closed door blocks passage
+from `[2.85, 0, -0.55]` to `[2.85, 0, -1.85]`, opening restores the route, and
+closing invalidates that route preview. Even while marked held, the door stays
+a navigation obstacle. The query does not change avatar motion or revision.
+This is read-only geometry evidence, not an avatar walking demonstration.
+
+The actual Rapier fixture records 1,080 frames: unforced closed, obstructed
+opening, unobstructed opening, release, closing and released settling. The
+blocker stops opening at 23.71 degrees. Opening reaches 90 degrees; measured
+maximum overshoot is 0.101 degrees and maximum hinge-anchor error is 0.080 mm.
+The authored sweep passes 78,735 conservative box-pair checks with angular
+inter-sample bounds and a 1 mm reserve. A separate full-3D separating-axis audit
+checks the actual recorded poses, including drift and overshoot, against fixed
+room boxes: 469,800 pairs and a minimum separating gap of 9.86 mm. It excludes
+the intentional diagnostic blocker and does not certify continuous motion
+between recorded frames, avatar contact or moving cloth collision.
+
+The library suite passes 324 tests, two ignored; final re-exported assets pass
+both bedroom-door tests, with byte-identical physics traces. The existing Python
+ownership text-check failure remains (six pass), as does the nonclean structural
+quality gate. No policy or acceptance gate was weakened. Initial cropped
+inspection/capture views and the audit's initial f32-vs-JSON coordinate equality
+failure are retained under `artifacts/toronto-condo-captures/door187/`; camera
+framing was corrected and placement is compared after the runtime's f32
+representation conversion. Physics and geometry were not changed to fix either.
+
+The final rebuilt-scene recording shows the complete doorway for 120 frames.
+All 11 mechanism parts load, all seven constrained parts remain navigation
+obstacles, and all 35 asset hashes match. Published bounds agree with transformed
+component boxes within 4.04e-7 m. The sheet audit passes through 1,303 ticks, with
+zero observed particle penetration and tail maximum speed 0.01970 m/s; unchanged
+native root interpolation error is below 9.12e-8 m. The video fully decodes.
+beautiful_assistant is partially visible at the frame edge, without door contact.
+Actual avatar opening, latching and passage are not demonstrated by this capture.
+
 ## Motion and evidence gates
 
 Follow `model-owned-motion.md`: Ardy generates body motion; physics determines
@@ -778,3 +870,58 @@ Validate in separate stages:
 Neither this preparation pass nor a successful Blender cloth bake proves a live
 avatar interaction. Screenshots, runtime observations and source-motion evidence
 must agree before marking a capability supported.
+
+## Checkpoint 188 — passive balcony slider and capture backpressure
+
+`scene-balcony-slider.json` extends the bedroom-door scene with a 45 kg estimated
+framed glass leaf on a passive X rail, travelling 0–2 m. It retains the original
+right-hand glass pane and adds a separate fixed companion panel. Three GLBs and
+`interaction-authoring/balcony-slider/balcony-slider.blend` are authored by
+`scripts/condo/balcony_slider.py`. Glass retains the source material's 0.13 alpha;
+the live view preserves the lake sightline. Only the interior pull is exposed.
+There is no latch, roller model, runtime actuator or avatar manipulation claim.
+The existing sill remains: route clearance is not threshold-crossing evidence.
+
+The exact axis-aligned swept boxes, expanded by a 1 mm reserve, pass 736 fixed
+obstacle comparisons with a 28.999 mm minimum gap. All 840 observed physics samples
+pass 618,240 box comparisons with a 29.999 mm minimum gap. The diagnostic fixture
+checks transverse loads, obstruction, full travel, release, closing, settling and
+published bounds. The full-condo route preview is blocked closed and usable open,
+retains held constrained objects as obstacles, invalidates stale previews after
+closing, and never changes avatar motion. The existing bedroom passage check now
+shares that read-only test helper. The full library suite passes 326 tests, two
+ignored; existing drawer, cabinet and bedroom mechanics also pass.
+
+A failed initial fixture used Rapier's single-substep default and exceeded the
+unchanged 3 mm rail limit under the 150 N diagnostic load. The fixture now uses
+`PhysicsConfig::default()` integration settings, matching the live renderer's
+four substeps. No runtime solver, force, limit or tolerance was changed. Earlier
+saved diagnostic traces retain their original integration settings. All attempts
+remain under `artifacts/toronto-condo-captures/balcony188/`.
+
+The first live integration capture verified 38 asset hashes, 14 registered parts,
+and closed slider bounds within 0.00041 mm, but failed the root interpolation gate
+by 2.039 mm. It is published as failed evidence. Investigation found capture replay
+paced by wall time could overfill the 136-pose native timeline when rendering ran
+slowly. `PlaybackCursor::feed` now caps its unchanged packet delivery at 500 ms
+ahead of the matching observed motion clock. A slow-renderer regression verifies
+bounded prefetch and all 436 original poses delivered without rewriting; all six
+capture-driver tests pass. The runtime pose timeline and audit thresholds are
+unchanged. The existing Python ownership suite still has six passes and its one
+pre-existing source-text failure.
+
+Quality checks remain nonclean across the accumulated worktree, including archived
+source copies and explicit mechanism fixtures. The new slider fixture shares the
+state/bounds observers but keeps its specific obstruction/load sequence explicit.
+The capture test module grew to add the slow-renderer regression. These findings
+were not blanket-acknowledged or hidden by resetting the quality baseline.
+
+The corrected `live-paced/` capture delivers all 436 source packets, passes the
+unchanged root gate at 9.23e-8 m maximum interpolation error, and verifies all 38
+asset hashes and 14 bodies. Cloth advances 1,304 ticks with zero observed particle
+penetration and 0.0259 m/s tail speed; the finger observer reports zero contacts.
+The avatar is loaded but outside this camera: this remains scene integration,
+not visible avatar handling. Gallery 188a retains the failed attempt, 188b has the
+14-second, 420-frame slider opening/closing video, and 188c shows verified live
+integration. Every video decodes; the mechanics frames match alternate samples of
+the original 60 Hz trace without cuts or pose interpolation.

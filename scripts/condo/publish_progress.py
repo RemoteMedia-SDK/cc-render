@@ -44,7 +44,7 @@ def render_entry(entry):
       <time datetime="{entry['captured_at']}">{entry['captured_at'].replace('T', ' ')}</time></div>
       <h2><a href="#{entry['id']}">{escape(entry['title'])}</a></h2>
       <p class="medium">{escape(entry['medium'])}</p>
-      <div class="shots">{shots}</div>{video}
+      {video}<div class="shots">{shots}</div>
       <div class="notes"><section><h3>Progress</h3><ul>{paragraphs(entry['progress'])}</ul></section>
       <section><h3>Still to improve</h3><ul>{paragraphs(entry['remaining'])}</ul></section></div>
       {metrics}<a class="metadata" href="{entry['id']}/entry.json">Entry metadata + file hashes</a>
@@ -73,7 +73,7 @@ def render_gallery(entries):
     .shots a{{text-decoration:none;background:#141b1c;border-radius:8px;overflow:hidden}}
     img{{width:100%;display:block;aspect-ratio:16/9;object-fit:contain}}
     .shots span{{display:block;padding:10px 12px;font-size:13px}}
-    video{{display:block;width:100%;max-height:700px;background:#101414;margin-top:16px;border-radius:8px}}
+    video{{display:block;width:100%;max-height:700px;background:#101414;margin:16px 0;border-radius:8px}}
     .notes{{display:grid;grid-template-columns:1fr 1fr;gap:28px}}ul{{padding-left:20px}}
     li{{margin:7px 0}}details{{background:#182020;padding:12px 16px;border-radius:8px;margin:16px 0}}
     summary{{cursor:pointer}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}}

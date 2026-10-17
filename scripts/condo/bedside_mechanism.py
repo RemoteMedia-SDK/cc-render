@@ -52,13 +52,13 @@ def drawer(name, height, palette):
     return part
 
 
-def export_parts(parts):
+def export_parts(parts, destination=OUT):
     rows = []
     for part in parts:
         origin = part['pivot'].location.copy()
         part['pivot'].location = (0, 0, 0)
         bpy.context.view_layer.update()
-        path = OUT / (part['id']+'.glb')
+        path = destination / (part['id']+'.glb')
         export_selection(path, [part['collection']])
         part['pivot'].location = origin
         bpy.context.view_layer.update()
@@ -95,21 +95,28 @@ def package(parts):
     return mechanism
 
 
-def preview(parts, output):
+def inspection_studio(camera_position, target, framing, lighting):
+    """Shared static asset/recorded-physics inspection setup, never runtime motion."""
     scene = bpy.context.scene
-    bpy.ops.object.camera_add(location=(1.3, -1.6, 1.25))
+    bpy.ops.object.camera_add(location=camera_position)
     camera = bpy.context.object
-    camera.rotation_euler = (Vector((0, -.12, .30))-camera.location).to_track_quat('-Z', 'Y').to_euler()
-    camera.data.type, camera.data.ortho_scale = 'ORTHO', 1.75
+    camera.rotation_euler = (Vector(target)-camera.location).to_track_quat('-Z', 'Y').to_euler()
+    camera.data.type, camera.data.ortho_scale = 'ORTHO', framing
     scene.camera = camera
-    bpy.ops.object.light_add(type='AREA', location=(.5, -1., 2.))
-    bpy.context.object.data.energy, bpy.context.object.data.size = 180, 2.
-    scene.world = bpy.data.worlds.new('Drawer inspection studio')
+    position, energy, size = lighting
+    bpy.ops.object.light_add(type='AREA', location=position)
+    bpy.context.object.data.energy, bpy.context.object.data.size = energy, size
+    scene.world = bpy.data.worlds.new('Furniture inspection studio')
     scene.world.color = (.2, .2, .2)
     scene.render.engine, scene.cycles.device = 'CYCLES', 'CPU'
     scene.cycles.samples = 24
     scene.render.resolution_x, scene.render.resolution_y = 1280, 960
     scene.render.resolution_percentage = 100
+    return scene
+
+
+def preview(parts, output):
+    scene = inspection_studio((1.3, -1.6, 1.25), (0, -.12, .30), 1.75, ((.5, -1., 2.), 180, 2.))
     for name, travel in [('closed', 0.), ('open-inspection', .4)]:
         for part in parts[1:]:
             part['pivot'].location.y = -travel

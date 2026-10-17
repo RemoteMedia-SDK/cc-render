@@ -19,6 +19,13 @@ fn fixture_for(package: ScenePackage, mechanism_index: usize) -> (App, SceneMech
     app.init_resource::<Assets<Mesh>>();
     app.init_resource::<SceneSpawner>();
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+    // Match the live renderer's default integration settings. Rapier's plugin
+    // default uses one substep, which differs from our four-substep runtime.
+    let physics = crate::cc_render::renderer::PhysicsConfig::default();
+    app.insert_resource(TimestepMode::Interpolated {
+        dt: 1. / physics.timestep_hz.max(1) as f32, time_scale: 1.,
+        substeps: physics.max_substeps_per_frame.max(1) as usize,
+    });
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
         std::time::Duration::from_secs_f32(1. / 60.)));
     app.insert_resource(package);
@@ -36,6 +43,15 @@ fn fixture_for(package: ScenePackage, mechanism_index: usize) -> (App, SceneMech
 
 #[path = "drawer_tests.rs"]
 mod drawers;
+
+#[path = "cabinet_tests.rs"]
+mod cabinets;
+
+#[path = "room_door_tests.rs"]
+mod room_doors;
+
+#[path = "balcony_slider_tests.rs"]
+mod balcony_slider;
 
 fn door_entities(app: &mut App) -> Vec<Entity> {
     let world = app.world_mut();
