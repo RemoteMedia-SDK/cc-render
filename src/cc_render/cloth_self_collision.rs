@@ -428,16 +428,17 @@ impl SelfCollisionTopology {
     ) -> Result<bool, ClothError> {
         let _ = layers;
         self.candidates_with(particles, triangles, radii);
-        for (k, (pair, axis)) in self.pairs.iter().zip(&self.axes).enumerate() {
+        for k in 0..self.pairs.len() {
+            let pair = self.pairs[k];
             let ids = pair.indices();
             if self.pair_resolved[k] > ids.map(|i| self.stamps[i]).into_iter().max().unwrap() {
                 continue;
             }
-            if certified_clear(*pair, k, &self.anchors, &mut self.slack, &self.reach, radii) {
+            if certified_clear(pair, k, &self.anchors, &mut self.slack, &self.reach, radii) {
                 continue;
             }
             let gap = radii[ids[0]] + radii[ids[pair.split()]];
-            if !pair.resolved(particles, gap, *axis)? {
+            if !pair.resolved(particles, gap, self.axes[k])? {
                 return Ok(false);
             }
             self.pair_resolved[k] = self.clock + 1;
@@ -497,6 +498,7 @@ struct FaceSupport {
     ids: [usize; 3],
     weights: [f64; 3],
     normal: DVec3,
+    friction: f64,
 }
 
 /// Dykstra corrections recover the mass-metric projection onto the
@@ -578,11 +580,11 @@ struct LazySupports<'a> {
     triangles: &'a [[usize; 3]],
     layers: &'a [ContactLayer<'a>],
     vertex_triangles: &'a [Vec<usize>],
-    rows: std::cell::RefCell<std::collections::HashMap<usize, std::rc::Rc<Vec<FaceSupport>>>>,
+    rows: std::cell::RefCell<std::collections::HashMap<usize, std::sync::Arc<Vec<FaceSupport>>>>,
 }
 
 impl LazySupports<'_> {
-    fn face(&self, triangle: usize) -> Result<std::rc::Rc<Vec<FaceSupport>>, ClothError> {
+    fn face(&self, triangle: usize) -> Result<std::sync::Arc<Vec<FaceSupport>>, ClothError> {
         if let Some(rows) = self.rows.borrow().get(&triangle) {
             return Ok(rows.clone());
         }
@@ -599,10 +601,11 @@ impl LazySupports<'_> {
                     ids,
                     weights,
                     normal,
+                    friction: collider.friction,
                 });
             }
         }
-        let rows = std::rc::Rc::new(rows);
+        let rows = std::sync::Arc::new(rows);
         self.rows.borrow_mut().insert(triangle, rows.clone());
         Ok(rows)
     }
@@ -637,7 +640,14 @@ impl LazySupports<'_> {
             return Ok(directions);
         }
         profile_scope!("support_dykstra");
-        Ok(project_supports(&rows, ids, inverse_mass, directions))
+        let supported = project_supports(&rows, ids, inverse_mass, directions);
+        let friction = rows
+            .iter()
+            .map(|r| r.friction)
+            .fold(f64::INFINITY, f64::min);
+        Ok(std::array::from_fn(|k| {
+            pair::friction_cone(directions[k], supported[k], friction)
+        }))
     }
 }
 
@@ -669,6 +679,7 @@ mod tests {
                     ids: [0, 1, 2],
                     weights,
                     normal: DVec3::Y,
+                    friction: 0.,
                 })
                 .into_iter()
                 .collect(),

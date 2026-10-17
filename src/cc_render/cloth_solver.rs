@@ -498,6 +498,7 @@ impl ClothSolver {
             self.self_collision
                 .resolve(&mut particles, &self.triangles, colliders, radius * 2.)?;
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
+            damp_edge_velocities(&self.springs, &self.inverse_mass, &mut velocities, h);
         }
         self.surface
             .update_positions(positions.iter().map(|v| v.as_vec3()).collect())?;
@@ -505,6 +506,39 @@ impl ClothSolver {
         self.velocities = velocities;
         constraints.commit(grips);
         Ok(())
+    }
+}
+
+/// Rate of the viscous edge dashpots, per second.
+///
+/// Distance springs damp only along their own axis (`spring_damping_ratio`).
+/// Out-of-plane and shear vibration of tensioned, nearly flat cloth is then
+/// left almost undamped: XPBD's numerical dissipation shrinks with the
+/// substep, and the authored bedding (48 substeps) kept a hanging flap
+/// fluttering at ~1 m/s after ten seconds while the same sheet at 24
+/// substeps settled. Real cloth loses that energy to fibre friction and air.
+/// At 20/s a single-edge relative velocity decays with a 50 ms time constant,
+/// while smooth large-scale motion (small relative velocity per edge) keeps
+/// its drape: measured drift during the condo drape was unchanged.
+const EDGE_DAMPING_PER_SECOND: f64 = 20.;
+
+/// Viscous internal damping: every material edge dashpot acts on the full
+/// relative velocity of its endpoints (axial, shear and out-of-plane), as a
+/// mass-weighted implicit decay. Common translation is untouched and linear
+/// momentum is conserved.
+fn damp_edge_velocities(
+    springs: &[DistanceSpring],
+    inverse_mass: &[f64],
+    velocities: &mut [DVec3],
+    h: f64,
+) {
+    let keep = 1. - (-EDGE_DAMPING_PER_SECOND * h).exp();
+    for spring in springs.iter().filter(|s| s.stretch) {
+        let [a, b] = spring.vertices;
+        let (wa, wb) = (inverse_mass[a], inverse_mass[b]);
+        let correction = (velocities[a] - velocities[b]) * keep / (wa + wb);
+        velocities[a] -= correction * wa;
+        velocities[b] += correction * wb;
     }
 }
 

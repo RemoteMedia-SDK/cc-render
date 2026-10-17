@@ -376,6 +376,15 @@ impl ClothBatch {
             #[cfg(test)]
             crate::cc_render::cloth_profile::stage("contacts", substep, &positions);
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
+            for (layer, layout) in layers.iter().zip(&self.layout) {
+                let r = layout.range.clone();
+                damp_edge_velocities(
+                    &layer.solver.springs,
+                    &inverse_mass[r.clone()],
+                    &mut velocities[r],
+                    h,
+                );
+            }
         }
         profiled!(
             "commit",

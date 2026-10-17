@@ -287,7 +287,7 @@ fn settled_layers_sleep_without_publishing_and_wake_on_any_disturbance() {
         .unwrap()]
     };
     let mut batch = ClothBatch::new(&[&sheet]).unwrap();
-    let mut step =
+    let step =
         |batch: &mut ClothBatch, sheet: &mut ClothSolver, floor: &[FixedClothCollider]| {
             batch
                 .step(

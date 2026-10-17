@@ -299,10 +299,34 @@ pub(super) fn fixed_support_direction(
         }
         let (distance, normal) = collider.distance_and_normal(position);
         if distance <= radius + 1e-8 {
+            let free = direction;
             direction -= normal * direction.dot(normal).min(0.);
+            direction = friction_cone(free, direction, collider.friction);
         }
     }
     direction
+}
+
+/// Limit a fixed-supported contact response to the support's Coulomb cone.
+/// The support reaction (`supported - free`) may cancel at most `friction`
+/// times its own magnitude of tangential response. Without this, a support
+/// that removes nearly all of a response's normal effectiveness turns the
+/// remainder into a large frictionless slide: the pair's depth is divided by
+/// a small effective mass, and the supported cloth jumps sideways along a
+/// rounded mattress edge. Alternating support status then makes it chatter.
+pub(super) fn friction_cone(free: DVec3, supported: DVec3, friction: f64) -> DVec3 {
+    let reaction = supported - free;
+    let normal_reaction = reaction.length();
+    if normal_reaction <= 0. {
+        return supported;
+    }
+    let normal = reaction / normal_reaction;
+    let tangent = supported - normal * supported.dot(normal);
+    let slip = tangent.length();
+    if slip <= 0. {
+        return supported;
+    }
+    supported - tangent * (friction * normal_reaction / slip).min(1.)
 }
 
 #[cfg(test)]
