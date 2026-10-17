@@ -715,8 +715,14 @@ impl AsyncStreamingNode for CcRenderNode {
             }
             _ => data,
         };
-        if self.accept_motion_control(&data)? {
-            return Ok(0);
+        match self.accept_motion_control(&data) {
+            Ok(true) => return Ok(0),
+            Ok(false) => {}
+            Err(error) => {
+                // A rejected goal is otherwise silent to anyone reading the renderer's log.
+                tracing::warn!(target: "cc_render", %error, "motion control rejected");
+                return Err(error);
+            }
         }
         if self.accept_speech_end(&data)? {
             return Ok(0);
@@ -1007,7 +1013,8 @@ impl AsyncStreamingNode for CcRenderNode {
             // starting another old-phase generation and starving the handoff.
             let awaiting_drain = delivery.pending.as_ref().is_some_and(|(goal, _)| driver.generated_until().is_some_and(|end|
                 super::office::scene_delivery::SceneDelivery::request_anchor(goal, displayed, end).is_some()));
-            let goal = if awaiting_drain { None } else { driver.next_request(displayed, now_ms) };
+            let handoff = delivery.pending.as_ref().is_some_and(|(goal, _)| goal.scene_outcome().is_some());
+            let goal = if awaiting_drain { None } else { driver.next_request(displayed, now_ms, handoff) };
             let reserved = goal.as_ref().is_some_and(|goal| delivery.reserved_for(goal));
             drop(driver);
             drop(delivery);
@@ -1636,7 +1643,7 @@ mod realtime_speech_tests {
         let goal = serde_json::json!({"kind":"motion_goal","version":2,"session_id":"replacement",
             "generation_revision":1,"pts_ms":0,"seed":42,"goal":{"description":"A person stands still."}});
         node.accept_motion_control(&RuntimeData::Json(goal.clone())).unwrap();
-        node.motion_driver.lock().next_request(0, 0).unwrap();
+        node.motion_driver.lock().next_request(0, 0, false).unwrap();
         let mut pending = goal.clone();
         pending["version"] = 3.into();
         pending["generation_revision"] = 3.into();
@@ -1670,7 +1677,7 @@ mod realtime_speech_tests {
         {
             let mut driver = node.motion_driver.lock();
             assert_eq!(driver.current_goal().unwrap().revision(), 1);
-            assert!(driver.next_request(1500, 100).is_none());
+            assert!(driver.next_request(1500, 100, false).is_none());
             driver.acknowledge("replacement", 3, 0); // Wrong request cannot release the old slot.
             assert!(driver.in_flight());
             driver.observe_frame("replacement", 1, 4000);
@@ -1685,7 +1692,7 @@ mod realtime_speech_tests {
         let mut driver = node.motion_driver.lock();
         assert_eq!(driver.generated_until(), None); // Old output cannot own the new horizon.
         assert!(node.scene_delivery.lock().reserved_for(driver.current_goal().unwrap()));
-        assert_eq!(driver.next_request(1500, 200).unwrap().revision(), 4);
+        assert_eq!(driver.next_request(1500, 200, false).unwrap().revision(), 4);
     }
 
     #[tokio::test]
@@ -1715,7 +1722,7 @@ mod realtime_speech_tests {
         node.accept_motion_control(&RuntimeData::Json(baseline.clone())).unwrap();
         {
             let mut driver = node.motion_driver.lock();
-            driver.next_request(0, 0).unwrap(); driver.observe_frame("test", 1, 2000);
+            driver.next_request(0, 0, false).unwrap(); driver.observe_frame("test", 1, 2000);
             driver.acknowledge("test", 1, 0);
         }
         let mut goal = baseline; goal["version"] = 3.into(); goal["generation_revision"] = 2.into();

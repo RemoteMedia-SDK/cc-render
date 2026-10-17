@@ -228,14 +228,18 @@ impl NativeMotionDriver {
         }
     }
 
-    pub fn next_request(&mut self, displayed_pts_ms: u64, now_ms: u64) -> Option<MotionGoal> {
+    /// `handoff`: a scene goal is waiting to take over this goal's stream.
+    pub fn next_request(&mut self, displayed_pts_ms: u64, now_ms: u64, handoff: bool) -> Option<MotionGoal> {
         if self.failed || self.in_flight.is_some() { return None; }
         let mut goal = self.goal.clone()?;
         self.observe_clock(displayed_pts_ms, now_ms);
         // Scene conditioning is slower than stock inference. This is a bounded
         // delivery lead, never a change to model timing or frame content.
         // 2s generation allowance plus the existing 2.4s revision-handoff lead.
-        let prefetch_ms = if goal.scene_outcome().is_some() { 4400 } else { PREFETCH_MS };
+        // A pending scene goal needs the same lead from the stream it takes over:
+        // it hands off at a token at least 2.2 s ahead, which a 600 ms semantic lead
+        // never reaches once generation is slower than the render clock.
+        let prefetch_ms = if goal.scene_outcome().is_some() || handoff { 4400 } else { PREFETCH_MS };
         if (self.has_committed_output && displayed_pts_ms < 200)
             || self.generated_until_pts_ms.is_some_and(|end| end > displayed_pts_ms.saturating_add(prefetch_ms))
             || self.empty_acks_at_clock >= MAX_EMPTY_ACKS_AT_CLOCK
@@ -338,22 +342,22 @@ mod tests {
     #[test]
     fn native_driver_waits_for_matching_ack_and_uses_displayed_clock() {
         let mut driver = NativeMotionDriver::default();
-        assert!(driver.next_request(0, 0).is_none());
+        assert!(driver.next_request(0, 0, false).is_none());
         driver.submit(serde_json::from_value(request()).unwrap()).unwrap();
-        let first = driver.next_request(0, 0).unwrap();
+        let first = driver.next_request(0, 0, false).unwrap();
         assert_eq!(first.wire.pts_ms, 0);
-        assert!(driver.next_request(100, 10).is_none());
+        assert!(driver.next_request(100, 10, false).is_none());
         let mut rise = request();
         rise["generation_revision"] = 2.into();
         rise["goal"]["description"] = "A person stands up from a squat.".into();
         driver.submit(serde_json::from_value(rise).unwrap()).unwrap();
         driver.acknowledge("other", 1, 0);
-        assert!(driver.next_request(200, 20).is_none());
+        assert!(driver.next_request(200, 20, false).is_none());
         driver.observe_frame("test", 1, 2000);
         driver.acknowledge("test", 1, 0);
-        assert!(driver.next_request(0, 30).is_none()); // Wait for one displayed native token.
-        assert!(driver.next_request(150, 40).is_none());
-        let changed = driver.next_request(250, 50).unwrap();
+        assert!(driver.next_request(0, 30, false).is_none()); // Wait for one displayed native token.
+        assert!(driver.next_request(150, 40, false).is_none());
+        let changed = driver.next_request(250, 50, false).unwrap();
         assert_eq!(changed.wire.pts_ms, 250);
         assert_eq!(changed.wire.generation_revision, 2);
         assert_eq!(changed.description(), Some("A person stands up from a squat."));
@@ -368,7 +372,7 @@ mod tests {
         driver.submit(serde_json::from_value(request()).unwrap()).unwrap();
         let mut sent = 0;
         for now in (0..120_000).step_by(50) {
-            if let Some(goal) = driver.next_request(0, now) {
+            if let Some(goal) = driver.next_request(0, now, false) {
                 sent += 1;
                 driver.acknowledge("test", 1, goal.wire.pts_ms);
             }
@@ -376,7 +380,7 @@ mod tests {
         }
         assert!(sent <= 3, "fixed clock sent {sent} requests");
         assert!(driver.watchdog(0, 120_000).unwrap().contains("stalled"));
-        assert!(driver.next_request(0, 121_000).is_none());
+        assert!(driver.next_request(0, 121_000, false).is_none());
         assert!(!driver.fail()); // one-shot terminal state
     }
 
@@ -384,7 +388,7 @@ mod tests {
     fn fixed_clock_after_full_horizon_does_not_poll_empty_acks() {
         let mut driver = NativeMotionDriver::default();
         driver.submit(serde_json::from_value(request()).unwrap()).unwrap();
-        driver.next_request(0, 0).unwrap();
+        driver.next_request(0, 0, false).unwrap();
         for pts in (50..=2000).step_by(50) { driver.observe_frame("test", 1, pts); }
         driver.acknowledge("test", 1, 0);
         let mut requests = 1;
@@ -392,7 +396,7 @@ mod tests {
             // The displayed clock advances ordinarily to the 600ms prefetch threshold,
             // then stops while the worker repeatedly acknowledges empty output.
             let displayed = (now / 50 * 50).min(1400);
-            if let Some(goal) = driver.next_request(displayed, now) {
+            if let Some(goal) = driver.next_request(displayed, now, false) {
                 requests += 1;
                 driver.acknowledge("test", 1, goal.wire.pts_ms);
             }
@@ -403,29 +407,29 @@ mod tests {
         assert!(driver.submit(serde_json::from_value(request()).unwrap()).is_err());
         let mut fresh = NativeMotionDriver::default();
         fresh.submit(serde_json::from_value(request()).unwrap()).unwrap();
-        assert!(fresh.next_request(0, 0).is_some());
+        assert!(fresh.next_request(0, 0, false).is_some());
     }
 
     #[test]
     fn missing_ack_and_true_starvation_both_timeout_without_clock_fabrication() {
         let mut lost = NativeMotionDriver::default();
         lost.submit(serde_json::from_value(request()).unwrap()).unwrap();
-        lost.next_request(0, 0).unwrap();
+        lost.next_request(0, 0, false).unwrap();
         assert!(lost.watchdog(0, 119_999).is_none());
         let message = lost.watchdog(0, 120_000).unwrap();
         assert!(message.contains("in_flight=true"));
         lost.acknowledge("test", 1, 0);
-        assert!(lost.next_request(0, 120_001).is_none());
+        assert!(lost.next_request(0, 120_001, false).is_none());
 
         let mut starved = NativeMotionDriver::default();
         starved.submit(serde_json::from_value(request()).unwrap()).unwrap();
-        let first = starved.next_request(0, 0).unwrap();
+        let first = starved.next_request(0, 0, false).unwrap();
         starved.observe_frame("test", 1, 2000);
         starved.acknowledge("test", 1, first.wire.pts_ms);
         // Once real playback reaches the horizon edge, only three empty retries.
         let mut count = 0;
         for now in (1000..15_000).step_by(50) {
-            if let Some(goal) = starved.next_request(2000, now) {
+            if let Some(goal) = starved.next_request(2000, now, false) {
                 count += 1;
                 starved.acknowledge("test", 1, goal.wire.pts_ms);
             }
@@ -435,37 +439,50 @@ mod tests {
     }
 
     #[test]
+    fn a_pending_scene_goal_keeps_the_scene_lead_on_the_stream_it_takes_over() {
+        let mut driver = NativeMotionDriver::default();
+        driver.submit(serde_json::from_value(request()).unwrap()).unwrap();
+        let first = driver.next_request(0, 0, false).unwrap();
+        for pts in (50..=2000).step_by(50) { driver.observe_frame("test", 1, pts); }
+        driver.acknowledge("test", 1, first.wire.pts_ms);
+        // 1 s of queued semantic motion: enough for a semantic goal...
+        assert!(driver.next_request(1000, 100, false).is_none());
+        // ...but a scene handoff needs a token 2.2 s ahead: keep generating ahead for it.
+        assert_eq!(driver.next_request(1000, 100, true).unwrap().wire.pts_ms, 1000);
+    }
+
+    #[test]
     fn horizon_prefetch_revision_and_stale_acks_respect_clock() {
         let mut driver = NativeMotionDriver::default();
         driver.submit(serde_json::from_value(request()).unwrap()).unwrap();
-        let first = driver.next_request(0, 0).unwrap();
+        let first = driver.next_request(0, 0, false).unwrap();
         for pts in (50..=2000).step_by(50) { driver.observe_frame("test", 1, pts); }
         driver.acknowledge("other", 1, 0);
-        assert!(driver.next_request(1400, 100).is_none()); // still in flight
+        assert!(driver.next_request(1400, 100, false).is_none()); // still in flight
         driver.acknowledge("test", 1, first.wire.pts_ms);
-        assert!(driver.next_request(1399, 200).is_none()); // 600ms prefetch threshold
-        let second = driver.next_request(1400, 300).unwrap();
+        assert!(driver.next_request(1399, 200, false).is_none()); // 600ms prefetch threshold
+        let second = driver.next_request(1400, 300, false).unwrap();
         assert_eq!(second.wire.pts_ms, 1400);
         driver.acknowledge("test", 1, 0); // late ACK cannot unlock
         driver.acknowledge("test", 2, 1400); // wrong revision cannot unlock
-        assert!(driver.next_request(1500, 400).is_none());
+        assert!(driver.next_request(1500, 400, false).is_none());
         for pts in (2050..=4000).step_by(50) { driver.observe_frame("test", 1, pts); }
         driver.acknowledge("test", 1, 1400);
-        assert!(driver.next_request(1500, 500).is_none());
-        assert!(driver.next_request(3399, 550).is_none());
+        assert!(driver.next_request(1500, 500, false).is_none());
+        assert!(driver.next_request(3399, 550, false).is_none());
         let mut revision = request();
         revision["generation_revision"] = 2.into();
         driver.submit(serde_json::from_value(revision).unwrap()).unwrap();
-        let changed = driver.next_request(3399, 600).unwrap(); // same displayed clock, new revision
+        let changed = driver.next_request(3399, 600, false).unwrap(); // same displayed clock, new revision
         assert_eq!(changed.wire.generation_revision, 2);
         assert_eq!(changed.wire.pts_ms, 3399);
         driver.observe_frame("test", 1, 6000); // old revision cannot increase new horizon
         driver.acknowledge("test", 1, 3399);
-        assert!(driver.next_request(3399, 700).is_none());
+        assert!(driver.next_request(3399, 700, false).is_none());
         driver.observe_frame("test", 2, 5400);
         driver.acknowledge("test", 2, 3399);
-        assert!(driver.next_request(3399, 800).is_none());
-        assert_eq!(driver.next_request(4800, 900).unwrap().wire.pts_ms, 4800);
+        assert!(driver.next_request(3399, 800, false).is_none());
+        assert_eq!(driver.next_request(4800, 900, false).unwrap().wire.pts_ms, 4800);
     }
 
     #[test]
@@ -474,11 +491,11 @@ mod tests {
         let goal = serde_json::json!({"kind":"motion_goal","version":3,"session_id":"test",
             "generation_revision":1,"pts_ms":0,"seed":42,"goal":{"operation":"sit","target_id":"chair"}});
         driver.submit(serde_json::from_value(goal).unwrap()).unwrap();
-        driver.next_request(0, 0).unwrap();
+        driver.next_request(0, 0, false).unwrap();
         for pts in (50..=6000).step_by(50) { driver.observe_frame("test", 1, pts); }
         driver.acknowledge("test", 1, 0);
-        assert!(driver.next_request(1599, 0).is_none());
-        assert!(driver.next_request(1600, 1).is_some());
+        assert!(driver.next_request(1599, 0, false).is_none());
+        assert!(driver.next_request(1600, 1, false).is_some());
         // After a 2s generation, a full suffix leaves >2.2s for a safe handoff.
         for pts in (6050..=8000).step_by(50) { driver.observe_frame("test", 1, pts); }
         driver.acknowledge("test", 1, 1600);
