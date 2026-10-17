@@ -155,3 +155,98 @@ fn removing_or_replacing_a_two_hand_prop_cleans_up_all_grips() {
         assert_eq!(world.query_filtered::<Entity, With<ContactGrip>>().iter(world).count(), 0);
     }
 }
+
+/// Two drawers on X rails (0-0.40 m), the upper gripped by a kinematic wrist touching its front.
+/// Returns the app and the drawers' entities.
+fn drawers() -> (App, UnboundedSender<GrabOrRelease>, Entity, Entity, Entity) {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, TransformPlugin, HierarchyPlugin, AssetPlugin::default()));
+    app.init_resource::<Assets<Mesh>>();
+    app.init_resource::<SceneSpawner>();
+    app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::from_secs_f32(1. / 60.)));
+    app.insert_resource(StoredPhysicsConfig(PhysicsConfig::default()));
+    app.init_resource::<GrabFsms>();
+    app.add_systems(PostUpdate, grab::handle_grab_cmds.after(PhysicsSet::Writeback));
+    let (grab, rx) = mpsc::unbounded_channel();
+    app.insert_resource(GrabCmdRx(std::sync::Mutex::new(rx)));
+    let shell = app.world_mut().spawn((Transform::default(), RigidBody::Fixed)).id();
+    let mut registry = PropRegistry::default();
+    let mut drawer = |app: &mut App, id: &str, y: f32| {
+        let rail = PrismaticJointBuilder::new(Vec3::X).limits([0., 0.4])
+            .local_anchor1(Vec3::Y * y).build();
+        let entity = app.world_mut().spawn((Transform::from_xyz(0., y, 0.),
+            RigidBody::Dynamic, Collider::cuboid(0.2, 0.08, 0.3), ColliderMassProperties::Mass(5.),
+            CollisionGroups::new(Group::GROUP_1, Group::ALL & !Group::GROUP_32),
+            ImpulseJoint::new(shell, rail), props::HandleExtent(Vec3::new(0.005, 0.005, 0.2)),
+            Prop { id: id.into(), loading: false,
+                grasp_local: Some(Mat4::from_translation(Vec3::X * 0.2).to_cols_array_2d()) })).id();
+        registry.by_id.insert(id.into(), entity);
+        entity
+    };
+    let upper = drawer(&mut app, "upper", 0.8);
+    let lower = drawer(&mut app, "lower", 0.63);
+    app.insert_resource(registry);
+    let wrist = app.world_mut().spawn((Transform::from_xyz(0.219, 0.8, 0.),
+        RigidBody::KinematicPositionBased, Collider::ball(0.02), BodyBoneCollider { smpl_idx: 21 },
+        CollisionGroups::new(Group::GROUP_32, Group::ALL & !Group::GROUP_32))).id();
+    for _ in 0..4 { app.update(); }
+    grab.send(GrabOrRelease::Grab(GrabCmd { hand: Hand::Right, target: "upper".into(),
+        palm_offset_override: None })).unwrap();
+    for _ in 0..4 { app.update(); }
+    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
+    (app, grab, wrist, upper, lower)
+}
+
+#[test]
+fn a_gripped_drawer_follows_the_hand_on_its_rail_and_the_hand_slips_off_pulling_past_the_stop() {
+    let (mut app, _grab, wrist, upper, lower) = drawers();
+    let travel = |app: &App, drawer: Entity| app.world().get::<Transform>(drawer).unwrap().translation.x;
+    // Pull out along the rail, the wrist turning, bobbing and sliding 8 cm along the bar as a hand does.
+    for frame in 1..=60 {
+        let mut pose = app.world_mut().get_mut::<Transform>(wrist).unwrap();
+        pose.translation = Vec3::new(0.219 + 0.005 * frame as f32, 0.8 + 0.01 * (frame as f32 * 0.3).sin(),
+                                     0.08 * frame as f32 / 60.);
+        pose.rotation = Quat::from_rotation_y(0.3 * (frame as f32 * 0.2).sin());
+        app.update();
+    }
+    for _ in 0..10 { app.update(); }
+    let pulled = travel(&app, upper);
+    assert!((pulled - 0.3).abs() < 0.02, "drawer at {pulled} m after a 0.30 m pull");
+    let pose = app.world().get::<Transform>(upper).unwrap();
+    assert!(pose.rotation.angle_between(Quat::IDENTITY) < 0.01 && (pose.translation.y - 0.8).abs() < 0.005);
+    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
+    // Pushing it closed and on 15 cm into it: pressing at its stop, the hand keeps hold.
+    for frame in 1..=100 {
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.519 - 0.0045 * frame as f32;
+        app.update();
+    }
+    // Resting at its stop (long enough to fall asleep), it still comes out with the hand.
+    for _ in 0..180 { app.update(); }
+    assert!(travel(&app, upper).abs() < 0.01, "drawer not closed: {}", travel(&app, upper));
+    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
+    // Out again to 0.30 m.
+    for frame in 1..=100 {
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.069 + 0.0045 * frame as f32;
+        app.update();
+    }
+    for _ in 0..10 { app.update(); }
+    assert!((travel(&app, upper) - 0.3).abs() < 0.02, "drawer at {} m", travel(&app, upper));
+    // Pull on past the 0.40 m stop: the drawer stays at it and the hand lets go out of reach of the bar.
+    for frame in 61..=120 {
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.219 + 0.005 * frame as f32;
+        app.update();
+        assert!(travel(&app, upper) < 0.41, "drawer pulled past its stop: {}", travel(&app, upper));
+    }
+    assert!(travel(&app, upper) > 0.39, "drawer short of its stop: {}", travel(&app, upper));
+    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Idle));
+    let failures = &app.world().resource::<PropRegistry>().pending_failures;
+    assert!(failures.iter().any(|f| f.reason == "grip_slipped" && f.target == "upper"), "{failures:?}");
+    let world = app.world_mut();
+    assert_eq!(world.query_filtered::<Entity, With<ContactGrip>>().iter(world).count(), 0);
+    assert!(travel(&app, lower).abs() < 0.005, "lower drawer moved to {}", travel(&app, lower));
+    // Let go, it may sleep again.
+    app.update();
+    assert_eq!(app.world().get::<Sleeping>(upper).map(|s| s.normalized_linear_threshold), Some(Sleeping::default().normalized_linear_threshold));
+}

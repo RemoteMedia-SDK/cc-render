@@ -1,7 +1,7 @@
 //! Generic ideal rigid grip, admitted only on intersecting physics shapes.
 //! Captures existing relative frames: no object repositioning, canonical grip
-//! rotation, body target, or distance-based object follower. This models neither
-//! finger closure nor human grip-force limits.
+//! rotation, body target, or distance-based object follower. It does not model
+//! finger closure; only a grip on a jointed part is force limited.
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -30,6 +30,40 @@ pub(super) fn capture_joint(
     // The captured pair is one rigid grip; other collisions remain active.
     joint.data.set_contacts_enabled(false);
     Some(joint)
+}
+
+/// A hand on a jointed part (a drawer on its rail, a door on its hinge) pulls with at most this
+/// force per axis: the part's own joint keeps its limits and orientation.
+pub(super) const ARTICULATED_GRIP_MAX_FORCE_N: f32 = 150.;
+/// A hand that drifts further than this from where it gripped a part, out from it or off to the
+/// side (pulling on past its stop, say), has slipped off and lets go. Sliding along a handle bar
+/// or pressing into the part is not drift. Generated hands sway several centimetres about a
+/// held bar, and nothing repositions them.
+pub(super) const ARTICULATED_GRIP_SLIP_M: f32 = 0.12;
+
+/// The grip on a jointed part, captured where the wrist touches it: a force-limited spring at the
+/// wrist, free to turn. A kinematic hand with a rigid grip would overpower the part's joint and
+/// drag it past its limits. Returns the joint and the grip point in the part's frame.
+pub(super) fn capture_articulated_joint(
+    wrist: &GlobalTransform,
+    object: &GlobalTransform,
+    active_contact: bool,
+) -> Option<(GenericJoint, Vec3)> {
+    if !active_contact { return None; }
+    let point = object.affine().inverse().transform_point3(wrist.translation());
+    if !point.is_finite() { return None; }
+    let mut joint = GenericJointBuilder::new(JointAxesMask::empty())
+        .local_anchor1(Vec3::ZERO)
+        .local_anchor2(point)
+        .build();
+    for axis in [JointAxis::LinX, JointAxis::LinY, JointAxis::LinZ] {
+        // Stiff and lightly damped: it closes nearly all of the gap each physics step, as tight
+        // as a rigid grip until the force limit.
+        joint.set_motor_position(axis, 0., 1.0e4, 10.)
+            .set_motor_max_force(axis, ARTICULATED_GRIP_MAX_FORCE_N);
+    }
+    joint.set_contacts_enabled(false);
+    Some((joint, point))
 }
 
 pub(super) fn has_object_contact(context: &RapierContext, wrist: Entity, object: Entity) -> bool {

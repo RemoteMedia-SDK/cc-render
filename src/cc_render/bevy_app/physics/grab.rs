@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use super::body_colliders::BodyBoneCollider;
-use super::contact_grasp::capture_joint;
+use super::contact_grasp::{capture_articulated_joint, capture_joint, ARTICULATED_GRIP_SLIP_M};
 use super::props::{Prop, PropRegistry};
 use crate::cc_render::renderer::{GrabFailure, GrabOrRelease, Hand, PropId};
 
@@ -32,6 +32,12 @@ pub(crate) enum GrabState {
 
 #[derive(Component)]
 pub(crate) struct ContactGrip;
+
+/// A force-limited grip on a jointed part, held at `point` in the part's frame.
+#[derive(Component)]
+pub(crate) struct ArticulatedGrip {
+    point: Vec3,
+}
 
 #[derive(Resource, Default)]
 pub(crate) struct GrabFsms {
@@ -120,8 +126,11 @@ pub(crate) fn handle_grab_cmds(
     mut prop_registry: ResMut<PropRegistry>,
     body_colliders: Query<(Entity, &BodyBoneCollider, &GlobalTransform)>,
     props: Query<(&Prop, &GlobalTransform, Option<&super::props::HandleExtent>)>,
+    jointed: Query<(), (With<Prop>, With<ImpulseJoint>)>,
+    articulated_grips: Query<&ArticulatedGrip>,
     physics: Query<&RapierContext>,
     stored_cfg: Res<super::StoredPhysicsConfig>,
+    mut awake: Local<Vec<Entity>>,
 ) {
     let dt = time.delta_secs();
     let proximity_m = stored_cfg.0.grab.proximity_m;
@@ -174,7 +183,7 @@ pub(crate) fn handle_grab_cmds(
         };
         let reach = super::contact_grasp::target_position(physics.get_single().ok(),
             wrist_bodies.get(&hand).map(|(entity, _)| (*entity, wrist)), target, proximity_m);
-        let trans = step_fsm(
+        let mut trans = step_fsm(
             state,
             wrist,
             reach.map(|(point, _)| point),
@@ -184,6 +193,26 @@ pub(crate) fn handle_grab_cmds(
             reach.map_or(proximity_m, |(_, within)| within),
             timeout_secs,
         );
+        // A jointed part held back at its limit while the hand goes on: the hand slips off.
+        if let (FsmTransition::NoChange, GrabState::Attached { target, prop_entity, grip_entity }) = (&trans, state) {
+            // The hand's drift from its grip point, in the part's frame. Sliding along a handle bar
+            // or pressing into the part (pushing a closed drawer) is not slipping off it.
+            let gap = articulated_grips.get(*grip_entity).ok().zip(props.get(*prop_entity).ok())
+                .map(|(grip, (_, transform, handle))| {
+                    let along_bar = handle.map_or(Vec3::ONE, |extent|
+                        Vec3::select(extent.0.cmpeq(Vec3::splat(extent.0.max_element())), Vec3::ZERO, Vec3::ONE));
+                    let gap = (transform.affine().inverse().transform_point3(wrist) - grip.point) * along_bar;
+                    let out = (grip.point * along_bar).normalize_or_zero();
+                    gap - out * gap.dot(out).min(0.)
+                });
+            if std::env::var("CC_GRASP_DIAGNOSTICS").as_deref() == Ok("1") {
+                tracing::info!(target: "cc_render", ?hand, ?gap, "articulated grip gap");
+            }
+            if gap.is_some_and(|gap| gap.length() > ARTICULATED_GRIP_SLIP_M) {
+                tracing::warn!(target: "cc_render", ?hand, ?gap, "physics: articulated grip slipped");
+                trans = FsmTransition::Failed { reason: "grip_slipped".into(), target: target.clone() };
+            }
+        }
         transitions.push((hand, trans));
     }
 
@@ -252,10 +281,14 @@ pub(crate) fn handle_grab_cmds(
                 };
                 let active_contact = physics.get_single().ok().is_some_and(|context|
                     super::contact_grasp::has_object_contact(context, wrist_e, prop_e));
-                let joint = props.get(prop_e).ok().and_then(|(_, object_world, _)| {
-                    capture_joint(&wrist_world, object_world, active_contact)
+                let articulated = jointed.contains(prop_e);
+                let joint = props.get(prop_e).ok().and_then(|(_, object_world, _)| if articulated {
+                    capture_articulated_joint(&wrist_world, object_world, active_contact)
+                        .map(|(joint, point)| (TypedJoint::GenericJoint(joint), Some(ArticulatedGrip { point })))
+                } else {
+                    capture_joint(&wrist_world, object_world, active_contact).map(|joint| (joint.into(), None))
                 });
-                let Some(joint) = joint else {
+                let Some((joint, articulated_grip)) = joint else {
                     *state = GrabState::Idle;
                     prop_registry.pending_failures.push(GrabFailure {
                         hand, target, reason: "physical_contact_lost".into(),
@@ -265,10 +298,9 @@ pub(crate) fn handle_grab_cmds(
                 // Rapier resolves the second endpoint through the entity's
                 // parent. A separate child lets permanent hinges coexist with
                 // this hand's temporary grip (and another hand's grip).
-                let grip_entity = commands
-                    .spawn((ContactGrip, ImpulseJoint::new(wrist_e, joint)))
-                    .set_parent(prop_e)
-                    .id();
+                let mut grip = commands.spawn((ContactGrip, ImpulseJoint::new(wrist_e, joint)));
+                if let Some(articulated_grip) = articulated_grip { grip.insert(articulated_grip); }
+                let grip_entity = grip.set_parent(prop_e).id();
                 tracing::info!(
                     target: "cc_render",
                     "physics: contact grip attached without repositioning — hand={:?} target={}",
@@ -291,6 +323,9 @@ pub(crate) fn handle_grab_cmds(
                 *state = GrabState::Idle;
             }
             FsmTransition::Failed { reason, target } => {
+                if let GrabState::Attached { grip_entity, .. } = *state {
+                    commands.entity(grip_entity).try_despawn_recursive();
+                }
                 tracing::warn!(
                     target: "cc_render",
                     "physics: grab failed — hand={:?} target={} reason={}",
@@ -305,6 +340,20 @@ pub(crate) fn handle_grab_cmds(
             }
         }
     }
+    // A gripped jointed part stays awake: a drawer come to rest at its stop would otherwise
+    // sleep through the hand pulling it out again.
+    let held: Vec<Entity> = [&fsms.left, &fsms.right].into_iter().filter_map(|state| match state {
+        GrabState::Attached { prop_entity, .. } if jointed.contains(*prop_entity) => Some(*prop_entity),
+        _ => None,
+    }).collect();
+    for entity in held.iter().filter(|e| !awake.contains(e)) {
+        commands.entity(*entity).try_insert(Sleeping::disabled());
+    }
+    // A part removed while held is gone; any other may sleep again.
+    for entity in awake.iter().filter(|e| !held.contains(e)) {
+        if let Some(mut part) = commands.get_entity(*entity) { part.try_insert(Sleeping::default()); }
+    }
+    *awake = held;
 }
 
 /// Historical canonical-frame fixture, not the production contact-grip policy.
