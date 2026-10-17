@@ -1,5 +1,24 @@
 use super::*;
 
+fn resolve_triangle(
+    previous: &[DVec3; 3],
+    positions: &mut [DVec3; 3],
+    collider: &FixedClothCollider,
+    h: f64,
+) -> Result<(), ClothError> {
+    collide_surface(
+        &mut GripParticles {
+            positions,
+            previous,
+            inverse_mass: &[1.; 3],
+            h,
+        },
+        &[[0, 1, 2]],
+        std::slice::from_ref(collider),
+        0.0005,
+    )
+}
+
 #[test]
 fn fast_sheet_cannot_cross_a_thin_fixed_slab_between_clear_endpoints() {
     let collider =
@@ -212,18 +231,7 @@ fn deforming_face_grazing_rounded_mattress_completes_without_search_stall() {
         DVec3::new(5.133995373412622, 0.6127066963205535, -3.5327255681263017),
         DVec3::new(5.133916746951582, 0.6122012724202225, -3.5966141351708503),
     ];
-    collide_surface(
-        &mut GripParticles {
-            positions: &mut positions,
-            previous: &previous,
-            inverse_mass: &[1.; 3],
-            h: 1. / 1440.,
-        },
-        &[[0, 1, 2]],
-        std::slice::from_ref(&collider),
-        0.0005,
-    )
-    .unwrap();
+    resolve_triangle(&previous, &mut positions, &collider, 1. / 1440.).unwrap();
     assert!(positions.iter().all(|p| p.is_finite()));
     assert!(collider
         .triangle_contact(positions, 0.00049)
@@ -331,5 +339,26 @@ fn triangle_contact_moves_only_touching_material_and_clears_dense_samples() {
             let p = positions[0] * u + positions[1] * v + positions[2] * (1. - u - v);
             assert!(collider.distance_and_normal(p).0 >= 0.00049, "{p:?}");
         }
+    }
+}
+
+#[test]
+fn large_tangent_motion_does_not_stall_a_tiny_normal_impact() {
+    let floor = FixedClothCollider::new(
+        SharedShape::cuboid(3., 0.1, 3.),
+        Isometry::translation(0., -0.1, 0.),
+        0.,
+    )
+    .unwrap();
+    let previous = [
+        DVec3::new(0., 0.0005005, 0.),
+        DVec3::new(0.2, 0.0005005, 0.),
+        DVec3::new(0., 0.0005005, 0.2),
+    ];
+    let mut positions = previous.map(|p| p + DVec3::new(1., -0.000001, 0.));
+    resolve_triangle(&previous, &mut positions, &floor, 1. / 60.).unwrap();
+    for (p, old) in positions.into_iter().zip(previous) {
+        assert!(p.y >= 0.000499999);
+        assert!((p.x - old.x - 1.).abs() < 1e-12);
     }
 }

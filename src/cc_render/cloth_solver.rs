@@ -3,7 +3,7 @@
 //!
 //! Small-step XPBD (Macklin et al., https://mmacklin.com/smallsteps.pdf), one
 //! constraint sweep per substep. Opposite-vertex springs approximate bending;
-//! they are not a calibrated shell material. Self-collision,
+//! they are not a calibrated shell material. Swept self-contact is frictionless;
 //! dynamic-body coupling and runtime hand admission are not implemented here.
 //! The crate-private contact clamp is an explicitly limited coupling prototype.
 use std::collections::BTreeMap;
@@ -61,6 +61,8 @@ pub enum ClothError {
     NonfiniteState,
     #[error("swept cloth contact could not be resolved conservatively")]
     SweptContactUnresolved,
+    #[error("cloth self contact could not be resolved conservatively")]
+    SelfContactUnresolved,
 }
 
 /// An immutable collider snapshot. Never used to move its owning rigid body.
@@ -237,6 +239,7 @@ pub struct ClothSolver {
     velocities: Vec<DVec3>,
     inverse_mass: Vec<f64>,
     triangles: Vec<[usize; 3]>,
+    self_collision: self_collision::SelfCollisionTopology,
     springs: Vec<DistanceSpring>,
     parameters: ClothParameters,
 }
@@ -274,12 +277,15 @@ impl ClothSolver {
             .collect();
         let springs = material_springs(&rest, &triangles, parameters)?;
         let velocities = vec![DVec3::ZERO; initial.len()];
+        let triangles: Vec<_> = triangles.iter().map(|t| t.map(|i| i as usize)).collect();
+        let self_collision = self_collision::SelfCollisionTopology::new(&triangles);
         Ok(Self {
             surface,
             positions: initial.into_iter().map(|v| v.as_dvec3()).collect(),
             velocities,
             inverse_mass,
-            triangles: triangles.iter().map(|t| t.map(|i| i as usize)).collect(),
+            triangles,
+            self_collision,
             springs,
             parameters,
         })
@@ -387,7 +393,8 @@ impl ClothSolver {
                 h,
             };
             self.project_constraints(&mut particles, interval, &mut pending_grips)?;
-            collision::collide_surface(&mut particles, &self.triangles, colliders, radius)?;
+            self.self_collision
+                .resolve(&mut particles, &self.triangles, colliders, radius * 2.)?;
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
         }
         self.surface
@@ -439,6 +446,12 @@ mod collision;
 
 #[path = "cloth_sweep.rs"]
 mod sweep;
+
+#[path = "cloth_pair.rs"]
+mod pair;
+
+#[path = "cloth_self_collision.rs"]
+mod self_collision;
 
 fn area_masses(rest: &[DVec3], triangles: &[[u32; 3]], mass: f64) -> Result<Vec<f64>, ClothError> {
     let mut weights = vec![0.0; rest.len()];
@@ -506,3 +519,7 @@ fn material_springs(
 #[cfg(test)]
 #[path = "cloth_solver_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cloth_self_tests.rs"]
+mod self_tests;

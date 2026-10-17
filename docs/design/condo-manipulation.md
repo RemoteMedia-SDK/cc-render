@@ -13,9 +13,9 @@ items open until their actual assets/runtime behavior and evidence are verified.
   shelf levels verified alongside moving drawers (checkpoint 197).
 - Entry door: inward-opening passive hinge, retained frame and observed doorway
   clearance verified (checkpoint 198).
-- Bed sheets: fixed-body fast-crossing protection is implemented and tested in
-  checkpoint 199. Self-collision, moving-object collision and separate interacting duvet
-  layers remain unfinished.
+- Bed sheets: fixed-body sweeps (199) and frictionless swept self-contact (200)
+  are implemented and tested. Moving-object collision and separate interacting
+  duvet layers remain unfinished.
 - Contents and durability: loaded drawers, shelf contents, repeated cycles and
   simultaneous hinges/rails covered by bounded tests; broader loads remain open.
 - Optional realism: assess latches, soft-close behavior, door closers and
@@ -27,6 +27,77 @@ Current scope: **physics and movable condo parts only**. The owner replaced the
 former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
+
+## Checkpoint 200 — swept cloth self-contact and a connected fold
+
+`cloth_pair.rs` handles vertex–triangle and edge–edge contacts between disjoint
+material features. `cloth_self_collision.rs` builds their spatial candidates,
+excludes a vertex from its own faces and edges sharing an endpoint, and alternates
+self/fixed contact until both converge. This runs inside the existing transactional
+cloth step, before velocities and the render surface are published. An unresolved
+search, undefined contact side or iteration limit rejects the step; no partial
+mesh or grip state is committed.
+
+Contacts distribute positional response to both features using barycentric
+weights and inverse masses. The target spacing is the existing cloth thickness;
+continuous checks guard an inner half-thickness envelope, with a 1e-8 m tolerance,
+so near-rest contact does not start every search at its numerical boundary.
+Proximity response restores full target spacing at the endpoint. Time intervals
+are discarded only by actual separating planes or swept bounds. Numerical
+closest-point distance is an upper bound and is not used to certify separation.
+An exactly intersecting initial surface has no reliable side and fails explicitly.
+
+A supporting fixed surface removes the component of response directed into it
+from the contact's effective mass. Upward/separating motion remains free. This
+avoids repeatedly pushing the lower sheet through the floor and then correcting
+it back. Relative response without fixed supports conserves mass-weighted centre
+of mass. Self-contact is currently frictionless; this is not a calibrated fabric
+or a claim of arbitrary-fold convergence. The vertex/face and edge/edge contact
+structure is informed by [Bridson, Fedkiw and Anderson](https://graphics.stanford.edu/papers/cloth-sig02/cloth.pdf);
+this implementation does not reproduce their full impact-zone/friction method.
+
+The spatial cache stores padded swept bounds, not a refresh timer. Every old and
+predicted vertex must fit its envelope; changed paths outside an envelope force
+new BVH candidates, including after contact corrections. Cached separating axes
+skip pairs only when the entire new interval clears them. Tests cover both a new
+crossing that invalidates the cache and a crossing already covered by fat bounds.
+A fixed-body particle sweep also now advances using normal closing motion,
+preventing a large tangential displacement from stalling a tiny normal impact.
+
+Evidence is under `artifacts/toronto-condo-captures/cloth200/`. The new fast
+layer-crossing test fails before integration and passes afterward. Feature tests
+cover interior edge hits, winding/rotation, unequal masses, common translation,
+support reactions and transactional failure on initial intersection. The connected
+231-vertex, 400-triangle fold drops onto a fixed floor for ten seconds and settles:
+
+- Minimum endpoint feature gap over 601 observed states: 0.0009999919 m.
+- Final maximum speed: 0.00009714 m/s; maximum final edge stretch: 1.003210.
+- Floor particle penetration stays below 1e-6 m throughout the test.
+- Independent Parry distance queries measure the candidate feature gaps; they
+  do not read a solver-reported success flag or alter the simulated positions.
+
+All 358 Rust library tests pass (two ignored), including the prior loaded drawer,
+upper cabinet, grip and clock tests. The full run took 56.63 seconds; the ordinary
+bed probe took about 24.3 seconds and retained zero particle penetration. The
+unchanged Python source-text ownership test remains the one failure among seven.
+The final 43 cloth checks pass after report-label/fixture-helper updates. The
+render audit is recorded alongside the full suite. Quality review retains five short-horizon churn notices for the
+required constructor/step integration and report/fixture updates; structural
+regressions in existing functions were removed. New feature helpers retain their
+local mathematical/contact flow despite length/nesting notices.
+
+The Blender preview replays 101 recorded samples at 10 fps, using the exact solver
+triangles and positions. Its two colours identify halves of **one connected sheet**.
+It is a standalone physics fixture, not a newly authored duvet or live avatar
+manipulation. All rejected test iterations are preserved. Gallery 200a/b includes
+the playable fold recordings. All 101 frames decode, source hashes and sample
+timestamps match, and every render mesh vertex matches the recorded positions.
+
+Still required: moving rigid colliders with aligned pose/time histories; a shared
+step for the currently independent live cloth solvers; separate fitted/top/duvet
+assets and render bindings; and multi-layer folding/compression/release evidence.
+The disconnected-patch collision test establishes a solver capability, not scene
+integration of separate bedding layers. The active physics goal remains open.
 
 ## Checkpoint 199 — fixed-body swept cloth contacts
 

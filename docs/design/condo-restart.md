@@ -7,6 +7,21 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 200 adds frictionless swept self-contact to the live cloth solver.
+Vertex/face and edge/edge constraints share response by inverse mass, account for
+fixed support reactions, and reject unresolved steps transactionally. Reusable
+spatial envelopes and separating axes retain coverage when contact corrections
+change trajectories. The connected folded-sheet diagnostic settles for ten
+seconds with a minimum measured feature gap of 0.0009999919 m and final speed
+0.00009714 m/s. Full Rust suite: 358 passed, two ignored; the existing Python
+ownership source-text failure remains. Evidence and playable fold previews live
+under `artifacts/toronto-condo-captures/cloth200/` and gallery 200a/b. Final 43 cloth
+checks pass; all 101 video frames decode with exact render/solver mesh parity.
+Two preview colours are halves of one connected sheet, not separate duvet layers.
+Required next: shared live stepping across separate bedding layers, moving-body
+collision with pose/time alignment, and authored duvet layers with rendered
+interaction evidence. The latest rigid scene remains `scene-entry-door.json`.
+
 Checkpoint 199 adds swept cloth contact against fixed cuboids/rounded cuboids.
 Seven new crossing/grazing/settling regressions pass; the full Rust library suite
 passes 346 tests (two ignored). The existing Python ownership source-text failure

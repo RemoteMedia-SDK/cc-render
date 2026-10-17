@@ -14,6 +14,25 @@ struct Witness {
 }
 
 impl FixedClothCollider {
+    fn project_swept_contact(
+        &self,
+        position: &mut DVec3,
+        old: DVec3,
+        witness: &Witness,
+        radius: f64,
+    ) {
+        let depth = radius - witness.distance - (*position - witness.point).dot(witness.normal);
+        if depth <= 0. {
+            return;
+        }
+        *position += witness.normal * depth;
+        let displacement = *position - old;
+        let tangent = displacement - witness.normal * displacement.dot(witness.normal);
+        if tangent.length() > 0. {
+            *position -= tangent * (self.friction * depth / tangent.length()).min(1.);
+        }
+    }
+
     fn project_swept_particle(
         &self,
         end: &mut DVec3,
@@ -34,17 +53,25 @@ impl FixedClothCollider {
             let at = old + motion * t;
             let (distance, normal) = self.distance_and_normal(at);
             if distance <= radius + 2. * tolerance {
-                let depth = radius - distance - (*end - at).dot(normal);
-                if depth > 0. {
-                    *end += normal * depth;
-                    let tangent = motion - normal * motion.dot(normal);
-                    if tangent.length() > 0. {
-                        *end -= tangent * (self.friction * depth / tangent.length()).min(1.);
-                    }
-                }
+                self.project_swept_contact(
+                    end,
+                    old,
+                    &Witness {
+                        point: at,
+                        normal,
+                        distance,
+                    },
+                    radius,
+                );
                 return Ok(());
             }
-            let increment = (distance - radius - tolerance) / speed;
+            // The supporting plane bounds the entire remaining straight path.
+            // Tangential motion does not close its gap and must not stall CCD.
+            let closing = -motion.dot(normal);
+            if closing <= 0. || distance - closing * (1. - t) >= radius {
+                return Ok(());
+            }
+            let increment = (distance - radius - tolerance) / closing;
             if t + increment > 1. {
                 return Ok(());
             }
@@ -196,17 +223,12 @@ impl FixedClothCollider {
         // prevents the other corners crossing behind the contact witness.
         // Ordinary slow contacts retain the mass-weighted point response.
         for i in indices {
-            let position = &mut particles.positions[i];
-            let depth = radius - witness.distance - (*position - witness.point).dot(witness.normal);
-            if depth <= 0. {
-                continue;
-            }
-            *position += witness.normal * depth;
-            let displacement = *position - particles.previous[i];
-            let tangent = displacement - witness.normal * displacement.dot(witness.normal);
-            if tangent.length() > 0. {
-                *position -= tangent * (self.friction * depth / tangent.length()).min(1.);
-            }
+            self.project_swept_contact(
+                &mut particles.positions[i],
+                particles.previous[i],
+                &witness,
+                radius,
+            );
         }
         Ok(())
     }

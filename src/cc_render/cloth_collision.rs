@@ -1,6 +1,6 @@
 //! Discrete surface contact against the solver's fixed convex colliders.
 //! Triangle witnesses distribute collision response to material vertices.
-//! Swept fixed-body contacts run first; self-collision remains unimplemented.
+//! Swept fixed-body contacts run first; the coupled solver also resolves self-contact.
 use super::*;
 use bevy_rapier3d::rapier::parry::{
     math::Point,

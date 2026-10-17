@@ -27,6 +27,43 @@ fn patch(offset: Vec3) -> ClothSolver {
 }
 
 #[test]
+fn disconnected_sheet_layers_cannot_exchange_sides_during_fast_impact() {
+    let base = [
+        Vec3::new(-1., 0., -1.),
+        Vec3::new(1., 0., -1.),
+        Vec3::new(0., 0., 1.),
+    ];
+    let positions: Vec<_> = [0.1, -0.1]
+        .into_iter()
+        .flat_map(|y| base.map(|p| p + Vec3::Y * y))
+        .collect();
+    let mut config = parameters();
+    config.air_drag_per_second = 0.;
+    let mut cloth = ClothSolver::new(
+        positions.clone(),
+        positions,
+        vec![[0, 1, 2], [3, 4, 5]],
+        vec![Vec2::ZERO; 6],
+        config,
+    )
+    .unwrap();
+    cloth.velocities[..3].fill(-DVec3::Y * 100.);
+    cloth.step(1. / 60., DVec3::ZERO, &[]).unwrap();
+    for i in 0..3 {
+        assert!(
+            cloth.positions[i].y - cloth.positions[i + 3].y >= 0.000999,
+            "layers exchanged sides: {:?}",
+            cloth.positions
+        );
+    }
+    let centre = cloth.positions.iter().map(|p| p.y).sum::<f64>() / 6.;
+    assert!(
+        (centre + 50. / 60.).abs() < 1e-8,
+        "internal contact changed centre of mass: {centre}"
+    );
+}
+
+#[test]
 fn fast_sheet_impact_stays_on_entry_side_then_settles_without_a_velocity_override() {
     let mut cloth = patch(Vec3::Y * 0.1);
     cloth.velocities.fill(-DVec3::Y * 100.);
@@ -211,7 +248,7 @@ fn condo_sheet_gravity_and_settling_probe() {
         .iter()
         .map(|r| r["support_fraction"].as_f64().unwrap())
         .fold(1.0, f64::min);
-    let report = serde_json::json!({"scope":"CPU solver prototype; static rounded mattress, no self-collision, hand, dynamic body or live renderer integration",
+    let report = serde_json::json!({"scope":"CPU solver prototype with self-contact and a static rounded mattress; no hand, dynamic body or live renderer integration",
         "parameters":cloth.parameters,"coordinates":"runtime metres X east, Y up, Z south","frames":1200,"simulation_seconds":20.0,"wall_seconds_including_measurements":elapsed,
         "tail_max_speed_m_s":max(tail,"max_speed_m_s"),"tail_support_fraction":support,
         "max_edge_stretch_ratio":max(&records,"max_edge_stretch_ratio"),

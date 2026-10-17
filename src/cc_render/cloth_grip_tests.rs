@@ -348,7 +348,7 @@ fn check_condo_trace(
     };
     let y = |frame: usize| records[frame]["point"][1].as_f64().unwrap();
     let report = serde_json::json!({
-        "scope":"CPU solver with a diagnostic kinematic contact clamp and swept fixed-body collision; no avatar or runtime hand admission; no self/dynamic body collision",
+        "scope":"CPU solver with a diagnostic kinematic contact clamp, self-contact and swept fixed-body collision; no avatar, runtime hand admission or dynamic body collision",
         "coordinates":"runtime metres X east, Y up, Z south", "pre_settle_seconds":20.,
         "simulation_seconds":13., "clamp_material":config, "triangle":32,
         "lift_m":y(180)-y(0), "released_drop_m":y(180)-y(780),
