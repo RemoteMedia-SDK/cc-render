@@ -95,3 +95,31 @@ fn slider_schema_requires_metre_limits_and_rejects_commands_and_tilted_axes() {
     hinge.mechanisms[0].parts[1].joint.as_mut().unwrap().limits_m = Some([0., 0.4]);
     assert!(validate_mechanisms(&hinge.mechanisms, &hinge.solids).is_err());
 }
+
+#[test]
+fn vanity_drawers_declare_their_handles_from_the_interactions_file() {
+    use crate::cc_render::office::interaction::{Grip, Transition};
+    let p = ScenePackage::load(&Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scenes/toronto_condo/scene-vanity-drawers.json")).unwrap();
+    let objects = p.office_objects();
+    let m = p.mechanisms.iter().find(|m| m.id == "vanity_drawers").unwrap();
+    for id in ["vanity_upper_drawer", "vanity_lower_drawer"] {
+        let object = objects.iter().find(|o| o.id == id).unwrap();
+        let part = m.parts.iter().find(|p| p.id == id).unwrap();
+        let handle = part.handle_region.as_ref().unwrap();
+        // The pull zone runs along the authored handle bar, in the part object's frame.
+        let pull = object.zones.iter().find(|z| z.id == "pull").unwrap();
+        assert_eq!(pull.grip, Some(Grip::Power));
+        let middle = (Vec3::from(pull.a.unwrap()) + Vec3::from(pull.b.unwrap())) / 2.;
+        let bar = Vec3::from(m.placement) + Vec3::from(part.position) + Vec3::from(handle.centre);
+        assert!(Vec3::from(object.anchor(middle.to_array())).distance(bar) < 1e-3, "{id}");
+        let open = object.interactions.iter().find(|i| i.id == "open").unwrap();
+        assert!(matches!(open.phases[0].transition, Some(Transition::Grip { .. })));
+        assert_eq!(open.phases[1].travel.as_ref().unwrap().min_m, Some(0.30));
+        assert!(object.interactions.iter().any(|i| i.id == "close"));
+    }
+    // Other packages declare nothing.
+    let plain = ScenePackage::load(&Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scenes/toronto_condo/scene-articulated.json")).unwrap();
+    assert!(plain.office_objects().iter().all(|o| o.interactions.is_empty()));
+}

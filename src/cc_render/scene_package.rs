@@ -65,6 +65,12 @@ pub struct ScenePackage {
     pub mechanisms: Vec<super::scene_mechanism::SceneMechanism>,
     #[serde(default)]
     pub cloths: Vec<super::scene_cloth::SceneCloth>,
+    /// Package-relative file of declared zones and interactions by object id (the office
+    /// overlay format), kept apart from geometry.
+    #[serde(default)]
+    pub interactions: Option<PathBuf>,
+    #[serde(skip)]
+    overlays: super::office::InteractionOverlays,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -121,6 +127,18 @@ impl ScenePackage {
             part.verify_asset(package.geometry.parent().unwrap())?;
         }
         for cloth in &mut package.cloths { cloth.load(package.geometry.parent().unwrap())?; }
+        if let Some(file) = &package.interactions {
+            ensure!(file.components().all(|c| matches!(c, std::path::Component::Normal(_))),
+                "interactions path must be package-relative");
+            let path = path.parent().unwrap_or(Path::new(".")).join(file);
+            package.overlays = serde_json::from_slice(&std::fs::read(&path)
+                .with_context(|| format!("read scene interactions {}", path.display()))?)
+                .context("decode scene interactions")?;
+            let mut objects = package.base_objects();
+            let unknown = super::office::apply_overlays(&mut objects, &package.overlays);
+            ensure!(unknown.is_empty(), "scene interactions name unknown objects: {unknown:?}");
+            super::office::validate_objects(&objects).map_err(|e| anyhow::anyhow!("scene interactions: {e}"))?;
+        }
         Ok(package)
     }
 
@@ -171,7 +189,14 @@ impl ScenePackage {
         Ok(())
     }
 
+    /// Office objects with the package's declared zones and interactions.
     pub(crate) fn office_objects(&self) -> Vec<super::office::OfficeObject> {
+        let mut objects = self.base_objects();
+        super::office::apply_overlays(&mut objects, &self.overlays);
+        objects
+    }
+
+    fn base_objects(&self) -> Vec<super::office::OfficeObject> {
         self.static_solids().filter(|s| s.navigation_obstacle).map(|s| super::office::OfficeObject {
             id: s.id.clone(), label: s.id.replace('_', " "), position: s.position,
             half_extents: s.half_extents, yaw_deg: s.yaw_deg, color: [0.5; 3],

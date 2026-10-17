@@ -237,20 +237,30 @@ pub fn starter_objects() -> Vec<OfficeObject> {
             .expect("bundled interaction props are valid"),
     );
     // Declared zones and interactions for bundled furniture, kept apart from its geometry.
-    let overlays: std::collections::BTreeMap<String, InteractionOverlay> =
+    let overlays: InteractionOverlays =
         serde_json::from_str(include_str!("interaction_overlays.json")).expect("bundled interaction overlays are valid");
-    for object in &mut objects {
+    apply_overlays(&mut objects, &overlays);
+    objects
+}
+
+/// Declared zones and interactions by object id, kept apart from geometry (bundled furniture,
+/// or a scene package's `interactions` file).
+pub(crate) type InteractionOverlays = std::collections::BTreeMap<String, InteractionOverlay>;
+
+/// Add each overlay's zones and interactions to its object; the ids that named no object.
+pub(crate) fn apply_overlays(objects: &mut [OfficeObject], overlays: &InteractionOverlays) -> Vec<String> {
+    for object in objects.iter_mut() {
         if let Some(overlay) = overlays.get(&object.id) {
             object.zones.extend(overlay.zones.iter().cloned());
             object.interactions.extend(overlay.interactions.iter().cloned());
         }
     }
-    objects
+    overlays.keys().filter(|id| !objects.iter().any(|o| &o.id == *id)).cloned().collect()
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct InteractionOverlay {
+pub(crate) struct InteractionOverlay {
     #[serde(default)]
     zones: Vec<interaction::Zone>,
     #[serde(default)]
