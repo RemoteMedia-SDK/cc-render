@@ -208,17 +208,20 @@ impl ClothBatch {
                     velocities[i]
                 });
             for pass in 0..CONSTRAINT_PASSES {
-                self.project_layers(
-                    layers,
-                    &mut GripParticles {
-                        positions: &mut positions,
-                        previous: &previous,
-                        inverse_mass: &inverse_mass,
-                        h,
-                    },
-                    interval,
-                    &mut constraints,
-                    pass,
+                profiled!(
+                    "constraints",
+                    self.project_layers(
+                        layers,
+                        &mut GripParticles {
+                            positions: &mut positions,
+                            previous: &previous,
+                            inverse_mass: &inverse_mass,
+                            h,
+                        },
+                        interval,
+                        &mut constraints,
+                        pass,
+                    )
                 )?;
                 #[cfg(test)]
                 self.energy_probe.record(
@@ -228,15 +231,18 @@ impl ClothBatch {
                     |i| (positions[i] - previous[i]) / h,
                 );
             }
-            self.contacts.resolve_layers(
-                &mut GripParticles {
-                    positions: &mut positions,
-                    previous: &previous,
-                    inverse_mass: &inverse_mass,
-                    h,
-                },
-                &self.triangles,
-                &contacts,
+            profiled!(
+                "contacts",
+                self.contacts.resolve_layers(
+                    &mut GripParticles {
+                        positions: &mut positions,
+                        previous: &previous,
+                        inverse_mass: &inverse_mass,
+                        h,
+                    },
+                    &self.triangles,
+                    &contacts,
+                )
             )?;
             #[cfg(test)]
             self.energy_probe
@@ -245,7 +251,10 @@ impl ClothBatch {
                 });
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
         }
-        self.commit_layers(layers, &positions, &velocities, &mut constraints)?;
+        profiled!(
+            "commit",
+            self.commit_layers(layers, &positions, &velocities, &mut constraints)
+        )?;
         #[cfg(test)]
         self.energy_probe.finish_tick();
         Ok(())
@@ -259,3 +268,7 @@ mod tests;
 #[cfg(test)]
 #[path = "cloth_energy_probe.rs"]
 mod energy;
+
+#[cfg(test)]
+#[path = "cloth_bench_tests.rs"]
+pub(crate) mod bench;

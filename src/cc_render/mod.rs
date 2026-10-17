@@ -30,6 +30,8 @@ pub mod scene_mechanism;
 pub mod scene_weather;
 pub mod deformable_surface;
 pub mod cloth_solver;
+#[cfg(test)]
+pub(crate) mod cloth_profile;
 pub(crate) mod cloth_grip;
 pub mod scene_cloth;
 

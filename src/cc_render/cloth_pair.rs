@@ -201,7 +201,9 @@ impl FeaturePair {
         axis: &mut DVec3,
     ) -> Result<bool, ClothError> {
         self.project_with_support(particles, thickness, axis, |_, p, d| {
-            std::array::from_fn(|k| fixed_support_direction(fixed, thickness * 0.5, p[k], d[k]))
+            Ok(std::array::from_fn(|k| {
+                fixed_support_direction(fixed, thickness * 0.5, p[k], d[k])
+            }))
         })
     }
 
@@ -210,7 +212,7 @@ impl FeaturePair {
         particles: &mut GripParticles<'_>,
         thickness: f64,
         axis: &mut DVec3,
-        support: impl Fn([usize; 4], [DVec3; 4], [DVec3; 4]) -> [DVec3; 4],
+        support: impl Fn([usize; 4], [DVec3; 4], [DVec3; 4]) -> Result<[DVec3; 4], ClothError>,
     ) -> Result<bool, ClothError> {
         let ids = self.indices();
         let end = ids.map(|i| particles.positions[i]);
@@ -249,12 +251,12 @@ impl FeaturePair {
         let directions = std::array::from_fn(|k| {
             witness.normal * (witness.weights[k] * particles.inverse_mass[ids[k]])
         });
-        let directions = support(ids, end, directions);
+        let directions = support(ids, end, directions)?;
         let directions = support(
             ids,
             std::array::from_fn(|k| contact_points[usize::from(k >= self.split())]),
             directions,
-        );
+        )?;
         let mass = directions
             .into_iter()
             .zip(witness.weights)

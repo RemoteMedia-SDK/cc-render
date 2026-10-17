@@ -174,12 +174,16 @@ pub(super) fn collide_surface(
 ) -> Result<(), ClothError> {
     #[cfg(test)]
     let mut probe = probe::ContactProbe::new(particles);
-    super::sweep::collide_swept(particles, triangles, colliders, radius)?;
+    profiled!(
+        "fixed_swept",
+        super::sweep::collide_swept(particles, triangles, colliders, radius)
+    )?;
     #[cfg(test)]
     probe.record("swept", particles);
     collide_particles(particles.positions, particles.previous, colliders, radius);
     #[cfg(test)]
     probe.record("particles_before_triangles", particles);
+    profile_scope!("fixed_triangles");
     let (mut min, mut max) = surface_bounds(particles.positions);
     for collider in colliders {
         if !collider.intersects_bounds(min, max, radius) {

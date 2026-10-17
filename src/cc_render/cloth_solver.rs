@@ -11,6 +11,23 @@ use std::collections::BTreeMap;
 
 const CONSTRAINT_PASSES: usize = 4;
 
+/// Attribute wall time to a solver phase in test builds; a no-op otherwise.
+macro_rules! profiled {
+    ($name:literal, $body:expr) => {{
+        #[cfg(test)]
+        let _timer = crate::cc_render::cloth_profile::Timer::start($name);
+        $body
+    }};
+}
+
+/// Attribute the rest of the enclosing block to a phase in test builds.
+macro_rules! profile_scope {
+    ($name:literal) => {
+        #[cfg(test)]
+        let _profile_guard = crate::cc_render::cloth_profile::Timer::start($name);
+    };
+}
+
 use bevy::math::{DQuat, DVec3, Vec2, Vec3};
 use bevy_rapier3d::rapier::parry::{math::Isometry, shape::SharedShape};
 
