@@ -119,7 +119,7 @@ pub(crate) fn handle_grab_cmds(
     mut fsms: ResMut<GrabFsms>,
     mut prop_registry: ResMut<PropRegistry>,
     body_colliders: Query<(Entity, &BodyBoneCollider, &GlobalTransform)>,
-    props: Query<(&Prop, &GlobalTransform)>,
+    props: Query<(&Prop, &GlobalTransform, Option<&super::props::HandleExtent>)>,
     physics: Query<&RapierContext>,
     stored_cfg: Res<super::StoredPhysicsConfig>,
 ) {
@@ -169,19 +169,19 @@ pub(crate) fn handle_grab_cmds(
                 .by_id
                 .get(target)
                 .copied()
-                .and_then(|e| props.get(e).ok().map(|(prop, transform)| (e, prop, transform))),
+                .and_then(|e| props.get(e).ok().map(|(prop, transform, handle)| (e, prop, transform, handle))),
             _ => None,
         };
-        let grasp = super::contact_grasp::target_position(
-            physics.get_single().ok(), wrist_bodies.get(&hand).map(|(entity, _)| *entity), target);
+        let reach = super::contact_grasp::target_position(physics.get_single().ok(),
+            wrist_bodies.get(&hand).map(|(entity, _)| (*entity, wrist)), target, proximity_m);
         let trans = step_fsm(
             state,
             wrist,
-            grasp,
+            reach.map(|(point, _)| point),
             dt,
             cmd,
             hand,
-            proximity_m,
+            reach.map_or(proximity_m, |(_, within)| within),
             timeout_secs,
         );
         transitions.push((hand, trans));
@@ -252,7 +252,7 @@ pub(crate) fn handle_grab_cmds(
                 };
                 let active_contact = physics.get_single().ok().is_some_and(|context|
                     super::contact_grasp::has_object_contact(context, wrist_e, prop_e));
-                let joint = props.get(prop_e).ok().and_then(|(_, object_world)| {
+                let joint = props.get(prop_e).ok().and_then(|(_, object_world, _)| {
                     capture_joint(&wrist_world, object_world, active_contact)
                 });
                 let Some(joint) = joint else {

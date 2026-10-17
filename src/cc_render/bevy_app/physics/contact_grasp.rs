@@ -49,16 +49,36 @@ pub(super) fn has_object_contact(context: &RapierContext, wrist: Entity, object:
     })
 }
 
+/// A wrist on a handle bar sits this far from it: the palm's grip point is about 6.5 cm along
+/// the fingers and 2.7 cm off the palm (SDK `GRIP_REACH_M`, `GRIP_LIFT_M`).
+pub(super) const HANDLE_REACH_M: f32 = 0.10;
+
+/// While the wrist actually touches the target: the point its reach is judged to, and how
+/// far that may be. A prop with a handle box: the nearest point on the bar, within
+/// HANDLE_REACH_M; else its grasp anchor, within the configured proximity.
 pub(super) fn target_position(
     context: Option<&RapierContext>,
-    wrist: Option<Entity>,
-    target: Option<(Entity, &super::props::Prop, &GlobalTransform)>,
-) -> Option<Vec3> {
+    wrist: Option<(Entity, Vec3)>,
+    target: Option<(Entity, &super::props::Prop, &GlobalTransform, Option<&super::props::HandleExtent>)>,
+    proximity_m: f32,
+) -> Option<(Vec3, f32)> {
     let context = context?;
-    let wrist = wrist?;
-    let (object, prop, transform) = target?;
+    let (wrist, wrist_position) = wrist?;
+    let (object, prop, transform, handle) = target?;
     log_pair(context, wrist, object);
-    has_object_contact(context, wrist, object).then(|| prop.grasp_world(transform))
+    if !has_object_contact(context, wrist, object) { return None; }
+    Some(match handle {
+        Some(extent) => (nearest_on_handle(transform, prop.grasp_offset(), extent.0, wrist_position), HANDLE_REACH_M),
+        None => (prop.grasp_world(transform), proximity_m),
+    })
+}
+
+/// Nearest point to `point` on a handle box (half extents `extent`, centred at `centre` in
+/// prop space).
+pub(super) fn nearest_on_handle(transform: &GlobalTransform, centre: Vec3, extent: Vec3, point: Vec3) -> Vec3 {
+    let matrix = transform.compute_matrix();
+    let local = matrix.inverse().transform_point3(point) - centre;
+    matrix.transform_point3(centre + local.clamp(-extent, extent))
 }
 
 pub(super) fn log_pair(context: &RapierContext, wrist: Entity, object: Entity) {
@@ -105,6 +125,20 @@ fn assert_right_grip(app: &App, object: Entity, wrist: Entity, attached: bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hand_on_a_long_bar_is_judged_to_the_bar_not_its_centre() {
+        // A 90 cm bar along Z at the front of a drawer, the drawer turned 90 degrees.
+        let drawer = GlobalTransform::from(Transform::from_xyz(1., 0.8, 0.).with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)));
+        let (centre, extent) = (Vec3::new(0.3, 0.1, 0.), Vec3::new(0.006, 0.006, 0.45));
+        let world_centre = drawer.transform_point(centre);
+        let along = drawer.transform_point(centre + Vec3::new(0., 0., 0.35));
+        let wrist = along + Vec3::new(0., 0.07, 0.);  // above the bar, 35 cm from its middle
+        let nearest = nearest_on_handle(&drawer, centre, extent, wrist);
+        assert!(nearest.distance(along) < 0.007, "{nearest} vs {along}");
+        assert!(wrist.distance(nearest) <= HANDLE_REACH_M);
+        assert!(wrist.distance(world_centre) > HANDLE_REACH_M);
+    }
 
     #[test]
     fn ecs_grasp_requires_contact_with_requested_prop() {

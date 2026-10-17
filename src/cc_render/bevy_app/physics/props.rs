@@ -32,6 +32,11 @@ pub(crate) struct Prop {
     #[allow(dead_code)]
     pub grasp_local: Option<[[f32; 4]; 4]>,
 }
+/// Half extents of a prop's handle box, centred on its grasp anchor in prop space (authored
+/// mechanism `handle_region`). A hand's reach is then judged to the bar, not to its centre.
+#[derive(Component, Clone, Copy, Debug)]
+pub(crate) struct HandleExtent(pub Vec3);
+
 impl Prop {
     pub fn grasp_offset(&self) -> Vec3 {
         self.grasp_local
