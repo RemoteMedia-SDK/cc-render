@@ -32,6 +32,8 @@ struct Layout {
 /// surface published outside this batch.
 struct Rest {
     asleep: bool,
+    /// Adopt the first tick's inputs as a rest state instead of simulating.
+    adopt_on_first_tick: bool,
     quiet_seconds: f64,
     anchor: Vec<DVec3>,
     inputs: u64,
@@ -46,6 +48,7 @@ impl Rest {
     fn new() -> Self {
         Self {
             asleep: false,
+            adopt_on_first_tick: false,
             quiet_seconds: 0.,
             anchor: Vec::new(),
             inputs: 0,
@@ -256,6 +259,12 @@ impl ClothBatch {
         Ok(())
     }
 
+    /// Start asleep: the layers' initial positions are a drape this solver
+    /// already brought to rest (`SceneCloth::starts_at_rest`).
+    pub(crate) fn start_at_rest(&mut self) {
+        self.rest.adopt_on_first_tick = true;
+    }
+
     /// The batch is at rest and its last published surfaces stand.
     #[cfg(test)]
     pub(crate) fn resting(&self) -> bool {
@@ -270,6 +279,17 @@ impl ClothBatch {
     ) -> Result<(), ClothError> {
         self.validate(layers, dt, gravity)?;
         let inputs = Rest::inputs(layers, gravity);
+        if std::mem::take(&mut self.rest.adopt_on_first_tick) {
+            // The baked drape already rested under these inputs: record them
+            // and sleep. Any later change to them, a grip or an external
+            // surface update wakes the batch as usual.
+            for layer in layers.iter_mut() {
+                layer.solver.velocities.fill(DVec3::ZERO);
+            }
+            self.rest.asleep = true;
+            self.rest.inputs = inputs;
+            self.rest.revisions = layers.iter().map(|l| l.solver.surface.revision()).collect();
+        }
         if self.rest.holds(layers, inputs) {
             #[cfg(test)]
             crate::cc_render::cloth_profile::count("resting_ticks", 1);

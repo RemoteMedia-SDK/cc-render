@@ -334,3 +334,43 @@ fn settled_layers_sleep_without_publishing_and_wake_on_any_disturbance() {
     assert!(!batch.resting());
     assert_eq!(sheet.surface.revision(), revision + 1);
 }
+
+#[test]
+fn baked_rest_starts_asleep_and_still_wakes_when_disturbed() {
+    let mut sheet = patch(0.0005, 0.5, 0.001, 24);
+    let floor = |y: f32| {
+        [FixedClothCollider::new(
+            SharedShape::cuboid(2., 0.1, 2.),
+            Isometry::translation(0., y - 0.1, 0.),
+            0.5,
+        )
+        .unwrap()]
+    };
+    let mut batch = ClothBatch::new(&[&sheet]).unwrap();
+    batch.start_at_rest();
+    let step = |batch: &mut ClothBatch, sheet: &mut ClothSolver, floor: &[FixedClothCollider]| {
+        batch
+            .step(
+                &mut [ClothLayerStep {
+                    solver: sheet,
+                    colliders: floor,
+                    grips: &mut [],
+                }],
+                1. / 60.,
+                -DVec3::Y * 9.81,
+            )
+            .unwrap()
+    };
+    let resting = floor(0.);
+    let positions = sheet.positions.clone();
+    for _ in 0..30 {
+        step(&mut batch, &mut sheet, &resting);
+        assert!(batch.resting());
+    }
+    assert_eq!(sheet.surface.revision(), 0);
+    assert_eq!(sheet.positions, positions);
+    // The same wake rule applies to a baked rest: the floor drops away.
+    step(&mut batch, &mut sheet, &floor(-0.01));
+    assert!(!batch.resting());
+    assert_eq!(sheet.surface.revision(), 1);
+}

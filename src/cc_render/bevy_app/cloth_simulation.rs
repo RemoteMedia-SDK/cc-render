@@ -6,6 +6,8 @@ use crate::cc_render::cloth_solver::{ClothBatch, ClothLayerStep};
 pub(super) struct ClothSimulation {
     batch: Option<ClothBatch>,
     ids: Vec<String>,
+    /// Every layer's authored start is a baked rest drape.
+    pub(super) starts_at_rest: bool,
 }
 
 impl ClothSimulation {
@@ -19,10 +21,12 @@ impl ClothSimulation {
             if ids.windows(2).any(|pair| pair[0] == pair[1]) {
                 return Err("duplicate cloth layer id".into());
             }
-            self.batch = Some(
-                ClothBatch::new(&layers.iter().map(|l| &l.solver).collect::<Vec<_>>())
-                    .map_err(|e| e.to_string())?,
-            );
+            let mut batch = ClothBatch::new(&layers.iter().map(|l| &l.solver).collect::<Vec<_>>())
+                .map_err(|e| e.to_string())?;
+            if self.starts_at_rest {
+                batch.start_at_rest();
+            }
+            self.batch = Some(batch);
             self.ids = ids;
         }
         Ok(())

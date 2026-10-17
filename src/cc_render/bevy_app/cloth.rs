@@ -120,7 +120,10 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ready: ResMut<ClothReadiness>,
+    mut simulation: ResMut<simulation::ClothSimulation>,
 ) {
+    simulation.starts_at_rest =
+        !package.cloths.is_empty() && package.cloths.iter().all(|c| c.starts_at_rest);
     for cloth in &package.cloths {
         let mesh = mesh_for(cloth);
         let bounds = mesh.compute_aabb().expect("validated cloth bounds");

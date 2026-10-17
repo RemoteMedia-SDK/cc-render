@@ -400,6 +400,17 @@ impl ClothSolver {
         &self.surface
     }
 
+    /// Resume from a recorded drape (benches only); publishes one revision.
+    #[cfg(test)]
+    pub(crate) fn restore_state(&mut self, positions: Vec<DVec3>, velocities: Vec<DVec3>) {
+        assert_eq!(positions.len(), self.positions.len());
+        self.surface
+            .update_positions(positions.iter().map(|p| p.as_vec3()).collect())
+            .unwrap();
+        self.positions = positions;
+        self.velocities = velocities;
+    }
+
     pub fn max_speed(&self) -> f64 {
         self.velocities
             .iter()

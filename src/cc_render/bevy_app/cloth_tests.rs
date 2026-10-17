@@ -274,3 +274,6 @@ mod layers;
 
 #[path = "bedding_tests.rs"]
 mod bedding;
+
+#[path = "cloth_frame_bench_tests.rs"]
+mod frame_bench;

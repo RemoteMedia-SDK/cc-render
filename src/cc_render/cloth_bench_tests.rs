@@ -114,7 +114,9 @@ fn bench_authored_cloth_ticks() {
     };
     write_frame(0, &solvers, false);
     let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
-    let gravity = DVec3::new(0., -9.81, 0.);
+    let gravity = bevy_rapier3d::prelude::RapierConfiguration::new(1.)
+        .gravity
+        .as_dvec3();
     cloth_profile::enable();
     let started = std::time::Instant::now();
     let mut window = std::time::Instant::now();
@@ -122,6 +124,7 @@ fn bench_authored_cloth_ticks() {
     let mut history: std::collections::VecDeque<Vec<DVec3>> = Default::default();
     let mut window_drift = 0f64;
     let mut window_stretch = 0f64;
+    let mut window_tick_speed = 0f64;
     for tick in 1..=ticks {
         let mut layers: Vec<_> = solvers
             .iter_mut()
@@ -148,6 +151,28 @@ fn bench_authored_cloth_ticks() {
             .iter()
             .flat_map(|s| s.positions.iter().copied())
             .collect();
+        if let (Some(last), Ok(_)) = (history.back(), std::env::var("CC_CLOTH_TICK_JITTER")) {
+            let mut moves: Vec<_> = last
+                .iter()
+                .zip(&now)
+                .enumerate()
+                .map(|(i, (a, b))| (a.distance(*b) * 60., i, *b))
+                .collect();
+            moves.sort_by(|a, b| b.0.total_cmp(&a.0));
+            for (speed, i, p) in moves.iter().take(5) {
+                println!(
+                    "TICK_JITTER {tick} vertex={i} tick_speed={speed:.4} at={:?}",
+                    p.to_array().map(|x| (x * 1e4).round() / 1e4)
+                );
+            }
+        }
+        if let Some(last) = history.back() {
+            window_tick_speed = last
+                .iter()
+                .zip(&now)
+                .map(|(a, b)| a.distance(*b) * 60.)
+                .fold(window_tick_speed, f64::max);
+        }
         if history.len() == 30 {
             let old = history.pop_front().unwrap();
             window_drift = old
@@ -192,6 +217,7 @@ fn bench_authored_cloth_ticks() {
                     "max_speeds": solvers.iter().map(ClothSolver::max_speed).collect::<Vec<_>>(),
                     "window_max_speed": window_speed,
                     "window_max_stretch": window_stretch,
+                    "window_max_tick_speed": window_tick_speed,
                     "window_max_drift_over_30_ticks": window_drift,
                     "resting": batch.resting(),
                     "phases_ms": phases.iter().map(|(k, v)| (k.to_string(), serde_json::json!({
@@ -202,6 +228,7 @@ fn bench_authored_cloth_ticks() {
             window_speed = 0.;
             window_drift = 0.;
             window_stretch = 0.;
+            window_tick_speed = 0.;
         }
     }
     let bytes: Vec<u8> = solvers
@@ -280,7 +307,9 @@ fn diagnose_authored_cloth_velocity_sources() {
         })
         .collect();
     let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
-    let gravity = DVec3::new(0., -9.81, 0.);
+    let gravity = bevy_rapier3d::prelude::RapierConfiguration::new(1.)
+        .gravity
+        .as_dvec3();
     let substeps = solvers.iter().map(|s| s.parameters.substeps).max().unwrap();
     let h = 1. / 60. / substeps as f64;
     for tick in 0..=warm {
@@ -570,5 +599,67 @@ fn bench_interlayer_distance_queries() {
                 started.elapsed().as_secs_f64() * 1e3
             );
         }
+    }
+}
+
+/// Bake a settled drape: simulate the authored cloth of a scene from its
+/// authored start (same batch, gravity and tick as live) until the batch
+/// falls asleep, then write each layer's surface asset with the settled
+/// positions as `initial_positions`. Rest positions, topology and UVs are
+/// copied unchanged. CC_CLOTH_BAKE_SCENE, CC_CLOTH_BAKE_OUT (directory).
+#[test]
+#[ignore = "tool: bakes settled cloth assets for live scenes"]
+fn bake_settled_drape() {
+    let scene = std::env::var("CC_CLOTH_BAKE_SCENE").expect("CC_CLOTH_BAKE_SCENE");
+    let out =
+        std::path::PathBuf::from(std::env::var("CC_CLOTH_BAKE_OUT").expect("CC_CLOTH_BAKE_OUT"));
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scenes/toronto_condo");
+    let package = ScenePackage::load(&root.join(&scene)).unwrap();
+    let mut definitions: Vec<_> = package.cloths.iter().collect();
+    definitions.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut solvers: Vec<_> = definitions.iter().map(|d| d.solver().unwrap()).collect();
+    let colliders: Vec<_> = definitions
+        .iter()
+        .map(|d| d.colliders(&package).unwrap())
+        .collect();
+    let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
+    let gravity = bevy_rapier3d::prelude::RapierConfiguration::new(1.)
+        .gravity
+        .as_dvec3();
+    let mut tick = 0;
+    while !batch.resting() {
+        let mut layers: Vec<_> = solvers
+            .iter_mut()
+            .zip(&colliders)
+            .map(|(solver, colliders)| ClothLayerStep {
+                solver,
+                colliders,
+                grips: &mut [],
+            })
+            .collect();
+        batch.step(&mut layers, 1. / 60., gravity).unwrap();
+        tick += 1;
+        assert!(tick <= 3600, "drape did not come to rest within 60 s");
+    }
+    std::fs::create_dir_all(&out).unwrap();
+    for (definition, solver) in definitions.iter().zip(&solvers) {
+        let source = root.join(&definition.surface);
+        let mut asset = (**definition.loaded.as_ref().unwrap()).clone();
+        asset.initial_positions = solver
+            .surface
+            .positions()
+            .iter()
+            .map(|p| p.to_array())
+            .collect();
+        let bytes = serde_json::to_vec(&asset).unwrap();
+        let name = source.file_stem().unwrap().to_string_lossy().to_string() + "-settled.json";
+        std::fs::write(out.join(&name), &bytes).unwrap();
+        println!(
+            "BAKED_DRAPE {}",
+            serde_json::json!({
+                "scene": scene, "id": definition.id, "file": name, "rest_tick": tick,
+                "sha256": hmac_sha256::Hash::hash(&bytes).iter().map(|b| format!("{b:02x}")).collect::<String>(),
+            })
+        );
     }
 }
