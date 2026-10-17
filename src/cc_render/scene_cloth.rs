@@ -161,11 +161,7 @@ pub(crate) fn validate(package: &ScenePackage) -> Result<()> {
             "invalid cloth color"
         );
         ensure!(
-            !cloth.replaces_nodes.is_empty()
-                && cloth
-                    .replaces_nodes
-                    .iter()
-                    .all(|n| !n.is_empty() && replaced.insert(n)),
+            cloth.replaces_nodes.iter().all(|n| !n.is_empty() && replaced.insert(n)),
             "duplicate/empty replaced cloth node"
         );
         let mut collisions = HashSet::new();

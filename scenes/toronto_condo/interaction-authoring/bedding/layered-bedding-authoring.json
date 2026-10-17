@@ -1,0 +1,108 @@
+{
+  "source_blend_sha256": "26db12886bb8d3a226c2242aa1bca033cb990a5591e3da4b83189e8b88a94bee",
+  "source_unchanged": true,
+  "base_scene_sha256": "832f487363283e534a621bdfb69eafc0af56b0ef3f994bbe7fe9bba945118193",
+  "scene_sha256": "8cc51cadb0fae80e20173df0558c1299573c19f29d04c220fe49e058e5e356ab",
+  "headboard": {
+    "source_sha256": "b2e9ef6263ef3acc05699f1f76f28913887c94d26b979d32ccd147c68452c279",
+    "result_sha256": "20102fadb94261f3baa7b708094860c56350c348a903781e3ef8d01468e04838",
+    "unchanged_binary_sha256": "29296eaa7298e852c877277814198d786cd1a02280e1b17bf0524f510a8385b8",
+    "nodes": [
+      {
+        "node": "Bedroom detail headboard frame",
+        "before": [
+          4.199999809265137,
+          0.800000011920929,
+          -4.550000190734863
+        ],
+        "after": [
+          4.199999809265137,
+          0.800000011920929,
+          -4.605000190734863
+        ]
+      },
+      {
+        "node": "Bedroom detail headboard upholstered panel",
+        "before": [
+          3.7300000190734863,
+          1,
+          -4.46999979019165
+        ],
+        "after": [
+          3.7300000190734863,
+          1,
+          -4.52499979019165
+        ]
+      },
+      {
+        "node": "Bedroom detail headboard upholstered panel.001",
+        "before": [
+          4.670000076293945,
+          1,
+          -4.46999979019165
+        ],
+        "after": [
+          4.670000076293945,
+          1,
+          -4.52499979019165
+        ]
+      }
+    ],
+    "limits": "Existing lightmap texels are retained; the small placement change is not rebaked."
+  },
+  "script_sha256": "f8a7eb38cf10b4a04761b00a3e2d70edceff8c363147ae6dad3ca36eb5e599df",
+  "fitted_hem": "Open edge; no elastic pre-tension",
+  "fitted_initial_clearance_m": 0.004,
+  "layers": [
+    {
+      "id": "bed_fitted_sheet",
+      "sha256": "f6ac17dca346cef5b335a61a993ce914c766d10dba6cd5a5e3298daede6bc28e",
+      "parameters": {
+        "total_mass_kg": 0.45,
+        "thickness_m": 0.001,
+        "stretch_compliance": 1e-07,
+        "bend_compliance": 0.05,
+        "air_drag_per_second": 0.2,
+        "spring_damping_ratio": 1.0,
+        "substeps": 24
+      },
+      "vertices": 1453,
+      "triangles": 2800
+    },
+    {
+      "id": "bed_top_sheet",
+      "sha256": "160d3dc1bf9ac2cde8c024b52265600b9093f755a511005c82d2ffa9f95d4b40",
+      "parameters": {
+        "total_mass_kg": 0.8,
+        "thickness_m": 0.001,
+        "stretch_compliance": 1e-07,
+        "bend_compliance": 0.05,
+        "air_drag_per_second": 0.2,
+        "spring_damping_ratio": 1.0,
+        "substeps": 24
+      },
+      "vertices": 1221,
+      "triangles": 2304
+    },
+    {
+      "id": "bed_duvet",
+      "sha256": "86c593d2ed047e9e4ad50439d1e2d85995ec1e308afe086413dd6f82be23629d",
+      "parameters": {
+        "total_mass_kg": 1.8,
+        "thickness_m": 0.012,
+        "stretch_compliance": 1e-07,
+        "bend_compliance": 0.05,
+        "air_drag_per_second": 0.2,
+        "spring_damping_ratio": 1.0,
+        "substeps": 24
+      },
+      "vertices": 575,
+      "triangles": 1056
+    }
+  ],
+  "limits": [
+    "Sewn-shape approximation without an elastic hem; uncalibrated fabric.",
+    "Duvet is one thick midsurface, not volumetric fill or two stitched shells.",
+    "Authored initial placements require runtime settling and validation."
+  ]
+}

@@ -172,6 +172,26 @@ impl FeaturePair {
         self.project_with_axis(particles, thickness, &[], &mut axis)
     }
 
+    pub(super) fn resolved(
+        self,
+        particles: &GripParticles<'_>,
+        thickness: f64,
+        axis: DVec3,
+    ) -> Result<bool, ClothError> {
+        let ids = self.indices();
+        let old = ids.map(|i| particles.previous[i]);
+        let end = ids.map(|i| particles.positions[i]);
+        if (axis.length_squared() > 0.5
+            && self.separation(old, axis) >= thickness
+            && self.separation(end, axis) >= thickness)
+            || self.bounds_separate(old, end, thickness)
+        {
+            return Ok(true);
+        }
+        Ok(self.sweep(old, end, thickness)?.is_none()
+            && self.witness(end)?.distance >= thickness - 1e-8)
+    }
+
     #[cfg(test)]
     pub(super) fn project_with_axis(
         self,
@@ -181,7 +201,7 @@ impl FeaturePair {
         axis: &mut DVec3,
     ) -> Result<bool, ClothError> {
         self.project_with_support(particles, thickness, axis, |_, p, d| {
-            fixed_support_direction(fixed, thickness * 0.5, p, d)
+            std::array::from_fn(|k| fixed_support_direction(fixed, thickness * 0.5, p[k], d[k]))
         })
     }
 
@@ -190,7 +210,7 @@ impl FeaturePair {
         particles: &mut GripParticles<'_>,
         thickness: f64,
         axis: &mut DVec3,
-        support: impl Fn(usize, DVec3, DVec3) -> DVec3,
+        support: impl Fn([usize; 4], [DVec3; 4], [DVec3; 4]) -> [DVec3; 4],
     ) -> Result<bool, ClothError> {
         let ids = self.indices();
         let end = ids.map(|i| particles.positions[i]);
@@ -225,14 +245,16 @@ impl FeaturePair {
         // A fixed support removes only the component directed into it. Its
         // reaction then participates in this constraint's effective mass;
         // supported lower cloth need not be repeatedly pushed through a floor.
-        let directions = std::array::from_fn::<_, 4, _>(|k| {
-            let i = ids[k];
-            support(
-                i,
-                particles.positions[i],
-                witness.normal * (witness.weights[k] * particles.inverse_mass[i]),
-            )
+        let contact_points = self.contact_points(end, witness.weights);
+        let directions = std::array::from_fn(|k| {
+            witness.normal * (witness.weights[k] * particles.inverse_mass[ids[k]])
         });
+        let directions = support(ids, end, directions);
+        let directions = support(
+            ids,
+            std::array::from_fn(|k| contact_points[usize::from(k >= self.split())]),
+            directions,
+        );
         let mass = directions
             .into_iter()
             .zip(witness.weights)
@@ -246,6 +268,17 @@ impl FeaturePair {
         }
         Ok(true)
     }
+
+    fn contact_points(self, positions: [DVec3; 4], weights: [f64; 4]) -> [DVec3; 2] {
+        let split = self.split();
+        [(0..split, 1.), (split..4, -1.)].map(|(range, sign)| {
+            let origin = positions[range.start];
+            origin
+                + range
+                    .map(|i| (positions[i] - origin) * (weights[i] * sign))
+                    .sum::<DVec3>()
+        })
+    }
 }
 
 pub(super) fn fixed_support_direction(
@@ -254,7 +287,13 @@ pub(super) fn fixed_support_direction(
     position: DVec3,
     mut direction: DVec3,
 ) -> DVec3 {
+    if direction == DVec3::ZERO {
+        return direction;
+    }
     for collider in fixed {
+        if !collider.intersects_bounds(position, position, radius + 1e-8) {
+            continue;
+        }
         let (distance, normal) = collider.distance_and_normal(position);
         if distance <= radius + 1e-8 {
             direction -= normal * direction.dot(normal).min(0.);

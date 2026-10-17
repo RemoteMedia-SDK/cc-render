@@ -9,6 +9,20 @@ fn check(pair: FeaturePair, old: [DVec3; 4], mut end: [DVec3; 4], expected: bool
             .sum::<DVec3>()
     };
     let before = centre(end);
+    assert_eq!(
+        pair.resolved(
+            &GripParticles {
+                positions: &mut end,
+                previous: &old,
+                inverse_mass: &inverse_mass,
+                h: 1. / 60.,
+            },
+            0.001,
+            DVec3::ZERO,
+        )
+        .unwrap(),
+        !expected
+    );
     let changed = pair
         .project(
             &mut GripParticles {
@@ -48,6 +62,29 @@ fn check(pair: FeaturePair, old: [DVec3; 4], mut end: [DVec3; 4], expected: bool
         assert!(settled, "feature response did not converge");
         assert!(pair.witness(end).unwrap().distance >= 0.000999, "{:?}", end);
     }
+}
+
+#[test]
+fn contact_certificate_rejects_submicrometre_overlap() {
+    let points = [
+        DVec3::new(0., 0.0009999, 0.),
+        DVec3::new(-1., 0., -1.),
+        DVec3::new(1., 0., -1.),
+        DVec3::new(0., 0., 1.),
+    ];
+    let mut end = points;
+    assert!(!FeaturePair::VertexFace([0, 1, 2, 3])
+        .resolved(
+            &GripParticles {
+                positions: &mut end,
+                previous: &points,
+                inverse_mass: &[1.; 4],
+                h: 1. / 60.
+            },
+            0.001,
+            DVec3::Y,
+        )
+        .unwrap());
 }
 
 #[test]
@@ -129,8 +166,7 @@ fn contact_is_invariant_under_rotation_and_vertex_order() {
     check(FeaturePair::VertexFace([0, 3, 2, 1]), old, end, true);
 }
 
-#[test]
-fn fixed_floor_reaction_keeps_supported_face_out_of_the_floor() {
+fn check_supported_face(half_width: f32) {
     let old = [
         DVec3::new(0., 0.2, 0.),
         DVec3::new(-1., 0.0005, -1.),
@@ -140,7 +176,7 @@ fn fixed_floor_reaction_keeps_supported_face_out_of_the_floor() {
     let mut end = old;
     end[0].y = 0.0007;
     let floor = FixedClothCollider::new(
-        SharedShape::cuboid(3., 0.1, 3.),
+        SharedShape::cuboid(half_width, 0.1, half_width),
         bevy_rapier3d::rapier::parry::math::Isometry::translation(0., -0.1, 0.),
         0.,
     )
@@ -161,4 +197,49 @@ fn fixed_floor_reaction_keeps_supported_face_out_of_the_floor() {
         .unwrap());
     assert_eq!(&end[1..], &old[1..]);
     assert!(end[0].y >= 0.00149999);
+}
+
+#[test]
+fn fixed_floor_reaction_keeps_supported_face_out_of_the_floor() {
+    check_supported_face(3.);
+}
+
+#[test]
+fn fixed_support_at_face_interior_participates_without_vertex_contact() {
+    check_supported_face(0.1);
+}
+
+#[test]
+fn fixed_support_at_edge_interior_participates_without_vertex_contact() {
+    let old = [
+        DVec3::new(-1., 0.2, 0.),
+        DVec3::new(1., 0.2, 0.),
+        DVec3::new(0., 0.0005, -1.),
+        DVec3::new(0., 0.0005, 1.),
+    ];
+    let mut end = old;
+    end[0].y = 0.0007;
+    end[1].y = 0.0007;
+    let floor = FixedClothCollider::new(
+        SharedShape::cuboid(0.1, 0.1, 0.1),
+        bevy_rapier3d::rapier::parry::math::Isometry::translation(0., -0.1, 0.),
+        0.,
+    )
+    .unwrap();
+    let pair = FeaturePair::EdgeEdge([0, 1, 2, 3]);
+    assert!(pair
+        .project_with_axis(
+            &mut GripParticles {
+                positions: &mut end,
+                previous: &old,
+                inverse_mass: &[1.; 4],
+                h: 1. / 60.,
+            },
+            0.001,
+            &[floor],
+            &mut DVec3::ZERO,
+        )
+        .unwrap());
+    assert_eq!(&end[2..], &old[2..]);
+    assert!(pair.witness(end).unwrap().distance >= 0.00099999);
 }

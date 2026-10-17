@@ -362,3 +362,29 @@ fn large_tangent_motion_does_not_stall_a_tiny_normal_impact() {
         assert!((p.x - old.x - 1.).abs() < 1e-12);
     }
 }
+
+#[test]
+fn rounded_face_contact_resolves_below_single_precision_without_jitter() {
+    let collider = FixedClothCollider::new(
+        SharedShape::round_cuboid(0.9, 0.1, 0.9, 0.1),
+        Isometry::identity(),
+        0.,
+    )
+    .unwrap();
+    let normal = DVec3::new(1., 1., 0.).normalize();
+    let tangent = DVec3::new(-normal.y, normal.x, 0.);
+    let radius = 0.0005;
+    let centre = DVec3::new(collider.half_extents.x, collider.half_extents.y, 0.)
+        + normal * (collider.border + radius - 5e-9);
+    let vertices = [
+        centre + tangent * 0.1 + DVec3::Z * 0.2,
+        centre - tangent * 0.1 + DVec3::Z * 0.2,
+        centre - DVec3::Z * 0.2,
+    ];
+    let (_, depth, observed_normal) = collider
+        .triangle_contact(vertices, radius)
+        .unwrap()
+        .expect("actual shallow face contact");
+    assert!((depth - 5e-9).abs() < 1e-10, "depth={depth}");
+    assert!(observed_normal.distance(normal) < 1e-7);
+}

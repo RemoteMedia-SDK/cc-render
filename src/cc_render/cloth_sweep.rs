@@ -1,11 +1,6 @@
 //! Conservative interval search for linearly deforming faces against fixed convex bodies.
 //! A face's maximum vertex displacement bounds its Hausdorff motion over the step.
 use super::*;
-use parry_ccd::{
-    math::{Isometry, Point},
-    query::{closest_points, ClosestPoints, PointQueryWithLocation},
-    shape::Triangle,
-};
 
 struct Witness {
     point: DVec3,
@@ -85,33 +80,9 @@ impl FixedClothCollider {
         vertices: [DVec3; 3],
         margin: f64,
     ) -> Result<Option<Witness>, ClothError> {
-        let points = vertices.map(|p| self.rotation.conjugate() * (p - self.center));
-        let [a, b, c] = points.map(|p| Point::new(p.x, p.y, p.z));
-        let triangle = Triangle::new(a, b, c);
-        let identity = Isometry::identity();
-        // Query the polyhedral core, then account for its spherical border
-        // analytically. Smooth support maps lose useful witness accuracy near
-        // contact even in f64; cuboid/triangle features avoid that ambiguity.
-        let result = closest_points(
-            &identity,
-            self.sweep_shape.as_ref(),
-            &identity,
-            &triangle,
-            margin + self.border,
-        )
-        .map_err(|_| ClothError::UnsupportedContact)?;
-        let ClosestPoints::WithinMargin(_, point) = result else {
-            return match result {
-                ClosestPoints::Disjoint => Ok(None),
-                _ => Err(ClothError::SweptContactUnresolved),
-            };
+        let Some(weights) = self.triangle_core_weights(vertices, margin)? else {
+            return Ok(None);
         };
-        let (_, location) = triangle.project_local_point_and_get_location(&point, false);
-        let weights = collision::witness_weights(
-            location
-                .barycentric_coordinates()
-                .ok_or(ClothError::InvalidInput)?,
-        )?;
         let point: DVec3 = vertices.into_iter().zip(weights).map(|(p, w)| p * w).sum();
         let (distance, normal) = self.distance_and_normal(point);
         Ok(Some(Witness {

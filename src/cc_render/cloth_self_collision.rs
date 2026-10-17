@@ -172,11 +172,18 @@ impl SelfCollisionTopology {
         layers: &[ContactLayer<'_>],
     ) -> Result<(), ClothError> {
         fixed_contacts(particles, layers)?;
-        for _ in 0..64 {
-            if !self.project_layers(particles, triangles, layers)? {
+        for iteration in 0..512 {
+            // Difficult coupled contacts get a 1 micrometre projection reserve.
+            // This is not an acceptance slop: the unpadded feature distance and
+            // complete swept path must still certify the original thickness.
+            let reserve = if iteration < 64 { 0. } else { 1e-6 };
+            if !self.project_layers(particles, triangles, layers, reserve)? {
                 return Ok(());
             }
             fixed_contacts(particles, layers)?;
+            if reserve > 0. && self.resolved(particles, triangles, layers)? {
+                return Ok(());
+            }
         }
         Err(ClothError::SelfContactUnresolved)
     }
@@ -186,21 +193,158 @@ impl SelfCollisionTopology {
         particles: &mut GripParticles<'_>,
         triangles: &[[usize; 3]],
         layers: &[ContactLayer<'_>],
+        reserve: f64,
     ) -> Result<bool, ClothError> {
         let thickness = layers.iter().map(|l| 2. * l.radius).fold(0., f64::max);
         self.candidates(particles, triangles, thickness);
+        let supports = face_supports(particles.positions, layers)?;
+        let inverse_mass = particles.inverse_mass;
         let mut changed = false;
         for (pair, axis) in self.pairs.iter().zip(&mut self.axes) {
             let ids = pair.indices();
             let gap =
                 layer_for(layers, ids[0]).radius + layer_for(layers, ids[pair.split()]).radius;
-            changed |= pair.project_with_support(particles, gap, axis, |i, p, d| {
-                let layer = layer_for(layers, i);
-                pair::fixed_support_direction(layer.fixed, layer.radius, p, d)
+            changed |= pair.project_with_support(particles, gap + reserve, axis, |ids, p, d| {
+                let d = std::array::from_fn(|k| {
+                    let layer = layer_for(layers, ids[k]);
+                    pair::fixed_support_direction(layer.fixed, layer.radius, p[k], d[k])
+                });
+                supports.project(ids, inverse_mass, d)
             })?;
         }
         Ok(changed)
     }
+
+    fn resolved(
+        &mut self,
+        particles: &GripParticles<'_>,
+        triangles: &[[usize; 3]],
+        layers: &[ContactLayer<'_>],
+    ) -> Result<bool, ClothError> {
+        let thickness = layers.iter().map(|l| 2. * l.radius).fold(0., f64::max);
+        self.candidates(particles, triangles, thickness);
+        for (pair, axis) in self.pairs.iter().zip(&self.axes) {
+            let ids = pair.indices();
+            let gap =
+                layer_for(layers, ids[0]).radius + layer_for(layers, ids[pair.split()]).radius;
+            if !pair.resolved(particles, gap, *axis)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+}
+
+struct FaceSupport {
+    ids: [usize; 3],
+    weights: [f64; 3],
+    normal: DVec3,
+}
+
+struct FaceSupports {
+    constraints: Vec<FaceSupport>,
+    adjacent: Vec<Vec<usize>>,
+}
+
+impl FaceSupports {
+    fn project(
+        &self,
+        ids: [usize; 4],
+        inverse_mass: &[f64],
+        mut directions: [DVec3; 4],
+    ) -> [DVec3; 4] {
+        let mut rows: Vec<_> = ids
+            .into_iter()
+            .flat_map(|i| self.adjacent[i].iter().copied())
+            .collect();
+        rows.sort_unstable();
+        rows.dedup();
+        // Dykstra corrections recover the mass-metric projection onto the
+        // intersection. Plain cyclic clipping can add excessive support
+        // motion and even reverse the response to the original load.
+        let mut corrections = vec![0.; rows.len()];
+        for _ in 0..128 {
+            let before = directions;
+            for (slot, &row) in rows.iter().enumerate() {
+                let contact = &self.constraints[row];
+                let weights: [f64; 4] = ids.map(|i| {
+                    contact
+                        .ids
+                        .iter()
+                        .position(|j| *j == i)
+                        .map(|k| contact.weights[k])
+                        .unwrap_or(0.)
+                });
+                let mass: f64 = ids
+                    .into_iter()
+                    .zip(weights)
+                    .map(|(i, w)| inverse_mass[i] * w * w)
+                    .sum();
+                for k in 0..4 {
+                    directions[k] +=
+                        contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
+                }
+                let approach: f64 = directions
+                    .iter()
+                    .zip(weights)
+                    .map(|(d, w)| d.dot(contact.normal) * w)
+                    .sum();
+                corrections[slot] = approach.min(0.) / mass;
+                for k in 0..4 {
+                    directions[k] -=
+                        contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
+                }
+            }
+            if directions
+                .iter()
+                .zip(before)
+                .all(|(a, b)| a.distance(b) < 1e-10)
+            {
+                break;
+            }
+        }
+        directions
+    }
+}
+
+fn face_supports(
+    positions: &[DVec3],
+    layers: &[ContactLayer<'_>],
+) -> Result<FaceSupports, ClothError> {
+    let mut supports = FaceSupports {
+        constraints: Vec::new(),
+        adjacent: vec![Vec::new(); positions.len()],
+    };
+    for layer in layers {
+        let (min, max) = collision::surface_bounds(&positions[layer.range.clone()]);
+        let fixed: Vec<_> = layer
+            .fixed
+            .iter()
+            .filter(|collider| collider.intersects_bounds(min, max, layer.radius + 1e-8))
+            .collect();
+        for triangle in layer.triangles {
+            let ids = triangle.map(|i| i + layer.range.start);
+            let vertices = ids.map(|i| positions[i]);
+            for collider in &fixed {
+                if let Some((weights, _, normal)) =
+                    collider.triangle_contact(vertices, layer.radius + 1e-8)?
+                {
+                    let row = supports.constraints.len();
+                    supports.constraints.push(FaceSupport {
+                        ids,
+                        weights,
+                        normal,
+                    });
+                    for (i, weight) in ids.into_iter().zip(weights) {
+                        if weight > 0. {
+                            supports.adjacent[i].push(row);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(supports)
 }
 
 fn bounds(ids: &[usize], particles: &GripParticles<'_>, radius: f64) -> Aabb {
@@ -222,6 +366,104 @@ fn bounds(ids: &[usize], particles: &GripParticles<'_>, radius: f64) -> Aabb {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coupled_supports_do_not_reverse_the_applied_load() {
+        let supports = FaceSupports {
+            constraints: [[0.9, 0.1, 0.], [0.1, 0.9, 0.]]
+                .map(|weights| FaceSupport {
+                    ids: [0, 1, 2],
+                    weights,
+                    normal: DVec3::Y,
+                })
+                .into_iter()
+                .collect(),
+            adjacent: vec![vec![0, 1], vec![0, 1], vec![], vec![]],
+        };
+        let load = [-DVec3::Y * 0.4, -DVec3::Y * 0.6, DVec3::ZERO, DVec3::ZERO];
+        let response = supports.project([0, 1, 2, 3], &[1.; 4], load);
+        // This load is inside the cone of support reactions: the closest
+        // feasible response is zero. Sequential clipping instead leaves an
+        // upward response that performs negative work against the load.
+        assert!(response.iter().all(|d| d.length() < 1e-8), "{response:?}");
+        assert!(
+            response
+                .into_iter()
+                .zip(load)
+                .map(|(d, f)| d.dot(f))
+                .sum::<f64>()
+                >= -1e-10
+        );
+    }
+
+    #[test]
+    fn off_center_contact_on_supported_face_can_tilt_without_penetrating() {
+        let previous = vec![
+            DVec3::new(-1., 0.0005, -1.),
+            DVec3::new(1., 0.0005, -1.),
+            DVec3::new(0., 0.0005, 1.),
+            DVec3::new(0.35, 0.2, -0.05),
+            DVec3::new(0.45, 0.2, -0.05),
+            DVec3::new(0.4, 0.2, 0.05),
+        ];
+        let mut positions = previous.clone();
+        for p in &mut positions[3..] {
+            p.y = 0.0012;
+        }
+        let triangles = [[0, 1, 2], [3, 4, 5]];
+        let fixed = [FixedClothCollider::new(
+            SharedShape::cuboid(0.1, 0.1, 0.1),
+            Isometry::translation(0., -0.1, 0.),
+            0.,
+        )
+        .unwrap()];
+        SelfCollisionTopology::new(&triangles)
+            .resolve(
+                &mut GripParticles {
+                    positions: &mut positions,
+                    previous: &previous,
+                    inverse_mass: &[1.; 6],
+                    h: 1. / 60.,
+                },
+                &triangles,
+                &fixed,
+                0.001,
+            )
+            .unwrap();
+        assert!(
+            positions[..3].iter().any(|p| p.y < 0.0004999),
+            "support must allow tilting"
+        );
+        assert!(
+            positions[..3].iter().any(|p| p.y > 0.0005001),
+            "support reaction missing"
+        );
+        for i in 3..6 {
+            let mut copy = positions.clone();
+            assert!(
+                !FeaturePair::VertexFace([i, 0, 1, 2])
+                    .project(
+                        &mut GripParticles {
+                            positions: &mut copy,
+                            previous: &positions,
+                            inverse_mass: &[1.; 6],
+                            h: 1. / 60.
+                        },
+                        0.001,
+                    )
+                    .unwrap(),
+                "resolved layer gap must not need more correction"
+            );
+        }
+        for triangle in triangles {
+            if let Some((_, depth, _)) = fixed[0]
+                .triangle_contact(triangle.map(|i| positions[i]), 0.0005)
+                .unwrap()
+            {
+                assert!(depth < 1e-8, "fixed support penetration {depth}");
+            }
+        }
+    }
 
     fn layers(gap: f64) -> Vec<DVec3> {
         [0., gap]

@@ -30,15 +30,75 @@ impl FixedClothCollider {
         {
             return Ok(None);
         }
-        // Collider-local queries avoid losing contact precision to world origin.
+        let weights = match self.triangle_core_weights(vertices, radius) {
+            Ok(Some(weights)) => weights,
+            Ok(None) => return Ok(None),
+            Err(ClothError::SweptContactUnresolved) => {
+                // A triangle inside the polyhedral core has no separated
+                // closest-point witness. Retain penetration recovery there.
+                let Some(weights) = self.penetrating_triangle_weights(vertices, radius)? else {
+                    return Ok(None);
+                };
+                weights
+            }
+            Err(error) => return Err(error),
+        };
+        let point = vertices.into_iter().zip(weights).map(|(p, w)| p * w).sum();
+        // A support-map witness alone never triggers correction. Re-evaluate
+        // actual signed distance and gradient with the analytic f64 collider.
+        let (distance, normal) = self.distance_and_normal(point);
+        let depth = radius - distance;
+        Ok((depth > 0.).then_some((weights, depth, normal)))
+    }
+
+    /// Double-precision contact against the cuboid core; the rounded border
+    /// is included in the query margin. Shared by discrete and swept contact.
+    pub(super) fn triangle_core_weights(
+        &self,
+        vertices: [DVec3; 3],
+        margin: f64,
+    ) -> Result<Option<[f64; 3]>, ClothError> {
+        use parry_ccd::{
+            math::{Isometry, Point},
+            query::{closest_points, ClosestPoints, PointQueryWithLocation},
+            shape::Triangle,
+        };
+        let points = vertices.map(|p| self.rotation.conjugate() * (p - self.center));
+        let [a, b, c] = points.map(|p| Point::new(p.x, p.y, p.z));
+        let triangle = Triangle::new(a, b, c);
+        let result = closest_points(
+            &Isometry::identity(),
+            self.sweep_shape.as_ref(),
+            &Isometry::identity(),
+            &triangle,
+            margin + self.border,
+        )
+        .map_err(|_| ClothError::UnsupportedContact)?;
+        let point = match result {
+            ClosestPoints::WithinMargin(_, point) => point,
+            ClosestPoints::Disjoint => return Ok(None),
+            ClosestPoints::Intersecting => return Err(ClothError::SweptContactUnresolved),
+        };
+        let (_, location) = triangle.project_local_point_and_get_location(&point, false);
+        Ok(Some(witness_weights(
+            location
+                .barycentric_coordinates()
+                .ok_or(ClothError::InvalidInput)?,
+        )?))
+    }
+
+    fn penetrating_triangle_weights(
+        &self,
+        vertices: [DVec3; 3],
+        radius: f64,
+    ) -> Result<Option<[f64; 3]>, ClothError> {
         let points = vertices.map(|p| self.rotation.conjugate() * (p - self.center));
         let [a, b, c] = points.map(|p| Point::new(p.x as f32, p.y as f32, p.z as f32));
         let triangle = Triangle::new(a, b, c);
-        let identity = Isometry::identity();
         let Some(hit) = contact(
-            &identity,
+            &Isometry::identity(),
             self.shape.as_ref(),
-            &identity,
+            &Isometry::identity(),
             &triangle,
             radius as f32,
         )
@@ -51,13 +111,7 @@ impl FixedClothCollider {
             .barycentric_coordinates()
             .ok_or(ClothError::InvalidInput)?
             .map(f64::from);
-        let weights = witness_weights(weights)?;
-        let point = vertices.into_iter().zip(weights).map(|(p, w)| p * w).sum();
-        // A support-map witness alone never triggers correction. Re-evaluate
-        // actual signed distance and gradient with the analytic f64 collider.
-        let (distance, normal) = self.distance_and_normal(point);
-        let depth = radius - distance;
-        Ok((depth > 0.).then_some((weights, depth, normal)))
+        Ok(Some(witness_weights(weights)?))
     }
 
     fn project_triangle(

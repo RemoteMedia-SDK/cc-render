@@ -29,6 +29,76 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 202 — authored bedding and support contacts (incomplete)
+
+The opt-in `scenes/toronto_condo/scene-bedding.json` adds an independent fitted
+shell (1,453 vertices, 0.45 kg, 1 mm thickness), top sheet (1,221 vertices,
+0.8 kg, 1 mm) and duvet midsurface (575 vertices, 1.8 kg, 12 mm). The fitted
+shell has sewn-shape rest geometry and an open hem without elastic pre-tension.
+The duvet is one thick collision midsurface, not volumetric fill or two stitched
+skins. Only the duvet replaces the old folded-duvet decoration; empty replacement
+lists now permit additive cloth. No avatar or interaction lifecycle changes.
+
+`prepare_bedding_layers.py` writes the assets and a separate authoring blend.
+The original mattress and headboard overlapped the fitted shell at the head:
+the new GLB variant shifts the three headboard nodes and their matching fixed
+collider back 55 mm. Its binary mesh buffer, other GLTF fields, other solids and
+all 45 mechanism parts/31 joints are unchanged, as recorded in
+`cloth202/headboard-audit.json`. Existing lightmaps are retained, not rebaked.
+
+Discrete rounded-collider contacts now reuse the double-precision cuboid-core
+query already used by swept contact. A regression reproduces a missed 5 nm
+rounded-face contact. Self-contact response also accounts for rigid support at
+feature interiors and incident triangles. Support constraints project the local
+four-particle response in the mass metric; Dykstra corrections prevent sequential
+clipping from reversing the applied load. Tests retain off-center tilting rather
+than pinning an entire supported face. The response remains a local, frictionless
+cloth-contact approximation, not a calibrated shell/contact model.
+
+After 64 ordinary contact sweeps, difficult contacts may use a 1 micrometre
+projection reserve, within a total cap of 512 sweeps. Acceptance still requires
+the original, unpadded feature separation (10 nm numerical tolerance) and swept
+path certificate. This is not a relaxed penetration gate. A regression rejects
+a 0.1 micrometre endpoint overlap; crossing tests also exercise the certificate.
+
+**The full-bed acceptance test fails.** With these changes it reaches tick 23
+(0.383 s), where fitted-sheet stretch reaches 1.168349 versus the unchanged
+1.15 limit. Its published geometry remains synchronized and reports no solver
+error, but that is not physical acceptance. The worst edge is fitted vertices
+696–697 (20.187 mm rest length). Earlier failures at ticks 16 and 19 exhausted
+contact resolution. All attempts remain under `cloth202/`; `live-v18.log` and
+`live-v18.ndjson` contain the latest full-bed result. Next investigate the coupled
+spring/contact response at the curved corner, retaining the stretch limit.
+
+The final remaining-library run (`rust-v20-other.log`) passes 377 tests, with two
+ignored and the full-bed test excluded because it ran separately. The focused
+solver run passes 44 tests. Python remains six passes and the pre-existing
+`test_root_acceptance_does_not_rewrite_the_candidate` source-text failure; its
+guard was not changed. Ripwire's quality delta could not obtain a baseline even
+though Git resolves HEAD; edit-check likewise reports `no-baseline`, not a clean
+contract result. The internal support callback changed from per-particle to
+four-particle response; compilation and the runtime regressions validate callers.
+
+Gallery `20261017T084136Z-202-layered-bedding-contact-work-in-progress` contains
+three stills and a four-frame, 10 fps video of ticks 0, 6, 12 and 18. It uses only
+the passing prefix (ticks 0–22); the failed full-test log and explicit prefix
+provenance are archived alongside it. Every replayed mesh coordinate matches
+the trace exactly, source hashes match, and the whole video decodes. This is an
+incomplete progress preview, **not** settling or manipulation evidence.
+
+Reproduce the full-bed check (choose a new trace filename for each run):
+
+```sh
+CC_BEDDING_TRACE=/tmp/bedding-new.ndjson CARGO_INCREMENTAL=0 cargo test --offline --lib authored_bedding_layers_drape_together_in_the_live_scene -- --nocapture
+```
+
+`preview_bedding_trace.py` requires a complete 600-tick trace by default. Its
+explicit `--diagnostic-prefix` flag labels partial progress; it does not turn a
+failed test into acceptance. Required work remains stable authored bedding,
+fold/compression/release evidence and moving-body collision with aligned motion
+histories. Broader durability beyond the existing bounded load tests and optional
+latch/soft-close/mass/friction realism remain open. The physics goal is active.
+
 ## Checkpoint 201 — shared live cloth stepping
 
 `ClothBatch` advances independent solvers in one transactional tick. Each retains

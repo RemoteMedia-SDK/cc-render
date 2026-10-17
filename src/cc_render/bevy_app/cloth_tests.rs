@@ -238,3 +238,6 @@ fn static_bedding_replacement_is_scoped_to_the_environment() {
 
 #[path = "cloth_layers_tests.rs"]
 mod layers;
+
+#[path = "bedding_tests.rs"]
+mod bedding;

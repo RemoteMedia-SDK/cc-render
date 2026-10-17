@@ -7,6 +7,21 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 202 is **work in progress**, not accepted bedding physics. The opt-in
+`scene-bedding.json` authors separate fitted/top/duvet meshes; additive cloth
+bindings are now allowed. Interior-face support reactions, a mass-weighted
+support projection and a guarded separation reserve advance the full-bed test
+past its former contact failure at tick 16. It now fails at tick 23: fitted-sheet
+stretch is 1.16835, above the unchanged 1.15 limit. Do not raise that limit to
+declare completion. Inspect coupled spring/contact response at fitted edge
+696–697; its rest length is 20.187 mm. Full settling and manipulation evidence
+remain missing, as does moving-body collision with aligned pose/time histories.
+The other Rust tests pass: 377 passed, two ignored, with the failing full-bed
+case run separately. Python remains six passes and its existing ownership-text
+failure. Gallery 202 is explicitly an incomplete 0.0–0.3 s replay, not acceptance.
+Logs, failed attempts and replay evidence: `artifacts/toronto-condo-captures/cloth202/`.
+See checkpoint 202 in `condo-manipulation.md` for reproduction and limitations.
+
 Checkpoint 201 adds transactional shared stepping for independent live cloth
 layers. Per-layer mass, thickness, material identity and fixed supports are
 preserved; group clocks and mesh publication are synchronized. Headless live
