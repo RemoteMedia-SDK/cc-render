@@ -284,8 +284,8 @@ impl FeaturePair {
     }
 }
 
-pub(super) fn fixed_support_direction(
-    fixed: &[FixedClothCollider],
+pub(super) fn fixed_support_direction<'a>(
+    fixed: impl IntoIterator<Item = &'a FixedClothCollider>,
     radius: f64,
     position: DVec3,
     mut direction: DVec3,

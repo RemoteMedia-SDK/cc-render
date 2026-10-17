@@ -4,6 +4,28 @@
 use super::*;
 use crate::cc_render::{cloth_profile, scene_package::ScenePackage};
 
+/// Sorted layer ids of the same selection `authored_layers` returns.
+fn authored_ids(scene: &str) -> Vec<String> {
+    let package = ScenePackage::load(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("scenes/toronto_condo")
+            .join(scene),
+    )
+    .unwrap();
+    let mut ids: Vec<_> = package
+        .cloths
+        .iter()
+        .map(|c| c.id.clone())
+        .filter(|id| {
+            std::env::var("CC_CLOTH_BENCH_LAYERS")
+                .map(|v| v.split(',').any(|x| x == id))
+                .unwrap_or(true)
+        })
+        .collect();
+    ids.sort();
+    ids
+}
+
 pub(crate) fn authored_layers(scene: &str) -> (Vec<ClothSolver>, Vec<Vec<FixedClothCollider>>) {
     let package = ScenePackage::load(
         &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -60,6 +82,37 @@ fn bench_authored_cloth_ticks() {
         load_state(&mut solvers, &path);
     }
     let save = std::env::var("CC_CLOTH_BENCH_SAVE").ok();
+    // Rendered-surface samples every 6 ticks (10 fps) for offline replay.
+    let mut frames = std::env::var("CC_CLOTH_BENCH_FRAMES").ok().map(|path| {
+        std::io::BufWriter::new(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .unwrap(),
+        )
+    });
+    let ids = authored_ids(&scene);
+    let mut write_frame = |tick: usize, solvers: &[ClothSolver], resting: bool| {
+        if let Some(file) = frames.as_mut() {
+            use std::io::Write;
+            let layers: Vec<_> = ids
+                .iter()
+                .zip(solvers)
+                .map(|(id, s)| {
+                    serde_json::json!({"id": id, "positions": s.surface.positions().iter()
+                        .map(|p| p.to_array()).collect::<Vec<_>>()})
+                })
+                .collect();
+            writeln!(
+                file,
+                "{}",
+                serde_json::json!({"frame": tick, "resting": resting, "layers": layers})
+            )
+            .unwrap();
+        }
+    };
+    write_frame(0, &solvers, false);
     let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
     let gravity = DVec3::new(0., -9.81, 0.);
     cloth_profile::enable();
@@ -80,6 +133,9 @@ fn bench_authored_cloth_ticks() {
             })
             .collect();
         batch.step(&mut layers, 1. / 60., gravity).unwrap();
+        if tick % 6 == 0 {
+            write_frame(tick, &solvers, batch.resting());
+        }
         window_speed = solvers
             .iter()
             .map(ClothSolver::max_speed)
@@ -475,5 +531,44 @@ fn diagnose_authored_cloth_velocity_sources() {
                 "last_substeps": history[history.len().saturating_sub(4)..],
             })
         );
+    }
+}
+
+#[test]
+#[ignore = "benchmark: cost of the bedding test's exact inter-layer distance check"]
+fn bench_interlayer_distance_queries() {
+    use parry_ccd::{math::Isometry, query::distance, shape::TriMesh};
+    let (mut solvers, _) = authored_layers("scene-bedding.json");
+    if let Ok(path) = std::env::var("CC_CLOTH_BENCH_LOAD") {
+        load_state(&mut solvers, &path);
+    }
+    let meshes: Vec<_> = solvers
+        .iter()
+        .map(|s| {
+            TriMesh::new(
+                s.surface
+                    .positions()
+                    .iter()
+                    .map(|p| parry_ccd::math::Point::new(p.x as f64, p.y as f64, p.z as f64))
+                    .collect(),
+                s.triangles.iter().map(|t| t.map(|i| i as u32)).collect(),
+            )
+        })
+        .collect();
+    for a in 0..meshes.len() {
+        for b in a + 1..meshes.len() {
+            let started = std::time::Instant::now();
+            let gap = distance(
+                &Isometry::identity(),
+                &meshes[a],
+                &Isometry::identity(),
+                &meshes[b],
+            )
+            .unwrap();
+            println!(
+                "INTERLAYER_DISTANCE {a}-{b} gap={gap:.9} ms={:.1}",
+                started.elapsed().as_secs_f64() * 1e3
+            );
+        }
     }
 }

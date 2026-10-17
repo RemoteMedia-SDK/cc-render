@@ -287,20 +287,19 @@ fn settled_layers_sleep_without_publishing_and_wake_on_any_disturbance() {
         .unwrap()]
     };
     let mut batch = ClothBatch::new(&[&sheet]).unwrap();
-    let step =
-        |batch: &mut ClothBatch, sheet: &mut ClothSolver, floor: &[FixedClothCollider]| {
-            batch
-                .step(
-                    &mut [ClothLayerStep {
-                        solver: sheet,
-                        colliders: floor,
-                        grips: &mut [],
-                    }],
-                    1. / 60.,
-                    -DVec3::Y * 9.81,
-                )
-                .unwrap()
-        };
+    let step = |batch: &mut ClothBatch, sheet: &mut ClothSolver, floor: &[FixedClothCollider]| {
+        batch
+            .step(
+                &mut [ClothLayerStep {
+                    solver: sheet,
+                    colliders: floor,
+                    grips: &mut [],
+                }],
+                1. / 60.,
+                -DVec3::Y * 9.81,
+            )
+            .unwrap()
+    };
     let floor = slab(0.);
     let mut ticks = 0;
     while !batch.resting() {

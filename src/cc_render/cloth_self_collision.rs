@@ -68,6 +68,10 @@ pub(super) struct SelfCollisionTopology {
     pair_resolved: Vec<u64>,
     /// Clock at the start of the latest fixed-contact pass.
     fixed_pass_start: u64,
+    /// Fixed-support rows per global face, with the pass-start clock of the
+    /// snapshot they were computed from. Rows depend only on the face's
+    /// snapshot vertices, so they stay exact while none of those changed.
+    face_rows: Vec<Option<(u64, std::sync::Arc<Vec<FaceSupport>>)>>,
     /// Distance certificates. Feature distance is 1-Lipschitz in each vertex,
     /// so a pair whose distance at the anchor positions exceeds its contact
     /// gap by `slack` cannot touch while every one of its vertices (over the
@@ -102,6 +106,7 @@ impl SelfCollisionTopology {
             pair_clean: Vec::new(),
             pair_resolved: Vec::new(),
             fixed_pass_start: 0,
+            face_rows: vec![None; triangles.len()],
             anchors: Vec::new(),
             slack: Vec::new(),
             reach: Vec::new(),
@@ -355,12 +360,20 @@ impl SelfCollisionTopology {
         // They are evaluated lazily, per incident face, only for pairs that
         // actually need a correction.
         let snapshot = particles.positions.to_vec();
+        let near = NearColliders::new(&snapshot, layers);
+        let mut cache = std::mem::take(&mut self.face_rows);
+        cache.resize(triangles.len(), None);
+        let face_rows = std::cell::RefCell::new(cache);
+        let stamps_at_start = self.stamps.clone();
         let supports = LazySupports {
             positions: &snapshot,
+            snapshot_clock: self.clock,
+            stamps: &stamps_at_start,
             triangles,
             layers,
+            near: &near,
             vertex_triangles: &self.vertex_triangles,
-            rows: Default::default(),
+            rows: &face_rows,
         };
         #[cfg(test)]
         crate::cc_render::cloth_profile::count("self_pairs", self.pairs.len() as u64);
@@ -394,7 +407,12 @@ impl SelfCollisionTopology {
                 pair.project_with_support(particles, gap + reserve, axis, |ids, p, d| {
                     let d = std::array::from_fn(|k| {
                         let layer = layer_for(layers, ids[k]);
-                        pair::fixed_support_direction(layer.fixed, layer.radius, p[k], d[k])
+                        pair::fixed_support_direction(
+                            near.colliders(layers, ids[k], p[k]),
+                            layer.radius,
+                            p[k],
+                            d[k],
+                        )
                     });
                     supports.project(ids, inverse_mass, d)
                 })?;
@@ -416,6 +434,8 @@ impl SelfCollisionTopology {
         #[cfg(test)]
         crate::cc_render::cloth_profile::count("self_pair_evaluations", evaluations);
         let _ = evaluations;
+        drop(supports);
+        self.face_rows = face_rows.into_inner();
         Ok(changed)
     }
 
@@ -577,23 +597,82 @@ impl FaceSupports {
 /// position snapshot. Rows keep the (face, collider) order of a full sweep.
 struct LazySupports<'a> {
     positions: &'a [DVec3],
+    /// Clock when `positions` was snapshot, and the stamps at that moment.
+    snapshot_clock: u64,
+    stamps: &'a [u64],
     triangles: &'a [[usize; 3]],
     layers: &'a [ContactLayer<'a>],
+    near: &'a NearColliders<'a>,
     vertex_triangles: &'a [Vec<usize>],
-    rows: std::cell::RefCell<std::collections::HashMap<usize, std::sync::Arc<Vec<FaceSupport>>>>,
+    rows: &'a std::cell::RefCell<Vec<Option<(u64, std::sync::Arc<Vec<FaceSupport>>)>>>,
+}
+
+/// Per-layer fixed colliders that can reach anything near the snapshot.
+/// A collider outside the layer's snapshot bounds grown by `NEAR_MARGIN`
+/// (plus the support reach) cannot support a point inside that grown box, so
+/// filtering preserves both the result and the collider order exactly.
+struct NearColliders<'a> {
+    layers: Vec<(DVec3, DVec3, Vec<&'a FixedClothCollider>)>,
+}
+
+const NEAR_MARGIN: f64 = 0.05;
+
+impl<'a> NearColliders<'a> {
+    fn new(positions: &[DVec3], layers: &[ContactLayer<'a>]) -> Self {
+        Self {
+            layers: layers
+                .iter()
+                .map(|layer| {
+                    let (min, max) = collision::surface_bounds(&positions[layer.range.clone()]);
+                    let (min, max) = (
+                        min - DVec3::splat(NEAR_MARGIN),
+                        max + DVec3::splat(NEAR_MARGIN),
+                    );
+                    let near = layer
+                        .fixed
+                        .iter()
+                        .filter(|c| c.intersects_bounds(min, max, layer.radius + 1e-8))
+                        .collect();
+                    (min, max, near)
+                })
+                .collect(),
+        }
+    }
+
+    /// Colliders to test for a point of the layer owning `vertex`.
+    fn colliders<'b>(
+        &'b self,
+        layers: &'b [ContactLayer<'a>],
+        vertex: usize,
+        point: DVec3,
+    ) -> Box<dyn Iterator<Item = &'a FixedClothCollider> + 'b> {
+        let index = layers
+            .iter()
+            .position(|l| l.range.contains(&vertex))
+            .expect("validated cloth layer partition");
+        let (min, max, near) = &self.layers[index];
+        if point.cmpge(*min).all() && point.cmple(*max).all() {
+            Box::new(near.iter().copied())
+        } else {
+            Box::new(layers[index].fixed.iter())
+        }
+    }
 }
 
 impl LazySupports<'_> {
     fn face(&self, triangle: usize) -> Result<std::sync::Arc<Vec<FaceSupport>>, ClothError> {
-        if let Some(rows) = self.rows.borrow().get(&triangle) {
-            return Ok(rows.clone());
+        let ids = self.triangles[triangle];
+        if let Some((clock, rows)) = &self.rows.borrow()[triangle] {
+            // Valid only if no vertex changed since that snapshot.
+            if ids.iter().all(|&i| self.stamps[i] <= *clock) {
+                return Ok(rows.clone());
+            }
         }
         profile_scope!("support_faces");
-        let ids = self.triangles[triangle];
         let layer = layer_for(self.layers, ids[0]);
         let vertices = ids.map(|i| self.positions[i]);
         let mut rows = Vec::new();
-        for collider in layer.fixed {
+        for collider in self.near.colliders(self.layers, ids[0], vertices[0]) {
             if let Some((weights, _, normal)) =
                 collider.triangle_contact(vertices, layer.radius + 1e-8)?
             {
@@ -606,7 +685,7 @@ impl LazySupports<'_> {
             }
         }
         let rows = std::sync::Arc::new(rows);
-        self.rows.borrow_mut().insert(triangle, rows.clone());
+        self.rows.borrow_mut()[triangle] = Some((self.snapshot_clock, rows.clone()));
         Ok(rows)
     }
 
