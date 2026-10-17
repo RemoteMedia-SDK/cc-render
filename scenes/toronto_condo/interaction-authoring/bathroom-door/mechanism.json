@@ -1,0 +1,154 @@
+{
+  "id": "bathroom_door",
+  "placement": [
+    -4.37,
+    0,
+    -2.0
+  ],
+  "replaces_solid": "bathroom_south_wall_a",
+  "replaces_nodes": [
+    "Bathroom south wall A"
+  ],
+  "parts": [
+    {
+      "id": "bathroom_hinge_jamb",
+      "geometry": "interaction-authoring/bathroom-door/bathroom_hinge_jamb.glb",
+      "sha256": "e8ec97260196a606adb3264058d245d81cdd6ce7aafafcf5e69be5f334df73cd",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "bathroom_retained_wall",
+          "position": [
+            -0.8299999833106995,
+            1.4500000476837158,
+            -0.0
+          ],
+          "half_extents": [
+            0.8,
+            1.45,
+            0.07
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bathroom_door_leaf",
+      "geometry": "interaction-authoring/bathroom-door/bathroom_door_leaf.glb",
+      "sha256": "da00220a735d32cc64374d13dd4506df927d5d7ca97f8e4ef58b2f0c19149949",
+      "position": [
+        0.0,
+        1.44,
+        0.0
+      ],
+      "mass_kg": 20.0,
+      "colliders": [
+        {
+          "id": "bathroom_door_panel",
+          "position": [
+            0.5899999737739563,
+            0.0,
+            -0.0
+          ],
+          "half_extents": [
+            0.59,
+            1.41,
+            0.0175
+          ]
+        },
+        {
+          "id": "bathroom_lever_mount_-1",
+          "position": [
+            1.0299999713897705,
+            -0.40000009536743164,
+            0.027499999850988388
+          ],
+          "half_extents": [
+            0.0225,
+            0.045,
+            0.01
+          ]
+        },
+        {
+          "id": "bathroom_lever_-1",
+          "position": [
+            0.9800000190734863,
+            -0.40000009536743164,
+            0.05000000074505806
+          ],
+          "half_extents": [
+            0.07,
+            0.009,
+            0.008
+          ]
+        },
+        {
+          "id": "bathroom_lever_mount_1",
+          "position": [
+            1.0299999713897705,
+            -0.40000009536743164,
+            -0.027499999850988388
+          ],
+          "half_extents": [
+            0.0225,
+            0.045,
+            0.01
+          ]
+        },
+        {
+          "id": "bathroom_lever_1",
+          "position": [
+            0.9800000190734863,
+            -0.40000009536743164,
+            -0.05000000074505806
+          ],
+          "half_extents": [
+            0.07,
+            0.009,
+            0.008
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "revolute",
+        "parent": "bathroom_hinge_jamb",
+        "parent_anchor": [
+          0.0,
+          1.44,
+          0.0
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "limits_rad": [
+          0,
+          1.5707963267948966
+        ]
+      },
+      "handle_region": {
+        "mesh": "bathroom_lever_-1",
+        "centre": [
+          0.9800000190734863,
+          -0.40000009536743164,
+          0.05000000074505806
+        ],
+        "half_extents": [
+          0.07,
+          0.009,
+          0.008
+        ]
+      }
+    }
+  ]
+}

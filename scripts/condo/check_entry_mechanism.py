@@ -50,6 +50,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('scene', type=Path)
     parser.add_argument('output', type=Path)
-    parser.add_argument('--mechanism', choices=('entry_cabinet', 'bedroom_door'), default='entry_cabinet')
+    parser.add_argument('--mechanism', choices=('entry_cabinet', 'bedroom_door', 'bathroom_door'), default='entry_cabinet')
     args = parser.parse_args()
     check(args.scene, args.output, args.mechanism)

@@ -19,18 +19,23 @@ OUT = SCENE / 'interaction-authoring/bedroom-door'
 def parts(palette):
     frame = assembly('bedroom_hinge_jamb', (0, 0, 0), None)
     panel(frame, 'bedroom_retained_jamb', (-.15, 0, 1.45), (.24, .14, 2.9), palette['plaster'])
-    leaf = assembly('bedroom_door_leaf', (0, 0, 1.44), 20.)
-    panel(leaf, 'bedroom_door_panel', (.56, 0, 1.44), (1.12, .035, 2.82), palette['oak'])
+    return [frame, hinged_leaf('bedroom', 1.12, palette)]
+
+
+def hinged_leaf(prefix, width, palette):
+    """Shared upright leaf and two real levers; only the room-side grip is exposed."""
+    leaf = assembly(prefix+'_door_leaf', (0, 0, 1.44), 20.)
+    panel(leaf, prefix+'_door_panel', (width/2, 0, 1.44), (width, .035, 2.82), palette['oak'])
     for side in (-1, 1):
-        panel(leaf, f'bedroom_lever_mount_{side}', (.97, side*.0275, 1.04), (.045, .02, .09), palette['dark'])
-        handle = panel(leaf, f'bedroom_lever_{side}', (.92, side*.05, 1.04), (.14, .016, .018), palette['dark'])
+        panel(leaf, f'{prefix}_lever_mount_{side}', (width-.15, side*.0275, 1.04), (.045, .02, .09), palette['dark'])
+        handle = panel(leaf, f'{prefix}_lever_{side}', (width-.20, side*.05, 1.04), (.14, .016, .018), palette['dark'])
         if side < 0:
             leaf['handle_region'] = {'mesh':handle.name, 'centre':runtime(handle.location),
                                     'half_extents':[.07, .009, .008]}
-    leaf['joint'] = {'kind':'revolute', 'parent':'bedroom_hinge_jamb',
+    leaf['joint'] = {'kind':'revolute', 'parent':prefix+'_hinge_jamb',
                      'parent_anchor':runtime(leaf['origin']), 'child_anchor':[0, 0, 0],
                      'axis':[0, 1, 0], 'limits_rad':[0, math.pi/2]}
-    return [frame, leaf]
+    return leaf
 
 
 def package(assemblies):

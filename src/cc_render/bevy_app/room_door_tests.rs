@@ -1,13 +1,24 @@
-//! Actual bedroom doorway geometry under diagnostic torques, not avatar motion.
+//! Actual room doorway geometry under diagnostic torques, not avatar motion.
 use super::*;
 
 #[test]
 fn bedroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry() {
+    verify_room_door("scene-doors.json", "bedroom_door", "CC_ROOM_DOOR_TRACE");
+}
+
+#[test]
+fn bathroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry() {
+    verify_room_door("scene-bathroom-door.json", "bathroom_door", "CC_BATHROOM_DOOR_TRACE");
+}
+
+fn verify_room_door(manifest: &str, mechanism_id: &str, trace_key: &str) {
     let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("scenes/toronto_condo/scene-doors.json")).unwrap();
-    assert!(!package.static_solids().any(|s| s.id == "bedroom_door_jamb"));
-    assert!(package.cloths[0].collision_fixed_parts.iter().any(|s| s == "bedroom_hinge_jamb"));
-    let (mut app, mechanism) = fixture_for(package, 3);
+        .join("scenes/toronto_condo").join(manifest)).unwrap();
+    let index = package.mechanisms.iter().position(|m| m.id == mechanism_id).unwrap();
+    let mechanism = &package.mechanisms[index];
+    assert!(!package.static_solids().any(|s| s.id == mechanism.replaces_solid));
+    assert!(package.cloths[0].collision_fixed_parts.contains(&mechanism.parts[0].id));
+    let (mut app, mechanism) = fixture_for(package, index);
     let doors = door_entities(&mut app);
     assert_eq!(doors.len(), 1);
     let door = doors[0];
@@ -16,7 +27,7 @@ fn bedroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry()
     for phase in 0..6 {
         if phase == 1 {
             blocker = Some(app.world_mut().spawn((RigidBody::Fixed, Collider::cuboid(0.08, 0.3, 0.06),
-                Transform::from_xyz(3.05, 1.04, -1.7))).id());
+                Transform::from_translation(Vec3::from(mechanism.placement)+Vec3::new(0.78, 1.04, -0.5)))).id());
         }
         if phase == 2 { app.world_mut().despawn(blocker.take().unwrap()); }
         let torque = match phase { 1 | 2 => 8., 4 => -8., _ => 0. };
@@ -36,11 +47,11 @@ fn bedroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry()
         }
         assert_current_snapshots(&app, &mechanism, &doors);
     }
-    if let Ok(path) = std::env::var("CC_ROOM_DOOR_TRACE") {
+    if let Ok(path) = std::env::var(trace_key) {
         use std::io::Write;
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(path).unwrap();
         file.write_all(&serde_json::to_vec(&serde_json::json!({
-            "scope":"Diagnostic torques on bedroom door; no avatar or runtime actuator",
+            "scope":"Diagnostic torques on room door; no avatar or runtime actuator",
             "mechanism":mechanism.id,"placement":mechanism.placement,"frames":trace})).unwrap()).unwrap();
     }
 }

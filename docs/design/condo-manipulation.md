@@ -1,5 +1,50 @@
 # Condo manipulation: current priority
 
+Latest owner direction, 2026-10-17: **scene conditioning is disabled in the
+interaction plan; use the `interact` function**. This supersedes checkpoint 189's
+gesture direction. The SDK scene-conditioned proposal is withdrawn, not waiting
+for approval. Existing passive articulation and physical grip/outcome checks
+remain applicable. Runtime `interact` wiring and actual avatar handling require
+their own verification; this documentation change does not certify them.
+
+## Checkpoint 193 — passive bathroom door
+
+`scene-bathroom-door.json` extends the balcony-slider scene with a 1.18 m oak
+leaf and an ideal passive 0–90 degree inward hinge (estimated mass 20 kg).
+The fixed part retains the exact replaced south-wall envelope. Both bronze
+levers are modeled; only the hallway-side grasp region is exposed. There is
+no latch, lever actuation, runtime motor or avatar manipulation claim.
+The Blender source is `interaction-authoring/bathroom-door/bathroom-door.blend`;
+`scripts/condo/bathroom_door.py` shares the upright leaf builder with the bedroom.
+
+The continuous conservative sweep passes 78,735 comparisons with 3.65 mm
+minimum reserved clearance; all 1,080 recorded physics samples pass 469,800
+fixed-room comparisons with 9.80 mm minimum gap. Both are limited to authored
+fixed colliders. The diagnostic fixture checks obstruction, full opening,
+release, closing, settling and current published bounds/joint observations.
+The read-only route test confirms closed blockage, open passage and stale-path
+invalidation without moving the avatar. Its initial point was inside the
+kitchen island's navigation margin; the corrected point lies in the actual
+aisle. The failed attempt remains archived.
+
+All 330 library tests pass, two ignored. The Python ownership suite retains
+six passes and its existing source-text failure; no policy test was weakened.
+Scoped structural review retains two duplication findings: two explicit
+navigation test wrappers and similar assembly metadata between the hinged
+leaf and the distinct balcony slider. Actual leaf construction and physics
+assertions are shared. The static scanner also marks the two new Rust tests
+as dead code, although both execute. Findings were not suppressed or reset.
+
+The live capture verifies 40 asset hashes, all 16 mechanism parts and nine
+registered passive joints over 120 frames. All 240 existing native packets
+are replayed unchanged; root interpolation error is 7.62e-8 m and the hand
+observer reports zero contacts. The avatar is outside this camera. Gallery
+193a is a four-second encoded integration capture, not real-time interaction.
+Gallery 193b preserves the full 18-second diagnostic physics trace at 30 fps,
+using alternate 60 Hz samples without interpolation. Source traces, checks
+and failed attempts remain under `artifacts/toronto-condo-captures/bathroom193/`.
+The scene-conditioned avatar interaction proposal is now withdrawn; use `interact`.
+
 User direction, 2026-10-16: pause visual detail work and prioritize fridge,
 drawers, cabinets, doors and **bed sheets** that the avatar can manipulate.
 The condo scene goal remains intact. Lighting and reflection polish are deferred.

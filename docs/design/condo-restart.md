@@ -1,8 +1,28 @@
 # Condo restart checkpoint
 
+Latest owner direction (2026-10-17): **disable scene conditioning and use the
+`interact` function**. This supersedes the earlier scene-conditioned gesture
+direction and approval request. The SDK proposal is withdrawn; do not implement
+its context-v2/scene-conditioning work. Keep passive mechanisms and physical
+contact/outcome validation available for the `interact` integration. This
+checkpoint records the direction; it does not claim that runtime routing or
+configuration has been changed or that avatar manipulation has succeeded.
+
+Checkpoint 193 adds the passive bathroom door in the latest opt-in manifest,
+`scenes/toronto_condo/scene-bathroom-door.json`. Its inward 0–90 degree hinge
+retains the original wall, with both handles modeled and the hallway grip exposed.
+Physics obstruction/open/release/close, continuous clearance, recorded-pose
+clearance and read-only closed/open navigation checks pass. All 330 Rust library
+tests pass (two ignored); Python retains its existing source-text failure.
+The live capture verifies 40 asset hashes, 16 mechanism parts and nine passive
+joints. Evidence is under `artifacts/toronto-condo-captures/bathroom193/`;
+gallery 193a shows the live integration and 193b the recorded physics sequence.
+This is mechanism readiness, not demonstrated avatar handling. The SDK
+scene-conditioned interaction proposal is withdrawn by the latest direction.
+
 Checkpoint 192 prepares an isolated outfit-bound calibration at
-`scenes/toronto_condo/calibration-v13/profile.json`. It is ready for the approved
-scene-conditioning integration, but is not installed into the running service.
+`scenes/toronto_condo/calibration-v13/profile.json`. It was prepared for the
+formerly proposed scene-conditioning integration and is not installed into the running service.
 The exporter verifies additive asset preservation and original calibration
 parity, retains verified contact patches, and adds both garment skins and the
 full 121-node hierarchy. The shared SDK calibration is untouched.
@@ -10,15 +30,15 @@ All 240 seed-189 native frames pass CPU world/root parity; six frames also pass
 the existing Rust exported-geometry test. Nine surfaces over five frames give
 413,335 checked skin vertices with maximum difference 8.89e-16 m. Evidence is in
 `artifacts/toronto-condo-captures/calibration192/`. No new screenshot was needed
-for this read-only calibration export. The interaction proposal still awaits
-owner approval; this checkpoint does not implement it.
+for this read-only calibration export. This checkpoint did not implement the
+interaction proposal, which the owner subsequently withdrew.
 
 Checkpoint 191 prepares the cross-repository implementation proposal at
 `../remotemedia-sdk-office-main/openspec/changes/add-articulated-scene-interactions/`.
 Strict OpenSpec validation passes. It covers context v2, observed physical
 grip/release, geometry-grounded open/close, outcome checks and real-time video
 acceptance. SDK OpenSpec instructions require owner approval before implementing
-this new capability; approval is pending. No new motion exception is requested.
+this new capability; the proposal was subsequently withdrawn. No new motion exception was requested.
 Preflight also found that the existing shared scene-calibration profile binds a
 different avatar hash than the condo outfit. Preserve the dirty shared files;
 export an isolated profile from the actual outfit before scene-conditioned runs.

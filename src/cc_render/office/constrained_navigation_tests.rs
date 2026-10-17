@@ -134,6 +134,14 @@ fn balcony_slider_controls_full_condo_passage_without_moving_avatar() {
         [-1., 0., 4.2], [-1., 0., 5.65], Transform::from_xyz(2., 0., 0.));
 }
 
+#[test]
+fn bathroom_door_controls_full_condo_passage_without_moving_avatar() {
+    verify_door_passage("scene-bathroom-door.json", "bathroom_door_leaf",
+        // Stand in the aisle between the island (ending at -1.15) and wall (-1.93).
+        [-3.78, 0., -1.55], [-3.78, 0., -2.65],
+        Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)));
+}
+
 fn verify_door_passage(manifest: &str, part_id: &str, start: [f32; 3], goal: [f32; 3], open: Transform) {
     // Read-only geometry observations; actual joint response is tested separately.
     let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
