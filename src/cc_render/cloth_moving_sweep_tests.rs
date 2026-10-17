@@ -55,6 +55,12 @@ fn full_turn_cannot_hide_a_rotating_bar_crossing() {
     }
     let hit = sweep.triangle(face, face, 0.001).unwrap().unwrap();
     assert!(hit.fraction > 0.2 && hit.fraction < 0.25, "{hit:?}");
+    let material_point = face
+        .into_iter()
+        .zip(hit.weights)
+        .map(|(p, w)| p * w)
+        .sum::<DVec3>();
+    assert!((material_point - hit.point).length() < 1e-12);
     let local_point = sweep.unmove(hit.point, hit.fraction);
     let (distance, normal) = collider.distance_and_normal(local_point);
     assert!((distance - hit.separation).abs() < 1e-12);
@@ -137,7 +143,7 @@ fn surface_contact_velocity_includes_translation_and_rotation_about_offset_pivot
         normal: DVec3::Y,
         distance: 0.001,
     };
-    let hit = sweep.hit(0.4, witness);
+    let hit = sweep.hit(0.4, witness, [1., 0., 0.]);
     let surface = DVec3::new(0.5, 0.02, 0.);
     let position = |t| origin + sweep.turn(t) * (surface - origin) + translation * t;
     let epsilon = 1e-5;

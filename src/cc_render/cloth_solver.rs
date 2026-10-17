@@ -63,6 +63,8 @@ pub enum ClothError {
     SweptContactUnresolved,
     #[error("cloth self contact could not be resolved conservatively")]
     SelfContactUnresolved,
+    #[error("cloth rigid impact has no movable contact degrees of freedom")]
+    RigidContactUnresolved,
 }
 
 /// An immutable collider snapshot. Never used to move its owning rigid body.
@@ -446,6 +448,9 @@ mod collision;
 
 #[path = "cloth_sweep.rs"]
 mod sweep;
+
+#[path = "cloth_rigid_impact.rs"]
+mod rigid_impact;
 
 #[path = "cloth_pair.rs"]
 mod pair;

@@ -7,6 +7,35 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 206 adds **frictionless two-way impact calculations** and a read-only
+Rapier mass/inertia adapter. Moving CCD now retains material barycentric weights.
+The response transfers linear/angular momentum between the face and body,
+accounts for locked axes and kinematic bodies, and releases separating contacts.
+It is not wired into live timestepping: callers still need to advance to impact,
+apply the impulse once, rebuild changed trajectories, resolve further contacts,
+and certify the remaining interval. No avatar/handle lifecycle code changed.
+
+All 60 focused cloth tests pass (one manual replay ignored). The final native
+adapter test plus seven impact tests pass separately, including agreement with
+Rapier's own point impulse. Python retains its existing failure. Evidence is
+under `cloth206/`; the initial adapter import compile error is retained alongside
+the corrected passing run. **Both bedding runs are now terminal.** The original
+retry completed all 600 ticks in 2,840.56 wall seconds, passing every per-tick
+check, then failed settling: tail peak 1.262657751 m/s versus 0.05 m/s. The
+instrumented duplicate was deliberately stopped after that result, with identical
+shared observations through tick 240 and no captured swept-query failure. Do not
+wait on or restart their old handles. `cloth206/run-status.json` records the stop.
+
+Gallery 206b contains the complete 101-frame replay, four images (including speed
+plots), and failed test evidence. Exact mesh parity, source hashes and full video
+decode pass. Next investigate sustained motion/substep oscillation in the actual
+bedding; the fitted layer's tail reported peak is much larger than its net
+60 Hz displacement speed. This is a diagnostic lead, not a proven cause.
+Do not weaken settling limits or add damping solely to make this test green.
+
+The following older run-status paragraphs are historical snapshots, superseded
+by checkpoint 206's terminal results above.
+
 Checkpoint 205 adds a **moving-rigid-object continuous collision query**, not yet
 live moving-object cloth response. `cloth_moving_sweep.rs` handles a linearly
 deforming face against translating/rotating cuboids and rounded cuboids, including

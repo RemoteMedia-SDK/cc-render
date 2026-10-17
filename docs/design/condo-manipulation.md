@@ -29,6 +29,88 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 206 — two-way normal impact response (incomplete)
+
+The moving query now retains the exact barycentric weights used to construct its
+material witness. `cloth_rigid_impact.rs` computes a frictionless, zero-restitution
+normal impulse from the three cloth velocities/masses and the rigid body's
+centre of mass, velocity, effective world-axis inverse masses and inverse inertia
+factor. Effective contact mass includes both the cloth weights squared and the
+body's rotational response. The body receives the opposite impulse. Separating
+contacts receive none; closing contacts without movable degrees of freedom fail
+explicitly. Nonfinite/invalid inputs fail before returning an update.
+
+The inverse inertia is represented as `B * B.transpose()` so locked axes and
+positive semidefiniteness do not need eigenvalue tolerances. The read-only
+`RigidContactBody::from_rapier` adapter reads actual native body state and mass
+properties, rather than rendered transforms. Kinematic/fixed bodies have zero
+response mass; fixed bodies have zero contact velocity. The caller still owns
+physical timestamp alignment. Returned velocity changes describe the same
+impulse, not additional forces to apply a second time.
+
+Seven impact tests cover linear/angular momentum conservation and inelastic
+energy loss, barycentric momentum distribution, release while separating,
+kinematic contact, locked translation with angular response, explicit failure
+for immovable/invalid cases, and actual translating/rotating CCD contacts. The
+rotating fixture uses cuboid inertia rotated into its current world frame. A
+separate native Rapier check compares point-impulse velocity changes for dynamic,
+axis-locked, kinematic and fixed bodies (2e-6 tolerance for the f32 native API).
+
+All 60 focused solver tests passed with one manual replay ignored. The final
+read-only adapter addition and its native test then passed with all seven impact
+tests (eight tests in that run). Python remains six passes and its existing
+source-text ownership failure. The initial native test imported `MassProperties`
+from the wrong Rapier namespace; that failed compile log is retained along with
+the corrected passing run. Logs/reports are under `cloth206/`.
+
+This is **instantaneous response groundwork, not live moving-cloth acceptance**.
+It does not integrate positions or alter a live body. After an impulse changes
+velocities, the original sweep is stale: the shared physical step must advance
+to impact, apply the update once, rebuild both remaining trajectories, resolve
+all further contacts and certify the remainder. Joint reactions, multiple-contact
+convergence, moving contact friction and common world timing/history are still
+required. The existing displayed-PTS cloth clock is unchanged. No grip lifecycle,
+avatar motion, or goal-driven furniture actuator was added.
+
+The full-bed retry is now **terminal and failed settling** after completing all
+600 ticks (10 simulated seconds) in 2,840.56 wall seconds. Every per-tick contact,
+layer-gap, strain, clock and mesh-parity check passed. Final-half-second peak
+speeds are fitted sheet **1.262657751 m/s**, duvet **1.011778690 m/s**, and top
+sheet **0.490700028 m/s**, against the unchanged 0.05 m/s limit. The run's source
+physics is checkpoint 203; the newly added moving-query/impact code is not used.
+
+The instrumented reproduction was intentionally stopped once the reference run
+completed without a swept-contact failure. Its complete logged observations
+match the reference at ticks 0, 16, 60, 120, 180 and 240. It is an incomplete
+stopped diagnostic, not a passed full-bed test. Both old PID/session pairs are
+terminal; `cloth206/run-status.json` records the outcome.
+
+Gallery entry
+`20261017T100332Z-206b-full-bedding-run-fails-settling-after-ten-seconds` archives
+the full 101-frame, 10 fps Blender replay, three scene stills, a speed plot and
+the failed log/metrics. All 101 frame timestamps, exact solver/render mesh parity,
+input hashes and full video decode pass. The rendered sheet and duvet continue
+moving over the bed's foot; this is failed settling evidence, not acceptance.
+The maximum fitted-sheet frame-to-frame displacement speed in the tail is
+0.079289 m/s versus its reported substep speed peak of 1.262658 m/s. This suggests
+internal oscillation as a hypothesis, but 60 Hz samples cannot diagnose its cause.
+
+Next investigate substep energy and constraint residuals, beginning with the
+authored fitted shell in isolation and then the three-layer scene. Determine
+whether spring/contact coupling sustains the motion before tuning material
+properties. Moving collision integration, interlayer friction, manipulation
+evidence and practical performance remain open. Do not relax the settling gate
+or use a visual filter to hide the failure.
+
+Source-only quality comparison against HEAD 4f5846e remains nonclean: a generic
+validation-pattern clone with `ClampMaterial::validate` gates the report, with
+additional unwired response/test types and similar translating/rotating test
+fixtures reported. Their validation fields and physical cases differ; no
+unrelated abstraction or acknowledgement was used to suppress the findings.
+The changed private `hit` signature has no incompatible callers; Rust compiled
+the witness return-type change and all its consumers. Static test discovery
+remains incomplete, so executed evidence is recorded separately.
+
 ## Checkpoint 205 — translating and rotating collider queries (incomplete)
 
 `cloth_moving_sweep.rs` adds a continuous triangle query in the fixed collider's

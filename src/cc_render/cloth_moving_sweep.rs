@@ -19,6 +19,7 @@ pub(crate) struct RigidSweepHit {
     pub point: DVec3,
     pub normal: DVec3,
     pub separation: f64,
+    pub weights: [f64; 3],
 }
 
 impl<'a> RigidClothSweep<'a> {
@@ -50,13 +51,14 @@ impl<'a> RigidClothSweep<'a> {
             + self.turn(fraction).conjugate() * (point - self.origin - self.translation * fraction)
     }
 
-    fn hit(&self, fraction: f64, witness: Witness) -> RigidSweepHit {
+    fn hit(&self, fraction: f64, witness: Witness, weights: [f64; 3]) -> RigidSweepHit {
         let turn = self.turn(fraction);
         RigidSweepHit {
             fraction,
             point: self.origin + turn * (witness.point - self.origin) + self.translation * fraction,
             normal: turn * witness.normal,
             separation: witness.distance,
+            weights,
         }
     }
 
@@ -85,7 +87,7 @@ impl<'a> RigidClothSweep<'a> {
                 return Ok(None);
             };
             let vertices = at(start);
-            let Some(witness) = self.witness(
+            let Some((witness, weights)) = self.witness(
                 vertices,
                 speed * (finish - start) + radius + tolerance,
                 radius,
@@ -103,7 +105,7 @@ impl<'a> RigidClothSweep<'a> {
                 continue;
             }
             if witness.distance <= radius + 2. * tolerance {
-                return Ok(Some(self.hit(start, witness)));
+                return Ok(Some(self.hit(start, witness, weights)));
             }
             let middle = (start + finish) * 0.5;
             if middle == start || middle == finish {
@@ -164,23 +166,29 @@ impl<'a> RigidClothSweep<'a> {
         vertices: [DVec3; 3],
         margin: f64,
         radius: f64,
-    ) -> Result<Option<Witness>, ClothError> {
-        match self.collider.sweep_witness(vertices, margin) {
+    ) -> Result<Option<(Witness, [f64; 3])>, ClothError> {
+        let weights = match self.collider.triangle_core_weights(vertices, margin) {
+            Ok(Some(weights)) => weights,
+            Ok(None) => return Ok(None),
             Err(ClothError::SweptContactUnresolved) => {
-                let Some((weights, _, normal)) =
-                    self.collider.triangle_contact(vertices, radius)?
+                let Some((weights, _, _)) = self.collider.triangle_contact(vertices, radius)?
                 else {
                     return Err(ClothError::SweptContactUnresolved);
                 };
-                let point = vertices.into_iter().zip(weights).map(|(p, w)| p * w).sum();
-                Ok(Some(Witness {
-                    point,
-                    normal,
-                    distance: self.collider.distance_and_normal(point).0,
-                }))
+                weights
             }
-            result => result,
-        }
+            Err(error) => return Err(error),
+        };
+        let point = vertices.into_iter().zip(weights).map(|(p, w)| p * w).sum();
+        let (distance, normal) = self.collider.distance_and_normal(point);
+        Ok(Some((
+            Witness {
+                point,
+                normal,
+                distance,
+            },
+            weights,
+        )))
     }
 }
 
