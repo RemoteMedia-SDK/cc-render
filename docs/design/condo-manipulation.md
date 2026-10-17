@@ -29,6 +29,56 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 204 — exact fixed-sweep failure reproduction (incomplete)
+
+`cloth_sweep_diagnostics.rs` is compiled only for tests. Failed particle and
+triangle sweeps optionally write their old/end positions, radius, normalized
+collider rotation, center, half-extents, rounded border, friction and bounds as
+integer IEEE-754 bit patterns. Reconstruction preserves the saved normalized
+rotation and bounds instead of recalculating them. The supported cuboid and
+rounded-cuboid shapes are reconstructed from their exact dimensions. Output
+uses `create_new`; failed writes are reported without replacing the physics
+error. This captures one failing query, not the surrounding layer/substep state.
+
+To collect: create an output directory and set `CC_CLOTH_FAILURE_DIR` while
+running `authored_bedding_layers_drape_together_in_the_live_scene`. To replay:
+
+```sh
+CC_CLOTH_REPLAY=path/to/sweep.json cargo test --offline --lib \
+  replay_captured_fixed_sweep -- --ignored --nocapture
+```
+
+The replay prints the recorded error and current result, and fails if the query
+still fails. It is a debugging entry point, not a physics acceptance test. The
+ordinary regression serializes a rotated rounded collider and fast triangle
+crossing, then verifies exact collider/input bits and identical contact witness
+bits after deserialization. All 45 focused solver tests pass; the manual replay
+is ignored by default. The simplified final round-trip test also passes.
+Python remains six passes and its unchanged source-text ownership failure.
+
+Two full-bed runs were verified live when checkpointed: the original 203 retry
+(PID 313957/session 15011, complete tick 136 without errors), and an instrumented
+reproduction (PID 322265/session 10900). The latter writes only its log and any
+failed-query files under `cloth204/`, avoiding another large mesh trace. It uses
+the same solver behavior; a later test-only simplification only shortened the
+round-trip assertion. No failed query has yet been captured at this checkpoint.
+Check live process state and terminal logs before starting another run.
+
+Quality comparison used an isolated copy of **HEAD's source tree** to establish
+the floor, then overlaid only these two changed files. This avoids copying
+2.70 GB of tracked assets into the nearly full filesystem. It reports no
+preexisting regressions and four new dead-code findings: the capture type,
+capture function and two tests. Those are reached through cfg(test), qualified
+calls and the Rust test harness, verified by compilation/tests. The static test
+gate does not recognize these tests and remains nonclean. Both changed caller
+contracts are unchanged with no incompatible callers. Reports/logs are retained
+under `artifacts/toronto-condo-captures/cloth204/`; no findings were acknowledged.
+
+Next: inspect a captured failure, isolate the failing query branch, and fix it
+with a regression before changing contact constants. Full settling, moving-body
+collisions, folding/compression/release evidence, interlayer friction and useful
+performance remain open. No new rendered bedding acceptance is claimed.
+
 ## Checkpoint 203 — finer bedding integration (incomplete)
 
 `prepare_bedding_layers.py` now authors 48 integration substeps for all three

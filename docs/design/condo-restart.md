@@ -7,6 +7,27 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 204 adds **test-only fixed-sweep failure capture and replay**; it does
+not change physical response or resolve full-bed acceptance. Set
+`CC_CLOTH_FAILURE_DIR` to an existing directory before running the bedding test.
+On a failed particle or triangle sweep, the exact query and collider are saved
+as integer IEEE-754 bit patterns. Replay with `CC_CLOTH_REPLAY=<capture.json>` and
+`cargo test --offline --lib replay_captured_fixed_sweep -- --ignored --nocapture`.
+The replay fails while the original query fails; a passing replay alone is not
+full-bed acceptance. No full-solver restart state is captured.
+
+The original checkpoint-203 retry was verified live (PID 313957, session 15011),
+with complete trace through tick 136 and no physics errors at this checkpoint.
+A separate instrumented reproduction is live as PID 322265 / session 10900,
+logging to `cloth204/instrumented-bedding.log`, with captures in
+`cloth204/failures/`. This deliberate reproduction adds missing diagnostics;
+neither run was restarted because of an observation timeout. Verify their actual
+current status before waiting or launching anything else. The instrumented run
+omits the large full-mesh trace. Both run the same physics as checkpoint 203.
+The 45 focused solver tests pass, one diagnostic ignored; final round-trip
+verification passes. Python retains its existing one failure (six pass).
+No new render is claimed. See checkpoint 204 in `condo-manipulation.md`.
+
 Checkpoint 203 is **work in progress**. Bedding authoring now requests 48
 substeps instead of 24. The resolution-only baseline passed the old tick-23
 strain failure, then failed swept fixed-surface contact at tick 138 (2.3 s),

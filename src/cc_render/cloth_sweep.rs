@@ -2,6 +2,10 @@
 //! A face's maximum vertex displacement bounds its Hausdorff motion over the step.
 use super::*;
 
+#[cfg(test)]
+#[path = "cloth_sweep_diagnostics.rs"]
+mod diagnostics;
+
 struct Witness {
     point: DVec3,
     normal: DVec3,
@@ -186,7 +190,12 @@ impl FixedClothCollider {
     ) -> Result<(), ClothError> {
         let old = indices.map(|i| particles.previous[i]);
         let end = indices.map(|i| particles.positions[i]);
-        let Some(witness) = self.swept_triangle(old, end, radius)? else {
+        let result = self.swept_triangle(old, end, radius);
+        #[cfg(test)]
+        if let Err(error) = &result {
+            diagnostics::capture(self, &old, &end, radius, error);
+        }
+        let Some(witness) = result? else {
             return Ok(());
         };
         // A confirmed fast face impact constrains that face to the convex
@@ -228,7 +237,12 @@ pub(super) fn collide_swept(
             continue;
         }
         for (end, old) in particles.positions.iter_mut().zip(particles.previous) {
-            collider.project_swept_particle(end, *old, radius)?;
+            let result = collider.project_swept_particle(end, *old, radius);
+            #[cfg(test)]
+            if let Err(error) = &result {
+                diagnostics::capture(collider, &[*old], &[*end], radius, error);
+            }
+            result?;
         }
         for triangle in triangles {
             collider.project_swept_triangle(*triangle, particles, radius)?;
