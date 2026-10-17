@@ -14,6 +14,7 @@ pub(crate) mod native_seat;
 pub mod metadata;
 pub mod motion_timeline;
 pub mod navigation;
+mod observed_objects;
 pub mod pathfinder;
 pub(crate) mod systems;
 pub mod timeline;

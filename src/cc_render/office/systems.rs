@@ -47,7 +47,13 @@ pub fn install(app: &mut App) {
     // may be registered here; tests/test_motion_ownership.py guards this seam.
     let mut controller = OfficeController::default();
     let mut bundled = true;
-    if let Ok(path) = std::env::var("CC_OFFICE_SCENE") {
+    if let Some(package) = app.world().get_resource::<crate::cc_render::scene_package::ScenePackage>() {
+        controller.objects = package.office_objects();
+        controller.constrained_objects = package.mechanisms.iter().flat_map(|m| &m.parts)
+            .filter(|part| part.joint.is_some()).map(|part| part.id.clone()).collect();
+        controller.homes = super::controller::home_poses(&controller.objects);
+        bundled = false;
+    } else if let Ok(path) = std::env::var("CC_OFFICE_SCENE") {
         match std::fs::read_to_string(path)
             .ok()
             .and_then(|s| serde_json::from_str::<Vec<super::OfficeObject>>(&s).ok())
@@ -67,10 +73,6 @@ pub fn install(app: &mut App) {
         .init_resource::<super::hand::HeldInHand>()
         .add_systems(Startup, spawn_office)
         .add_systems(Update, super::hand::capture_hand_rigs)
-        // Fingers close in hand space from last frame's object-in-hand pose, then propagate this frame.
-        .add_systems(PostUpdate, super::hand::conform_fingers
-            .after(crate::cc_render::bevy_app::pose::apply_skeletal_pose)
-            .before(bevy::transform::TransformSystem::TransformPropagate))
         .add_systems(PreUpdate, classify_animated_colliders)
         .add_systems(
             PostUpdate,
@@ -91,7 +93,10 @@ fn spawn_office(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut registry: ResMut<PropRegistry>,
     layout: Option<Res<super::home::BundledHome>>,
+    package: Option<Res<crate::cc_render::scene_package::ScenePackage>>,
 ) {
+    // Package assets and collision solids share one authoring source.
+    if package.is_some() { return; }
     for o in &office.objects {
         let h = Vec3::from(o.half_extents);
         let material = materials.add(Color::srgb(o.color[0], o.color[1], o.color[2]));
@@ -365,29 +370,7 @@ fn observe(
             return;
         }
     }
-    let mut moved = false;
-    for prop in &world.props {
-        let carried = office.held.iter().any(|(_, id)| id == &prop.id);
-        if let Some(o) = office.objects.iter_mut().find(|o| o.id == prop.id) {
-            let p = [
-                prop.transform[3][0],
-                prop.transform[3][1],
-                prop.transform[3][2],
-            ];
-            moved |= !carried && Vec3::from(o.position).distance(Vec3::from(p)) > 0.03;
-            o.position = p;
-            o.rotation_xyzw = Some(
-                Transform::from_matrix(Mat4::from_cols_array_2d(&prop.transform))
-                    .rotation
-                    .to_array(),
-            );
-            o.yaw_deg = Transform::from_matrix(Mat4::from_cols_array_2d(&prop.transform))
-                .rotation
-                .to_euler(EulerRot::YXZ)
-                .0
-                .to_degrees();
-        }
-    }
+    let moved = office.update_prop_observations(&world.props);
     // Compile the first idle only after the avatar's world position is known.
     // Otherwise a slow LLM turn starts with an unconstrained root-only stream.
     if office.observed.position_valid && office.motion.timeline.is_none() {

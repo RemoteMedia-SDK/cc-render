@@ -3,6 +3,42 @@ use super::*;
 const IDENT_SOURCE: [[f32; 4]; 22] = [[0., 0., 0., 1.]; 22];
 
 #[test]
+fn actual_heeled_ankles_keep_bind_reference_and_full_source_rotation() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cc5-scene-fit-calibration.json"
+    ))).unwrap();
+    let quats = |key: &str| {
+        serde_json::from_value::<[[f32; 4]; 22]>(fixture[key].clone()).unwrap().map(Quat::from_array)
+    };
+    let axes = serde_json::from_value::<[[f32; 3]; 22]>(fixture["axes"].clone()).unwrap().map(Vec3::from_array);
+    let parent = Quat::from_array(serde_json::from_value(fixture["pelvis_parent"].clone()).unwrap());
+    let own = quats("own");
+    let inter = quats("inter");
+    let reference = calibrated_cc5_world_frames(&quats("rest"), &axes, &inter, &own, parent);
+    for i in [7, 8, 10, 11] {
+        let p = SMPL_PARENTS[i] as usize;
+        let local = (reference[p] * inter[i]).inverse() * reference[i];
+        assert!(local.angle_between(own[i]) < 0.001, "foot {i} lost authored bind reference");
+    }
+    let mut input = IDENT_SOURCE;
+    for (i, rotation) in [(0, Vec3::new(0.1, 0.4, -0.1)), (4, Vec3::new(0.3, 0.1, 0.2)),
+                          (7, Vec3::new(0.2, -0.3, 0.4)), (8, Vec3::new(-0.3, 0.1, 0.2)),
+                          (10, Vec3::new(0.1, 0.2, -0.1)), (11, Vec3::new(-0.2, 0.1, 0.3))] {
+        input[i] = Quat::from_scaled_axis(rotation).to_array();
+    }
+    let output = fk_retarget_smpl_to_cc5_with_align(&input, &reference, &inter, parent, Quat::IDENTITY);
+    let mut source = [Quat::IDENTITY; 22];
+    let mut target = [Quat::IDENTITY; 22];
+    for i in SMPL_TOPO {
+        let p = SMPL_PARENTS[i];
+        source[i] = if p < 0 { Quat::from_array(input[i]) } else { source[p as usize] * Quat::from_array(input[i]) };
+        target[i] = if p < 0 { parent * output[i] } else { target[p as usize] * inter[i] * output[i] };
+        assert!((target[i] * reference[i].inverse()).normalize().angle_between(source[i].normalize()) < 0.001,
+                "bone {i} lost source rotation");
+    }
+}
+
+#[test]
 fn actual_cc5_scene_fit_geometry_matches_production_calibration() {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cc5-scene-fit-calibration.json"
@@ -94,7 +130,7 @@ fn calibrated_transfer_preserves_mixed_arm_rotation_and_independent_wrist() {
 }
 
 #[test]
-fn calibrated_neutral_preserves_legacy_reference_and_pelvis_anatomy() {
+fn calibrated_neutral_preserves_reference_except_authored_ankle_bind() {
     let rest = [Quat::from_rotation_y(0.2); 22];
     let own = [Quat::IDENTITY; 22];
     let inter = [Quat::IDENTITY; 22];
@@ -122,8 +158,9 @@ fn calibrated_neutral_preserves_legacy_reference_and_pelvis_anatomy() {
         Quat::IDENTITY,
     );
     for i in 0..22 {
+        let expected = if matches!(i, 7 | 8) { own[i] } else { before[i] };
         assert!(
-            before[i].angle_between(after[i]) < 0.001,
+            expected.angle_between(after[i]) < 0.001,
             "neutral bone {i} changed"
         );
     }

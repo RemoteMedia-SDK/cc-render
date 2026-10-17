@@ -1,0 +1,404 @@
+{
+  "id": "bedside_drawers",
+  "placement": [
+    5.52,
+    0,
+    -4.18
+  ],
+  "replaces_solid": "bedside_unit",
+  "replaces_nodes": [
+    "Bedroom detail bedside case",
+    "Bedroom detail bedside drawer",
+    "Bedroom detail bedside drawer.001",
+    "Bedroom detail bedside finger pull",
+    "Bedroom detail bedside finger pull.001",
+    "Bedroom detail bedside plinth",
+    "Bedroom detail bedside stone top"
+  ],
+  "parts": [
+    {
+      "id": "bedside_shell",
+      "geometry": "interaction-authoring/bedside/bedside_shell.glb",
+      "sha256": "729ff9fd7124a26b81902ac383a7ed6a62272998e7b81459f254e2156ac34605",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass_kg": null,
+      "colliders": [
+        {
+          "id": "bedside_side_-0.258",
+          "position": [
+            -0.257999986410141,
+            0.33500000834465027,
+            -0.0
+          ],
+          "half_extents": [
+            0.012,
+            0.265,
+            0.3
+          ]
+        },
+        {
+          "id": "bedside_side_0.258",
+          "position": [
+            0.257999986410141,
+            0.33500000834465027,
+            -0.0
+          ],
+          "half_extents": [
+            0.012,
+            0.265,
+            0.3
+          ]
+        },
+        {
+          "id": "bedside_back",
+          "position": [
+            0.0,
+            0.33500000834465027,
+            -0.2879999876022339
+          ],
+          "half_extents": [
+            0.246,
+            0.265,
+            0.012
+          ]
+        },
+        {
+          "id": "bedside_bottom",
+          "position": [
+            0.0,
+            0.0820000022649765,
+            -0.0
+          ],
+          "half_extents": [
+            0.246,
+            0.012,
+            0.276
+          ]
+        },
+        {
+          "id": "bedside_divider",
+          "position": [
+            0.0,
+            0.35499998927116394,
+            -0.0
+          ],
+          "half_extents": [
+            0.246,
+            0.008,
+            0.276
+          ]
+        },
+        {
+          "id": "bedside_plinth",
+          "position": [
+            0.0,
+            0.04500000178813934,
+            -0.0
+          ],
+          "half_extents": [
+            0.215,
+            0.045,
+            0.245
+          ]
+        },
+        {
+          "id": "bedside_stone_top",
+          "position": [
+            0.0,
+            0.6200000047683716,
+            -0.0
+          ],
+          "half_extents": [
+            0.285,
+            0.02,
+            0.315
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bedside_lower_drawer",
+      "geometry": "interaction-authoring/bedside/bedside_lower_drawer.glb",
+      "sha256": "5b51bada6528fa55ee24fb5f1cfcb7246342ae4ad4de42809593f847842cfae7",
+      "position": [
+        0.0,
+        0.23,
+        0.0
+      ],
+      "mass_kg": 3.5,
+      "colliders": [
+        {
+          "id": "bedside_lower_drawer_front",
+          "position": [
+            0.0,
+            0.0,
+            0.3140000104904175
+          ],
+          "half_extents": [
+            0.259,
+            0.1125,
+            0.0125
+          ]
+        },
+        {
+          "id": "bedside_lower_drawer_floor",
+          "position": [
+            0.0,
+            -0.09800000488758087,
+            0.019999999552965164
+          ],
+          "half_extents": [
+            0.238,
+            0.008,
+            0.275
+          ]
+        },
+        {
+          "id": "bedside_lower_drawer_side_-0.23",
+          "position": [
+            -0.23000000417232513,
+            -0.018000006675720215,
+            0.019999999552965164
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.275
+          ]
+        },
+        {
+          "id": "bedside_lower_drawer_side_0.23",
+          "position": [
+            0.23000000417232513,
+            -0.018000006675720215,
+            0.019999999552965164
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.275
+          ]
+        },
+        {
+          "id": "bedside_lower_drawer_end_-0.293",
+          "position": [
+            0.0,
+            -0.018000006675720215,
+            0.2930000126361847
+          ],
+          "half_extents": [
+            0.222,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "bedside_lower_drawer_end_0.247",
+          "position": [
+            0.0,
+            -0.018000006675720215,
+            -0.24699999392032623
+          ],
+          "half_extents": [
+            0.222,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "bedside_lower_drawer_pull",
+          "position": [
+            0.0,
+            0.07500000298023224,
+            0.33500000834465027
+          ],
+          "half_extents": [
+            0.09,
+            0.006,
+            0.009
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "prismatic",
+        "parent": "bedside_shell",
+        "parent_anchor": [
+          0.0,
+          0.23,
+          0.0
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "limits_m": [
+          0,
+          0.4
+        ]
+      },
+      "handle_region": {
+        "mesh": "bedside_lower_drawer_pull",
+        "centre": [
+          0.0,
+          0.07500000298023224,
+          0.33500000834465027
+        ],
+        "half_extents": [
+          0.09,
+          0.006,
+          0.009
+        ]
+      }
+    },
+    {
+      "id": "bedside_upper_drawer",
+      "geometry": "interaction-authoring/bedside/bedside_upper_drawer.glb",
+      "sha256": "36cf78502e949d0e0dc00021daf8f859988102957e40ce0d618ad37d6e8b3446",
+      "position": [
+        0.0,
+        0.48,
+        0.0
+      ],
+      "mass_kg": 3.5,
+      "colliders": [
+        {
+          "id": "bedside_upper_drawer_front",
+          "position": [
+            0.0,
+            0.0,
+            0.3140000104904175
+          ],
+          "half_extents": [
+            0.259,
+            0.1125,
+            0.0125
+          ]
+        },
+        {
+          "id": "bedside_upper_drawer_floor",
+          "position": [
+            0.0,
+            -0.09799998998641968,
+            0.019999999552965164
+          ],
+          "half_extents": [
+            0.238,
+            0.008,
+            0.275
+          ]
+        },
+        {
+          "id": "bedside_upper_drawer_side_-0.23",
+          "position": [
+            -0.23000000417232513,
+            -0.017999976873397827,
+            0.019999999552965164
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.275
+          ]
+        },
+        {
+          "id": "bedside_upper_drawer_side_0.23",
+          "position": [
+            0.23000000417232513,
+            -0.017999976873397827,
+            0.019999999552965164
+          ],
+          "half_extents": [
+            0.008,
+            0.08,
+            0.275
+          ]
+        },
+        {
+          "id": "bedside_upper_drawer_end_-0.293",
+          "position": [
+            0.0,
+            -0.017999976873397827,
+            0.2930000126361847
+          ],
+          "half_extents": [
+            0.222,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "bedside_upper_drawer_end_0.247",
+          "position": [
+            0.0,
+            -0.017999976873397827,
+            -0.24699999392032623
+          ],
+          "half_extents": [
+            0.222,
+            0.08,
+            0.008
+          ]
+        },
+        {
+          "id": "bedside_upper_drawer_pull",
+          "position": [
+            0.0,
+            0.07500001788139343,
+            0.33500000834465027
+          ],
+          "half_extents": [
+            0.09,
+            0.006,
+            0.009
+          ]
+        }
+      ],
+      "joint": {
+        "kind": "prismatic",
+        "parent": "bedside_shell",
+        "parent_anchor": [
+          0.0,
+          0.48,
+          0.0
+        ],
+        "child_anchor": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "limits_m": [
+          0,
+          0.4
+        ]
+      },
+      "handle_region": {
+        "mesh": "bedside_upper_drawer_pull",
+        "centre": [
+          0.0,
+          0.07500001788139343,
+          0.33500000834465027
+        ],
+        "half_extents": [
+          0.09,
+          0.006,
+          0.009
+        ]
+      }
+    }
+  ]
+}

@@ -25,6 +25,13 @@
 pub mod bevy_app;
 pub mod node;
 pub mod renderer;
+pub mod scene_package;
+pub mod scene_mechanism;
+pub mod scene_weather;
+pub mod deformable_surface;
+pub mod cloth_solver;
+pub(crate) mod cloth_grip;
+pub mod scene_cloth;
 
 pub use node::{CcRenderConfig, CcRenderNode};
 #[allow(unused_imports)]

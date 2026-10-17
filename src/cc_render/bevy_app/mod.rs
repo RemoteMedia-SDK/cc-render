@@ -11,6 +11,19 @@ pub(super) mod pose;
 pub(crate) mod twist;
 mod skinning;
 mod visibility;
+mod environment;
+mod mechanisms;
+pub(crate) mod cloth;
+mod sky;
+mod texture_filtering;
+mod lightmaps;
+mod city_windows;
+mod vehicle_lights;
+mod street_lights;
+mod practical_lights;
+pub(crate) mod weather;
+mod weather_transition;
+mod wet_surfaces;
 
 pub(super) mod physics;
 
@@ -102,13 +115,35 @@ const READY_SETTLE_FRAMES: u32 = 60;
 /// before we trust SceneSpawner is fully done populating the scene.
 const READY_STABLE_TICKS: u32 = 8;
 
-#[allow(clippy::too_many_arguments)]
+#[derive(bevy::ecs::system::SystemParam)]
+struct SceneReadiness<'w, 's> {
+    avatar: Query<'w, 's, &'static SceneRoot, With<AvatarRoot>>,
+    environment: Query<'w, 's, &'static SceneRoot, Without<AvatarRoot>>,
+    package: Option<Res<'w, super::scene_package::ScenePackage>>,
+    meshes: Query<'w, 's, &'static Mesh3d>,
+    materials: Query<'w, 's, &'static MeshMaterial3d<StandardMaterial>>,
+    lightmaps: Query<'w, 's, (&'static Name, &'static bevy::pbr::Lightmap)>,
+    mechanisms: Option<Res<'w, mechanisms::MechanismReadiness>>,
+    cloth: Option<Res<'w, cloth::ClothReadiness>>,
+}
+
+impl SceneReadiness<'_, '_> {
+    fn environment_loaded(&self, assets: &AssetServer) -> bool {
+        let Some(package) = &self.package else { return true };
+        if self.mechanisms.as_ref().is_some_and(|m| !m.ready(package)) { return false; }
+        if self.cloth.as_ref().is_some_and(|c| !c.ready(package)) { return false; }
+        !self.environment.is_empty() && self.environment.iter().all(|root|
+            matches!(assets.recursive_dependency_load_state(root.0.id()), bevy::asset::RecursiveDependencyLoadState::Loaded))
+            && package.lightmaps.iter().all(|map|
+                self.lightmaps.iter().any(|(name, lightmap)| name.as_str() == map.mesh
+                    && assets.is_loaded_with_dependencies(lightmap.image.id())))
+    }
+}
+
 fn mark_ready_when_settled(
     bind: Res<pose::CC5BindRotations>,
     asset_server: Res<AssetServer>,
-    avatar_scene_q: Query<&SceneRoot, With<AvatarRoot>>,
-    mesh_q: Query<&Mesh3d>,
-    material_q: Query<&MeshMaterial3d<StandardMaterial>>,
+    scenes: SceneReadiness,
     signal: Res<ReadySignal>,
     mut monitor: ResMut<ReadyMonitor>,
     mut log_throttle: Local<u32>,
@@ -124,14 +159,12 @@ fn mark_ready_when_settled(
         return;
     }
 
-    // Gate 2: the avatar's SceneRoot has fully loaded its transitive
-    // dep tree (every Mesh, Image, Material, morph-target). We only
-    // gate on the avatar — an optional environment scene can keep
-    // streaming textures in the background without blocking
-    // readiness, since the avatar is what the consumer cares about.
+    // Gate 2: load the avatar's complete dependency tree. Packaged scenes
+    // also require their environment and traffic prefabs; legacy optional
+    // scene GLBs retain the avatar-only readiness behavior.
     let mut scene_seen = 0_usize;
     let mut deps_loaded = true;
-    for scene_root in avatar_scene_q.iter() {
+    for scene_root in scenes.avatar.iter() {
         scene_seen += 1;
         match asset_server.recursive_dependency_load_state(scene_root.0.id()) {
             bevy::asset::RecursiveDependencyLoadState::Loaded => {}
@@ -155,12 +188,17 @@ fn mark_ready_when_settled(
         return;
     }
 
+    if !scenes.environment_loaded(&asset_server) {
+        monitor.settled_frames = 0;
+        return;
+    }
+
     // Gate 3: SceneSpawner has stopped adding entities. We watch
     // mesh + material counts and only proceed once they've stayed
     // constant for `READY_STABLE_TICKS` ticks. Catches the case where
     // a GLB's children spawn over multiple frames.
-    let mesh_count = mesh_q.iter().count();
-    let material_count = material_q.iter().count();
+    let mesh_count = scenes.meshes.iter().count();
+    let material_count = scenes.materials.iter().count();
     if mesh_count != monitor.last_mesh_count || material_count != monitor.last_material_count {
         monitor.last_mesh_count = mesh_count;
         monitor.last_material_count = material_count;
@@ -290,6 +328,8 @@ pub(super) fn run(
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
+    package: Option<super::scene_package::ScenePackage>,
+    weather_bridge: super::scene_weather::WeatherBridge,
 ) {
     let glb_path = match config.glb_path.canonicalize() {
         Ok(p) => p,
@@ -379,7 +419,10 @@ pub(super) fn run(
     //   3. <glb_dir>/env (legacy default; matches the old behavior)
     // Must run before `add_plugins(AssetPlugin)` — registered sources are
     // built when AssetPlugin initializes and cannot be added afterward.
-    let env_dir = resolve_envmap_dir(&glb_dir);
+    let env_dir = if std::env::var_os("CC_AVATAR_ENVMAP_DIR").is_none() {
+        package.as_ref().map(|p|p.geometry.with_file_name("env"))
+            .unwrap_or_else(||resolve_envmap_dir(&glb_dir))
+    } else { resolve_envmap_dir(&glb_dir) };
     tracing::info!(
         target: "cc_render",
         "asset source 'env://' → {}",
@@ -564,9 +607,14 @@ pub(super) fn run(
         (draw_joint_skeleton, update_joint_labels).after(TransformSystem::TransformPropagate),
     );
 
+    let packaged = package.is_some();
+    if let Some(package) = package {
+        app.insert_resource(weather_bridge);
+        environment::install(&mut app, package);
+    }
     app.init_resource::<super::office::timeline::PoseTimeline>();
     if let Some(mut phys) = config.physics.clone() {
-        let office_enabled = std::env::var("CC_OFFICE").as_deref() == Ok("1");
+        let office_enabled = packaged || std::env::var("CC_OFFICE").as_deref() == Ok("1");
         if office_enabled {
             phys.ground_y = Some(0.0);
         }

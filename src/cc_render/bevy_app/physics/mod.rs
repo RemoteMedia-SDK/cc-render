@@ -8,6 +8,8 @@ pub(crate) mod cc5_json;
 pub(crate) mod debug_overlay;
 pub(crate) mod grab;
 mod contact_grasp;
+#[cfg(test)]
+mod grip_lifecycle_tests;
 pub(crate) mod props;
 pub(crate) mod secondary;
 pub(crate) mod sidecar;
@@ -112,7 +114,8 @@ pub(crate) fn install(app: &mut App, config: PhysicsConfig, glb_path: PathBuf) {
     // foot bones once `CC5BindRotations.captured` becomes true (the
     // `auto_detect_ground_from_feet` Update system below will despawn
     // the placeholder static world and respawn at the discovered Y).
-    let auto_detect = config.ground_y.is_none();
+    let packaged = app.world().contains_resource::<crate::cc_render::scene_package::ScenePackage>();
+    let auto_detect = !packaged && config.ground_y.is_none();
     let resolved_ground = config.ground_y.unwrap_or(0.0);
     app.insert_resource(WorldGroundY(resolved_ground));
     app.insert_resource(GroundAutoDetect(auto_detect));
@@ -122,6 +125,7 @@ pub(crate) fn install(app: &mut App, config: PhysicsConfig, glb_path: PathBuf) {
     app.add_systems(
         Startup,
         move |mut commands: Commands, ground: Res<WorldGroundY>| {
+            if packaged { return; }
             spawn_ground(
                 &mut commands,
                 ground.0,

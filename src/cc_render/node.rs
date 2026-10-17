@@ -41,6 +41,7 @@ pub struct CcRenderConfig {
     /// doc-comment for the `CC_SCENE_*` env-var tunables (placement,
     /// scale, light stripping).
     pub scene_glb_path: Option<PathBuf>,
+    pub scene_package_path: Option<PathBuf>,
     /// When true, `tick()` emits `RuntimeData::Video` frames continuously
     /// once the renderer is ready, regardless of upstream audio /
     /// blendshape arrival. Buffered speech drains on that same presentation
@@ -67,6 +68,7 @@ impl Default for CcRenderConfig {
             fps: 30,
             video_stream_id: "avatar.video".to_string(),
             scene_glb_path: None,
+            scene_package_path: None,
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
@@ -267,6 +269,7 @@ impl CcRenderNode {
             height: config.height,
             fps: config.fps,
             scene_glb_path: config.scene_glb_path.clone(),
+            scene_package_path: config.scene_package_path.clone(),
             // Physics on by default — needed for hair / breast /
             // skirt / tongue jiggle (see `secondary::auto_detect_chains`).
             // Set `CC_PHYSICS_DISABLE=1` to skip the install for an

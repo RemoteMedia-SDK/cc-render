@@ -75,6 +75,7 @@ pub struct CcRenderManifestParams {
     pub height: u32,
     /// Optional environment-scene GLB loaded alongside the avatar.
     pub scene_glb_path: Option<PathBuf>,
+    pub scene_package_path: Option<PathBuf>,
     /// When true, emit Video continuously once ready (skips A+V pairing
     /// and audio buffer drain). Used by live WebRTC pipelines.
     pub realtime_mode: bool,
@@ -93,6 +94,7 @@ impl Default for CcRenderManifestParams {
             width: 1280,
             height: 1280,
             scene_glb_path: None,
+            scene_package_path: None,
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
@@ -120,6 +122,7 @@ fn build_node(params: CcRenderManifestParams) -> Result<CcRenderNode, String> {
         fps: params.framerate.max(1),
         video_stream_id: params.video_stream_id,
         scene_glb_path: params.scene_glb_path,
+        scene_package_path: params.scene_package_path,
         realtime_mode: params.realtime_mode,
         scene_key_file: params.scene_key_file,
         scene_geometry_file: params.scene_geometry_file,

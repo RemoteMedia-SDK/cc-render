@@ -1,0 +1,110 @@
+{
+  "source": "Blender Cycles normalized white world; diffuse direct and indirect, color excluded",
+  "samples": 128,
+  "seed": 731,
+  "resolution": [
+    512,
+    512
+  ],
+  "targets": [
+    [
+      "Interior floor 12 x 10 m",
+      "floor"
+    ],
+    [
+      "Ceiling",
+      "ceiling"
+    ],
+    [
+      "Living rug",
+      "rug"
+    ],
+    [
+      "Living sofa 0",
+      "sofa"
+    ],
+    [
+      "Coffee table",
+      "coffee"
+    ],
+    [
+      "Balcony slab 12 x 2.4 m",
+      "balcony"
+    ],
+    [
+      "Bedroom rug",
+      "bedroom-rug"
+    ],
+    [
+      "Bedroom detail folded duvet",
+      "bedroom-duvet"
+    ],
+    [
+      "Bedroom detail mattress",
+      "bedroom-mattress"
+    ],
+    [
+      "Bathroom floor",
+      "bathroom-floor"
+    ]
+  ],
+  "denoiser": {
+    "filter": "OIDN RTLightmap",
+    "library": "/tmp/oidn-2.5.1.x86_64.linux/lib/libOpenImageDenoise.so.2.5.1",
+    "sha256": "8f8b88740eb4bec96c0d0aa84ad54758b3732ed4529ee77af7892e7df618ef79"
+  },
+  "encoding": "RGB8 linear, vertical flip from Blender pixel buffer; load with is_srgb=false",
+  "ranges": {
+    "balcony-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.6816385388374329,
+      "encoding_scale": 1.0
+    },
+    "bathroom-floor-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.03547047823667526,
+      "encoding_scale": 1.0
+    },
+    "bedroom-duvet-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.3844392001628876,
+      "encoding_scale": 1.0
+    },
+    "bedroom-mattress-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.24277958273887634,
+      "encoding_scale": 1.0
+    },
+    "bedroom-rug-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.29280269145965576,
+      "encoding_scale": 1.0
+    },
+    "ceiling-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.9530925154685974,
+      "encoding_scale": 1.0
+    },
+    "coffee-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.22645559906959534,
+      "encoding_scale": 1.0
+    },
+    "floor-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.549590528011322,
+      "encoding_scale": 1.0
+    },
+    "rug-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.4200187027454376,
+      "encoding_scale": 1.0
+    },
+    "sofa-sky-linear.png": {
+      "minimum": 0.0,
+      "maximum": 0.3594571352005005,
+      "encoding_scale": 1.0
+    }
+  },
+  "limitations": "Static architecture/furniture only. No avatar, sun or practical lamps are baked."
+}

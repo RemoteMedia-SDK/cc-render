@@ -555,6 +555,7 @@ pub(crate) fn fit_camera_to_avatar(
 /// keep the GLB's authored orientation.
 pub(crate) fn auto_orient_avatar(
     bind: Res<CC5BindRotations>,
+    package: Option<Res<crate::cc_render::scene_package::ScenePackage>>,
     scenes: Query<&Transform, With<SceneRoot>>,
     mut cam_lights: Query<
         &mut Transform,
@@ -568,7 +569,7 @@ pub(crate) fn auto_orient_avatar(
     if *done || !bind.captured {
         return;
     }
-    if std::env::var("CC_AVATAR_AUTO_FACE_CAMERA").ok().as_deref() == Some("0")
+    if package.is_some() || std::env::var("CC_AVATAR_AUTO_FACE_CAMERA").ok().as_deref() == Some("0")
         || std::env::var("CC_OFFICE").as_deref() == Ok("1")
     {
         *done = true;
@@ -733,7 +734,7 @@ pub(crate) fn strip_scene_lights(
 
 /// True iff `entity` is itself in `roots` or descended from any of them.
 /// Bounded parent walk; safe against cycles in pathological scenes.
-fn is_descendant_of_any(entity: Entity, parent_q: &Query<&Parent>, roots: &[Entity]) -> bool {
+pub(super) fn is_descendant_of_any(entity: Entity, parent_q: &Query<&Parent>, roots: &[Entity]) -> bool {
     if roots.is_empty() {
         return false;
     }
@@ -762,7 +763,15 @@ pub(crate) fn setup_scene(
     mut pose_anim: ResMut<PoseAnimation>,
     asset_server: Res<AssetServer>,
     glb: Res<GlbAsset>,
+    package: Option<Res<crate::cc_render::scene_package::ScenePackage>>,
+    weather: Option<Res<super::weather::CondoWeather>>,
 ) {
+    let lighting = weather.as_deref().copied().unwrap_or_default().lighting();
+    let view = std::env::var("CC_CONDO_VIEW").unwrap_or_else(|_| "living".into());
+    let authored_camera = package.as_ref().and_then(|p| p.cameras.iter().find(|c| c.id == view).or_else(|| p.cameras.first()));
+    let camera_position = authored_camera.map_or_else(camera_pos, |c| env_vec3("CC_AVATAR_CAMERA_POS", c.position.into()));
+    let camera_target = authored_camera.map_or_else(camera_look_at, |c| env_vec3("CC_AVATAR_CAMERA_LOOK_AT", c.look_at.into()));
+    let camera_fov = authored_camera.map_or_else(camera_fov_deg, |c| env_f32("CC_AVATAR_CAMERA_FOV_DEG", c.fov_deg));
     // ─── Headless render target ────────────────────────────────────────
     let size = Extent3d {
         width: glb.width,
@@ -795,14 +804,14 @@ pub(crate) fn setup_scene(
     });
 
     // ─── Camera ────────────────────────────────────────────────────────
-    commands
+    let camera_entity = commands
         .spawn((
             Camera3d::default(),
             Camera {
                 target: RenderTarget::Image(target_handle),
                 clear_color: ClearColorConfig::Custom({
                     let bg = env_vec3_opt("CC_AVATAR_CLEAR_COLOR")
-                        .unwrap_or(Vec3::new(0.10, 0.09, 0.08));
+                        .unwrap_or(if package.is_some() { Vec3::new(0.49, 0.67, 0.79) } else { Vec3::new(0.10, 0.09, 0.08) });
                     Color::srgb(bg.x, bg.y, bg.z)
                 }),
                 hdr: true,
@@ -822,20 +831,46 @@ pub(crate) fn setup_scene(
                 // regardless of the GLB's directory.
                 diffuse_map: asset_server.load("env://pisa_diffuse_rgb9e5_zstd.ktx2"),
                 specular_map: asset_server.load("env://pisa_specular_rgb9e5_zstd.ktx2"),
-                intensity: 8.0,
+                intensity: if package.is_some() { lighting.environment } else { 8.0 },
                 rotation: Quat::IDENTITY,
             },
-            Transform::from_translation(camera_pos()).looking_at(camera_look_at(), Vec3::Y),
+            Transform::from_translation(camera_position).looking_at(camera_target, Vec3::Y),
             // Mark this camera as bevy_ui's default render target so the
             // joint-debug overlay (text labels) draws into the same
             // texture as the 3D scene. Harmless when no UI nodes exist.
             IsDefaultUiCamera,
         ))
         .insert(Projection::Perspective(PerspectiveProjection {
-            fov: camera_fov_deg().to_radians(),
+            fov: camera_fov.to_radians(),
+            far: if package.is_some() { 20000.0 } else { 1000.0 },
+            ..default()
+        })).id();
+
+    if package.is_some() {
+        // Keep this diagnostic opt-in until its contact shading and thin
+        // geometry have been reviewed. SSAO requires a single-sample target;
+        // FXAA avoids temporal trails through the glazing and animated water.
+        if std::env::var("CC_CONDO_AO").as_deref() == Ok("1") {
+            commands.entity(camera_entity).insert((
+                Msaa::Off,
+                bevy::pbr::ScreenSpaceAmbientOcclusion {
+                    quality_level: bevy::pbr::ScreenSpaceAmbientOcclusionQualityLevel::Ultra,
+                    ..default()
+                },
+                bevy::core_pipeline::fxaa::Fxaa::default(),
+            ));
+            tracing::info!(target: "cc_render", "condo: diagnostic SSAO Ultra + FXAA enabled");
+        }
+        commands.entity(camera_entity).insert((bevy::render::camera::Exposure {
+            ev100: env_f32("CC_CONDO_EV100", lighting.exposure).clamp(6.0,18.0),
+        }, DistanceFog {
+            color: lighting.fog_color,
+            falloff: FogFalloff::Linear { start: lighting.fog_start, end: lighting.fog_end },
             ..default()
         }));
+    }
 
+    if package.is_none() {
     // ─── 3-light portrait setup ────────────────────────────────────────
     // Key — pushed hard to upper-right so glossy visors/goggles reflect
     // a single highlight in the top-right of the lens, not dead-center.
@@ -901,6 +936,7 @@ pub(crate) fn setup_scene(
             },
         ),
     });
+    }
 
     // ─── Avatar scene ──────────────────────────────────────────────────
     let scene: Handle<Scene> = asset_server.load(format!("{}#Scene0", glb.filename));

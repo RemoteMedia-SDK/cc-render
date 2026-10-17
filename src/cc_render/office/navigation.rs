@@ -37,6 +37,10 @@ pub struct WaypointPath {
     pub session_id: String,
     pub generation_revision: u64,
     pub snapshot_pts_ms: u64,
+    /// Identity of the observed obstacle geometry, independent of avatar time.
+    /// Empty on older serialized previews; those cannot be validated as current.
+    #[serde(default)]
+    pub navigation_geometry_sha256: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -68,8 +72,8 @@ impl NavigationError {
 
 impl SceneState {
     /// Generate a route without moving the avatar or editing its motion timeline.
-    /// Object endpoints use transformed approach anchors. Held objects are omitted
-    /// as obstacles, matching the action controller; destinations remain obstacles.
+    /// Object endpoints use transformed approach anchors. Obstacle membership is
+    /// the controller's observed list: held hinged parts remain obstacles.
     pub fn generate_waypoint(
         &self,
         from: impl Into<NavigationTarget>,
@@ -88,13 +92,7 @@ impl SceneState {
                 .map(super::locomotion::target_direction),
             NavigationTarget::Position(_) => None,
         };
-        let objects: Vec<_> = office
-            .objects
-            .iter()
-            .filter(|o| !office.occupied_hands.iter().any(|(_, id)| id == &o.id))
-            .cloned()
-            .collect();
-        let scene = scene_metadata(&objects);
+        let scene = navigation_geometry(office);
         let mut path = super::locomotion::approach_path(&scene, start, goal, facing, super::locomotion::arrival_angle())?;
         path.dedup_by(|a, b| a.xz == b.xz);
         // An explicit origin does not specify an orientation. Assume it already
@@ -121,8 +119,31 @@ impl SceneState {
             session_id: office.motion.session_id.clone(),
             generation_revision: office.motion.generation_revision,
             snapshot_pts_ms: office.avatar.displayed_pts_ms,
+            navigation_geometry_sha256: geometry_digest(&scene),
         })
     }
+
+    /// Recheck only scene-geometry freshness. This does not authorize movement,
+    /// reserve a route, or establish that the avatar is still at its start.
+    pub fn waypoint_geometry_is_current(&self, path: &WaypointPath) -> Result<bool, NavigationError> {
+        let office = self.office.as_ref().ok_or(NavigationError::SceneUnavailable)?;
+        Ok(path.session_id == office.motion.session_id
+            && path.navigation_geometry_sha256 == geometry_digest(&navigation_geometry(office)))
+    }
+}
+
+fn navigation_geometry(office: &OfficeSnapshot) -> super::metadata::SceneMetadata {
+    let objects: Vec<_> = office.objects.iter()
+        .filter(|o| office.navigation_object_ids.contains(&o.id)).cloned().collect();
+    scene_metadata(&objects)
+}
+
+fn geometry_digest(scene: &super::metadata::SceneMetadata) -> String {
+    let bytes = serde_json::to_vec(scene).expect("scene metadata has serializable keys");
+    let mut hash = hmac_sha256::Hash::new();
+    hash.update(b"cc-render-navigation-geometry-v1\0");
+    hash.update(&bytes);
+    hash.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn resolve_target(
@@ -325,12 +346,14 @@ mod tests {
 
     #[test]
     fn snapshot_prop_transforms_and_occupied_hands_control_obstacles() {
-        let mut state = scene();
-        let office = state.office.as_mut().unwrap();
-        let book = office.objects.iter_mut().find(|o| o.id == "book").unwrap();
+        let mut controller = OfficeController::default();
+        controller.observed.ready = true;
+        controller.observed.pelvis = [0., 0.95, 0.];
+        let book = controller.objects.iter_mut().find(|o| o.id == "book").unwrap();
         book.position = [0., 0.1, 1.];
         book.yaw_deg = 90.;
         let approach = book.approach_position();
+        let mut state = SceneState { office: Some(controller.snapshot()), ..Default::default() };
         let path = state.generate_waypoint("avatar", "book").unwrap();
         assert_eq!(
             path.waypoints.last().unwrap(),
@@ -343,12 +366,8 @@ mod tests {
                 .code(),
             "goal_blocked"
         );
-        state
-            .office
-            .as_mut()
-            .unwrap()
-            .occupied_hands
-            .push((Hand::Right, "book".into()));
+        controller.held.push((Hand::Right, "book".into()));
+        state.office = Some(controller.snapshot());
         assert!(state.generate_waypoint("avatar", [0., 0., 1.]).is_ok());
     }
 

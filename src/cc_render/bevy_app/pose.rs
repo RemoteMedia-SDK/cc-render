@@ -304,6 +304,9 @@ pub(crate) fn fk_retarget_smpl_to_cc5_axis_match_chained(
 /// world rotations to these frames preserves roll as well as bone direction.
 /// Leaves inherit the neutral parent frame here, but retain their own animated
 /// source rotation during playback. The pelvis keeps its anatomical bind frame.
+/// Ankles keep their authored calf-relative bind rotation: a heeled foot's
+/// ankle-to-toe segment is not a horizontal canonical forward axis. This is
+/// fixed calibration only; playback still transfers the full ankle/toe deltas.
 fn calibrated_cc5_world_frames(
     rest: &[Quat; 22],
     axes: &[Vec3; 22],
@@ -329,7 +332,8 @@ fn calibrated_cc5_world_frames(
         } else {
             world[parent as usize] * inter[i]
         };
-        world[i] = (parent_world * neutral[i]).normalize();
+        let local = if matches!(i, 7 | 8) { own[i] } else { neutral[i] };
+        world[i] = (parent_world * local).normalize();
     }
     world
 }

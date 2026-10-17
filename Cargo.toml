@@ -19,6 +19,11 @@ opt-level = 1
 debug = 1
 incremental = true
 
+# Cloth contact queries dominate the interactive scene's CPU time. Optimizing
+# Parry preserves the recorded trajectory while reducing the measured cost.
+[profile.dev.package.parry3d]
+opt-level = 3
+
 [lib]
 name = "cc_render_plugin"
 crate-type = ["cdylib", "rlib"]

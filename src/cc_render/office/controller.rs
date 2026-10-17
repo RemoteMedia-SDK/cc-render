@@ -119,6 +119,9 @@ pub struct Observation {
     pub native_seat: Option<super::native_seat::SeatObservation>,
     /// Read-only native queue watermark; not a body target.
     pub buffered_until_pts_ms: Option<u64>,
+    /// Transport acknowledgement: (revision, retained source-history timestamp).
+    /// Set only after the timeline has applied the handoff; never a pose target.
+    pub acknowledged_native_handoff: Option<(u64, u64)>,
     pub feet: [[f32; 3]; 2],
     pub torso_up: [f32; 3],
     /// Diagnostic canonical world deltas: chest, neck, head, observed after FK.
@@ -263,6 +266,8 @@ pub struct OfficeController {
     timeline_layers: std::collections::BTreeMap<String, super::motion_timeline::TimelineLayer>,
     pub objects: Vec<OfficeObject>,
     pub observed: Observation,
+    /// Parts with permanent physics joints remain obstacles during a hand grip.
+    pub constrained_objects: std::collections::HashSet<String>,
     pub seated: Option<String>,
     /// Seat the native avatar was last measured on. Generated motion may step
     /// away from it (never deeper) until the pelvis clears its native reserve.
@@ -326,6 +331,7 @@ impl Default for OfficeController {
             blocked: false,
             last_replan: -1.,
             objects: starter_objects(),
+            constrained_objects: Default::default(),
             observed: Observation::default(),
             seated: None,
             leaving_seat: None,
@@ -2191,6 +2197,10 @@ impl OfficeController {
         use super::interaction::CouplingCommand as C;
         match command {
             C::Attach { object, anchors, slide_on } => {
+                if self.constrained_objects.contains(&object) {
+                    self.motion_error = Some(format!("{object}: articulated parts require a physical contact grip"));
+                    return;
+                }
                 if self.couplings.iter().any(|c| c.object == object
                     || c.anchors.iter().any(|(h, ..)| anchors.iter().any(|(a, ..)| a == h))) {
                     self.motion_error = Some(format!("cannot attach {object}: object or hand already coupled"));
@@ -2288,9 +2298,10 @@ impl OfficeController {
             &self
                 .objects
                 .iter()
-                .filter(|o| !self.held.iter().any(|(_, id)| id == &o.id)
+                .filter(|o| self.constrained_objects.contains(&o.id)
+                    || (!self.held.iter().any(|(_, id)| id == &o.id)
                     && !self.couplings.iter().any(|c| c.object == o.id)
-                    && !self.active.iter().any(|a| a.push.as_ref().is_some_and(|p| p.id == o.id)))
+                    && !self.active.iter().any(|a| a.push.as_ref().is_some_and(|p| p.id == o.id))))
                 .cloned()
                 .collect::<Vec<_>>(),
         )
@@ -2424,6 +2435,10 @@ pub(super) fn walking_waypoints(path: &[pathfinder::Waypoint], mut time: f32, he
     }
     roots
 }
+
+#[cfg(test)]
+#[path = "constrained_navigation_tests.rs"]
+mod constrained_navigation_tests;
 
 #[cfg(test)]
 mod tests {

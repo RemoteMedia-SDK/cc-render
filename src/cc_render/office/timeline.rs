@@ -406,15 +406,7 @@ impl WorldMotion<'_, '_> {
             while rx.try_recv().is_ok() {} // discard already queued unsafe poses
             return (None, true);
         }
-        if let Some(o) = self.office.as_ref() {
-            if let Some((revision, handoff)) = o.native_scene_handoff {
-                self.timeline.schedule_revision(revision, Some(handoff));
-            } else if let Some(revision) = o.native_motion_revision {
-                self.timeline.schedule_revision(revision, None);
-            } else {
-                self.timeline.schedule_revision(o.revision, o.motion.handoff_pts_ms);
-            }
-        }
+        self.apply_revision();
         let now = self.time.elapsed_secs_f64();
         match rx.try_recv() {
             Ok(Some(p)) if p.stream.is_none() => return (Some(p), false),
@@ -459,6 +451,19 @@ impl WorldMotion<'_, '_> {
             });
         }
         (pose, false)
+    }
+    fn apply_revision(&mut self) {
+        let Some(office) = self.office.as_mut() else { return };
+        let previous = self.timeline.revision;
+        let (revision, handoff) = match (office.native_scene_handoff, office.native_motion_revision) {
+            (Some((revision, at)), _) => (revision, Some(at)),
+            (None, Some(revision)) => (revision, None),
+            (None, None) => (office.revision, office.motion.handoff_pts_ms),
+        };
+        self.timeline.schedule_revision(revision, handoff);
+        if self.timeline.revision != previous {
+            office.observed.acknowledged_native_handoff = office.native_scene_handoff;
+        }
     }
     pub fn root_translation(&mut self, pelvis: Entity, pose: &SkeletalPose) -> Option<Vec3> {
         let proposed = Vec3::from(pose.root_pos);

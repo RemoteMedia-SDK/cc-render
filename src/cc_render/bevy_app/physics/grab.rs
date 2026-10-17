@@ -25,8 +25,13 @@ pub(crate) enum GrabState {
     Attached {
         target: PropId,
         prop_entity: Entity,
+        /// Dedicated child joint; never replaces the prop's permanent joints.
+        grip_entity: Entity,
     },
 }
+
+#[derive(Component)]
+pub(crate) struct ContactGrip;
 
 #[derive(Resource, Default)]
 pub(crate) struct GrabFsms {
@@ -200,8 +205,8 @@ pub(crate) fn handle_grab_cmds(
             } => {
                 // If we're swapping out a previously-attached prop, release
                 // its joint first to avoid leaking the FixedJoint.
-                if let GrabState::Attached { prop_entity, .. } = state {
-                    commands.entity(*prop_entity).remove::<ImpulseJoint>();
+                if let GrabState::Attached { grip_entity, .. } = state {
+                    commands.entity(*grip_entity).try_despawn_recursive();
                     tracing::info!(
                         target: "cc_render",
                         "physics: grab swap — hand={:?} released previous prop for new target={}",
@@ -257,9 +262,13 @@ pub(crate) fn handle_grab_cmds(
                     });
                     continue;
                 };
-                commands
-                    .entity(prop_e)
-                    .insert(ImpulseJoint::new(wrist_e, joint));
+                // Rapier resolves the second endpoint through the entity's
+                // parent. A separate child lets permanent hinges coexist with
+                // this hand's temporary grip (and another hand's grip).
+                let grip_entity = commands
+                    .spawn((ContactGrip, ImpulseJoint::new(wrist_e, joint)))
+                    .set_parent(prop_e)
+                    .id();
                 tracing::info!(
                     target: "cc_render",
                     "physics: contact grip attached without repositioning — hand={:?} target={}",
@@ -268,11 +277,12 @@ pub(crate) fn handle_grab_cmds(
                 *state = GrabState::Attached {
                     target,
                     prop_entity: prop_e,
+                    grip_entity,
                 };
             }
             FsmTransition::DetachIdle => {
-                if let GrabState::Attached { prop_entity, .. } = *state {
-                    commands.entity(prop_entity).remove::<ImpulseJoint>();
+                if let GrabState::Attached { grip_entity, .. } = *state {
+                    commands.entity(grip_entity).try_despawn_recursive();
                     tracing::info!(
                         target: "cc_render",
                         "physics: grab released — hand={:?}", hand,
@@ -465,6 +475,7 @@ mod tests {
         let state = GrabState::Attached {
             target: "mug".into(),
             prop_entity: Entity::from_raw(42),
+            grip_entity: Entity::from_raw(43),
         };
         let cmd = GrabOrRelease::Release(Hand::Right);
         let trans = step_fsm(
@@ -487,6 +498,7 @@ mod tests {
         let state = GrabState::Attached {
             target: "mug".into(),
             prop_entity: Entity::from_raw(42),
+            grip_entity: Entity::from_raw(43),
         };
         let cmd = GrabOrRelease::Grab(GrabCmd {
             hand: Hand::Right,

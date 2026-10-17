@@ -84,6 +84,24 @@ pub(super) fn log_pair(context: &RapierContext, wrist: Entity, object: Entity) {
     }
 }
 
+/// Check both ECS ownership and backend registration in contact fixtures.
+#[cfg(test)]
+fn assert_right_grip(app: &App, object: Entity, wrist: Entity, attached: bool) -> Option<Entity> {
+    use super::grab::{GrabFsms, GrabState};
+    let grip = match app.world().resource::<GrabFsms>().right {
+        GrabState::Attached { grip_entity, .. } => Some(grip_entity),
+        _ => None,
+    };
+    assert_eq!(grip.is_some(), attached);
+    assert!(app.world().get::<ImpulseJoint>(object).is_none());
+    if let Some(entity) = grip {
+        assert_eq!(app.world().get::<Parent>(entity).unwrap().get(), object);
+        assert_eq!(app.world().get::<ImpulseJoint>(entity).unwrap().parent, wrist);
+        assert!(app.world().get::<RapierImpulseJointHandle>(entity).is_some());
+    }
+    grip
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,7 +149,7 @@ mod tests {
             for _ in 0..10 { app.update(); }
             let attached = matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached {..});
             assert_eq!(attached, distance < 0.04, "distance={distance}");
-            assert_eq!(app.world().get::<ImpulseJoint>(mug).is_some(), attached);
+            let grip = assert_right_grip(&app, mug, wrist, attached);
             if attached {
                 let start = app.world().get::<Transform>(mug).unwrap().translation;
                 // Synthetic kinematic drive tests physics only, not model behavior.
@@ -145,7 +163,7 @@ mod tests {
                 assert!((displacement - Vec3::X * 0.1).length() < 0.003, "{displacement:?}");
                 tx.send(GrabOrRelease::Release(Hand::Right)).unwrap();
                 app.update();
-                assert!(app.world().get::<ImpulseJoint>(mug).is_none());
+                assert!(app.world().get_entity(grip.unwrap()).is_err());
                 assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Idle));
             }
         }

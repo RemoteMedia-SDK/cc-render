@@ -123,6 +123,8 @@ pub struct RendererConfig {
     ///   portrait rig is the only illumination source. Defaults to
     ///   keeping scene lights.
     pub scene_glb_path: Option<PathBuf>,
+    /// Complete authored environment package; supersedes the loose scene GLB.
+    pub scene_package_path: Option<PathBuf>,
 
     pub physics: Option<PhysicsConfig>,
 }
@@ -136,6 +138,7 @@ impl Default for RendererConfig {
             height: 1280,
             fps: 30,
             scene_glb_path: None,
+            scene_package_path: None,
 
             physics: None,
         }
@@ -216,6 +219,9 @@ pub struct CcRenderer {
     grab_cmd_tx: tokio::sync::mpsc::UnboundedSender<GrabOrRelease>,
     scene_state_rx: tokio::sync::watch::Receiver<SceneState>,
     hud_tx: watch::Sender<Option<super::office::home_hud::HomeHud>>,
+    weather_tx: watch::Sender<Option<super::scene_weather::WeatherRequest>>,
+    weather_rx: watch::Receiver<Option<super::scene_weather::WeatherSnapshot>>,
+    weather_revision: std::sync::atomic::AtomicU64,
 }
 
 impl Renderer for CcRenderer {
@@ -273,7 +279,17 @@ impl CcRenderer {
     /// thread is up; the GLB still loads asynchronously inside Bevy
     /// so the first few frames may be empty (the consumer should
     /// drop frames whose `pts_ms == 0` if it cares about that).
-    pub fn spawn(config: RendererConfig) -> anyhow::Result<Self> {
+    pub fn spawn(mut config: RendererConfig) -> anyhow::Result<Self> {
+        let package_path = config.scene_package_path.clone()
+            .or_else(|| std::env::var_os("CC_SCENE_PACKAGE").map(PathBuf::from));
+        let package = package_path.as_deref().map(super::scene_package::ScenePackage::load).transpose()?;
+        if let Some(package) = &package {
+            anyhow::ensure!(package.mechanisms.is_empty() || config.physics.is_some(), "articulated scene requires physics");
+            super::bevy_app::weather::CondoWeather::from_env()?;
+            anyhow::ensure!(config.scene_glb_path.is_none(), "choose scene_package_path or scene_glb_path, not both");
+            config.scene_glb_path = Some(package.geometry.clone());
+            config.scene_package_path = package_path;
+        }
         tracing::info!(
             target: "cc_render",
             "CcRenderer::spawn: glb={:?} map={:?} {}x{}@{}fps",
@@ -311,6 +327,11 @@ impl CcRenderer {
         let (scene_state_tx, scene_state_rx) =
             tokio::sync::watch::channel::<SceneState>(SceneState::default());
         let (hud_tx, hud_rx) = watch::channel(None);
+        let (weather_tx, weather_requests) = watch::channel(None);
+        let (weather_snapshots, weather_rx) = watch::channel(None);
+        let weather_bridge = super::scene_weather::WeatherBridge {
+            requests: weather_requests, snapshots: weather_snapshots,
+        };
 
         let cfg = Arc::clone(&config);
         let join = thread::Builder::new()
@@ -329,6 +350,8 @@ impl CcRenderer {
                     grab_cmd_rx,
                     scene_state_tx,
                     hud_rx,
+                    package,
+                    weather_bridge,
                 );
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
@@ -346,7 +369,24 @@ impl CcRenderer {
             grab_cmd_tx,
             scene_state_rx,
             hud_tx,
+            weather_tx,
+            weather_rx,
+            weather_revision: std::sync::atomic::AtomicU64::new(0),
         })
+    }
+
+    /// Change only the packaged scene's weather. New requests replace a pending
+    /// request and transition from the currently applied atmosphere.
+    pub fn transition_weather(&self, target: super::scene_weather::WeatherPreset, seconds: f32) -> anyhow::Result<u64> {
+        anyhow::ensure!(self.config.scene_package_path.is_some(), "weather requires a scene package");
+        let id = self.weather_revision.fetch_add(1, Ordering::Relaxed) + 1;
+        let request = super::scene_weather::WeatherRequest::new(id, target, seconds)?;
+        self.weather_tx.send(Some(request)).map_err(|_| anyhow::anyhow!("weather renderer stopped"))?;
+        Ok(id)
+    }
+
+    pub fn weather_state(&self) -> Option<super::scene_weather::WeatherSnapshot> {
+        self.weather_rx.borrow().clone()
     }
 
     /// Replace the display-only home overlay (latest wins); `None` hides it.
@@ -561,6 +601,7 @@ mod physics_types {
 
     #[derive(Clone, Debug, Default, serde::Serialize)]
     pub struct SceneState {
+        pub cloths: Vec<crate::cc_render::scene_cloth::ClothSnapshot>,
         pub office: Option<crate::cc_render::office::controller::OfficeSnapshot>,
         pub props: Vec<PropSnapshot>,
         pub grabs: Vec<GrabSnapshot>,
@@ -629,6 +670,8 @@ fn run_bevy_app(
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
+    package: Option<super::scene_package::ScenePackage>,
+    weather_bridge: super::scene_weather::WeatherBridge,
 ) {
     super::bevy_app::run(
         config,
@@ -642,5 +685,7 @@ fn run_bevy_app(
         grab_cmd_rx,
         scene_state_tx,
         hud_rx,
+        package,
+        weather_bridge,
     );
 }

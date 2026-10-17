@@ -82,27 +82,27 @@ pub(crate) fn handle_prop_cmds(
     if let Some(despawn_rx) = despawn_rx.as_ref() {
         let mut d_rx = despawn_rx.0.lock().unwrap();
         while let Ok(id) = d_rx.try_recv() {
-            despawn_prop(&mut commands, &mut registry, &id);
+            despawn_prop(&mut commands, &mut registry, &mut fsms, &id);
         }
     }
 }
 
-/// Returns the hand currently attached to `target`, if any. Used to
-/// determine whether a `spawn_prop` replacement should emit a real
-/// `prop_replaced` failure (and on which hand) versus silently
-/// replacing an unheld prop.
-fn attached_hand_for(fsms: &super::grab::GrabFsms, target: &PropId) -> Option<Hand> {
-    if let super::grab::GrabState::Attached { target: t, .. } = &fsms.left {
-        if t == target {
-            return Some(Hand::Left);
+/// Removing a prop invalidates every hand attached to it, not just the first.
+fn forget_attachments(
+    fsms: &mut super::grab::GrabFsms,
+    registry: &mut PropRegistry,
+    target: &PropId,
+    reason: &str,
+) {
+    use super::grab::GrabState;
+    for (hand, state) in [(Hand::Left, &mut fsms.left), (Hand::Right, &mut fsms.right)] {
+        if matches!(state, GrabState::Attached { target: held, .. } if held == target) {
+            registry.pending_failures.push(GrabFailure {
+                hand, target: target.clone(), reason: reason.into(),
+            });
+            *state = GrabState::Idle;
         }
     }
-    if let super::grab::GrabState::Attached { target: t, .. } = &fsms.right {
-        if t == target {
-            return Some(Hand::Right);
-        }
-    }
-    None
 }
 
 fn spawn_prop(
@@ -113,28 +113,14 @@ fn spawn_prop(
     p: PropCmd,
 ) {
     if let Some(existing) = registry.by_id.remove(&p.id) {
-        // Bevy 0.15: despawn() is recursive by default.
-        commands.entity(existing).despawn();
+        // Include visual/collider children and each hand's temporary grip.
+        commands.entity(existing).despawn_recursive();
         tracing::warn!(
             target: "cc_render",
             "physics: prop id={} replaced (existing entity despawned)",
             p.id,
         );
-        // Only emit `prop_replaced` failure if a hand was actually
-        // grabbing this prop — and reset that hand's FSM to Idle since
-        // its joint partner just got despawned. (No need to remove the
-        // ImpulseJoint; it's on the despawned entity.)
-        if let Some(hand) = attached_hand_for(fsms, &p.id) {
-            registry.pending_failures.push(GrabFailure {
-                hand,
-                target: p.id.clone(),
-                reason: "prop_replaced".into(),
-            });
-            match hand {
-                Hand::Left => fsms.left = super::grab::GrabState::Idle,
-                Hand::Right => fsms.right = super::grab::GrabState::Idle,
-            }
-        }
+        forget_attachments(fsms, registry, &p.id, "prop_replaced");
     }
 
     let log_id = p.id.clone();
@@ -349,9 +335,15 @@ pub(crate) fn finalize_meshglb_collider(
     }
 }
 
-fn despawn_prop(commands: &mut Commands, registry: &mut PropRegistry, id: &PropId) {
+fn despawn_prop(
+    commands: &mut Commands,
+    registry: &mut PropRegistry,
+    fsms: &mut super::grab::GrabFsms,
+    id: &PropId,
+) {
     if let Some(e) = registry.by_id.remove(id) {
-        commands.entity(e).despawn();
+        commands.entity(e).despawn_recursive();
+        forget_attachments(fsms, registry, id, "prop_removed");
         tracing::info!(target: "cc_render", "physics: despawned prop id={}", id);
     } else {
         tracing::debug!(target: "cc_render", "physics: despawn_prop id={} not found", id);
@@ -359,6 +351,7 @@ fn despawn_prop(commands: &mut Commands, registry: &mut PropRegistry, id: &PropI
 }
 
 pub(crate) fn publish_scene_state(
+    cloth: Option<Res<super::super::cloth::ClothObservations>>,
     tx: Option<Res<SceneStateTx>>,
     mut registry: ResMut<PropRegistry>,
     props: Query<(Entity, &Prop, &GlobalTransform)>,
@@ -377,7 +370,7 @@ pub(crate) fn publish_scene_state(
     let any_grabs = matches!(fsms.left, super::grab::GrabState::Attached { .. })
         || matches!(fsms.right, super::grab::GrabState::Attached { .. });
     let any_failures = !registry.pending_failures.is_empty();
-    if !any_props && !any_grabs && !any_failures {
+    if !any_props && !any_grabs && !any_failures && cloth.as_ref().is_none_or(|c|c.0.is_empty()) {
         return;
     }
     let mut snapshots = Vec::new();
@@ -427,6 +420,7 @@ pub(crate) fn publish_scene_state(
     let failed = std::mem::take(&mut registry.pending_failures);
     let pts_ms = last_pts.as_ref().map(|p| p.0).unwrap_or(0);
     let state = SceneState {
+        cloths: cloth.as_ref().map_or_else(Vec::new,|c|c.0.clone()),
         office: tx.0.borrow().office.clone(),
         props: snapshots,
         grabs,

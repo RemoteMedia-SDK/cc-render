@@ -135,7 +135,7 @@ pub(crate) fn apply_couplings(
     bind: Res<CC5BindRotations>,
     globals: Query<&GlobalTransform>,
     registry: Res<PropRegistry>,
-    mut props: Query<(&mut Transform, &mut Velocity), With<Prop>>,
+    mut props: Query<(&mut Transform, &mut Velocity), (With<Prop>, Without<ImpulseJoint>)>,
     rigs: Option<Res<super::hand::HandRigs>>,
     mut held_in_hand: ResMut<super::hand::HeldInHand>,
     time: Res<Time>,
