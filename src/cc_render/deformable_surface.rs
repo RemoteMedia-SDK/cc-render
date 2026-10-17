@@ -147,6 +147,21 @@ impl DeformedSurface {
         Ok(())
     }
 
+    /// Prepare a transactional replacement while preserving material identity.
+    /// Callers can prepare every layer before committing any surface revision.
+    pub(crate) fn updated(&self, positions: Vec<Vec3>) -> Result<Self, SurfaceError> {
+        let mut pending = Self {
+            identity: self.identity.clone(),
+            positions: self.positions.clone(),
+            triangles: self.triangles.clone(),
+            material_uv: self.material_uv.clone(),
+            half_thickness: self.half_thickness,
+            revision: self.revision,
+        };
+        pending.update_positions(positions)?;
+        Ok(pending)
+    }
+
     /// All actual shape/shell intersections, preserving distinct material faces.
     /// Thickness is explicit geometry: there is no extra proximity margin.
     /// No exposure, pinch, force, closure, or grasp-policy decision is made here.

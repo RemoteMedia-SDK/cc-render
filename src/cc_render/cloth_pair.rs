@@ -26,7 +26,7 @@ impl FeaturePair {
         }
     }
 
-    fn split(self) -> usize {
+    pub(super) fn split(self) -> usize {
         match self {
             Self::VertexFace(_) => 1,
             Self::EdgeEdge(_) => 2,
@@ -168,15 +168,29 @@ impl FeaturePair {
         particles: &mut GripParticles<'_>,
         thickness: f64,
     ) -> Result<bool, ClothError> {
-        self.project_with_axis(particles, thickness, &[], &mut DVec3::ZERO)
+        let mut axis = DVec3::ZERO;
+        self.project_with_axis(particles, thickness, &[], &mut axis)
     }
 
+    #[cfg(test)]
     pub(super) fn project_with_axis(
         self,
         particles: &mut GripParticles<'_>,
         thickness: f64,
         fixed: &[FixedClothCollider],
         axis: &mut DVec3,
+    ) -> Result<bool, ClothError> {
+        self.project_with_support(particles, thickness, axis, |_, p, d| {
+            fixed_support_direction(fixed, thickness * 0.5, p, d)
+        })
+    }
+
+    pub(super) fn project_with_support(
+        self,
+        particles: &mut GripParticles<'_>,
+        thickness: f64,
+        axis: &mut DVec3,
+        support: impl Fn(usize, DVec3, DVec3) -> DVec3,
     ) -> Result<bool, ClothError> {
         let ids = self.indices();
         let end = ids.map(|i| particles.positions[i]);
@@ -213,14 +227,11 @@ impl FeaturePair {
         // supported lower cloth need not be repeatedly pushed through a floor.
         let directions = std::array::from_fn::<_, 4, _>(|k| {
             let i = ids[k];
-            let mut direction = witness.normal * (witness.weights[k] * particles.inverse_mass[i]);
-            for collider in fixed {
-                let (distance, normal) = collider.distance_and_normal(particles.positions[i]);
-                if distance <= thickness * 0.5 + 1e-8 {
-                    direction -= normal * direction.dot(normal).min(0.);
-                }
-            }
-            direction
+            support(
+                i,
+                particles.positions[i],
+                witness.normal * (witness.weights[k] * particles.inverse_mass[i]),
+            )
         });
         let mass = directions
             .into_iter()
@@ -235,6 +246,21 @@ impl FeaturePair {
         }
         Ok(true)
     }
+}
+
+pub(super) fn fixed_support_direction(
+    fixed: &[FixedClothCollider],
+    radius: f64,
+    position: DVec3,
+    mut direction: DVec3,
+) -> DVec3 {
+    for collider in fixed {
+        let (distance, normal) = collider.distance_and_normal(position);
+        if distance <= radius + 1e-8 {
+            direction -= normal * direction.dot(normal).min(0.);
+        }
+    }
+    direction
 }
 
 #[cfg(test)]

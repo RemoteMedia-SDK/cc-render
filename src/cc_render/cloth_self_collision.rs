@@ -3,6 +3,37 @@ use super::pair::FeaturePair;
 use super::*;
 use parry_ccd::{bounding_volume::Aabb, math::Point, partitioning::Qbvh};
 
+pub(super) struct ContactLayer<'a> {
+    pub range: std::ops::Range<usize>,
+    pub triangles: &'a [[usize; 3]],
+    pub radius: f64,
+    pub fixed: &'a [FixedClothCollider],
+}
+
+fn layer_for<'a, 'b>(layers: &'a [ContactLayer<'b>], vertex: usize) -> &'a ContactLayer<'b> {
+    layers
+        .iter()
+        .find(|layer| layer.range.contains(&vertex))
+        .expect("validated cloth layer partition")
+}
+
+fn fixed_contacts(
+    particles: &mut GripParticles<'_>,
+    layers: &[ContactLayer<'_>],
+) -> Result<(), ClothError> {
+    for layer in layers {
+        let r = layer.range.clone();
+        let mut local = GripParticles {
+            positions: &mut particles.positions[r.clone()],
+            previous: &particles.previous[r.clone()],
+            inverse_mass: &particles.inverse_mass[r],
+            h: particles.h,
+        };
+        collision::collide_surface(&mut local, layer.triangles, layer.fixed, layer.radius)?;
+    }
+    Ok(())
+}
+
 pub(super) struct SelfCollisionTopology {
     edges: Vec<[usize; 2]>,
     envelopes: Vec<(DVec3, DVec3)>,
@@ -125,29 +156,48 @@ impl SelfCollisionTopology {
         fixed: &[FixedClothCollider],
         thickness: f64,
     ) -> Result<(), ClothError> {
-        collision::collide_surface(particles, triangles, fixed, thickness * 0.5)?;
+        let layers = [ContactLayer {
+            range: 0..particles.positions.len(),
+            triangles,
+            radius: thickness * 0.5,
+            fixed,
+        }];
+        self.resolve_layers(particles, triangles, &layers)
+    }
+
+    pub(super) fn resolve_layers(
+        &mut self,
+        particles: &mut GripParticles<'_>,
+        triangles: &[[usize; 3]],
+        layers: &[ContactLayer<'_>],
+    ) -> Result<(), ClothError> {
+        fixed_contacts(particles, layers)?;
         for _ in 0..64 {
-            if !self.project(particles, triangles, thickness, fixed)? {
+            if !self.project_layers(particles, triangles, layers)? {
                 return Ok(());
             }
-            // Recheck fixed contacts after self-response. Stop only when both
-            // passes agree; no last-writer permission to publish intersections.
-            collision::collide_surface(particles, triangles, fixed, thickness * 0.5)?;
+            fixed_contacts(particles, layers)?;
         }
         Err(ClothError::SelfContactUnresolved)
     }
 
-    pub(super) fn project(
+    fn project_layers(
         &mut self,
         particles: &mut GripParticles<'_>,
         triangles: &[[usize; 3]],
-        thickness: f64,
-        fixed: &[FixedClothCollider],
+        layers: &[ContactLayer<'_>],
     ) -> Result<bool, ClothError> {
-        let mut changed = false;
+        let thickness = layers.iter().map(|l| 2. * l.radius).fold(0., f64::max);
         self.candidates(particles, triangles, thickness);
+        let mut changed = false;
         for (pair, axis) in self.pairs.iter().zip(&mut self.axes) {
-            changed |= pair.project_with_axis(particles, thickness, fixed, axis)?;
+            let ids = pair.indices();
+            let gap =
+                layer_for(layers, ids[0]).radius + layer_for(layers, ids[pair.split()]).radius;
+            changed |= pair.project_with_support(particles, gap, axis, |i, p, d| {
+                let layer = layer_for(layers, i);
+                pair::fixed_support_direction(layer.fixed, layer.radius, p, d)
+            })?;
         }
         Ok(changed)
     }

@@ -523,3 +523,7 @@ mod tests;
 #[cfg(test)]
 #[path = "cloth_self_tests.rs"]
 mod self_tests;
+
+#[path = "cloth_batch.rs"]
+mod batch;
+pub(crate) use batch::{ClothBatch, ClothLayerStep};

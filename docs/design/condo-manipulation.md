@@ -14,8 +14,9 @@ items open until their actual assets/runtime behavior and evidence are verified.
 - Entry door: inward-opening passive hinge, retained frame and observed doorway
   clearance verified (checkpoint 198).
 - Bed sheets: fixed-body sweeps (199) and frictionless swept self-contact (200)
-  are implemented and tested. Moving-object collision and separate interacting
-  duvet layers remain unfinished.
+  are implemented and tested. Shared live stepping for independent fabric layers
+  is implemented (201). Moving-object collision and authored interacting duvet
+  layers remain unfinished.
 - Contents and durability: loaded drawers, shelf contents, repeated cycles and
   simultaneous hinges/rails covered by bounded tests; broader loads remain open.
 - Optional realism: assess latches, soft-close behavior, door closers and
@@ -27,6 +28,70 @@ Current scope: **physics and movable condo parts only**. The owner replaced the
 former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
+
+## Checkpoint 201 — shared live cloth stepping
+
+`ClothBatch` advances independent solvers in one transactional tick. Each retains
+its mass, thickness, springs, material coordinates, surface identity and fixed
+collision references. Contact spacing is the sum of the two feature radii; fixed
+support reactions use the owning layer's radius and collider list. The common
+substep count is the largest requested by any layer. All new surfaces validate
+before any solver, revision or pending clamp state is published.
+
+The Bevy cloth system now advances this shared batch, using stable layer IDs and
+one synchronized content-time clock. Missing render meshes, changed layer sets,
+divergent clocks and failed physics stop the group. A successful catch-up tick
+commits all layers together; if a later tick fails, earlier successful ticks stay
+committed and their meshes are published. Entire catch-up intervals are not rolled
+back. Per-layer observations and the existing read-only contact observer remain.
+No grip-zone or interaction-phase functionality is added.
+
+Evidence is under `artifacts/toronto-condo-captures/cloth201/`. Focused tests cover
+unequal masses/thicknesses during a 100 m/s impact, standalone/batch parity,
+independent fixed supports, persistent material identity, stale contact rejection,
+invalid later-layer clamps, and rollback of intersecting layers. Headless live
+checks cover collision, mesh/solver equality, synchronized pausing, missing meshes,
+divergent clocks, changed layer sets and failed contact steps.
+
+A three-layer stack also runs for 30 seconds with the authored 0.2/s air drag,
+checking adjacent-layer triangle distances every tick and final support heights
+within 1e-6 m. Early attempts are retained: the two-second ballistic fixture used
+zero drag with frictionless inter-layer contact, leaving tangential motion; the
+later 30-second run missed an unnecessarily strict 1e-7 m resting-height assertion
+by about 0.063 micrometres. The final resting-height tolerance is 1e-6 m, matching
+the floor penetration bound. Interlayer clearance remains checked independently
+within 1e-7 m of the summed radii; no solver positions are repaired.
+
+The recording contains two separately authored 81-vertex fabric patches with
+0.2/0.5 kg masses and 1/4 mm thicknesses. Independent Parry triangle-distance
+queries test every cross-layer triangle pair at every one of 181 observed states.
+The minimum measured gap is 0.00249999055 m; final maximum speed after three
+seconds is 0.00507377 m/s. Every sample has less than 1e-6 m particle penetration
+into the fixed floor and less than 1.1 maximum edge stretch. Blender replays 31
+samples at 10 fps with exact mesh coordinates; the 3.1-second video decodes fully,
+source hashes match, and all sample timestamps match. This is a physics fixture,
+not the authored condo bed. Cloth-to-cloth contact is still frictionless.
+
+Final Rust library run: **370 passed, two ignored**, including the three-layer
+stack, existing live sheet/clamp checks and all rigid articulation/load tests.
+The Python suite remains six passes and the existing source-text failure in
+`test_root_acceptance_does_not_rewrite_the_candidate`; its guard was not changed.
+All initial failed stack attempts and full-suite logs remain in the capture folder.
+Gallery entry 201 contains the playable independent-layer recording and audit.
+
+Structural review: the Bevy `advance` system adds the shared simulation resource;
+its registrations and both headless test apps are validated by compilation and
+runtime tests. Ripwire retains six duplication/reused-helper notices for triangle
+fixture constructors and entity/mesh-removal tests. Their geometry, parameters and
+failure assertions serve different cases; these test-only similarities were
+reviewed and retained without an acknowledgement or baseline change. New batch
+and contact functions retain length notices for their transactional/mathematical
+flow. This is not a claim of a clean structural-tool gate.
+
+Required next: moving-body collision with aligned pose/time histories; actual
+fitted/top/duvet assets and render bindings; multi-layer folding, compression and
+release evidence on those assets. Optional latch/soft-close/mass/friction realism
+remains unassessed. The full physics objective remains open.
 
 ## Checkpoint 200 — swept cloth self-contact and a connected fold
 

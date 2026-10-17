@@ -18,7 +18,7 @@ use bevy::{
 use bevy_rapier3d::prelude::RapierConfiguration;
 use std::collections::HashSet;
 
-#[derive(Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 struct ClothClock {
     session: Option<String>,
     origin: Option<u64>,
@@ -81,6 +81,7 @@ impl ClothReadiness {
 pub(super) fn install(app: &mut App) {
     app.init_resource::<ClothReadiness>()
         .init_resource::<ClothObservations>()
+        .init_resource::<simulation::ClothSimulation>()
         .add_systems(Startup, spawn)
         .add_systems(Update, hide_static_bedding)
         .add_systems(
@@ -174,26 +175,6 @@ fn hide_static_bedding(
 }
 
 impl LiveCloth {
-    fn advance(&mut self, session: &str, pts: u64, gravity: DVec3) {
-        if self.error.is_some() {
-            return;
-        }
-        let target = match self.clock.observe(session, pts) {
-            Ok(target) => target,
-            Err(e) => {
-                self.error = Some(e);
-                return;
-            }
-        };
-        while self.clock.ticks < target {
-            if let Err(error) = self.solver.step(1.0 / 60.0, gravity, &self.colliders) {
-                self.error = Some(error.to_string());
-                return;
-            }
-            self.clock.ticks += 1;
-        }
-    }
-
     fn snapshot(&self, mesh: Option<&Mesh>, paused: bool) -> ClothSnapshot {
         let positions = self.solver.surface().positions();
         let values: Vec<_> = positions.iter().map(|p| p.to_array()).collect();
@@ -255,51 +236,58 @@ fn position_digest(positions: &[[f32; 3]]) -> String {
         .collect()
 }
 
+#[path = "cloth_simulation.rs"]
+mod simulation;
+
 fn advance(
     mut cloths: Query<(&mut LiveCloth, &Mesh3d, &mut Aabb)>,
     mut meshes: ResMut<Assets<Mesh>>,
     office: Option<Res<OfficeController>>,
     config: Query<&RapierConfiguration>,
     mut observations: ResMut<ClothObservations>,
+    mut simulation: ResMut<simulation::ClothSimulation>,
 ) {
     observations.0.clear();
-    for (mut cloth, handle, mut bounds) in &mut cloths {
-        let before = cloth.clock.ticks;
-        if let (Some(office), Ok(config)) = (office.as_ref(), config.get_single()) {
-            if office.motion_error.is_none() {
-                if let Some(stream) = &office.observed.native_stream {
-                    cloth.advance(
-                        &stream.session_id,
-                        office.observed.displayed_pts_ms,
-                        config.gravity.as_dvec3(),
-                    );
+    let mut entries: Vec<_> = cloths.iter_mut().collect();
+    entries.sort_by(|a, b| a.0.id.cmp(&b.0.id));
+    let before: Vec<_> = entries.iter().map(|e| e.0.clock.ticks).collect();
+    let missing_mesh = entries.iter().any(|e| meshes.get(&e.1 .0).is_none());
+    let mut layers: Vec<_> = entries.iter_mut().map(|e| &mut *e.0).collect();
+    let result = if missing_mesh {
+        Err("cloth render mesh missing".into())
+    } else {
+        simulation.advance(&mut layers, office.as_deref(), config.get_single().ok())
+    };
+    if let Err(error) = result {
+        for cloth in layers {
+            cloth.error = Some(error.clone());
+        }
+    }
+    for ((cloth, handle, mut bounds), before) in entries.into_iter().zip(before) {
+        let mesh = meshes.get_mut(&handle.0);
+        if let Some(mesh) = mesh {
+            if cloth.clock.ticks != before {
+                mesh.insert_attribute(
+                    Mesh::ATTRIBUTE_POSITION,
+                    cloth
+                        .solver
+                        .surface()
+                        .positions()
+                        .iter()
+                        .map(|p| p.to_array())
+                        .collect::<Vec<_>>(),
+                );
+                mesh.compute_smooth_normals();
+                if let Some(current) = mesh.compute_aabb() {
+                    *bounds = current;
                 }
             }
-        }
-        let Some(mesh) = meshes.get_mut(&handle.0) else {
-            cloth.error = Some("cloth render mesh missing".into());
+            observations
+                .0
+                .push(cloth.snapshot(Some(mesh), cloth.clock.ticks == before));
+        } else {
             observations.0.push(cloth.snapshot(None, true));
-            continue;
-        };
-        if cloth.clock.ticks != before {
-            mesh.insert_attribute(
-                Mesh::ATTRIBUTE_POSITION,
-                cloth
-                    .solver
-                    .surface()
-                    .positions()
-                    .iter()
-                    .map(|p| p.to_array())
-                    .collect::<Vec<_>>(),
-            );
-            mesh.compute_smooth_normals();
-            if let Some(current) = mesh.compute_aabb() {
-                *bounds = current;
-            }
         }
-        observations
-            .0
-            .push(cloth.snapshot(Some(mesh), cloth.clock.ticks == before));
     }
 }
 

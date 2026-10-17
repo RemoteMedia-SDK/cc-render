@@ -1,7 +1,7 @@
-"""Render a recorded connected-fold cloth test; no Blender cloth solve or repair.
+"""Render recorded cloth contact tests; no Blender cloth solve or repair.
 
 blender --background --python-exit-code 1 --python this_file -- TRACE_JSON NEW_OUTPUT
-The two colours identify halves of one connected sheet, not separate duvet layers.
+The trace identifies whether colours mark connected halves or separate fabric layers.
 """
 import argparse
 import hashlib
@@ -32,10 +32,10 @@ def setup(trace):
         material('Stone support', (.24, .27, .29), .85), scene.collection)
     mesh = bpy.data.meshes.new('Recorded solver topology')
     mesh.from_pydata([point(p) for p in trace['frames'][0]['positions']], [], trace['triangles'])
-    sheet = bpy.data.objects.new('Connected folded sheet', mesh)
+    sheet = bpy.data.objects.new(trace.get('fixture', 'Connected folded sheet'), mesh)
     scene.collection.objects.link(sheet)
-    mesh.materials.append(material('Lower material half', (.8, .72, .57), .9))
-    mesh.materials.append(material('Upper material half', (.16, .4, .58), .9))
+    mesh.materials.append(material('Fabric A', (.8, .72, .57), .9))
+    mesh.materials.append(material('Fabric B', (.16, .4, .58), .9))
     for face, index in zip(mesh.polygons, trace['face_materials']):
         face.material_index = index
         face.use_smooth = True

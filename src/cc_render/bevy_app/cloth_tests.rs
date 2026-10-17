@@ -31,6 +31,7 @@ fn app() -> App {
         .insert_resource(Assets::<StandardMaterial>::default())
         .init_resource::<ClothReadiness>()
         .init_resource::<ClothObservations>()
+        .init_resource::<simulation::ClothSimulation>()
         .init_resource::<OfficeController>()
         .add_systems(Startup, spawn)
         .add_systems(Update, advance);
@@ -234,3 +235,6 @@ fn static_bedding_replacement_is_scoped_to_the_environment() {
         Visibility::Inherited
     );
 }
+
+#[path = "cloth_layers_tests.rs"]
+mod layers;

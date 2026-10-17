@@ -7,6 +7,19 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 201 adds transactional shared stepping for independent live cloth
+layers. Per-layer mass, thickness, material identity and fixed supports are
+preserved; group clocks and mesh publication are synchronized. Headless live
+checks include pause and failure propagation. A two-patch recorded simulation
+keeps a minimum 2.49999055 mm interlayer gap for three seconds; its 31-frame
+Blender replay has exact solver/mesh parity. Evidence: `cloth201/` in the capture
+folder. This is a diagnostic fixture, not authored fitted/top/duvet assets.
+Required next: moving-body collision with pose/time alignment, authored bedding
+layers and their folding/compression/release evidence. Inter-cloth friction is
+still absent. Handle grips and interaction phases belong to the other agent. Final verification:
+370 Rust tests pass, two ignored; the existing Python ownership source-text
+failure remains (six pass). Gallery entry 201 has the independent-layer video.
+
 Checkpoint 200 adds frictionless swept self-contact to the live cloth solver.
 Vertex/face and edge/edge constraints share response by inverse mass, account for
 fixed support reactions, and reject unresolved steps transactionally. Reusable
