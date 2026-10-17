@@ -1,11 +1,78 @@
 # Condo manipulation: current priority
 
-Current scope: **physics and movable condo parts only**, per the owner's latest
-instruction. Avatar work is deferred and the broader goal is paused.
+## Active physics goal (2026-10-17)
+
+The owner replaced the broader visual goal with this physics scope. Keep all
+items open until their actual assets/runtime behavior and evidence are verified.
+
+- Kitchen and island drawers: 15 passive rails implemented and checked with
+  45 loose contents through ten simultaneous cycles (checkpoint 195).
+- Upper cabinets, desk drawer and entry door: movable geometry and joints pending.
+- Bed sheets: self-collision, moving-object collision and fast-motion collision
+  protection pending; separate duvet layers remain unfinished.
+- Contents and durability: expand beyond the vanity cube to loaded drawers,
+  shelf contents, repeated cycles and simultaneous mechanisms.
+- Optional realism: assess latches, soft-close behavior, door closers and
+  improved mass/friction calibration after the core mechanics are reliable.
+
+The functionality agent owns grip zones and interaction phase transitions.
+
+Current scope: **physics and movable condo parts only**. The owner replaced the
+former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
-Physics integration handoff: the latest scene is `scene-vanity-drawers.json`.
+## Checkpoint 195 — kitchen/island rails and loaded cycling
+
+Latest opt-in package: `scene-kitchen-drawers.json`, extending the vanity package.
+New mechanisms `kitchen_drawers` and `island_drawers` have nine and six moving
+parts respectively. Stable IDs are `kitchen_drawer_{column}_{row}` (columns
+0–2, rows 0–2) and `island_drawer_{column}_{row}` (columns 0–2, rows 0–1).
+Each drawer has a named `_pull` mesh. Grip-zone authoring is left to the
+functionality agent. Both banks have 0–0.40 m passive rails; kitchen axis is
+`[1,0,0]`, island axis `[-1,0,0]`. Estimated empty masses are 5 and 7 kg.
+
+The kitchen keeps its oven, sink, counter and fixed carcass. Two upper trays
+use side storage and shallow front pockets to clear the basin. The island's
+solid body is replaced by a hollow carcass with fixed dividers and back.
+All moving parts use real open trays and compound collision boxes.
+
+The first preview exposed an import bug: library-loaded object transforms
+were read before Blender evaluated them. Retained cabinet meshes and their
+bounds were consequently misplaced. The same pattern affected the previous
+vanity towel and soap import. Both scripts now evaluate transforms before
+relocation. Source-coordinate regression checks and the assembled capture
+verify the corrected positions. Earlier positive checks on those misplaced
+parts were insufficient; the rejected preview and failed logs remain archived.
+
+Swept checks pass 8,103 kitchen and 4,200 island comparisons, with at least
+3 mm clearance after a 1 mm reserve. All recorded solver poses pass 6,806,520
+and 3,528,000 fixed-room comparisons, with approximately 4 mm minimum gap.
+The full-scene physics fixture checks obstruction, transverse forces, stops,
+release, closing and published current bounds. It instantiates all mechanisms,
+so the opposing banks collide with real neighboring parts during testing.
+
+The loaded test puts a sphere, cylinder and box in every drawer: 45 loose
+bodies, 2 kg total contents per drawer. All 15 drawers complete ten simultaneous
+open/close cycles. Content centers remain within their bins and retain support
+height throughout; all drawers reach their endpoints. A two-second quiet
+interval initially failed for rolling contents. The final test measures up to
+ten seconds and requires 30 consecutive frames below 0.05 m/s without changing
+body velocity or damping. The longest measured interval is 5.083 seconds;
+5,675 physics steps are checked. This is bounded durability evidence, not
+arbitrary-load or lifetime certification. Shelf-content coverage remains open.
+
+The live capture verifies 61 asset hashes, 37 mechanism parts and 26 passive
+joints over 120 frames. Gallery 195a records the rejected import; 195b/c are
+14-second recorded kitchen/island sequences at 10 fps; 195d shows installation.
+Evidence is under `artifacts/toronto-condo-captures/kitchen195/`.
+Structural review retains similar phase assertions, the explicit obstruction
+fixture's branching, and the drawer builder's parameter count; the loaded
+cycle test was split into force/containment and endpoint checks for readability.
+All 335 Rust library tests pass (two ignored). The existing Python ownership
+source-text failure remains unchanged; its other six tests pass.
+
+Previous vanity integration handoff (included in `scene-kitchen-drawers.json`):
 Its new moving IDs are `vanity_lower_drawer` and `vanity_upper_drawer`, each with
 parent `vanity_shell`, world-aligned axis `[1, 0, 0]`, and limits `[0, 0.40]` m.
 The wall-mounted towel is a separate fixed part, `vanity_wall_towel`.

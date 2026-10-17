@@ -69,11 +69,13 @@ def accessories():
     local = Matrix.Translation(Vector((5.58, -2.83, 0)))
     for index, name in enumerate(names):
         obj = bpy.data.objects[name]
+        fixed['collection'].objects.link(obj)
+        bpy.context.view_layer.update()
         if index < 2:
-            fixed['collection'].objects.link(obj)
             obj.matrix_world = local @ shift @ obj.matrix_world
             obj.parent = fixed['pivot']
             fixed['meshes'].append(obj)
+            bpy.context.view_layer.update()
         corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
         low = Vector(tuple(min(c[i] for c in corners) for i in range(3)))
         high = Vector(tuple(max(c[i] for c in corners) for i in range(3)))
@@ -84,6 +86,7 @@ def accessories():
             fixed['colliders'].append(row)
         else:
             solids.append({**row, 'navigation_obstacle':False})
+            fixed['collection'].objects.unlink(obj)
     return fixed, names[:2], solids
 
 

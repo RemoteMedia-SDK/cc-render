@@ -1,11 +1,24 @@
 # Condo restart checkpoint
 
-Latest scope (2026-10-17): the owner paused the broader goal and requested
-**physics and movable condo parts only; stop avatar work**. Do not resume avatar
+Latest scope (2026-10-17): the owner replaced the broader goal with an active
+**physics and movable condo parts** goal. Do not resume avatar
 generation, interaction routing or calibration as part of this physics checkpoint.
 The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
+
+Checkpoint 195 adds nine kitchen and six island drawers to the latest opt-in
+`scenes/toronto_condo/scene-kitchen-drawers.json`. Both banks use passive 40 cm
+rails. Forty-five loose spheres/cylinders/boxes (2 kg per drawer) pass ten
+simultaneous open/close cycles, with measured settling up to 5.083 seconds.
+Swept and recorded-pose clearance pass. A Blender import transform bug was
+fixed in both the new retained carcasses and the previous vanity accessory
+placement; regression checks verify source coordinates. Gallery 195 preserves
+the failed import, recorded mechanics and corrected assembled scene. The live
+capture verifies all 61 asset hashes and 26 passive joints. See the active
+physics checklist and checkpoint 195 in `condo-manipulation.md` for the full
+remaining scope: upper cabinets, desk drawer, entry door, cloth collisions and
+duvet layers, shelf contents/durability, and optional passive realism.
 
 Checkpoint 194 adds two passive vanity drawers with 40 cm travel in
 `scenes/toronto_condo/scene-vanity-drawers.json`, now the latest opt-in scene.

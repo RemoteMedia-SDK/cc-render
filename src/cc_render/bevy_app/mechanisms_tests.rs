@@ -13,7 +13,13 @@ fn fixture() -> (App, SceneMechanism) {
 }
 
 fn fixture_for(package: ScenePackage, mechanism_index: usize) -> (App, SceneMechanism) {
-    let mechanism = package.mechanisms[mechanism_index].clone();
+    let (app, mut mechanisms) = fixture_for_indices(package, &[mechanism_index]);
+    (app, mechanisms.remove(0))
+}
+
+fn fixture_for_indices(package: ScenePackage, indices: &[usize]) -> (App, Vec<SceneMechanism>) {
+    let mechanisms: Vec<_> = indices.iter().map(|i| package.mechanisms[*i].clone()).collect();
+    let selected = indices.to_vec();
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, TransformPlugin, HierarchyPlugin));
     app.init_resource::<Assets<Mesh>>();
@@ -35,10 +41,12 @@ fn fixture_for(package: ScenePackage, mechanism_index: usize) -> (App, SceneMech
     app.insert_resource(SceneStateTx(tx));
     app.insert_resource(SceneReceiver { _receiver: rx });
     app.add_systems(Startup, (super::super::environment::spawn_solids,
-        move |mut commands: Commands, package: Res<ScenePackage>| { spawn_bodies(&mut commands, &package.mechanisms[mechanism_index]); }));
+        move |mut commands: Commands, package: Res<ScenePackage>| {
+            for index in &selected { spawn_bodies(&mut commands, &package.mechanisms[*index]); }
+        }));
     app.add_systems(PostUpdate, publish_scene_state.after(bevy::transform::TransformSystem::TransformPropagate));
     for _ in 0..4 { app.update(); }
-    (app, mechanism)
+    (app, mechanisms)
 }
 
 #[path = "drawer_tests.rs"]
@@ -46,6 +54,9 @@ mod drawers;
 
 #[path = "vanity_tests.rs"]
 mod vanity;
+
+#[path = "kitchen_drawer_tests.rs"]
+mod kitchen_drawers;
 
 #[path = "cabinet_tests.rs"]
 mod cabinets;
