@@ -175,7 +175,7 @@ fn unavailable_or_unsynchronized_motion_never_reuses_old_hand_contacts() {
 }
 
 #[test]
-fn production_office_schedule_has_no_finger_pose_writer() {
+fn production_office_fingers_are_written_only_by_the_approved_grasp_closure() {
     let mut app = App::new();
     crate::cc_render::office::systems::install(&mut app);
     let names: Vec<_> = app
@@ -191,5 +191,8 @@ fn production_office_schedule_has_no_finger_pose_writer() {
             .any(|n| n.ends_with("office::systems::observe")),
         "{names:?}"
     );
-    assert!(names.iter().all(|n| !n.contains("::hand::")), "{names:?}");
+    // The one finger writer is the owner-approved contact closure on held objects
+    // (openspec add-conforming-hand-grasps; restored by owner decision 2026-10-17).
+    let hand: Vec<_> = names.iter().filter(|n| n.contains("::hand::")).collect();
+    assert!(hand.len() == 1 && hand[0].ends_with("office::hand::conform_fingers"), "{names:?}");
 }
