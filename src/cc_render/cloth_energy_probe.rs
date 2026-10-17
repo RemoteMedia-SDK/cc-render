@@ -42,8 +42,7 @@ impl EnergyProbe {
 
     pub(super) fn record(
         &mut self,
-        stage: &str,
-        substep: usize,
+        phase: (&str, usize, Option<usize>),
         layers: &[ClothLayerStep<'_>],
         positions: &[DVec3],
         velocity: impl Fn(usize) -> DVec3,
@@ -51,6 +50,7 @@ impl EnergyProbe {
         if self.file.is_none() {
             return;
         }
+        let (stage, substep, iteration) = phase;
         let mut offset = 0;
         let mut values = Vec::new();
         for layer in layers {
@@ -70,7 +70,7 @@ impl EnergyProbe {
             self.file.as_mut().unwrap(),
             "{}",
             serde_json::json!({
-                "tick":self.tick,"substep":substep,"stage":stage,
+                "tick":self.tick,"substep":substep,"stage":stage,"iteration":iteration,
                 "interval_start_s":self.elapsed + substep as f64 * self.h,
                 "interval_end_s":self.elapsed + (substep+1) as f64 * self.h,"layers":values,
             })

@@ -1,12 +1,15 @@
 //! CPU cloth prototype: area-lumped particles, compliant distance constraints,
 //! and swept/discrete particle/triangle contacts with fixed colliders. No body-motion writes.
 //!
-//! Small-step XPBD (Macklin et al., https://mmacklin.com/smallsteps.pdf), one
-//! constraint sweep per substep. Opposite-vertex springs approximate bending;
+//! Small-step XPBD with accumulated multipliers across material passes
+//! (Macklin et al., https://mmacklin.com/xpbd.pdf). Opposite-vertex springs
+//! approximate bending;
 //! they are not a calibrated shell material. Swept self-contact is frictionless;
 //! dynamic-body coupling and runtime hand admission are not implemented here.
 //! The crate-private contact clamp is an explicitly limited coupling prototype.
 use std::collections::BTreeMap;
+
+const CONSTRAINT_PASSES: usize = 4;
 
 use bevy::math::{DQuat, DVec3, Vec2, Vec3};
 use bevy_rapier3d::rapier::parry::{math::Isometry, shape::SharedShape};
@@ -212,14 +215,19 @@ struct DistanceSpring {
 }
 
 impl DistanceSpring {
-    fn project(&self, positions: &mut [DVec3], previous: &[DVec3], inverse_mass: &[f64], h: f64) {
+    fn project(&self, particles: &mut GripParticles<'_>, accumulated: &mut f64) {
+        let positions = &mut *particles.positions;
+        let previous = particles.previous;
+        let inverse_mass = particles.inverse_mass;
+        let h = particles.h;
         let [a, b] = self.vertices;
         let delta = positions[a] - positions[b];
         let length = delta.length();
         if length <= f64::EPSILON {
             return;
         }
-        // Small Steps Eq. 8: Rayleigh damping along this constraint gradient.
+        // XPBD Eq. 26 (https://mmacklin.com/xpbd.pdf): accumulated elastic
+        // and Rayleigh damping multiplier; reset once per physical substep.
         // beta = 2*zeta*sqrt(k*m_eff), gamma = compliance*beta/h.
         let inverse_effective_mass = inverse_mass[a] + inverse_mass[b];
         let gamma =
@@ -227,11 +235,55 @@ impl DistanceSpring {
         let normal = delta / length;
         let relative_displacement =
             normal.dot((positions[a] - previous[a]) - (positions[b] - previous[b]));
-        let lambda = -(length - self.rest + gamma * relative_displacement)
-            / ((1.0 + gamma) * inverse_effective_mass + self.compliance / (h * h));
+        let alpha = self.compliance / (h * h);
+        let lambda = -(length - self.rest + alpha * *accumulated + gamma * relative_displacement)
+            / ((1.0 + gamma) * inverse_effective_mass + alpha);
+        *accumulated += lambda;
         let correction = normal * lambda;
         positions[a] += correction * inverse_mass[a];
         positions[b] -= correction * inverse_mass[b];
+    }
+}
+
+/// Working constraints commit only after the whole cloth tick succeeds.
+struct PendingConstraints {
+    multipliers: Vec<f64>,
+    grips: Vec<ClothGrip>,
+}
+
+impl PendingConstraints {
+    fn new(solver: &ClothSolver, grips: &[ClothGrip]) -> Result<Self, ClothError> {
+        let mut grips = grips.to_vec();
+        for grip in &mut grips {
+            grip.prepare(&solver.surface)?;
+        }
+        Ok(Self {
+            multipliers: vec![0.; solver.springs.len()],
+            grips,
+        })
+    }
+
+    fn project(
+        &mut self,
+        solver: &ClothSolver,
+        particles: &mut GripParticles<'_>,
+        interval: [f64; 2],
+        pass: usize,
+    ) -> Result<(), ClothError> {
+        // Grip capacity/force is integrated once per physical substep.
+        let grips = if pass + 1 == CONSTRAINT_PASSES {
+            &mut self.grips[..]
+        } else {
+            &mut []
+        };
+        solver.project_constraints(particles, interval, grips, &mut self.multipliers)
+    }
+
+    fn commit(&mut self, grips: &mut [ClothGrip]) {
+        for grip in &mut self.grips {
+            grip.finish();
+        }
+        grips.clone_from_slice(&self.grips);
     }
 }
 
@@ -342,14 +394,10 @@ impl ClothSolver {
         particles: &mut GripParticles<'_>,
         interval: [f64; 2],
         grips: &mut [ClothGrip],
+        multipliers: &mut [f64],
     ) -> Result<(), ClothError> {
-        for spring in &self.springs {
-            spring.project(
-                particles.positions,
-                particles.previous,
-                particles.inverse_mass,
-                particles.h,
-            );
+        for (spring, multiplier) in self.springs.iter().zip(multipliers) {
+            spring.project(particles, multiplier);
         }
         for grip in grips {
             grip.project(particles, interval)?;
@@ -376,12 +424,10 @@ impl ClothSolver {
         let mut positions = self.positions.clone();
         let mut velocities = self.velocities.clone();
         let mut previous = positions.clone();
-        let mut pending_grips = grips.to_vec();
-        for grip in &mut pending_grips {
-            grip.prepare(&self.surface)?;
-        }
+        let mut constraints = PendingConstraints::new(self, grips)?;
         for substep in 0..self.parameters.substeps {
             previous.copy_from_slice(&positions);
+            constraints.multipliers.fill(0.);
             for (p, v) in positions.iter_mut().zip(&mut velocities) {
                 *v = *v * drag + gravity * h;
                 *p += *v * h;
@@ -394,7 +440,9 @@ impl ClothSolver {
                 inverse_mass: &self.inverse_mass,
                 h,
             };
-            self.project_constraints(&mut particles, interval, &mut pending_grips)?;
+            for pass in 0..CONSTRAINT_PASSES {
+                constraints.project(self, &mut particles, interval, pass)?;
+            }
             self.self_collision
                 .resolve(&mut particles, &self.triangles, colliders, radius * 2.)?;
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
@@ -403,10 +451,7 @@ impl ClothSolver {
             .update_positions(positions.iter().map(|v| v.as_vec3()).collect())?;
         self.positions = positions;
         self.velocities = velocities;
-        for grip in &mut pending_grips {
-            grip.finish();
-        }
-        grips.clone_from_slice(&pending_grips);
+        constraints.commit(grips);
         Ok(())
     }
 }

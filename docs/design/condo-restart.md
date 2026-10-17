@@ -7,6 +7,41 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 209 improves material convergence without repeating contact solves.
+Both cloth steppers now run four spring passes with accumulated damped XPBD
+multipliers, followed by the existing single contact solve. Multipliers reset
+once per substep. Grips integrate once, on the final material pass; failed steps
+still leave every solver, grip and published mesh unchanged. This differs from
+208's rejected four alternating spring/contact passes. Materials, geometry,
+substeps and acceptance limits are unchanged.
+
+A test-only contact-stage probe localized the initial energy increase to ordinary
+triangle recovery, not swept corrections. Its first two fitted-only ticks exactly
+match all 384 saved energy records. More spring convergence lowers fitted-only
+two-second energy from 16.172291 J to 9.139268 J and three-layer tick-16 energy
+from 388.089327 J to 109.960660 J. Energy remains above the initial state;
+this is an improvement, not full bedding stability proof.
+
+Verification: 393 library tests pass (four ignored, three separately selected
+long tests excluded), all seven cloth-grip tests pass, and the separately run live
+single-sheet check passes at 0.007328569 m/s versus 0.05 m/s. The remaining excluded
+test is full bedding, still running at this snapshot under session 63709 /
+PID 365375. Use `cloth209/full-bed-material-four.log` and `.ndjson` and verify the
+handle/process before waiting or restarting. `cloth209/run-status.json` records
+its latest observed tick. Never treat the saved state file as proof of liveness.
+Python remains six passes and its existing ownership source-text failure.
+Source-only quality reports no gating regressions; the six-parameter slicing
+helper and false-positive unused type/test rows remain disclosed.
+
+Gallery 209 has a four-frame, 10 fps replay of ticks 0–18 (0.0–0.3 s), three stills
+and an energy/live-test chart. All three live tick-16 mesh hashes match the
+isolated diagnostic; render mesh/source hashes and full video decode pass.
+This is explicitly a diagnostic prefix, not ten-second settling or manipulation
+acceptance. Evidence is in `artifacts/toronto-condo-captures/cloth209/`.
+Next obtain the full-bed result before accepting the bedding or changing its
+solver again. Moving-body integration, cloth friction and duvet construction
+remain unfinished. The physics goal is active.
+
 Checkpoint 208 **rejects and reverts** a four-pass spring/contact experiment.
 The production solver is restored byte-for-byte to checkpoint 207. The candidate
 used accumulated damped XPBD multipliers (equation 26, https://mmacklin.com/xpbd.pdf),

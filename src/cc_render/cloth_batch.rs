@@ -72,6 +72,71 @@ impl ClothBatch {
         Ok(())
     }
 
+    fn project_layers(
+        &self,
+        layers: &[ClothLayerStep<'_>],
+        particles: &mut GripParticles<'_>,
+        interval: [f64; 2],
+        constraints: &mut [PendingConstraints],
+        pass: usize,
+    ) -> Result<(), ClothError> {
+        for ((layer, layout), state) in layers.iter().zip(&self.layout).zip(constraints) {
+            let r = layout.range.clone();
+            state.project(
+                layer.solver,
+                &mut GripParticles {
+                    positions: &mut particles.positions[r.clone()],
+                    previous: &particles.previous[r.clone()],
+                    inverse_mass: &particles.inverse_mass[r],
+                    h: particles.h,
+                },
+                interval,
+                pass,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn commit_layers(
+        &self,
+        layers: &mut [ClothLayerStep<'_>],
+        positions: &[DVec3],
+        velocities: &[DVec3],
+        constraints: &mut [PendingConstraints],
+    ) -> Result<(), ClothError> {
+        // Validate every render surface and revision before publishing any one.
+        let surfaces = layers
+            .iter()
+            .zip(&self.layout)
+            .map(|(layer, layout)| {
+                layer.solver.surface.updated(
+                    positions[layout.range.clone()]
+                        .iter()
+                        .map(|p| p.as_vec3())
+                        .collect(),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for (((layer, layout), surface), pending) in layers
+            .iter_mut()
+            .zip(&self.layout)
+            .zip(surfaces)
+            .zip(constraints)
+        {
+            layer
+                .solver
+                .positions
+                .copy_from_slice(&positions[layout.range.clone()]);
+            layer
+                .solver
+                .velocities
+                .copy_from_slice(&velocities[layout.range.clone()]);
+            layer.solver.surface = surface;
+            pending.commit(layer.grips);
+        }
+        Ok(())
+    }
+
     pub(crate) fn step(
         &mut self,
         layers: &mut [ClothLayerStep<'_>],
@@ -101,12 +166,10 @@ impl ClothBatch {
             .flat_map(|l| l.solver.inverse_mass.iter().copied())
             .collect();
         let mut previous = positions.clone();
-        let mut grips: Vec<_> = layers.iter().map(|l| l.grips.to_vec()).collect();
-        for (layer, pending) in layers.iter().zip(&mut grips) {
-            for grip in pending {
-                grip.prepare(&layer.solver.surface)?;
-            }
-        }
+        let mut constraints = layers
+            .iter()
+            .map(|layer| PendingConstraints::new(layer.solver, layer.grips))
+            .collect::<Result<Vec<_>, _>>()?;
         let contacts: Vec<_> = layers
             .iter()
             .zip(&self.layout)
@@ -119,8 +182,14 @@ impl ClothBatch {
             .collect();
         for substep in 0..substeps {
             #[cfg(test)]
-            self.energy_probe.record("before", substep, layers, &positions, |i| velocities[i]);
+            self.energy_probe
+                .record(("before", substep, None), layers, &positions, |i| {
+                    velocities[i]
+                });
             previous.copy_from_slice(&positions);
+            for state in &mut constraints {
+                state.multipliers.fill(0.);
+            }
             let interval = [substep as f64, (substep + 1) as f64].map(|s| s / substeps as f64);
             for (layer, layout) in layers.iter().zip(&self.layout) {
                 let r = layout.range.clone();
@@ -134,22 +203,31 @@ impl ClothBatch {
                 }
             }
             #[cfg(test)]
-            self.energy_probe.record("predicted", substep, layers, &positions, |i| velocities[i]);
-            for ((layer, layout), pending) in layers.iter().zip(&self.layout).zip(&mut grips) {
-                let r = layout.range.clone();
-                layer.solver.project_constraints(
+            self.energy_probe
+                .record(("predicted", substep, None), layers, &positions, |i| {
+                    velocities[i]
+                });
+            for pass in 0..CONSTRAINT_PASSES {
+                self.project_layers(
+                    layers,
                     &mut GripParticles {
-                        positions: &mut positions[r.clone()],
-                        previous: &previous[r.clone()],
-                        inverse_mass: &inverse_mass[r],
+                        positions: &mut positions,
+                        previous: &previous,
+                        inverse_mass: &inverse_mass,
                         h,
                     },
                     interval,
-                    pending,
+                    &mut constraints,
+                    pass,
                 )?;
+                #[cfg(test)]
+                self.energy_probe.record(
+                    ("constraints", substep, Some(pass)),
+                    layers,
+                    &positions,
+                    |i| (positions[i] - previous[i]) / h,
+                );
             }
-            #[cfg(test)]
-            self.energy_probe.record("constraints", substep, layers, &positions, |i| (positions[i] - previous[i]) / h);
             self.contacts.resolve_layers(
                 &mut GripParticles {
                     positions: &mut positions,
@@ -161,42 +239,13 @@ impl ClothBatch {
                 &contacts,
             )?;
             #[cfg(test)]
-            self.energy_probe.record("contacts", substep, layers, &positions, |i| (positions[i] - previous[i]) / h);
+            self.energy_probe
+                .record(("contacts", substep, None), layers, &positions, |i| {
+                    (positions[i] - previous[i]) / h
+                });
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
         }
-        // Validate every render surface and revision before publishing any one.
-        let surfaces = layers
-            .iter()
-            .zip(&self.layout)
-            .map(|(layer, layout)| {
-                layer.solver.surface.updated(
-                    positions[layout.range.clone()]
-                        .iter()
-                        .map(|p| p.as_vec3())
-                        .collect(),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        for (((layer, layout), surface), pending) in layers
-            .iter_mut()
-            .zip(&self.layout)
-            .zip(surfaces)
-            .zip(&mut grips)
-        {
-            layer
-                .solver
-                .positions
-                .copy_from_slice(&positions[layout.range.clone()]);
-            layer
-                .solver
-                .velocities
-                .copy_from_slice(&velocities[layout.range.clone()]);
-            layer.solver.surface = surface;
-            for grip in pending.iter_mut() {
-                grip.finish();
-            }
-            layer.grips.clone_from_slice(pending);
-        }
+        self.commit_layers(layers, &positions, &velocities, &mut constraints)?;
         #[cfg(test)]
         self.energy_probe.finish_tick();
         Ok(())

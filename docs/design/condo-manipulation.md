@@ -29,6 +29,61 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 209 — material convergence before one contact solve
+
+The first two fitted-only ticks were traced at each fixed-contact stage. Ordinary
+triangle recovery accounts for about 35.164 J of accumulated increases in
+stretch-plus-kinetic-plus-gravity energy, versus 0.0478 J from particle recovery;
+there were no swept-contact position corrections in that interval. These are
+summed stage changes, not final net energy (spring projections also change it).
+`contact-analysis.json` retains affected vertices and per-stage measurements.
+The test-only trace leaves all 384 baseline energy records exactly unchanged.
+It supports investigating material/contact coupling, not bypassing CCD.
+
+The candidate now runs **four material passes followed by one contact solve**.
+Accumulated damped XPBD multipliers follow equation 26 of
+https://mmacklin.com/xpbd.pdf and reset each physical substep. This differs from
+208's rejected alternating contact/material iterations: fixed/self contact and
+its friction projections are not repeated by the new outer loop. Grips project
+once on the last material pass. Pending constraints and mesh publication preserve
+transactional failure behavior. No geometry, material, substep or gate changed.
+
+| Diagnostic endpoint | Checkpoint 207 | Checkpoint 209 | Initial energy |
+| --- | ---: | ---: | ---: |
+| Fitted sheet alone, 2 s | 16.172291 J | 9.139268 J | 2.587458 J |
+| Three layers, tick 16 | 388.089327 J | 109.960660 J | 25.464395 J |
+
+The unchanged live single-sheet 20-second settling test now passes at
+**0.007328569 m/s**, below 0.05 m/s, unlike 208's 0.080120034 m/s failure.
+All seven acquired-cloth-grip tests pass, including the diagnostic lift/release:
+0.399754 m lift, 0.401771 m drop, maximum force 2.151528 N and tail speed
+0.018852514 m/s. These are physical fixture results, not avatar handling.
+The library run passes 393 tests with four ignored and three long cases excluded;
+the long grip/live cases pass separately, while the full-bed case is running.
+Python retains six passes and the unchanged ownership source-text failure.
+
+The full-bed acceptance runs under session 63709 / PID 365375, with logs and
+complete-mesh trace in `cloth209/full-bed-material-four.*`. Verify its actual
+status before waiting or launching another run. The source-only quality delta
+against d00a930 has zero gating regressions; disclosed new findings are the
+six-parameter batch helper and unused-type/test indexing false positives.
+The additional spring test verifies repeated projection preserves isolated axial
+compliance and damping. Compiler and batch/standalone parity checks pass.
+
+`CC_CLOTH_CONTACT_TRACE` optionally enables test-only per-stage position, prior
+position and inverse-mass snapshots in a new file. It is diagnostic data rather
+than a bit-exact solver restart format. The existing energy trace now includes
+iteration indices for material projections. Both traces are opt-in and introduce
+no production filesystem access. Reproduce the contact analysis with
+`cloth209/analyze_contacts.py`; snapshots and analysis are retained locally.
+
+Gallery 209 contains an exact Blender replay of ticks 0, 6, 12 and 18 at 10 fps,
+three stills and the energy/live-test chart. All source hashes, exact mesh mapping
+and full video decoding pass; the three live tick-16 hashes match the isolated
+energy probe. The **0.0–0.3 s prefix is not full settling acceptance**. The duvet
+is still a single thick midsurface. Moving-body timestepping/response, inter-layer
+friction, complete bedding stability and practical performance remain open.
+
 ## Checkpoint 208 — four-pass experiment rejected after live settling failure
 
 Tested four alternating spring/contact passes with accumulated damped XPBD

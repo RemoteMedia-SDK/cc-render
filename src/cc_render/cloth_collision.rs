@@ -2,6 +2,9 @@
 //! Triangle witnesses distribute collision response to material vertices.
 //! Swept fixed-body contacts run first; the coupled solver also resolves self-contact.
 use super::*;
+#[cfg(test)]
+#[path = "cloth_contact_probe.rs"]
+mod probe;
 use bevy_rapier3d::rapier::parry::{
     math::Point,
     query::{contact, PointQueryWithLocation},
@@ -169,8 +172,14 @@ pub(super) fn collide_surface(
     colliders: &[FixedClothCollider],
     radius: f64,
 ) -> Result<(), ClothError> {
+    #[cfg(test)]
+    let mut probe = probe::ContactProbe::new(particles);
     super::sweep::collide_swept(particles, triangles, colliders, radius)?;
+    #[cfg(test)]
+    probe.record("swept", particles);
     collide_particles(particles.positions, particles.previous, colliders, radius);
+    #[cfg(test)]
+    probe.record("particles_before_triangles", particles);
     let (mut min, mut max) = surface_bounds(particles.positions);
     for collider in colliders {
         if !collider.intersects_bounds(min, max, radius) {
@@ -181,7 +190,11 @@ pub(super) fn collide_surface(
         }
         (min, max) = surface_bounds(particles.positions);
     }
+    #[cfg(test)]
+    probe.record("triangles", particles);
     collide_particles(particles.positions, particles.previous, colliders, radius);
+    #[cfg(test)]
+    probe.record("particles_after_triangles", particles);
     Ok(())
 }
 

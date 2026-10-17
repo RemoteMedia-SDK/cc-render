@@ -349,7 +349,15 @@ fn damped_spring_dissipates_energy_without_moving_the_centre() {
         for (p, v) in positions.iter_mut().zip(&velocities) {
             *p += *v * h;
         }
-        spring.project(&mut positions, &old, &inverse_mass, h);
+        spring.project(
+            &mut GripParticles {
+                positions: &mut positions,
+                previous: &old,
+                inverse_mass: &inverse_mass,
+                h,
+            },
+            &mut 0.,
+        );
         for ((v, p), old) in velocities.iter_mut().zip(&positions).zip(old) {
             *v = (*p - old) / h;
         }
@@ -408,5 +416,48 @@ fn write_trace(
         ] {
             std::fs::write(directory.join(name), serde_json::to_vec(&data).unwrap()).unwrap();
         }
+    }
+}
+
+#[test]
+fn repeated_spring_projection_preserves_compliance_and_damping() {
+    for damping_ratio in [0., 0.5, 1.] {
+        let spring = DistanceSpring {
+            vertices: [0, 1],
+            rest: 1.,
+            compliance: 0.01,
+            damping_ratio,
+            stretch: true,
+        };
+        let previous = [DVec3::ZERO, DVec3::X * 1.2];
+        let mut positions = [DVec3::ZERO, DVec3::X * 1.3];
+        let inverse_mass = [2., 4.];
+        let mut accumulated = 0.;
+        spring.project(
+            &mut GripParticles {
+                positions: &mut positions,
+                previous: &previous,
+                inverse_mass: &inverse_mass,
+                h: 1. / 60.,
+            },
+            &mut accumulated,
+        );
+        let converged = positions;
+        let multiplier = accumulated;
+        for _ in 0..15 {
+            spring.project(
+                &mut GripParticles {
+                    positions: &mut positions,
+                    previous: &previous,
+                    inverse_mass: &inverse_mass,
+                    h: 1. / 60.,
+                },
+                &mut accumulated,
+            );
+        }
+        for (actual, expected) in positions.iter().zip(converged) {
+            assert!(actual.distance(expected) < 1e-12);
+        }
+        assert!((accumulated - multiplier).abs() < 1e-12);
     }
 }
