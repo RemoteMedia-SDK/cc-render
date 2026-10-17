@@ -29,6 +29,68 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 210 — native substep boundary observations
+
+The existing moving-face queries and normal-impact calculations need body and
+cloth states at the same physical instant. Reading the rendered transform after
+Rapier writeback misses its intermediate steps. The installed bevy_rapier3d
+0.28.0 driver performs those steps inside `RapierContext::step_simulation` without
+an observer hook. The new driver reproduces its outer scheduling and delegates
+each substep to that public method in Fixed mode with one substep. It does not
+reimplement Rapier's integration, joint solve or CCD.
+
+`physics::install_backend` selects this driver for a package with cloth and the
+stock plugin otherwise. The shared helper is also used by mechanism fixtures,
+so loaded mechanism tests cover the selected runtime path. SyncBackend and
+Writeback remain Rapier's own systems in their original order. The wrapper
+preserves repeated f32 subtraction for interpolated lookahead, time scaling,
+interpolation-start capture before the final outer step, the outer integration
+parameter used by writeback and event order. Events flush after each native call
+because the public method replaces its pending event queue. Query updates still
+happen after the frame's native steps.
+
+`PhysicsSubsteps` is a per-context, current-update observation resource:
+
+- Monotonic native-call sequence and accumulated physical seconds.
+- Before/after native body poses, linear/angular velocities, handles and CCD flags.
+- Empty interval lists when interpolated physics skips an update or is disabled.
+- Context removal discards its clock; missing contexts cannot retain stale records.
+- Invalid timing produces an error observation before advancing bodies.
+
+Native zero-duration Variable calls can produce equal start/end times: they do
+not advance the physical clock. These records are **boundaries, not a continuous
+motion certificate**. Intra-step CCD motion and full-turn rotation cannot safely
+be reconstructed solely from endpoints. No shape/force history or backward-time
+impulse application is implied. The cloth content-time clock remains unchanged;
+common scheduling and actual two-way contact response are still required.
+
+Validation compares the observed driver to an unmodified Rapier plugin in four
+configurations: Fixed/4 substeps, Variable/3, and Interpolated with half/double
+time scale and 4/3 substeps. Each runs 100 varying-duration updates with a passive
+limited hinge, falling contact body, fast CCD body and kinematic body. Native
+poses/velocities, Bevy render transforms/interpolation, collision and force events,
+outer dt and simulation/render residual all compare exactly. The run includes
+zero-step and multiple-outer-step updates plus removal of the CCD body. Recorded
+end states equal the actual native context; adjacent boundary states are
+continuous. Separate pause and context-removal checks pass.
+
+The final four focused tests pass; a library run passes 397 tests with four
+ignored and three existing long cloth cases excluded. The latter are the
+unchanged 209 full-bed run and the separately validated 209 grip/live checks.
+The first attempt lacked the existing headless fixture's Mesh/SceneSpawner
+resources; that failed log is preserved, and the corrected fixture uses the
+repository pattern. Python remains six passes and the existing ownership
+source-text failure. Source-only quality against 0ee06d4 has zero gating
+regressions; new test/fixture length and unused-type/test indexing rows are
+reported without acknowledgment. No ownership or acceptance test was weakened.
+
+Evidence: `artifacts/toronto-condo-captures/cloth210/`, including final parity
+output, 72 sampled update records, full library log, initial failure, source
+hashes and quality reports. Gallery 210 plots 18 actual updates of the half-speed
+interpolated fixture. It is timing evidence, not rendered moving-cloth acceptance.
+The original checkpoint-209 bedding process is still running; see the restart
+checkpoint and verify its handle before waiting or restarting.
+
 ## Checkpoint 209 — material convergence before one contact solve
 
 The first two fitted-only ticks were traced at each fixed-contact stage. Ordinary

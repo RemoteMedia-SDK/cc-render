@@ -7,6 +7,37 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 210 records actual native Rapier substep boundaries in cloth scenes.
+`physics::install_backend` selects the observed driver when the loaded package
+has cloth; other scenes retain the stock plugin. The wrapper delegates every
+body/joint/CCD solve to Rapier, preserving the original outer timestep, f32
+lookahead arithmetic, events and render interpolation. `PhysicsSubsteps` holds
+per-context sequence/physical seconds and the current update's before/after body
+poses, velocities and CCD flags. It is not an animation-PTS clock or a complete
+trajectory inside a CCD step. Cloth still uses its previous content-time clock;
+no moving-cloth response is enabled by this checkpoint.
+
+Four final native-driver tests pass: exact state/event/interpolation comparison
+across four timestep configurations and 100 updates each, pause behavior, body
+removal within the parity run and context removal. The 397-test library run
+passes (four ignored; three existing long cloth cases separately selected).
+Mechanism fixtures now use the same backend selection as the renderer; loaded
+cabinet/drawer cycles pass through the observed path. The initial missing
+Assets<Mesh>/SceneSpawner fixture failure is retained. Python retains its one
+existing ownership text-guard failure. Source-only quality has zero gating
+regressions; new flat fixture/test length and indexing findings remain disclosed.
+Gallery 210 archives the native timing chart and logs, not a cloth-contact demo.
+
+The checkpoint-209 full-bed test remains active under session 63709 / PID 365375;
+its running process and handle were verified during 210. `cloth210/run-status.json`
+is only a snapshot, not proof of current liveness. Continue checking the original
+`cloth209/full-bed-material-four.*` files; do not launch a duplicate. Its solver
+is unchanged by 210, and its headless cloth test does not consume native boundary
+observations. Next move cloth and native bodies onto a common physical interval
+and integrate contact response before both sides commit. Do not relabel sampled
+endpoints as continuous CCD paths or apply impulses retroactively to old PTS.
+The physics goal remains active.
+
 Checkpoint 209 improves material convergence without repeating contact solves.
 Both cloth steppers now run four spring passes with accumulated damped XPBD
 multipliers, followed by the existing single contact solve. Multipliers reset

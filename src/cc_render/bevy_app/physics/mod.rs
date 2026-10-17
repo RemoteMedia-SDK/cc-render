@@ -14,6 +14,7 @@ mod grip_lifecycle_tests;
 pub(crate) mod props;
 pub(crate) mod secondary;
 pub(crate) mod sidecar;
+pub(crate) mod substeps;
 pub(crate) mod world;
 
 use std::path::PathBuf;
@@ -24,6 +25,19 @@ use bevy_rapier3d::prelude::*;
 use crate::cc_render::renderer::PhysicsConfig;
 use world::{spawn_ground, spawn_walls, GroundAutoDetect, StaticWorldEntity, WorldGroundY};
 
+/// Keep scene fixtures and the renderer on the same native backend schedule.
+pub(crate) fn install_backend(app: &mut App) {
+    let has_cloth = app
+        .world()
+        .get_resource::<crate::cc_render::scene_package::ScenePackage>()
+        .is_some_and(|package| !package.cloths.is_empty());
+    if has_cloth {
+        substeps::install(app);
+    } else {
+        app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+    }
+}
+
 /// Install Rapier + world setup. Called from `bevy_app::run` when
 /// `RendererConfig::physics` is `Some`. `glb_path` is the renderer's
 /// avatar GLB path, used by sidecar auto-discovery.
@@ -31,7 +45,7 @@ pub(crate) fn install(app: &mut App, config: PhysicsConfig, glb_path: PathBuf) {
     // bevy_rapier3d 0.28: timestep_mode is a separate `Resource`,
     // gravity lives on the `RapierConfiguration` *Component* attached
     // to the RapierContext entity. Plugin add first; then mutate.
-    app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+    install_backend(app);
 
     // TimestepMode::Interpolated: physics runs at fixed dt, but render
     // frames sample interpolated body poses between physics steps when

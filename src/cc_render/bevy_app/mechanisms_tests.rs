@@ -24,7 +24,8 @@ fn fixture_for_indices(package: ScenePackage, indices: &[usize]) -> (App, Vec<Sc
     app.add_plugins((MinimalPlugins, TransformPlugin, HierarchyPlugin));
     app.init_resource::<Assets<Mesh>>();
     app.init_resource::<SceneSpawner>();
-    app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+    app.insert_resource(package);
+    super::super::physics::install_backend(&mut app);
     // Match the live renderer's default integration settings. Rapier's plugin
     // default uses one substep, which differs from our four-substep runtime.
     let physics = crate::cc_render::renderer::PhysicsConfig::default();
@@ -34,7 +35,6 @@ fn fixture_for_indices(package: ScenePackage, indices: &[usize]) -> (App, Vec<Sc
     });
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
         std::time::Duration::from_secs_f32(1. / 60.)));
-    app.insert_resource(package);
     app.init_resource::<PropRegistry>();
     app.init_resource::<GrabFsms>();
     let (tx, rx) = tokio::sync::watch::channel(Default::default());
