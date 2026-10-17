@@ -272,8 +272,9 @@ pub struct OfficeController {
     /// Parts with permanent physics joints remain obstacles during a hand grip.
     pub constrained_objects: std::collections::HashSet<String>,
     pub seated: Option<String>,
-    /// Seat the native avatar was last measured on. Generated motion may step
-    /// away from it (never deeper) until the pelvis clears its native reserve.
+    /// Seat the native avatar was last measured on (or a support she stepped off, a part
+    /// she let go of). Generated motion may step away from it (never deeper) until the
+    /// pelvis clears its native reserve.
     pub leaving_seat: Option<String>,
     /// Objects attached to hands by declared interactions (posed each frame).
     pub couplings: Vec<Coupling>,
@@ -872,6 +873,10 @@ impl OfficeController {
             let previous = self.held.iter().find(|(h, _)| *h == hand);
             let current = held.iter().find(|(h, _)| *h == hand);
             if previous != current {
+                // A part let go of (a drawer she pulled out towards her) is left like a seat.
+                if let Some((_, id)) = previous.filter(|(_, id)| !held.iter().any(|(_, now)| now == id)) {
+                    self.leaving_seat = Some(id.clone());
+                }
                 self.held_since_ms[index] = current.map(|_| self.observed.displayed_pts_ms);
                 self.held_grip_rotations[index] = current
                     .and_then(|(_, id)| self.objects.iter().find(|o| &o.id == id))
@@ -2223,6 +2228,8 @@ impl OfficeController {
                 None if onto.is_some() && self.objects.iter().any(|o| o.id == object) =>
                     self.couplings.push(Coupling { object, anchors: Vec::new(), slide_height: None,
                                                    release: Some(onto), latch: None }),
+                // A jointed part's grip the hand already slipped off: nothing left to let go.
+                None if onto.is_none() && self.constrained_objects.contains(&object) => {}
                 None => self.motion_error = Some(format!("cannot release {object}: not coupled")),
             },
             C::SupportOn { object } => self.support_object = Some(object),

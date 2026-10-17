@@ -598,6 +598,33 @@ mod tests {
     }
 
     #[test]
+    fn a_hand_slipping_off_while_letting_go_has_released_the_drawer() {
+        use crate::cc_render::Hand;
+        let mut scene = drawer_scene();
+        let mut task = SceneLifecycle::new(interact(1, "drawer", "open"), &scene).unwrap();
+        scene.avatar.wrists[1] = [0.3, 0.8, 0.];
+        scene.occupied_hands.push((Hand::Right, "drawer".into()));
+        for pts in [100, 150, 200] {
+            displayed(&mut scene, 1, pts);
+            task.observe(&scene);
+        }
+        task.bind_generation(interact(2, "drawer", "open")).unwrap();
+        scene.articulation.insert("drawer".into(), 0.31);
+        let mut update = Update::None;
+        for pts in [300, 350, 400, 450, 500] {
+            displayed(&mut scene, 2, pts);
+            update = task.observe(&scene);
+        }
+        assert_eq!(update, Update::PhaseChanged);
+        task.bind_generation(interact(3, "drawer", "open")).unwrap();
+        scene.occupied_hands.clear();
+        displayed(&mut scene, 3, 600);
+        assert_eq!(task.observe(&scene), Update::None);
+        displayed(&mut scene, 3, 1700);
+        assert_eq!(task.observe(&scene), Update::Completed);
+    }
+
+    #[test]
     fn travel_needs_a_gripped_object_and_a_range() {
         let base = drawer_scene().objects.pop().unwrap();
         let mut ungripped = base.clone();

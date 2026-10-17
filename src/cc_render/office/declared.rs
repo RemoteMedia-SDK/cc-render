@@ -163,10 +163,14 @@ impl DeclaredState {
         if let Some(detail) = failure.filter(|_| declared.travel.is_none()) {
             return self.fail(elapsed, detail);
         }
-        // A gripped handle stays gripped until its release phase lets go.
+        // A gripped handle stays gripped until its release phase lets go; a hand slipping off
+        // while letting go has released it.
         if let Some(hand) = self.grip {
             if !office.occupied_hands.iter().any(|(h, id)| *h == hand && id == &self.object) {
-                return self.fail(elapsed, format!("grip on {} lost", self.object));
+                if !matches!(declared.transition, Some(Transition::Release { .. })) {
+                    return self.fail(elapsed, format!("grip on {} lost", self.object));
+                }
+                self.grip = None;
             }
         }
         self.travel_m = office.articulation.get(&self.object).copied();

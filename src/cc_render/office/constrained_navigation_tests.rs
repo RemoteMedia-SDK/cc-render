@@ -221,11 +221,23 @@ fn a_gripped_drawer_pulled_towards_her_does_not_reject_her_own_root() {
     let stand = Vec3::new(drawer.position[0], 0.9, front + NATIVE_ROOT_RESERVE_M + 0.05);
     controller.observed.pelvis = stand.to_array();
     assert!(controller.permits_native_root(stand));
-    // The drawer slides 0.3 m out towards her: ungripped, her standing root is now inside its reserve.
-    controller.objects[0].position[2] += 0.3;
+    // The drawer slides 0.15 m out towards her: ungripped, her standing root is now inside its reserve.
+    controller.objects[0].position[2] += 0.15;
     assert!(!controller.permits_native_root(stand));
     // Gripped, it moves with her hand: the native check ignores it; planning still keeps it.
-    controller.held.push((Hand::Right, "bedside_upper_drawer".into()));
+    let grip = crate::cc_render::renderer::GrabSnapshot { hand: Hand::Right, prop: "bedside_upper_drawer".into() };
+    controller.advance(&SceneState { grabs: vec![grip], ..Default::default() });
     assert!(controller.permits_native_root(stand));
     assert!(!controller.permits_root(stand));
+    // Let go, the open drawer is an obstacle again: she may stay or step back, never closer.
+    controller.advance(&SceneState::default());
+    assert!(controller.held.is_empty());
+    assert!(controller.permits_native_root(stand));
+    assert!(controller.permits_native_root(stand + Vec3::Z * 0.05));
+    assert!(!controller.permits_native_root(stand - Vec3::Z * 0.05));
+    assert!(!controller.permits_root(stand));
+    // Its release phase lets go of a grip the hand has already slipped off: not an error.
+    controller.apply_coupling(super::super::interaction::CouplingCommand::Release {
+        object: "bedside_upper_drawer".into(), onto: None });
+    assert_eq!(controller.motion_error, None);
 }
