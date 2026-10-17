@@ -29,6 +29,55 @@ former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
 
+## Checkpoint 207 — substep energy localization (incomplete)
+
+`cloth_energy_probe.rs` measures mass-weighted kinetic, gravitational and spring
+potential energy before prediction, after prediction, after spring constraints,
+and after contact correction. It also records the fastest vertex, its position,
+velocity and support distance, and the maximum spring residual. Zero-compliance
+constraints have undefined stored energy and report null rather than infinity.
+All logging is cfg(test), disabled unless `CC_CLOTH_ENERGY_TRACE` names a new file.
+The production batch loop only separates independent layer prediction from
+independent spring projection; no physical settings or acceptance gates change.
+
+The ignored `probe_authored_bedding_substep_energy` loads the actual scene assets
+and fixed supports. It selects comma-separated `CC_CLOTH_PROBE_LAYERS` (default
+`bed_fitted_sheet`) and `CC_CLOTH_PROBE_TICKS` (default 120, maximum 600). It reports
+asset/parameter provenance and final surface hashes. Run it with
+`cargo test --offline --lib probe_authored_bedding_substep_energy -- --ignored --nocapture`.
+This direct batch probe omits live ECS/publication acceptance and does not claim
+that the bedding settles.
+
+The initial probe accidentally used a direct f64 gravity literal instead of the
+live Rapier f32 value converted to f64. That short comparison did not match;
+its log and failed parity JSON remain in `cloth207/`. The corrected probe reads
+`RapierConfiguration::new(1.).gravity`. Both without and with energy logging,
+the corrected three-layer probe matches all three original live mesh hashes
+exactly at tick 16. The diagnostic loop therefore preserves the tested prefix.
+
+With native gravity, the fitted shell alone starts at 2.587458 J total model
+energy and reaches 16.172291 J at two seconds, with 13.600823 J of stretch energy
+and only 0.000003305 J kinetic energy. Its final maximum speed is 0.034445 m/s;
+this single endpoint is not the full settling gate. Spring and contact passes
+repeatedly remove and restore elastic energy. In the three-layer scene, total
+model energy rises from 25.464395 J to 388.089327 J by tick 16. These energies
+follow the solver's documented distance-spring compliance model; they are not
+calibrated fabric measurements. The existing isolated two-particle spring
+dissipation test passes, so the next investigation is coupled constraints.
+
+The focused solver suite passes 61 tests (two manual diagnostics ignored).
+Python retains its existing source-text failure. Source-only quality checks
+still report added batch-step verbosity and diagnostic-only findings; the
+optional logging guards are encapsulated in the probe to avoid six nested
+branches in the solver. No findings or gates were suppressed. All attempts and
+reports are retained under `artifacts/toronto-condo-captures/cloth207/`.
+
+Next test accumulated spring multipliers with repeated spring/contact passes,
+holding material parameters, geometry and acceptance limits fixed. Compare the
+same short recorded energy runs before any expensive ten-second acceptance run.
+The full goal, moving collision integration, settling and manipulation evidence
+remain unfinished.
+
 ## Checkpoint 206 — two-way normal impact response (incomplete)
 
 The moving query now retains the exact barycentric weights used to construct its

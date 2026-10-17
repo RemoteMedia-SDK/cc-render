@@ -18,6 +18,8 @@ pub(crate) struct ClothBatch {
     layout: Vec<Layout>,
     triangles: Vec<[usize; 3]>,
     contacts: SelfCollisionTopology,
+    #[cfg(test)]
+    energy_probe: energy::EnergyProbe,
 }
 
 impl ClothBatch {
@@ -38,6 +40,8 @@ impl ClothBatch {
             offset = end;
         }
         Ok(Self {
+            #[cfg(test)]
+            energy_probe: energy::EnergyProbe::from_environment(),
             contacts: SelfCollisionTopology::new(&triangles),
             layout,
             triangles,
@@ -82,6 +86,8 @@ impl ClothBatch {
             .max()
             .unwrap();
         let h = dt / substeps as f64;
+        #[cfg(test)]
+        self.energy_probe.begin_tick(dt, substeps, gravity);
         let mut positions: Vec<_> = layers
             .iter()
             .flat_map(|l| l.solver.positions.iter().copied())
@@ -112,9 +118,11 @@ impl ClothBatch {
             })
             .collect();
         for substep in 0..substeps {
+            #[cfg(test)]
+            self.energy_probe.record("before", substep, layers, &positions, |i| velocities[i]);
             previous.copy_from_slice(&positions);
             let interval = [substep as f64, (substep + 1) as f64].map(|s| s / substeps as f64);
-            for ((layer, layout), pending) in layers.iter().zip(&self.layout).zip(&mut grips) {
+            for (layer, layout) in layers.iter().zip(&self.layout) {
                 let r = layout.range.clone();
                 let drag = (-layer.solver.parameters.air_drag_per_second * h).exp();
                 for (p, v) in positions[r.clone()]
@@ -124,6 +132,11 @@ impl ClothBatch {
                     *v = *v * drag + gravity * h;
                     *p += *v * h;
                 }
+            }
+            #[cfg(test)]
+            self.energy_probe.record("predicted", substep, layers, &positions, |i| velocities[i]);
+            for ((layer, layout), pending) in layers.iter().zip(&self.layout).zip(&mut grips) {
+                let r = layout.range.clone();
                 layer.solver.project_constraints(
                     &mut GripParticles {
                         positions: &mut positions[r.clone()],
@@ -135,6 +148,8 @@ impl ClothBatch {
                     pending,
                 )?;
             }
+            #[cfg(test)]
+            self.energy_probe.record("constraints", substep, layers, &positions, |i| (positions[i] - previous[i]) / h);
             self.contacts.resolve_layers(
                 &mut GripParticles {
                     positions: &mut positions,
@@ -145,6 +160,8 @@ impl ClothBatch {
                 &self.triangles,
                 &contacts,
             )?;
+            #[cfg(test)]
+            self.energy_probe.record("contacts", substep, layers, &positions, |i| (positions[i] - previous[i]) / h);
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
         }
         // Validate every render surface and revision before publishing any one.
@@ -180,6 +197,8 @@ impl ClothBatch {
             }
             layer.grips.clone_from_slice(pending);
         }
+        #[cfg(test)]
+        self.energy_probe.finish_tick();
         Ok(())
     }
 }
@@ -187,3 +206,7 @@ impl ClothBatch {
 #[cfg(test)]
 #[path = "cloth_batch_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cloth_energy_probe.rs"]
+mod energy;

@@ -7,6 +7,22 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 207 adds test-only substep energy measurements and an ignored authored
+bedding probe. Physics, materials and acceptance limits are unchanged. The batch
+prediction loop is separated from per-layer spring projection; all three meshes
+still match the original live run exactly at tick 16, with energy logging enabled.
+Use the same f32 Rapier gravity converted to f64; an initial direct-f64 diagnostic
+did not match and its failed parity report is retained.
+
+The fitted shell alone gains stored spring energy: total model energy rises from
+2.587458 J to 16.172291 J over two seconds, ending with 13.600823 J stretch energy.
+The three-layer scene rises from 25.464395 J to 388.089327 J by tick 16 (0.267 s).
+This motivates testing coupled spring/contact convergence, not arbitrary damping
+or a relaxed settling threshold. Measurements are in `cloth207/`; the probe is
+`probe_authored_bedding_substep_energy`, selected with `CC_CLOTH_PROBE_LAYERS`,
+`CC_CLOTH_PROBE_TICKS` and optional unique `CC_CLOTH_ENERGY_TRACE` output path.
+It is an isolated diagnostic, not full live acceptance. See checkpoint 207 below.
+
 Checkpoint 206 adds **frictionless two-way impact calculations** and a read-only
 Rapier mass/inertia adapter. Moving CCD now retains material barycentric weights.
 The response transfers linear/angular momentum between the face and body,
