@@ -1,6 +1,16 @@
 # Condo restart checkpoint
 
-Latest: checkpoint 188 adds the passive balcony slider in
+Latest: checkpoint 189 preserves a text-only door-gesture baseline in the gallery
+as **Failed: approach prerequisite**. All 240 native packets were displayed
+unchanged, but the closest observed wrist remained 4.60 m from the handle and
+the door did not travel. No grab intent was armed. This is not a grip-failure
+test. Source and capture evidence are in `interaction189/` under the capture
+artifacts directory. The user prefers the existing **scene-conditioned gesture**
+path next; do not spend more text-only seeds. See checkpoint 189 in
+`condo-manipulation.md` for the integration gaps. No model/physics behavior was
+changed by this checkpoint.
+
+Checkpoint 188 adds the passive balcony slider in
 `scene-balcony-slider.json`. All 326 library tests pass (two ignored), and the
 six capture-driver tests pass. Gallery entries 188a–c retain the failed replay
 attempt, playable slider physics and corrected live integration. Live replay now

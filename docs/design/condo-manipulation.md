@@ -4,14 +4,64 @@ User direction, 2026-10-16: pause visual detail work and prioritize fridge,
 drawers, cabinets, doors and **bed sheets** that the avatar can manipulate.
 The condo scene goal remains intact. Lighting and reflection polish are deferred.
 
-Current opt-in package: `scene-doors.json` combines the passive fridge,
-bedside drawers, entry cabinet doors, bedroom door, live top-sheet solver and split bed
+Current opt-in package: `scene-balcony-slider.json` combines the passive fridge,
+bedside drawers, entry cabinet doors, bedroom door, balcony slider, live top-sheet solver and split bed
 collision shapes. Grasping/manipulation by
 the avatar is still unverified. Checkpoint 180 adds a solver contact-clamp
 prototype; checkpoint 181 adds triangle contact and clears the measured
 triangle/mattress penetration in the lift/release fixture. Runtime hand
 contact observations are available in checkpoint 182; grasp admission and
 avatar handling remain unfinished. See the progress gallery.
+
+## Checkpoint 189: scene-conditioned gesture direction
+
+User steering, 2026-10-17: probably use the scene-conditioned gesture. Keep
+mechanism articulation and actual manipulation ahead of cosmetic work.
+
+The single text-only baseline (seed 189, 12 seconds, Core40) generated a gesture
+near the origin. In the unchanged CC5 replay, the closest observed wrist stayed
+4.5997 m from the balcony handle; observed rail travel was zero. All 240 source
+packets were delivered, six source audits reported zero future constraints, and
+the root interpolation audit passed at 8.46e-8 m. No grab intent was armed;
+this failed the approach prerequisite, not an attempted physical grip. Gallery
+189 preserves the playable capture, audits and setup-failure log. Its four-second
+preview compresses twelve seconds of source motion. Do not infer real-time motion
+quality from the preview speed.
+
+Existing integration points, verified from current source:
+
+- `office/scene_context.rs` exports current object transforms, compound solids,
+  approach/grasp regions and declared interaction zones. `scene_signing.rs`
+  signs the internal `scene_step` envelope for the SDK scene-conditioning path.
+- The scene snapshot currently has no hinge/rail axis, limits or joint state.
+  Those environmental facts need a defined renderer-to-service representation
+  before claiming constraint-aware door generation.
+- `OfficeController::apply_coupling` explicitly rejects attaching an articulated
+  part. Generic declared attachment makes free objects follow the hands and is
+  unsuitable for a constrained door. Preserve that rejection until articulated
+  transitions use `physics/contact_grasp.rs` and its physical contact admission.
+- Scene context currently exports held objects from legacy declared couplings;
+  an admitted physical door grip also needs observable feedback to the motion
+  service. Do not report a requested grip as an observed grip.
+
+Next bounded integration slice: the balcony slider. Ground the gesture in its
+actual handle geometry and live obstacles; include its passive +X rail and
+0–2 m limits as scene facts. Let the motion service generate approach and body
+motion, use contact admission for the temporary hand joint, and retain the
+permanent rail joint. Observe opening, release and settling from physics.
+Refresh scene facts as the door moves. Stale geometry, failed contact and
+unsupported conditioning must remain explicit failures.
+
+Acceptance must separately show unchanged source/displayed motion, actual
+contact before grip, door travel, release and sustained settling. Publish a
+playable opening/closing recording in the progress gallery. Do not enable the
+SDK's optional planned-grasp experiment merely because scene conditioning is
+selected; it has its own scoped approval and audit contract. Sheets still need
+their separate deformable-contact/grip integration.
+
+This checkpoint documents the integration boundary; it does not implement or
+certify scene-conditioned door manipulation. Existing SDK changes and avatar
+calibration files were left untouched.
 
 ## Verified starting point
 
