@@ -222,6 +222,7 @@ pub(super) fn collide_swept(
     triangles: &[[usize; 3]],
     colliders: &[FixedClothCollider],
     radius: f64,
+    stamps: &mut collision::ContactStamps<'_>,
 ) -> Result<(), ClothError> {
     // Same motion threshold as each particle/face, evaluated once for settled
     // cloth instead of repeating it for every face and every scene collider.
@@ -239,16 +240,31 @@ pub(super) fn collide_swept(
         if !collider.intersects_bounds(old_min.min(min), old_max.max(max), radius) {
             continue;
         }
-        for (end, old) in particles.positions.iter_mut().zip(particles.previous) {
-            let result = collider.project_swept_particle(end, *old, radius);
-            #[cfg(test)]
-            if let Err(error) = &result {
-                diagnostics::capture(collider, &[*old], &[*end], radius, error);
+        for i in 0..particles.positions.len() {
+            let old = particles.previous[i];
+            let result = stamps.apply([i], particles.positions, |p| {
+                let result = collider.project_swept_particle(&mut p[i], old, radius);
+                #[cfg(test)]
+                if let Err(error) = &result {
+                    diagnostics::capture(collider, &[old], &[p[i]], radius, error);
+                }
+                result
+            });
+            if let Some(result) = result {
+                result?;
             }
-            result?;
         }
         for triangle in triangles {
+            if stamps.clean(triangle) {
+                continue;
+            }
+            let before = triangle.map(|i| particles.positions[i]);
             collider.project_swept_triangle(*triangle, particles, radius)?;
+            for (i, old) in triangle.iter().zip(before) {
+                if particles.positions[*i] != old {
+                    stamps.touch(*i);
+                }
+            }
         }
         (min, max) = collision::surface_bounds(particles.positions);
     }

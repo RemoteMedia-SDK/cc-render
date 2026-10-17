@@ -188,21 +188,6 @@ impl FixedClothCollider {
         )
     }
 
-    fn project_particles(
-        &self,
-        positions: &mut [DVec3],
-        previous: &[DVec3],
-        radius: f64,
-    ) -> (DVec3, DVec3) {
-        let mut bounds = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
-        for (position, old) in positions.iter_mut().zip(previous) {
-            self.project(position, *old, radius);
-            bounds.0 = bounds.0.min(*position);
-            bounds.1 = bounds.1.max(*position);
-        }
-        bounds
-    }
-
     fn project(&self, position: &mut DVec3, previous: DVec3, radius: f64) {
         if !self.intersects_bounds(*position, *position, radius) {
             return;
@@ -231,30 +216,60 @@ struct DistanceSpring {
     stretch: bool,
 }
 
+/// Per-substep XPBD terms of one spring; they depend only on its material,
+/// the endpoint masses and the substep length.
+#[derive(Clone, Copy)]
+struct SpringTerms {
+    gamma: f64,
+    alpha: f64,
+    denominator: f64,
+}
+
 impl DistanceSpring {
-    fn project(&self, particles: &mut GripParticles<'_>, accumulated: &mut f64) {
-        let positions = &mut *particles.positions;
-        let previous = particles.previous;
-        let inverse_mass = particles.inverse_mass;
-        let h = particles.h;
+    fn terms(&self, inverse_mass: &[f64], h: f64) -> SpringTerms {
         let [a, b] = self.vertices;
-        let delta = positions[a] - positions[b];
-        let length = delta.length();
-        if length <= f64::EPSILON {
-            return;
-        }
         // XPBD Eq. 26 (https://mmacklin.com/xpbd.pdf): accumulated elastic
         // and Rayleigh damping multiplier; reset once per physical substep.
         // beta = 2*zeta*sqrt(k*m_eff), gamma = compliance*beta/h.
         let inverse_effective_mass = inverse_mass[a] + inverse_mass[b];
         let gamma =
             2.0 * self.damping_ratio * (self.compliance / inverse_effective_mass).sqrt() / h;
+        let alpha = self.compliance / (h * h);
+        SpringTerms {
+            gamma,
+            alpha,
+            denominator: (1.0 + gamma) * inverse_effective_mass + alpha,
+        }
+    }
+
+    #[cfg(test)]
+    fn project(&self, particles: &mut GripParticles<'_>, accumulated: &mut f64) {
+        let terms = self.terms(particles.inverse_mass, particles.h);
+        self.project_with(particles, accumulated, &terms);
+    }
+
+    fn project_with(
+        &self,
+        particles: &mut GripParticles<'_>,
+        accumulated: &mut f64,
+        terms: &SpringTerms,
+    ) {
+        let positions = &mut *particles.positions;
+        let previous = particles.previous;
+        let inverse_mass = particles.inverse_mass;
+        let [a, b] = self.vertices;
+        let delta = positions[a] - positions[b];
+        let length = delta.length();
+        if length <= f64::EPSILON {
+            return;
+        }
         let normal = delta / length;
         let relative_displacement =
             normal.dot((positions[a] - previous[a]) - (positions[b] - previous[b]));
-        let alpha = self.compliance / (h * h);
-        let lambda = -(length - self.rest + alpha * *accumulated + gamma * relative_displacement)
-            / ((1.0 + gamma) * inverse_effective_mass + alpha);
+        let lambda = -(length - self.rest
+            + terms.alpha * *accumulated
+            + terms.gamma * relative_displacement)
+            / terms.denominator;
         *accumulated += lambda;
         let correction = normal * lambda;
         positions[a] += correction * inverse_mass[a];
@@ -266,6 +281,9 @@ impl DistanceSpring {
 struct PendingConstraints {
     multipliers: Vec<f64>,
     grips: Vec<ClothGrip>,
+    /// Spring terms for `terms_h`, computed once per tick.
+    terms: Vec<SpringTerms>,
+    terms_h: f64,
 }
 
 impl PendingConstraints {
@@ -277,6 +295,8 @@ impl PendingConstraints {
         Ok(Self {
             multipliers: vec![0.; solver.springs.len()],
             grips,
+            terms: Vec::new(),
+            terms_h: f64::NAN,
         })
     }
 
@@ -293,7 +313,21 @@ impl PendingConstraints {
         } else {
             &mut []
         };
-        solver.project_constraints(particles, interval, grips, &mut self.multipliers)
+        if self.terms_h != particles.h {
+            self.terms = solver
+                .springs
+                .iter()
+                .map(|s| s.terms(particles.inverse_mass, particles.h))
+                .collect();
+            self.terms_h = particles.h;
+        }
+        solver.project_constraints(
+            particles,
+            interval,
+            grips,
+            &mut self.multipliers,
+            &self.terms,
+        )
     }
 
     fn commit(&mut self, grips: &mut [ClothGrip]) {
@@ -412,9 +446,10 @@ impl ClothSolver {
         interval: [f64; 2],
         grips: &mut [ClothGrip],
         multipliers: &mut [f64],
+        terms: &[SpringTerms],
     ) -> Result<(), ClothError> {
-        for (spring, multiplier) in self.springs.iter().zip(multipliers) {
-            spring.project(particles, multiplier);
+        for ((spring, multiplier), terms) in self.springs.iter().zip(multipliers).zip(terms) {
+            spring.project_with(particles, multiplier, terms);
         }
         for grip in grips {
             grip.project(particles, interval)?;
@@ -486,23 +521,6 @@ fn reconstruct_velocities(
         }
     }
     Ok(())
-}
-
-fn collide_particles(
-    positions: &mut [DVec3],
-    previous: &[DVec3],
-    colliders: &[FixedClothCollider],
-    radius: f64,
-) {
-    let (mut min, mut max) = positions.iter().fold(
-        (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
-        |(lo, hi), p| (lo.min(*p), hi.max(*p)),
-    );
-    for collider in colliders {
-        if collider.intersects_bounds(min, max, radius) {
-            (min, max) = collider.project_particles(positions, previous, radius);
-        }
-    }
 }
 
 #[path = "cloth_collision.rs"]

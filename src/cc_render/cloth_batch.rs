@@ -187,6 +187,8 @@ impl ClothBatch {
                     velocities[i]
                 });
             previous.copy_from_slice(&positions);
+            #[cfg(test)]
+            crate::cc_render::cloth_profile::stage("start", substep, &positions);
             for state in &mut constraints {
                 state.multipliers.fill(0.);
             }
@@ -202,6 +204,8 @@ impl ClothBatch {
                     *p += *v * h;
                 }
             }
+            #[cfg(test)]
+            crate::cc_render::cloth_profile::stage("predicted", substep, &positions);
             #[cfg(test)]
             self.energy_probe
                 .record(("predicted", substep, None), layers, &positions, |i| {
@@ -231,6 +235,8 @@ impl ClothBatch {
                     |i| (positions[i] - previous[i]) / h,
                 );
             }
+            #[cfg(test)]
+            crate::cc_render::cloth_profile::stage("constraints", substep, &positions);
             profiled!(
                 "contacts",
                 self.contacts.resolve_layers(
@@ -249,6 +255,8 @@ impl ClothBatch {
                 .record(("contacts", substep, None), layers, &positions, |i| {
                     (positions[i] - previous[i]) / h
                 });
+            #[cfg(test)]
+            crate::cc_render::cloth_profile::stage("contacts", substep, &positions);
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
         }
         profiled!(

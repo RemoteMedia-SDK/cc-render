@@ -17,19 +17,35 @@ fn layer_for<'a, 'b>(layers: &'a [ContactLayer<'b>], vertex: usize) -> &'a Conta
         .expect("validated cloth layer partition")
 }
 
+/// A fixed-contact pass that skips elements unchanged since the pass that
+/// began at clock `threshold` (0: process everything) and stamps every vertex
+/// it moves.
 fn fixed_contacts(
     particles: &mut GripParticles<'_>,
     layers: &[ContactLayer<'_>],
+    stamps: &mut [u64],
+    clock: &mut u64,
+    threshold: u64,
 ) -> Result<(), ClothError> {
     for layer in layers {
         let r = layer.range.clone();
         let mut local = GripParticles {
             positions: &mut particles.positions[r.clone()],
             previous: &particles.previous[r.clone()],
-            inverse_mass: &particles.inverse_mass[r],
+            inverse_mass: &particles.inverse_mass[r.clone()],
             h: particles.h,
         };
-        collision::collide_surface(&mut local, layer.triangles, layer.fixed, layer.radius)?;
+        collision::collide_surface_tracked(
+            &mut local,
+            layer.triangles,
+            layer.fixed,
+            layer.radius,
+            &mut collision::ContactStamps {
+                stamps: &mut stamps[r],
+                threshold,
+                clock,
+            },
+        )?;
     }
     Ok(())
 }
@@ -50,6 +66,15 @@ pub(super) struct SelfCollisionTopology {
     stamps: Vec<u64>,
     pair_clean: Vec<u64>,
     pair_resolved: Vec<u64>,
+    /// Clock at the start of the latest fixed-contact pass.
+    fixed_pass_start: u64,
+    /// Distance certificates. Feature distance is 1-Lipschitz in each vertex,
+    /// so a pair whose distance at the anchor positions exceeds its contact
+    /// gap by `slack` cannot touch while every one of its vertices (over the
+    /// whole substep path) stays within `slack / 2` of its anchor.
+    anchors: Vec<DVec3>,
+    slack: Vec<f64>,
+    reach: Vec<f64>,
 }
 
 impl SelfCollisionTopology {
@@ -76,6 +101,10 @@ impl SelfCollisionTopology {
             stamps: Vec::new(),
             pair_clean: Vec::new(),
             pair_resolved: Vec::new(),
+            fixed_pass_start: 0,
+            anchors: Vec::new(),
+            slack: Vec::new(),
+            reach: Vec::new(),
         }
     }
 
@@ -125,6 +154,29 @@ impl SelfCollisionTopology {
                 })
                 .collect();
             self.radii = radii.to_vec();
+            self.anchors = particles.positions.to_vec();
+            self.slack = vec![f64::NAN; self.pairs.len()];
+            self.measure_reach(particles);
+        }
+    }
+
+    /// Farthest any vertex has been from its anchor during this substep.
+    fn measure_reach(&mut self, particles: &GripParticles<'_>) {
+        if self.anchors.len() != particles.positions.len() {
+            self.reach = vec![f64::INFINITY; particles.positions.len()];
+            return;
+        }
+        self.reach = self
+            .anchors
+            .iter()
+            .zip(particles.previous.iter().zip(particles.positions.iter()))
+            .map(|(a, (p, q))| a.distance(*p).max(a.distance(*q)))
+            .collect();
+    }
+
+    fn extend_reach(&mut self, vertex: usize, position: DVec3) {
+        if let (Some(r), Some(a)) = (self.reach.get_mut(vertex), self.anchors.get(vertex)) {
+            *r = r.max(a.distance(position));
         }
     }
 
@@ -203,30 +255,28 @@ impl SelfCollisionTopology {
         self.resolve_layers(particles, triangles, &layers)
     }
 
-    /// Record which vertices a whole-surface pass actually moved.
-    fn mark_moved(&mut self, before: &[DVec3], after: &[DVec3]) {
-        let mut stamped = false;
-        for (i, (a, b)) in before.iter().zip(after).enumerate() {
-            if a != b {
-                if !stamped {
-                    self.clock += 1;
-                    stamped = true;
-                }
-                self.stamps[i] = self.clock;
-            }
-        }
-    }
-
+    /// Run a fixed-contact pass, skipping elements the previous pass already
+    /// left settled, and extend distance certificates by what it moved.
     fn fixed_contacts_tracked(
         &mut self,
         particles: &mut GripParticles<'_>,
         layers: &[ContactLayer<'_>],
-        scratch: &mut Vec<DVec3>,
     ) -> Result<(), ClothError> {
-        scratch.clear();
-        scratch.extend_from_slice(particles.positions);
-        fixed_contacts(particles, layers)?;
-        self.mark_moved(scratch, particles.positions);
+        let threshold = self.fixed_pass_start;
+        self.fixed_pass_start = self.clock + 1;
+        let start = self.fixed_pass_start;
+        fixed_contacts(
+            particles,
+            layers,
+            &mut self.stamps,
+            &mut self.clock,
+            threshold,
+        )?;
+        for i in 0..particles.positions.len() {
+            if self.stamps[i] >= start {
+                self.extend_reach(i, particles.positions[i]);
+            }
+        }
         Ok(())
     }
 
@@ -244,8 +294,15 @@ impl SelfCollisionTopology {
         self.stamps = vec![self.clock; particles.positions.len()];
         self.pair_clean.fill(0);
         self.pair_resolved.fill(0);
-        let mut scratch = Vec::with_capacity(particles.positions.len());
-        profiled!("fixed_contacts", fixed_contacts(particles, layers))?;
+        // The first pass of a substep processes everything.
+        self.fixed_pass_start = 0;
+        profiled!(
+            "fixed_contacts",
+            self.fixed_contacts_tracked(particles, layers)
+        )?;
+        self.measure_reach(particles);
+        #[cfg(test)]
+        crate::cc_render::cloth_profile::stage("fixed_first", usize::MAX, particles.positions);
         for iteration in 0..512 {
             #[cfg(test)]
             crate::cc_render::cloth_profile::count("self_iterations", 1);
@@ -265,16 +322,20 @@ impl SelfCollisionTopology {
                 "self_project",
                 self.project_layers(particles, triangles, layers, &radii, reserve)
             )? {
+                #[cfg(test)]
+                count_iterations(iteration + 1);
                 return Ok(());
             }
             profiled!(
                 "fixed_contacts_repeat",
-                self.fixed_contacts_tracked(particles, layers, &mut scratch)
+                self.fixed_contacts_tracked(particles, layers)
             )?;
             if profiled!(
                 "self_resolved",
                 self.resolved(particles, triangles, layers, &radii)
             )? {
+                #[cfg(test)]
+                count_iterations(iteration + 1);
                 return Ok(());
             }
         }
@@ -313,11 +374,17 @@ impl SelfCollisionTopology {
             stamps,
             pair_clean,
             pair_resolved,
+            anchors,
+            slack,
+            reach,
             ..
         } = self;
         for (k, (pair, axis)) in pairs.iter().zip(axes.iter_mut()).enumerate() {
             let ids = pair.indices();
             if pair_clean[k] > ids.map(|i| stamps[i]).into_iter().max().unwrap() {
+                continue;
+            }
+            if certified_clear(*pair, k, anchors, slack, reach, radii) {
                 continue;
             }
             evaluations += 1;
@@ -332,6 +399,11 @@ impl SelfCollisionTopology {
                     supports.project(ids, inverse_mass, d)
                 })?;
             if moved {
+                for i in ids {
+                    reach[i] = reach[i].max(anchors[i].distance(particles.positions[i]));
+                }
+                #[cfg(test)]
+                crate::cc_render::cloth_profile::count("self_pairs_projected", 1);
                 *clock += 1;
                 for i in ids {
                     stamps[i] = *clock;
@@ -361,6 +433,9 @@ impl SelfCollisionTopology {
             if self.pair_resolved[k] > ids.map(|i| self.stamps[i]).into_iter().max().unwrap() {
                 continue;
             }
+            if certified_clear(*pair, k, &self.anchors, &mut self.slack, &self.reach, radii) {
+                continue;
+            }
             let gap = radii[ids[0]] + radii[ids[pair.split()]];
             if !pair.resolved(particles, gap, *axis)? {
                 return Ok(false);
@@ -368,6 +443,48 @@ impl SelfCollisionTopology {
             self.pair_resolved[k] = self.clock + 1;
         }
         Ok(true)
+    }
+}
+
+/// True when the pair's anchor distance certificate proves it is farther
+/// apart than its largest contact gap (with projection reserve) everywhere on
+/// this substep's paths. Such a pair can neither need nor fail a correction.
+fn certified_clear(
+    pair: FeaturePair,
+    k: usize,
+    anchors: &[DVec3],
+    slack: &mut [f64],
+    reach: &[f64],
+    radii: &[f64],
+) -> bool {
+    let ids = pair.indices();
+    if anchors.len() != reach.len() || slack.len() <= k {
+        return false;
+    }
+    if slack[k].is_nan() {
+        let gap = radii[ids[0]] + radii[ids[pair.split()]];
+        slack[k] = pair
+            .witness(ids.map(|i| anchors[i]))
+            .map(|w| w.distance - gap - CONTACT_RESERVE_LIMIT - CERTIFICATE_MARGIN)
+            .unwrap_or(f64::NEG_INFINITY);
+    }
+    let moved = ids.map(|i| reach[i]).into_iter().fold(0., f64::max);
+    slack[k] > 2. * moved
+}
+
+/// Numerical allowance on distance certificates, far above f64 roundoff at
+/// scene scale and far below any contact gap.
+const CERTIFICATE_MARGIN: f64 = 1e-7;
+
+#[cfg(test)]
+fn count_iterations(n: usize) {
+    use crate::cc_render::cloth_profile::count;
+    match n {
+        1 => count("self_solves_1_pass", 1),
+        2..=4 => count("self_solves_2_4_passes", 1),
+        5..=16 => count("self_solves_5_16_passes", 1),
+        17..=64 => count("self_solves_17_64_passes", 1),
+        _ => count("self_solves_65_plus_passes", 1),
     }
 }
 
@@ -469,6 +586,7 @@ impl LazySupports<'_> {
         if let Some(rows) = self.rows.borrow().get(&triangle) {
             return Ok(rows.clone());
         }
+        profile_scope!("support_faces");
         let ids = self.triangles[triangle];
         let layer = layer_for(self.layers, ids[0]);
         let vertices = ids.map(|i| self.positions[i]);
@@ -518,6 +636,7 @@ impl LazySupports<'_> {
         if rows.is_empty() {
             return Ok(directions);
         }
+        profile_scope!("support_dykstra");
         Ok(project_supports(&rows, ids, inverse_mass, directions))
     }
 }

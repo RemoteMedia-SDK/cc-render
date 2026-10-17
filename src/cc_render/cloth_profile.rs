@@ -49,3 +49,32 @@ impl Drop for Timer {
         add(self.0, self.1.elapsed(), 0);
     }
 }
+
+/// Per-substep position snapshots at solver stage boundaries, for locating
+/// where velocity is created. Recorded only while explicitly enabled.
+pub(crate) type StageTrace = Vec<(&'static str, usize, Vec<bevy::math::DVec3>)>;
+
+thread_local! {
+    static STAGES: RefCell<Option<StageTrace>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn trace_stages(enabled: bool) {
+    STAGES.with(|s| *s.borrow_mut() = enabled.then(Vec::new));
+}
+
+pub(crate) fn take_stages() -> StageTrace {
+    STAGES.with(|s| {
+        s.borrow_mut()
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    })
+}
+
+pub(crate) fn stage(name: &'static str, substep: usize, positions: &[bevy::math::DVec3]) {
+    STAGES.with(|s| {
+        if let Some(trace) = s.borrow_mut().as_mut() {
+            trace.push((name, substep, positions.to_vec()));
+        }
+    });
+}

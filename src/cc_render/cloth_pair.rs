@@ -13,10 +13,10 @@ pub(super) enum FeaturePair {
     EdgeEdge([usize; 4]),
 }
 
-struct PairWitness {
-    weights: [f64; 4],
-    normal: DVec3,
-    distance: f64,
+pub(super) struct PairWitness {
+    pub weights: [f64; 4],
+    pub normal: DVec3,
+    pub distance: f64,
 }
 
 impl FeaturePair {
@@ -33,7 +33,7 @@ impl FeaturePair {
         }
     }
 
-    fn witness(self, positions: [DVec3; 4]) -> Result<PairWitness, ClothError> {
+    pub(super) fn witness(self, positions: [DVec3; 4]) -> Result<PairWitness, ClothError> {
         // Translation-local f64 geometry avoids losing small cloth gaps far
         // from the scene origin. Reconstruct material points from source data.
         let [a, b, c, d] = positions.map(|p| {
@@ -226,7 +226,7 @@ impl FeaturePair {
         if self.bounds_separate(old, end, thickness) {
             return Ok(false);
         }
-        let witness = match self.sweep(old, end, thickness)? {
+        let witness = match profiled!("pair_sweep", self.sweep(old, end, thickness))? {
             Some(witness) => witness,
             None => {
                 let witness = self.witness(end)?;
@@ -251,6 +251,7 @@ impl FeaturePair {
         let directions = std::array::from_fn(|k| {
             witness.normal * (witness.weights[k] * particles.inverse_mass[ids[k]])
         });
+        profile_scope!("pair_supports");
         let directions = support(ids, end, directions)?;
         let directions = support(
             ids,
