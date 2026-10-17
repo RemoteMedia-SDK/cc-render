@@ -205,3 +205,27 @@ fn legacy_coupling_cannot_reposition_or_freeze_a_body_with_a_permanent_joint() {
     assert_eq!(app.world().get::<RigidBody>(entity), Some(&RigidBody::Dynamic));
     assert_eq!(app.world().get::<ImpulseJoint>(entity), Some(&hinge));
 }
+
+#[test]
+fn a_gripped_drawer_pulled_towards_her_does_not_reject_her_own_root() {
+    let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scenes/toronto_condo/scene-drawers.json")).unwrap();
+    let mut app = App::new();
+    app.insert_resource(package);
+    super::super::systems::install(&mut app);
+    let mut controller = app.world_mut().remove_resource::<OfficeController>().unwrap();
+    controller.objects.retain(|o| o.id == "bedside_upper_drawer");
+    // She stands just outside the reserve of the drawer's front.
+    let drawer = controller.objects[0].clone();
+    let front = drawer.position[2] + drawer.half_extents[2];
+    let stand = Vec3::new(drawer.position[0], 0.9, front + NATIVE_ROOT_RESERVE_M + 0.05);
+    controller.observed.pelvis = stand.to_array();
+    assert!(controller.permits_native_root(stand));
+    // The drawer slides 0.3 m out towards her: ungripped, her standing root is now inside its reserve.
+    controller.objects[0].position[2] += 0.3;
+    assert!(!controller.permits_native_root(stand));
+    // Gripped, it moves with her hand: the native check ignores it; planning still keeps it.
+    controller.held.push((Hand::Right, "bedside_upper_drawer".into()));
+    assert!(controller.permits_native_root(stand));
+    assert!(!controller.permits_root(stand));
+}

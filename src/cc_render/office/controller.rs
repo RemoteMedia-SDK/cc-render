@@ -2285,7 +2285,9 @@ impl OfficeController {
             .filter(|o| validated_seat != Some(o.id.as_str()) && self.seat_transition() != Some(o.id.as_str())
                 && push.is_none_or(|plan| plan.id != o.id)
                 && !(reserve == NATIVE_ROOT_RESERVE_M && self.support_object.as_deref() == Some(o.id.as_str()))
-                && !self.couplings.iter().any(|c| c.object == o.id))
+                && !self.couplings.iter().any(|c| c.object == o.id)
+                // A part she grips (a drawer she pulls) moves with her hand, not into her.
+                && !(reserve == NATIVE_ROOT_RESERVE_M && self.held.iter().any(|(_, id)| id == &o.id)))
             .collect();
         // Generated motion standing up from the seat it was measured on (a bed it sat
         // on, say) may move away from that seat but never deeper into it. Any other
