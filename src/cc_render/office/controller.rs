@@ -18,6 +18,14 @@ const PLANNING_ROOT_RESERVE_M: f32 = 0.35;
 /// drifts a few centimetres into the planning margin plays on. Only a pelvis
 /// close enough for the body to pass into furniture rejects the candidate.
 const NATIVE_ROOT_RESERVE_M: f32 = 0.20;
+/// Standing sway: generated motion leaving an object it stands within (or at the edge of) the
+/// reserve of may come this much closer per frame; it has left once LEAVING_CLEAR_M clear of
+/// the reserve.
+const LEAVING_SWAY_M: f32 = 0.003;
+const LEAVING_CLEAR_M: f32 = 0.05;
+/// Within a jointed part's reserve her pelvis may move freely while this far from the part
+/// (about her body's front): she handled it at arm's length, and it moves on its own.
+const JOINTED_CLEAR_M: f32 = 0.10;
 const KNEEL_TRANSITION_MS: u64 = 2000;
 const KNEEL_SUPPORT_MS: u64 = 2400;
 const FLOOR_CONTACT_MS: u64 = 4000;
@@ -2258,7 +2266,7 @@ impl OfficeController {
         } else if let Some(id) = self.leaving_seat.clone() {
             let pelvis = Vec2::new(pose.root_pos[0], pose.root_pos[2]);
             let clear = self.navigation_scene().objects.iter().find(|o| o.id == id)
-                .is_none_or(|o| o.footprint.distance(pelvis) >= NATIVE_ROOT_RESERVE_M);
+                .is_none_or(|o| o.footprint.distance(pelvis) >= NATIVE_ROOT_RESERVE_M + LEAVING_CLEAR_M);
             if clear { self.leaving_seat = None; }
         }
         self.native_previous_pose = Some(pose.clone());
@@ -2297,17 +2305,24 @@ impl OfficeController {
                 && !(reserve == NATIVE_ROOT_RESERVE_M && self.held.iter().any(|(_, id)| id == &o.id)))
             .collect();
         // Generated motion standing up from the seat it was measured on (a bed it sat
-        // on, say) may move away from that seat but never deeper into it. Any other
-        // object, and planning, keep the strict visibility rule.
+        // on, say) may move away from that seat but never deeper into it; so may motion
+        // standing within the reserve of a jointed part, which moves on its own (a drawer
+        // let go of slides on to its stop). Any other object, and planning, keep the strict
+        // visibility rule.
         let leaving = |o: &&super::metadata::SceneObject| reserve == NATIVE_ROOT_RESERVE_M
-            && self.leaving_seat.as_deref() == Some(o.id.as_str()) && o.footprint.distance(start) < reserve;
+            && o.footprint.distance(start) < reserve + LEAVING_SWAY_M
+            && (self.leaving_seat.as_deref() == Some(o.id.as_str())
+                || self.constrained_objects.contains(&o.id) && o.footprint.distance(start) > 0.);
         let polygons: Vec<_> = checked
             .iter()
             .filter(|o| !leaving(o))
             .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve)))
             .collect();
-        checked.iter().filter(|o| leaving(o))
-            .all(|o| o.footprint.distance(end) >= o.footprint.distance(start) - 1e-4)
+        checked.iter().filter(|o| leaving(o)).all(|o| {
+            let from = o.footprint.distance(start);
+            let floor = if self.constrained_objects.contains(&o.id) { from.min(JOINTED_CLEAR_M) } else { from };
+            o.footprint.distance(end) >= floor - LEAVING_SWAY_M
+        })
             && super::pathfinder::visible(start, end, &polygons)
     }
     pub fn navigation_scene(&self) -> super::metadata::SceneMetadata {
