@@ -289,8 +289,11 @@ pub(crate) fn handle_grab_cmds(
                     });
                     continue;
                 };
-                let active_contact = physics.get_single().ok().is_some_and(|context|
-                    super::contact_grasp::has_object_contact(context, wrist_e, prop_e));
+                let active_contact = physics.get_single().ok().is_some_and(|context| match props.get(prop_e) {
+                    Ok((prop, transform, Some(extent))) => super::contact_grasp::has_handle_contact(
+                        context, wrist_e, transform, prop.grasp_offset(), extent.0),
+                    _ => super::contact_grasp::has_object_contact(context, wrist_e, prop_e),
+                });
                 let articulated = jointed.contains(prop_e);
                 let joint = props.get(prop_e).ok().and_then(|(_, object_world, _)| if articulated {
                     capture_articulated_joint(&wrist_world, object_world, active_contact)

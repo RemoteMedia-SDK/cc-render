@@ -280,3 +280,19 @@ fn a_hand_sweeping_past_a_drawer_handle_does_not_grip_it_until_at_rest() {
     for _ in 0..3 { app.update(); }
     assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
 }
+
+#[test]
+fn a_hand_resting_on_the_handle_grips_it_without_touching_the_drawer() {
+    for (x, grips) in [(0.26_f32, true), (0.29, false)] {
+        let (mut app, grab, wrist, _, _) = drawers();
+        grab.send(GrabOrRelease::Release(Hand::Right)).unwrap();
+        app.update();
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = x;
+        for _ in 0..3 { app.update(); }
+        grab.send(GrabOrRelease::Grab(GrabCmd { hand: Hand::Right, target: "upper".into(),
+            palm_offset_override: None })).unwrap();
+        for _ in 0..4 { app.update(); }
+        let attached = matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. });
+        assert_eq!(attached, grips, "wrist {:.3} m from the bar", x - 0.205 - 0.02);
+    }
+}

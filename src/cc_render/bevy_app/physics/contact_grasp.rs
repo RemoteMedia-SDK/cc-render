@@ -85,12 +85,32 @@ pub(super) fn has_object_contact(context: &RapierContext, wrist: Entity, object:
     })
 }
 
+/// A hand is on a handle bar when its collider comes this close to the declared bar, which is
+/// not itself a collision shape: the wrist collider is a 5 cm stub, and the palm and fingers
+/// that close around the bar reach on beyond it.
+pub(super) const HANDLE_WRAP_M: f32 = 0.04;
+
+/// The hand's collider within HANDLE_WRAP_M of a part's handle box (half extents `extent`,
+/// centred at `centre` in the part's frame).
+pub(super) fn has_handle_contact(context: &RapierContext, wrist: Entity, object: &GlobalTransform,
+                                 centre: Vec3, extent: Vec3) -> bool {
+    let Some(hand) = context.entity2collider().get(&wrist)
+        .and_then(|handle| context.colliders.get(*handle)) else { return false; };
+    if hand.is_sensor() { return false; }
+    let object = object.compute_transform();
+    let pose = bevy_rapier3d::rapier::math::Isometry::from_parts(
+        object.transform_point(centre).into(), object.rotation.into());
+    let bar = bevy_rapier3d::rapier::parry::shape::Cuboid::new(extent.into());
+    bevy_rapier3d::rapier::parry::query::contact(hand.position(), hand.shape(), &pose, &bar, HANDLE_WRAP_M)
+        .ok().flatten().is_some_and(|contact| contact.dist <= HANDLE_WRAP_M)
+}
+
 /// A wrist on a handle bar sits this far from it: the palm's grip point is about 6.5 cm along
 /// the fingers and 2.7 cm off the palm (SDK `GRIP_REACH_M`, `GRIP_LIFT_M`).
 pub(super) const HANDLE_REACH_M: f32 = 0.10;
 
-/// While the wrist actually touches the target: the point its reach is judged to, and how
-/// far that may be. A prop with a handle box: the nearest point on the bar, within
+/// While the hand actually touches the target (a prop with a handle box: the handle): the point
+/// its reach is judged to, and how far that may be. A prop with a handle box: the nearest point on the bar, within
 /// HANDLE_REACH_M; else its grasp anchor, within the configured proximity.
 pub(super) fn target_position(
     context: Option<&RapierContext>,
@@ -102,7 +122,11 @@ pub(super) fn target_position(
     let (wrist, wrist_position) = wrist?;
     let (object, prop, transform, handle) = target?;
     log_pair(context, wrist, object);
-    if !has_object_contact(context, wrist, object) { return None; }
+    let touching = match handle {
+        Some(extent) => has_handle_contact(context, wrist, transform, prop.grasp_offset(), extent.0),
+        None => has_object_contact(context, wrist, object),
+    };
+    if !touching { return None; }
     Some(match handle {
         Some(extent) => (nearest_on_handle(transform, prop.grasp_offset(), extent.0, wrist_position), HANDLE_REACH_M),
         None => (prop.grasp_world(transform), proximity_m),
