@@ -1,9 +1,9 @@
 //! CPU cloth prototype: area-lumped particles, compliant distance constraints,
-//! and discrete particle/triangle contacts with fixed colliders. No body-motion writes.
+//! and swept/discrete particle/triangle contacts with fixed colliders. No body-motion writes.
 //!
 //! Small-step XPBD (Macklin et al., https://mmacklin.com/smallsteps.pdf), one
 //! constraint sweep per substep. Opposite-vertex springs approximate bending;
-//! they are not a calibrated shell material. Self-collision, swept collision,
+//! they are not a calibrated shell material. Self-collision,
 //! dynamic-body coupling and runtime hand admission are not implemented here.
 //! The crate-private contact clamp is an explicitly limited coupling prototype.
 use std::collections::BTreeMap;
@@ -59,12 +59,16 @@ pub enum ClothError {
     UnsupportedContact,
     #[error("cloth step produced nonfinite state")]
     NonfiniteState,
+    #[error("swept cloth contact could not be resolved conservatively")]
+    SweptContactUnresolved,
 }
 
 /// An immutable collider snapshot. Never used to move its owning rigid body.
 /// Only fixed colliders belong in this prototype; dynamic response is absent.
 pub struct FixedClothCollider {
     shape: SharedShape,
+    // Double-precision polyhedral core; swept queries add the rounded border analytically.
+    sweep_shape: parry_ccd::shape::SharedShape,
     center: DVec3,
     rotation: DQuat,
     half_extents: DVec3,
@@ -114,6 +118,11 @@ impl FixedClothCollider {
             + (rotation * DVec3::Z).abs() * half_extents.z
             + DVec3::splat(border as f64);
         Ok(Self {
+            sweep_shape: parry_ccd::shape::SharedShape::cuboid(
+                half_extents.x,
+                half_extents.y,
+                half_extents.z,
+            ),
             shape,
             center,
             rotation,
@@ -427,6 +436,9 @@ fn collide_particles(
 
 #[path = "cloth_collision.rs"]
 mod collision;
+
+#[path = "cloth_sweep.rs"]
+mod sweep;
 
 fn area_masses(rest: &[DVec3], triangles: &[[u32; 3]], mass: f64) -> Result<Vec<f64>, ClothError> {
     let mut weights = vec![0.0; rest.len()];

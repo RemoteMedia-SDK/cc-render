@@ -15,6 +15,7 @@ from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_bed_sheet import ROOT, SOURCE, load_mattress, sheet_mesh, studio, write_json
+from preview_drawer_trace import configure_animation, encode_animation
 
 
 def mattress_clearance(mattress, sheet):
@@ -74,7 +75,18 @@ def audit_trace(mattress, sheet, frames):
             'scope':'Finite stored-time and triangle samples only; not swept or continuous collision'}
 
 
-def preview(trace, out, selected_frames=None, topology=None, audit_all=False):
+def animation_rate(frames):
+    """Preserve the recorded simulation rate; reject missing or irregular samples."""
+    if len(frames) < 2:
+        raise ValueError('Animation requires at least two trace samples')
+    spacing = frames[1]['frame'] - frames[0]['frame']
+    if spacing <= 0 or 60 % spacing or any(
+            b['frame'] - a['frame'] != spacing for a, b in zip(frames, frames[1:])):
+        raise ValueError('Animation requires uniformly sampled 60 Hz trace frames')
+    return 60 // spacing
+
+
+def preview(trace, out, selected_frames=None, topology=None, audit_all=False, animation=False):
     out.mkdir(parents=True, exist_ok=False)
     frames = json.loads((trace/'positions.json').read_text())
     report = json.loads((trace/'report.json').read_text())
@@ -89,21 +101,32 @@ def preview(trace, out, selected_frames=None, topology=None, audit_all=False):
     if selected_frames is not None:
         by_frame = {sample['frame']: sample for sample in frames}
         selected = [by_frame[frame] for frame in selected_frames]
+    fps = None
+    if animation:
+        if selected_frames is not None:
+            raise ValueError('Animation uses every stored sample; omit --frames')
+        fps = animation_rate(frames)
+        selected = frames
+        configure_animation(scene, out)
     shots = []
-    for sample in selected:
+    for ordinal, sample in enumerate(selected):
         apply_sample(sheet, sample)
-        filename = f"frame-{sample['frame']:04d}.png"
+        filename = f'frames/{ordinal:04d}.png' if animation else f"frame-{sample['frame']:04d}.png"
         scene.render.filepath = str(out/filename)
         bpy.ops.render.render(write_still=True)
         shots.append({'file':filename, 'simulation_seconds':sample['frame']/60,
                       'authored_mattress_clearance': mattress_clearance(mattress, sheet)})
+    if animation:
+        encode_animation(out, shots, fps)
     inputs = [trace/'positions.json', trace/'observations.json', trace/'report.json',
-              SOURCE, Path(__file__), ROOT/'scripts/condo/check_bed_sheet.py']
+              SOURCE, Path(__file__), ROOT/'scripts/condo/check_bed_sheet.py',
+              ROOT/'scripts/condo/preview_drawer_trace.py']
     if topology:
         inputs.append(topology)
     audit = audit_trace(mattress, sheet, frames) if audit_all else None
     write_json(out/'capture.json', {'scope':__doc__, 'solver_report':report, 'screenshots':shots,
         'topology':'Explicit runtime triangles' if topology else 'Legacy Blender quads',
+        'fps':fps, 'animation_timing':'Stored simulation time; no interpolation or retiming' if animation else None,
         'surface_audit':audit,
         'inputs':[{'path':str(p), 'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in inputs]})
     for filename in ['report.json','observations.json']:
@@ -118,5 +141,6 @@ if __name__ == '__main__':
     parser.add_argument('--frames', type=int, nargs='+')
     parser.add_argument('--topology', type=Path)
     parser.add_argument('--audit-all', action='store_true')
+    parser.add_argument('--animation', action='store_true', help='Render every stored sample at its simulation rate')
     args = parser.parse_args(sys.argv[sys.argv.index('--')+1:])
-    preview(args.trace.resolve(), args.output.resolve(), args.frames, args.topology, args.audit_all)
+    preview(args.trace.resolve(), args.output.resolve(), args.frames, args.topology, args.audit_all, args.animation)

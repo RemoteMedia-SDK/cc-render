@@ -27,6 +27,29 @@ fn patch(offset: Vec3) -> ClothSolver {
 }
 
 #[test]
+fn fast_sheet_impact_stays_on_entry_side_then_settles_without_a_velocity_override() {
+    let mut cloth = patch(Vec3::Y * 0.1);
+    cloth.velocities.fill(-DVec3::Y * 100.);
+    let support = FixedClothCollider::new(
+        SharedShape::cuboid(2., 0.005, 2.),
+        Isometry::translation(0.5, 0., 0.5),
+        0.6,
+    )
+    .unwrap();
+    for _ in 0..60 {
+        cloth
+            .step(1. / 60., -DVec3::Y * 9.81, std::slice::from_ref(&support))
+            .unwrap();
+        assert!(
+            cloth.positions.iter().all(|p| p.y >= 0.00549),
+            "fast sheet crossed support"
+        );
+    }
+    assert!(cloth.max_speed() < 0.001);
+    assert_eq!(cloth.surface.revision(), 60);
+}
+
+#[test]
 fn free_fall_matches_semi_implicit_gravity_without_pins() {
     let mut cloth = patch(Vec3::Y);
     cloth.parameters.air_drag_per_second = 0.0;

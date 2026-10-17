@@ -1,6 +1,6 @@
 //! Discrete surface contact against the solver's fixed convex colliders.
 //! Triangle witnesses distribute collision response to material vertices.
-//! This is not swept collision or cloth self-collision.
+//! Swept fixed-body contacts run first; self-collision remains unimplemented.
 use super::*;
 use bevy_rapier3d::rapier::parry::{
     math::Point,
@@ -9,7 +9,7 @@ use bevy_rapier3d::rapier::parry::{
 };
 
 impl FixedClothCollider {
-    fn triangle_contact(
+    pub(super) fn triangle_contact(
         &self,
         vertices: [DVec3; 3],
         radius: f64,
@@ -94,7 +94,7 @@ impl FixedClothCollider {
     }
 }
 
-fn witness_weights(weights: [f64; 3]) -> Result<[f64; 3], ClothError> {
+pub(super) fn witness_weights(weights: [f64; 3]) -> Result<[f64; 3], ClothError> {
     // Parry's f32 face projection can return a tiny negative weight at a
     // vertex (observed -2.83e-10). Restrict to roundoff, then evaluate the
     // actual point and signed distance again; never expand collision geometry.
@@ -115,6 +115,7 @@ pub(super) fn collide_surface(
     colliders: &[FixedClothCollider],
     radius: f64,
 ) -> Result<(), ClothError> {
+    super::sweep::collide_swept(particles, triangles, colliders, radius)?;
     collide_particles(particles.positions, particles.previous, colliders, radius);
     let (mut min, mut max) = surface_bounds(particles.positions);
     for collider in colliders {
@@ -130,7 +131,7 @@ pub(super) fn collide_surface(
     Ok(())
 }
 
-fn surface_bounds(positions: &[DVec3]) -> (DVec3, DVec3) {
+pub(super) fn surface_bounds(positions: &[DVec3]) -> (DVec3, DVec3) {
     positions.iter().fold(
         (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
         |(min, max), p| (min.min(*p), max.max(*p)),

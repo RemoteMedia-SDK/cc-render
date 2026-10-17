@@ -24,6 +24,9 @@ incremental = true
 [profile.dev.package.parry3d]
 opt-level = 3
 
+[profile.dev.package.parry3d-f64]
+opt-level = 3
+
 [lib]
 name = "cc_render_plugin"
 crate-type = ["cdylib", "rlib"]
@@ -71,3 +74,4 @@ crossbeam-channel = "0.5"
 # a few regexes — bring in `regex` directly.
 regex = "1"
 tempfile = "3.27.0"
+parry_ccd = { version = "=0.17.6", package = "parry3d-f64" }

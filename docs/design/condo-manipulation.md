@@ -13,8 +13,9 @@ items open until their actual assets/runtime behavior and evidence are verified.
   shelf levels verified alongside moving drawers (checkpoint 197).
 - Entry door: inward-opening passive hinge, retained frame and observed doorway
   clearance verified (checkpoint 198).
-- Bed sheets: self-collision, moving-object collision and fast-motion collision
-  protection pending; separate duvet layers remain unfinished.
+- Bed sheets: fixed-body fast-crossing protection is implemented and tested in
+  checkpoint 199. Self-collision, moving-object collision and separate interacting duvet
+  layers remain unfinished.
 - Contents and durability: loaded drawers, shelf contents, repeated cycles and
   simultaneous hinges/rails covered by bounded tests; broader loads remain open.
 - Optional realism: assess latches, soft-close behavior, door closers and
@@ -26,6 +27,66 @@ Current scope: **physics and movable condo parts only**. The owner replaced the
 former visual/avatar goal with the active physics goal above.
 The owner assigned grip zones and the physical grip/pull-or-push/release lifecycle
 to a separate agent. This workstream should not edit that functionality.
+
+## Checkpoint 199 — fixed-body swept cloth contacts
+
+`cloth_sweep.rs` checks predicted particle paths and linearly deforming triangle
+faces before the existing discrete fixed-body contact passes. Tests include a
+10 mm slab crossed between two separated endpoint configurations, face/edge
+crossings whose vertex paths miss the obstacle, rotated rounded boxes,
+nonuniform vertex motion, reversed winding, clear near misses, initial-overlap
+recovery and a 100 m/s diagnostic impact followed by free settling.
+
+The triangle search uses time-ordered interval subdivision. A convex supporting
+plane can discard an interval only when all six endpoint vertices clear it.
+Otherwise the search subdivides until it finds a near-contact witness. The
+maximum vertex displacement bounds the distance a linearly deforming face can
+move. Unresolved searches return an error through the solver's transactional
+step; they are not treated as clear motion. Initial intersections use the old
+measured contact to select a recovery side, without discarding the sweep.
+
+Swept witnesses use pinned `parry3d-f64 = 0.17.6`, matching the existing Parry
+version, with collider-local cuboid queries and the rounded border applied
+analytically. f32 witnesses failed the rotated case; tiny conservative forward
+steps stalled on a measured grazing mattress triangle. Both rejected approaches
+and their logs are retained in `artifacts/toronto-condo-captures/cloth199/`.
+The exact grazing triangle is now a regression fixture.
+
+A confirmed fast face contact constrains its three corners to the local convex
+supporting plane for that substep, with positional friction. This deliberately
+conservative response can overconstrain coarse fast faces; it is not an exact
+elastic impact law. Slow motion retains the previous mass-weighted discrete
+response. No collider, avatar, joint or grip-lifecycle authority is added.
+
+All 346 Rust library tests pass (two ignored). The unchanged Python ownership
+source-text check remains the one failure among seven tests. The 20-second
+mattress probe reports zero particle penetration, maximum edge stretch 1.03280,
+and tail speed 0.03353 m/s.
+The renderer reads stored Rust positions with the runtime triangle topology;
+`preview_cloth_trace.py --animation` preserves their 60 Hz source timestamps
+at the stored sampling rate. This is a solver recording, not a live renderer
+or moving-body/inter-layer acceptance claim.
+
+The first passing full suite took 242.84 seconds. Consolidating the existing
+slow-motion threshold and rejecting whole-surface/whole-trajectory clear cases
+reduced the observed full-suite run to 38.81 seconds. Stored bed positions and
+measurements are byte-identical across the three versions (`trace-parity.json`);
+these suite timings are observations, not an isolated hardware benchmark. The
+headless ECS clock test passes with matching solver/mesh hashes. The existing
+diagnostic clamp test still lifts about 0.39975 m and releases/settles, with zero
+particle penetration; it does not demonstrate avatar manipulation.
+
+Gallery 199a preserves the first passing animation. Final exporter and trace
+validation are saved as 199b. The video uses 201 stored samples at 10 fps
+(20 seconds of simulated time plus the final sample display). Finite vertex,
+triangle-centroid and edge-midpoint checks against the authored mattress mesh
+report zero sampled penetration; they do not certify every continuous mesh point.
+
+Required work remains: self-collision, moving collider pose/time alignment,
+separate interacting bedding layers, and their rendered stress tests. Fixed
+convex sweep tests do not establish collision against arbitrary meshes or
+simultaneous moving bodies. The latest articulated scene package is still
+`scene-entry-door.json` (45 parts, 31 passive joints).
 
 ## Checkpoint 198 — condo entry door
 
@@ -65,10 +126,11 @@ and 198c assembled placement. Evidence: `artifacts/toronto-condo-captures/entry1
 Current-state review confirms three concrete integration gaps:
 
 - `cloth_solver.rs::step_with_grips` predicts particles, projects springs, then
-  calls discrete fixed particle/triangle contacts in `cloth_collision.rs`.
-  Fast-motion protection must cover swept vertex/face and edge contacts, not
-  merely increase substeps or check endpoint penetration. Add crossing tests
-  where both endpoint configurations are separated before claiming coverage.
+  calls swept fixed particle/triangle contacts followed by discrete contacts
+  in `cloth_collision.rs` (checkpoint 199). Fixed-body crossing tests cover
+  separated endpoints and face/edge hits with clear vertex paths. Preserve
+  those guarantees when adding moving-body and inter-layer contacts; merely
+  increasing substeps or checking endpoint penetration is insufficient.
   The installed Parry 0.17.6 already provides linear shape casts and
   `cast_shapes_nonlinear` for rigid translation/rotation; reuse those where
   applicable. Deforming triangles and inter-layer contacts still need their

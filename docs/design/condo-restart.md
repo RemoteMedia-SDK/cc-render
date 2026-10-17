@@ -7,6 +7,22 @@ The owner assigned handle grip zones and the physical grip/pull-or-push/release
 phase lifecycle to a separate agent. This workstream owns authored geometry,
 collision shapes, passive joints, and physics evidence. Preserve mechanism IDs.
 
+Checkpoint 199 adds swept cloth contact against fixed cuboids/rounded cuboids.
+Seven new crossing/grazing/settling regressions pass; the full Rust library suite
+passes 346 tests (two ignored). The existing Python ownership source-text failure
+remains. Swept-contact witnesses use pinned Parry f64 0.17.6. Time-ordered
+interval subdivision avoids a grazing-contact advancement stall; unresolved
+queries fail the transactional step. Whole-surface and trajectory culling retain
+byte-identical bed traces and reduce the observed suite time from 242.84 to
+38.81 seconds. See checkpoint 199 in `condo-manipulation.md` for response limits.
+Gallery 199a/b includes playable Blender recordings of the Rust solver at 10 fps
+(201 frames). Final source hashes, timestamps and full video decoding pass;
+finite authored-mattress samples report zero penetration. Evidence is in
+`artifacts/toronto-condo-captures/cloth199/`.
+Required next work remains self-collision, moving-body collision with aligned
+pose/time intervals, and separate interacting duvet layers. The articulated
+scene package remains `scene-entry-door.json` (45 parts, 31 passive joints).
+
 Checkpoint 198 adds the inward-opening entry door. Latest opt-in package:
 `scene-entry-door.json` (45 parts, 31 passive joints). Its retained frame matches
 source coordinates; observed open/closed poses respectively clear/block the
