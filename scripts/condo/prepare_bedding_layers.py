@@ -158,7 +158,7 @@ def build():
         cloth = copy.deepcopy(original)
         cloth.update(id=name, surface=str(target.relative_to(SCENE)), sha256=digest(target),
                      color_srgb=color, replaces_nodes=original['replaces_nodes'] if name=='bed_duvet' else [])
-        cloth['parameters'].update(total_mass_kg=mass, thickness_m=thickness, substeps=48)
+        cloth['parameters'].update(total_mass_kg=mass, thickness_m=thickness, substeps=24)
         cloths.append(cloth)
         author_mesh(cloth, asset)
     scene['cloths'] = cloths

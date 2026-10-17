@@ -7,6 +7,13 @@ use parry_ccd::{
     shape::{Segment, Triangle},
 };
 
+/// Cloth-on-cloth Coulomb coefficient. Without it the layers slide freely
+/// on each other: the authored duvet slid off the foot of the bed within two
+/// seconds. 0.2 keeps it on the bed. Higher values (0.5, closer to cotton on
+/// cotton) loaded the fitted sheet to 11% stretch at 24 substeps (limit 15%)
+/// and left more contact jitter, so they were not adopted.
+const SELF_FRICTION: f64 = 0.2;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum FeaturePair {
     VertexFace([usize; 4]),
@@ -269,7 +276,36 @@ impl FeaturePair {
         for (i, direction) in ids.into_iter().zip(directions) {
             particles.positions[i] += direction * (depth / mass);
         }
+        self.apply_friction(particles, &witness, depth);
         Ok(true)
+    }
+
+    /// Coulomb friction between the two material contact points. Their
+    /// relative tangential slip since the substep start is reduced by at most
+    /// `SELF_FRICTION` times the normal correction just applied, the same
+    /// position-level bound the fixed contacts use. Mass-weighted, so linear
+    /// momentum is conserved.
+    fn apply_friction(self, particles: &mut GripParticles<'_>, witness: &PairWitness, depth: f64) {
+        let ids = self.indices();
+        let relative: DVec3 = ids
+            .into_iter()
+            .zip(witness.weights)
+            .map(|(i, w)| (particles.positions[i] - particles.previous[i]) * w)
+            .sum();
+        let tangent = relative - witness.normal * relative.dot(witness.normal);
+        let slip = tangent.length();
+        let inverse: f64 = ids
+            .into_iter()
+            .zip(witness.weights)
+            .map(|(i, w)| particles.inverse_mass[i] * w * w)
+            .sum();
+        if slip <= 0. || inverse <= 0. || depth <= 0. {
+            return;
+        }
+        let lambda = (SELF_FRICTION * depth).min(slip) / inverse;
+        for (i, w) in ids.into_iter().zip(witness.weights) {
+            particles.positions[i] -= tangent * (w * particles.inverse_mass[i] * lambda / slip);
+        }
     }
 
     fn contact_points(self, positions: [DVec3; 4], weights: [f64; 4]) -> [DVec3; 2] {

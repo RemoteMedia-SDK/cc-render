@@ -16,12 +16,20 @@ struct Layout {
 
 /// A settled batch costs nothing until something can disturb it.
 ///
-/// Sleep: every particle stays within `REST_DRIFT_M` of where a quiet window
-/// began, and every end-of-tick speed stays below `REST_SPEED_M_S`, for
-/// `REST_SECONDS` of simulated time. The coupled layers rest together.
+/// Sleep: for `REST_SECONDS` of simulated time, every particle stays within
+/// `REST_DRIFT_M` of where the quiet window began, and moves less than
+/// `REST_SPEED_M_S` times the tick between consecutive published ticks. The
+/// coupled layers rest together.
+///
+/// Motion is measured between published tick positions, not with the last
+/// substep's velocity: where stacked layers press on the mattress's rounded
+/// corners, material and contact projections exchange ~0.1-0.6 mm every
+/// substep, which shows up as 0.1-0.8 m/s of substep velocity while the
+/// drape itself moves well under a millimetre per tick. Resting zeroes those
+/// velocities; it never moves a particle or skips a failure.
+///
 /// Wake: any grip, a different gravity or fixed-collider snapshot, or a layer
-/// surface published outside this batch. Resting zeroes the (already
-/// sub-threshold) velocities; it never moves a particle or skips a failure.
+/// surface published outside this batch.
 struct Rest {
     asleep: bool,
     quiet_seconds: f64,
@@ -32,7 +40,7 @@ struct Rest {
 
 const REST_SECONDS: f64 = 0.5;
 const REST_DRIFT_M: f64 = 5e-3;
-const REST_SPEED_M_S: f64 = 0.02;
+const REST_SPEED_M_S: f64 = 0.05;
 
 impl Rest {
     fn new() -> Self {
@@ -83,7 +91,13 @@ impl Rest {
                 .eq(self.revisions.iter().copied())
     }
 
-    fn observe(&mut self, layers: &mut [ClothLayerStep<'_>], dt: f64, inputs: u64) {
+    fn observe(
+        &mut self,
+        layers: &mut [ClothLayerStep<'_>],
+        tick_start: &[DVec3],
+        dt: f64,
+        inputs: u64,
+    ) {
         self.asleep = false;
         let positions = layers.iter().flat_map(|l| l.solver.positions.iter());
         let quiet = self.anchor.len()
@@ -96,10 +110,10 @@ impl Rest {
                 .clone()
                 .zip(&self.anchor)
                 .all(|(p, a)| p.distance_squared(*a) <= REST_DRIFT_M * REST_DRIFT_M)
-            && layers
-                .iter()
-                .flat_map(|l| l.solver.velocities.iter())
-                .all(|v| v.length_squared() <= REST_SPEED_M_S * REST_SPEED_M_S);
+            && positions
+                .clone()
+                .zip(tick_start)
+                .all(|(p, a)| p.distance_squared(*a) <= (REST_SPEED_M_S * dt).powi(2));
         if !quiet {
             self.anchor = positions.copied().collect();
             self.quiet_seconds = 0.;
@@ -284,6 +298,7 @@ impl ClothBatch {
             .flat_map(|l| l.solver.inverse_mass.iter().copied())
             .collect();
         let mut previous = positions.clone();
+        let tick_start = positions.clone();
         let mut constraints = layers
             .iter()
             .map(|layer| PendingConstraints::new(layer.solver, layer.grips))
@@ -390,7 +405,7 @@ impl ClothBatch {
             "commit",
             self.commit_layers(layers, &positions, &velocities, &mut constraints)
         )?;
-        self.rest.observe(layers, dt, inputs);
+        self.rest.observe(layers, &tick_start, dt, inputs);
         #[cfg(test)]
         self.energy_probe.finish_tick();
         Ok(())
