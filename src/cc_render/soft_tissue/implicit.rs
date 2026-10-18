@@ -208,6 +208,7 @@ impl Tissue {
                     .map(|((x, p), m)| m * gravity.dot(*x - *p))
                     .sum::<f64>()
         };
+        let mut energy = objective(&x);
         for _ in 0..max_iterations {
             let mut system = self.linearize(&x, &self.positions, self.frame, f64::INFINITY, &[], &Dissipation::default());
             for (i, g) in system.gradient.iter_mut().enumerate() {
@@ -227,26 +228,27 @@ impl Tissue {
                 return Ok(residual);
             }
             let delta = system.direction()?;
-            x = self.descend(&x, &delta, dot(&system.gradient, &delta), &objective)?;
+            (x, energy) = self.descend((&x, energy), &delta, dot(&system.gradient, &delta), &objective)?;
         }
         Err(TissueError::InvalidInput("equilibrium did not converge"))
     }
 
     fn descend(
         &self,
-        x: &[DVec3],
+        current: (&[DVec3], f64),
         delta: &[DVec3],
         slope: f64,
         objective: impl Fn(&[DVec3]) -> f64,
-    ) -> Result<Vec<DVec3>, TissueError> {
-        let energy = objective(x);
+    ) -> Result<(Vec<DVec3>, f64), TissueError> {
+        let (x, energy) = current;
         let mut scale = 1.0;
         for _ in 0..20 {
             let candidate: Vec<_> = x.iter().zip(delta).map(|(x, d)| *x + scale * *d).collect();
-            if self.validate_positions(&candidate).is_ok()
-                && objective(&candidate) <= energy + 1e-4 * scale * slope + 1e-15
-            {
-                return Ok(candidate);
+            if self.validate_positions(&candidate).is_ok() {
+                let candidate_energy = objective(&candidate);
+                if candidate_energy <= energy + 1e-4 * scale * slope + 1e-15 {
+                    return Ok((candidate, candidate_energy));
+                }
             }
             scale *= 0.5;
         }
@@ -395,6 +397,14 @@ impl Tissue {
         contacts: &[PlaneContact],
         damping: &Dissipation,
     ) -> Result<(), TissueError> {
+        let objective = |x: &[DVec3]| {
+            self.objective(x, predicted, frame, dt)
+                + contacts.iter().map(|c| c.energy(x, &self.tets)).sum::<f64>()
+                + damping.energy(x, &self.tets, &self.pressure_patches)
+        };
+        // The objective is fixed for this physical solve. Retain the energy
+        // already evaluated at each accepted trial, never across timesteps.
+        let mut energy = objective(x);
         // Check the final accepted descent too. Reaching the iteration budget
         // is not convergence; the caller may retry a smaller physical step.
         // Reuse only the SPD preconditioner within this physical step. Every
@@ -426,14 +436,7 @@ impl Tissue {
                 });
             }
             let slope = dot(&system.gradient, &delta);
-            *x = self.descend(x, &delta, slope, |x| {
-                self.objective(x, predicted, frame, dt)
-                    + contacts
-                        .iter()
-                        .map(|c| c.energy(x, &self.tets))
-                        .sum::<f64>()
-                    + damping.energy(x, &self.tets, &self.pressure_patches)
-            })?;
+            (*x, energy) = self.descend((x, energy), &delta, slope, &objective)?;
         }
         unreachable!("the inclusive final iteration returns a convergence result")
     }
@@ -442,6 +445,33 @@ impl Tissue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tissue_descent_returns_energy_of_accepted_backtrack_without_rechecking_current_state() {
+        let tissue = super::super::tests::cube(Frame::IDENTITY, false);
+        let x = tissue.positions.clone();
+        let target: Vec<_> = x.iter().map(|p| *p + DVec3::X * 0.125).collect();
+        let potential = |p: &[DVec3]| p.iter().zip(&target)
+            .map(|(p, t)| p.distance_squared(*t)).sum::<f64>();
+        let energy = potential(&x);
+        let evaluations = std::cell::Cell::new(0);
+        let objective = |p: &[DVec3]| {
+            // The caller supplied this value; only new trials need evaluation.
+            assert_ne!(p, x.as_slice());
+            evaluations.set(evaluations.get() + 1);
+            potential(p)
+        };
+        let direction = vec![DVec3::X * 0.5; x.len()];
+        let slope = -0.125 * x.len() as f64;
+        let (accepted, accepted_energy) = tissue.descend((&x, energy), &direction, slope, objective).unwrap();
+        assert_eq!(accepted, target);
+        assert_eq!(accepted_energy, potential(&accepted));
+        assert!(accepted_energy < energy && evaluations.get() > 1);
+        let ascent = vec![-DVec3::X * 0.125; x.len()];
+        assert!(tissue.descend((&x, energy), &ascent, slope, objective).is_err());
+        assert_eq!(x, tissue.positions);
+        assert_eq!(energy, potential(&x));
+    }
 
     #[test]
     fn restarted_linear_solve_converges_on_recorded_arm_fold_matrix() {

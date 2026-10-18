@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='tissue-profile-', dir=ROOT/'target') as
     code = p.read_text()
     code = replace(code, 'use bevy::math::DMat3;', '''use bevy::math::DMat3;
 use std::sync::atomic::{AtomicU64, Ordering};
-static COUNTERS: [AtomicU64; 12] = [const {AtomicU64::new(0)}; 12];
+static COUNTERS: [AtomicU64; 14] = [const {AtomicU64::new(0)}; 14];
 struct Timer(usize, std::time::Instant);
 impl Timer { fn new(i: usize) -> Self { Self(i, std::time::Instant::now()) } }
 impl Drop for Timer { fn drop(&mut self) {
@@ -50,7 +50,8 @@ impl Drop for Timer { fn drop(&mut self) {
 pub fn profile() {
     let names = ["direction_ns", "linearize_ns", "descent_ns", "linear_solves",
         "cg_steps", "multiply_ns", "elastic_assembly_ns", "viscous_assembly_ns",
-        "pressure_assembly_ns", "factor_ns", "precondition_ns", "linearizations"];
+        "pressure_assembly_ns", "factor_ns", "precondition_ns", "linearizations",
+        "objective_ns", "objective_calls"];
     let values: std::collections::BTreeMap<_, _> = names.iter().enumerate()
         .map(|(i, n)| (*n, COUNTERS[i].load(Ordering::Relaxed))).collect();
     eprintln!("{}", serde_json::to_string(&values).unwrap());
@@ -66,8 +67,10 @@ pub fn profile() {
     for old, new in [
         (direction_entry, direction_entry+'\nlet _timer=Timer::new(0); COUNTERS[3].fetch_add(1, Ordering::Relaxed);'),
         (") -> System<'_> {", ") -> System<'_> {\nlet _timer=Timer::new(1); COUNTERS[11].fetch_add(1, Ordering::Relaxed);"),
-        ('objective: impl Fn(&[DVec3]) -> f64,\n    ) -> Result<Vec<DVec3>, TissueError> {',
-         'objective: impl Fn(&[DVec3]) -> f64,\n    ) -> Result<Vec<DVec3>, TissueError> {\nlet _timer=Timer::new(2);'),
+        ('        let mut scale = 1.0;',
+         '        let _timer=Timer::new(2);\n        let mut scale = 1.0;'),
+        ('fn objective(&self, x: &[DVec3], predicted: &[DVec3], frame: Frame, dt: f64) -> f64 {',
+         'fn objective(&self, x: &[DVec3], predicted: &[DVec3], frame: Frame, dt: f64) -> f64 {\nlet _timer=Timer::new(12); COUNTERS[13].fetch_add(1, Ordering::Relaxed);'),
         ('let product = self.multiply(&direction);',
          'COUNTERS[4].fetch_add(1, Ordering::Relaxed);\nlet product = {let _timer=Timer::new(5); self.multiply(&direction)};'),
         (factor_call, '{let _timer=Timer::new(9); '+factor_call+'}'),

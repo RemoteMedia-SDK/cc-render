@@ -165,3 +165,44 @@ Sources, launch details, cache counts, comparison report and archived traces are
 in `boundary-runtime/bevy-pose-cache/`. The next performance investigation should
 measure trial-state copying and the slowest physics steps; elapsed live time is
 still unacceptable despite the preserved visual result.
+
+## Accepted-energy reuse
+
+After `ae36df7`, a clone microbenchmark measured 10,000 copies of both regions in
+0.338–0.345 seconds. Pressure-patch copying accounts for much of that cost, but
+the full copy is only about 34 microseconds: it does not explain the live stalls.
+No production cloning or topology representation was changed.
+
+The line search now returns both the accepted positions and their already
+evaluated objective energy. Both the physical solve and offline equilibrium
+solve retain that value only while their objective is unchanged. New candidates
+still undergo the same volume validation and Armijo check. Material parameters,
+forces, tangents, integration, convergence limits and source motion are unchanged.
+
+On the recorded 240 Hz CPU workload, objective evaluations fell from 29,238 to
+18,520. Solve time was 12.29 seconds before and 11.35 / 11.55 seconds after (6–8%
+lower in these shared-host runs). All node-position bytes at all 1,908 steps are
+identical, with the same 85 subdivisions and 117,531 CG iterations. The updated
+profiler's descent timer excludes the baseline energy evaluation in both runs;
+compare wall time and objective counts, not the old descent timer.
+
+Bevy preserved all 478 fixed-clock frames: node coordinates match the preceding
+pose-cache capture exactly, while the difference from the reviewed video remains
+below 9.05e-15 m. The surface envelope and attachments are unchanged. Fixed-clock
+playback took 12.73 seconds versus 13.46 previously; elastic solving fell from
+8.13 to 7.39 seconds. Live playback took 8.84 seconds for 7.934 source seconds,
+with 110 readbacks and a 310 ms p95 delivery gap. This is still not smooth
+real-time playback. No active contacts occurred, and no replacement video was made.
+
+76 tissue tests pass, including a new check of accepted backtrack energy and
+failure without input mutation. The Python suite remains 15 passes and the
+existing ownership source-slice failure. Structural reports flag growth of the
+test module, recent solver edits and matches against preserved historical source
+copies; these are retained as reviewed findings, not suppressed or presented as
+a clean structural gate. The compiler and tests cover the changed tuple types;
+the name-based contract checker alone does not verify them.
+
+`boundary-runtime/energy-cpu-comparison.json`, `clone-before-01/` and
+`bevy-energy-cache/` preserve the measurements, input hashes, sources and traces.
+The remaining live delays are dominated by elastic solving during catch-up;
+local element distortion and rendered active-contact validation also remain open.

@@ -1,0 +1,159 @@
+{
+  "fixed_baseline": {
+    "directory": "lab-boundary-nodal-front-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 478,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 26.67053294
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 6118.896168,
+    "playback_capture_seconds": 20.550553309,
+    "playback_wall_over_source": 2.584975258993711,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      37.88387999999941,
+      68.53008600000173,
+      90.67069396000029,
+      896.2275849999969
+    ],
+    "stage_seconds": {
+      "sampling": 2.6615507869999995,
+      "elasticity": 13.482529456999995,
+      "collision": 1.6890842629999996
+    },
+    "peak_surface_displacement_mm": 36.151353269815445,
+    "minimum_element_volume_ratio": 0.3098243978497577,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "fixed_current": {
+    "directory": "lab-boundary-energy-cache240-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 18.166053461
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 5431.841526,
+    "playback_capture_seconds": 12.733115457,
+    "playback_wall_over_source": 1.6016497430188679,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      24.28854400000091,
+      44.26346880000055,
+      56.13689659999903,
+      97.96070899999722
+    ],
+    "stage_seconds": {
+      "sampling": 2.3856907750000005,
+      "elasticity": 7.385992916999994,
+      "collision": 0.8868570910000002
+    },
+    "peak_surface_displacement_mm": 36.151353269815445,
+    "minimum_element_volume_ratio": 0.30982439784977994,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "live_before": {
+    "directory": "lab-boundary-live120-01",
+    "capture": {
+      "frames": 37,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 22.616583302
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 66,
+    "source_span_seconds": 7.934,
+    "playback_wall_seconds": 14.949072763,
+    "presentations_per_source_second": 4.537433829089992,
+    "source_gap_ms_p50_p95_p99_max": [
+      250.0,
+      250.0,
+      250.0,
+      250.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      359.2673034999998,
+      867.0014694999991,
+      982.7269968499995,
+      1022.1224189999994
+    ],
+    "source_gaps_above_50ms": 34,
+    "relative_clock_drift_ms_min_max_end": [
+      0.0,
+      7247.193916,
+      7015.072763
+    ],
+    "maximum_skin_error_mm": 0.0005870376707193914,
+    "peak_surface_displacement_mm": 23.987894877791405,
+    "minimum_element_volume_ratio": 0.38782522957719956,
+    "maximum_active_contacts": 0
+  },
+  "live_current": {
+    "directory": "lab-boundary-energy-cache-live120-01",
+    "capture": {
+      "frames": 110,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 15.517012202
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 66,
+    "source_span_seconds": 7.934,
+    "playback_wall_seconds": 8.843723352,
+    "presentations_per_source_second": 13.738341315855811,
+    "source_gap_ms_p50_p95_p99_max": [
+      36.0,
+      250.0,
+      250.0,
+      250.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      36.942237000000205,
+      310.22363599999966,
+      349.62447027999923,
+      375.337316000001
+    ],
+    "source_gaps_above_50ms": 36,
+    "relative_clock_drift_ms_min_max_end": [
+      -0.17030400000021473,
+      1131.2788200000014,
+      909.7233519999991
+    ],
+    "maximum_skin_error_mm": 0.0010084464738183397,
+    "peak_surface_displacement_mm": 25.389043614268303,
+    "minimum_element_volume_ratio": 0.2697343008599785,
+    "maximum_active_contacts": 0
+  },
+  "parity": {
+    "frames": 478,
+    "maximum_node_difference_m": 9.042068359625668e-15,
+    "rms_node_difference_m": 8.837703260569849e-16,
+    "maximum_attachment_translation_difference_m": 0.0,
+    "maximum_attachment_quaternion_chord_difference": 0.0,
+    "maximum_surface_envelope_difference_m": 0.0
+  },
+  "limits": [
+    "Single runs on a shared host; absolute timing is not a controlled benchmark.",
+    "Live captures have different sample times and cannot prove mechanical parity.",
+    "Readbacks are not browser presentations. The jump contains no active contacts."
+  ]
+}
