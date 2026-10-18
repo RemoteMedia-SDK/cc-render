@@ -11,12 +11,19 @@ import time
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--timing-only', action='store_true')
+mode = parser.add_mutually_exclusive_group()
+mode.add_argument('--timing-only', action='store_true')
+mode.add_argument('--fixed-only', action='store_true')
 parser.add_argument('--label', default='quality')
 parser.add_argument('--output', type=Path)
+parser.add_argument('--packets', type=Path)
+parser.add_argument('--view', choices=['front', 'side'], default='front')
+parser.add_argument('--snapshot-pts-ms', type=int, default=7633)
+parser.add_argument('--log-filter', default='info')
 parser.add_argument('--trace-only', action='store_true', help='Omit fixed-clock PNGs; retain all node traces.')
 args = parser.parse_args()
 assert args.label.replace('-', '').isalnum()
+assert args.snapshot_pts_ms >= 0
 OUT = args.output.resolve() if args.output else HERE/('bevy-timing-01' if args.timing_only else 'bevy-01')
 assert OUT.is_relative_to(HERE.parent)
 OUT.mkdir(exist_ok=False)
@@ -32,22 +39,27 @@ with tarfile.open(OUT/'source.tar.gz', 'x:gz') as archive:
         archive.add(path, arcname=path)
 runs = []
 cases = [(args.label+'-live120-timing', 120, 30, 'live')] if args.timing_only else [
-    (args.label+'-front', 240, 60, 'fixed'), (args.label+'-live120', 120, 30, 'live')]
+    (args.label+'-'+args.view, 240, 60, 'fixed'), (args.label+'-live120', 120, 30, 'live')]
+if args.fixed_only:
+    cases = cases[:1]
 for name, rate, fps, clock in cases:
     command = baseline['argv'].copy()
+    if args.packets:
+        command[3] = str(args.packets.resolve())
     command[4] = str(asset)
+    command[5] = args.view
     command[-1] = 'artifacts/soft-tissue/lab-'+name+'-01'
     assert not Path(command[-1]).exists()
     environment = baseline['environment'].copy()
     for key in ['CC_AVATAR_TISSUE_SNAPSHOT', 'CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS']:
         environment.pop(key, None)
-    environment.update(CC_AVATAR_TISSUE_HZ=str(rate), CC_TISSUE_LAB_FPS=str(fps),
+    environment.update(RUST_LOG=args.log_filter, CC_AVATAR_TISSUE_HZ=str(rate), CC_TISSUE_LAB_FPS=str(fps),
                        CC_TISSUE_LAB_CLOCK=clock,
                        CC_TISSUE_LAB_TRACE_ONLY='0' if clock=='fixed' and not args.trace_only else '1',
                        CC_AVATAR_TISSUE_TRACE_NODES='0' if args.timing_only or (args.trace_only and clock=='live') else '1')
     if clock == 'fixed':
         environment.update(CC_AVATAR_TISSUE_SNAPSHOT=str(OUT/'geometry.json'),
-                           CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS='7633')
+                           CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS=str(args.snapshot_pts_ms))
     record = {'argv': command, 'environment': environment, 'sources': hashes,
               'binary_sha256': hashlib.sha256(Path(command[0]).read_bytes()).hexdigest(),
               'asset_sha256': hashlib.sha256(asset.read_bytes()).hexdigest(),

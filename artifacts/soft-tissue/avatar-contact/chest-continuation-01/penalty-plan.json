@@ -1,0 +1,77 @@
+{
+  "baseline_commit": "58ba162d3",
+  "diagnosis": "Detected contact leaves finite penalty overlap above the unchanged residual. Repeating the same physical step with the same penalty converges to the same overlap.",
+  "diagnostic_final_rounds": [
+    {
+      "round": 0.0,
+      "dt": 6.510416666696984e-05,
+      "maximum_penetration_m": [
+        0.0,
+        0.00010498073183388974
+      ],
+      "normal_force_n": [
+        0.0,
+        64.503636841177
+      ]
+    },
+    {
+      "round": 1.0,
+      "dt": 6.510416666696984e-05,
+      "maximum_penetration_m": [
+        0.0,
+        0.00010498073183388974
+      ],
+      "normal_force_n": [
+        0.0,
+        64.503636841177
+      ]
+    },
+    {
+      "round": 2.0,
+      "dt": 6.510416666696984e-05,
+      "maximum_penetration_m": [
+        0.0,
+        0.00010498073183388974
+      ],
+      "normal_force_n": [
+        0.0,
+        64.503636841177
+      ]
+    },
+    {
+      "round": 3.0,
+      "dt": 6.510416666696984e-05,
+      "maximum_penetration_m": [
+        0.0,
+        0.00010498073183388974
+      ],
+      "normal_force_n": [
+        0.0,
+        64.503636841177
+      ]
+    }
+  ],
+  "repair": "Bounded per-region penalty continuation only when a contact solve exceeds its residual; re-solve the same original state and refresh witnesses. Keep all body poses, material, clearance and residual unchanged.",
+  "max_rounds": 8,
+  "max_pressure_scale": 4096,
+  "pressure_scale_update": "multiply by clamp(2 * maximum_penetration / residual, 2, 8), bounded by max_pressure_scale",
+  "reference": "https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_ctec/Hlp_ctec_realkey.html",
+  "checks": [
+    "Partly fixed skin regression must fail before and pass after",
+    "Same 739 recording completes or preserves a separately diagnosed next failure",
+    "No-contact jump unchanged",
+    "Existing tissue and source ownership tests",
+    "Actual rendered evidence if contact recording completes"
+  ],
+  "after_first_replay": {
+    "focused_tests": 86,
+    "original_contact_step": "129-130 um residual reduced to 95.777 um at scale 2.60395; the original tolerance is unchanged",
+    "next_failure_interval_ms": [
+      7666.666666666667,
+      7670.833333333334
+    ],
+    "next_failure_detail": "The current error display truncates its cause. A rerun with full soft_tissue debug reports no linear-system failure; do not label this a confirmed linear solve failure.",
+    "additional_change": "Classify exhausted nonlinear line search as DescentFailed so existing bounded timestep subdivision can retry it; retain full error chains in terminal diagnostics.",
+    "status": "Full contact recording still unvalidated."
+  }
+}

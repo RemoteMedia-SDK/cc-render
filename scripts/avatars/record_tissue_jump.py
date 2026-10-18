@@ -13,15 +13,19 @@ def main():
     parser.add_argument("--description", default="A person stands upright, jumps straight up once, lands on both feet, and then stands still.")
     parser.add_argument("--seed", type=int, default=731)
     parser.add_argument("--session-id", default="tissue-lab-jump-731")
+    parser.add_argument("--initial-description", help="Generate one native block first, then request the main goal from service-owned history.")
     args = parser.parse_args()
     if not args.description.strip() or not args.session_id.strip():
         parser.error("description and session ID must be nonempty")
+    if args.initial_description is not None and not args.initial_description.strip():
+        parser.error("initial description must be nonempty")
     args.output.mkdir(parents=True, exist_ok=False)
     request = dict(kind="motion_goal", version=2, session_id=args.session_id,
                    generation_revision=1, pts_ms=0, seed=args.seed,
-                   goal=dict(description=args.description))
+                   goal=dict(description=args.initial_description or args.description))
     (args.output / "attempt-plan.json").write_text(json.dumps(
-        dict(request=request, seconds=8, attempts=1, policy="Semantic only; preserve every generated sample."), indent=2))
+        dict(request=request, continuation_description=args.description if args.initial_description else None,
+             seconds=8, attempts=1, policy="Semantic only; preserve every generated sample."), indent=2))
     os.environ["ARDY_JOURNAL_DIR"] = str(args.output / "journal")
     with contextlib.redirect_stdout(sys.stderr):
         from ardy_worker import ArdySession, load_office_model
@@ -45,6 +49,12 @@ def main():
             packets.flush()
             request["pts_ms"] = response["frames"][-1]["pts_ms"]
             print(json.dumps({"generated_until_ms": request["pts_ms"]}), flush=True)
+            if args.initial_description and request['generation_revision'] == 1:
+                # Request while the first native block is still queued. The
+                # service chooses its own history anchor; never edit a pose.
+                request = {**request, 'generation_revision': 2,
+                           'pts_ms': request['pts_ms'] - service.semantic_prefetch_ms,
+                           'goal': {'description': args.description}}
 
 
 if __name__ == "__main__":

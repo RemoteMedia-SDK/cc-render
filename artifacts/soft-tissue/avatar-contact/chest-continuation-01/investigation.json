@@ -1,0 +1,41 @@
+{
+  "objective": "Validate and repair contact during an unchanged native approach; retain volumetric motion and source ownership.",
+  "base_commit": "58ba162d3",
+  "recording": "lab-chest-continuation-739-01",
+  "source_revision_handoff": {
+    "revision_1_end_ms": 2000,
+    "revision_2_first_ms": 2050,
+    "service_history_anchor_ms": 2000,
+    "future_channels": [],
+    "exceptions": []
+  },
+  "initial_geometry": {
+    "minimum_arm_gap_mm": 18.18429952478564,
+    "tissue_edge_arm_face_crossings": 0,
+    "body_gap_mm": 2.0880265815221954,
+    "independent_audit": "initial-gap.json"
+  },
+  "failure": {
+    "last_completed_frame_ms": 7666,
+    "physical_interval_ms": [
+      7666.406250000001,
+      7666.471354166668
+    ],
+    "depth": 6,
+    "reason": "ContactUnresolved; diagnostic build will identify witness failure versus contact residual."
+  },
+  "constraints": [
+    "No body/root/joint edits or retiming",
+    "No weaker clearance/residual checks",
+    "Preserve failed captures",
+    "Verify a repair against the same source packets and baseline jump"
+  ],
+  "checks": [
+    "existing shared native replay tests",
+    "focused tissue tests",
+    "required Python ownership suite",
+    "complete actual Bevy contact recording",
+    "unchanged source packets and timestamps",
+    "baseline jump deformation parity"
+  ]
+}

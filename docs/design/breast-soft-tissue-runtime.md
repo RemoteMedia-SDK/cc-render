@@ -328,3 +328,25 @@ inputs, builds, tests and archived Bevy traces. The adjacent
 `quality-refresh-production-01` directories preserve every CPU candidate's
 instrumented source, counters, hashes and positions. Necessary work remains in
 the isolated worktree rather than `/tmp`.
+
+
+## Native contact approach: unresolved precision checkpoint
+
+The first clean-start native approach now reaches detected contact. Seed 739
+uses a service-owned semantic revision handoff, and the initial independent
+geometry audit finds 18.184 mm arm clearance with zero edge crossings. All
+source poses remain unchanged. Seeds 736, 737 and 738 are retained with their
+initial-overlap / no-contact outcomes.
+
+Bounded penalty continuation fixes the first 130 um residual violation without
+changing the 100 um limit, material, clearance or body motion. The next step
+still fails after numerical subdivision: force residual 1.112e-6 N, remaining
+Newton correction 9.767e-14 m at an approximately 1.332e-7 N timestep-scaled force budget. An exhausted line search
+now has a retryable numerical-failure type; underlying errors are no longer
+hidden by outer context. No tolerance was relaxed.
+
+All 87 tissue tests pass; Python remains 15 passes and the existing ownership
+source-slice failure. Full actual-avatar contact and smooth playback are still
+open. Do not default-enable the replacement on this evidence. See
+`artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md`,
+`result.json`, preserved failed captures, and the unchanged-jump comparison.

@@ -19,11 +19,9 @@ fn main() -> anyhow::Result<()> {
     let out = Path::new(&args[6]);
     anyhow::ensure!(!out.exists(), "use a new output directory to preserve evidence");
     let poses = native_recording::load(Path::new(&args[3]))?;
-    // Keep the lab's first benchmark to one immutable generation stream.
-    let stream = poses[0].stream.as_ref().expect("validated native identity");
-    anyhow::ensure!(poses.iter().all(|p| p.stream.as_ref().is_some_and(|s|
-        s.session_id == stream.session_id && s.generation_revision == stream.generation_revision)),
-        "lab requires one native revision");
+    // load verifies one session, monotone revisions, unchanged service packets
+    // and the service-owned history anchor at every revision handoff.
+    // PlaybackCursor uses that existing handoff protocol without editing poses.
     std::fs::create_dir_all(out)?;
     let fps = std::env::var("CC_TISSUE_LAB_FPS").unwrap_or_else(|_| "60".into()).parse::<u32>()?;
     anyhow::ensure!([30, 60].contains(&fps), "lab output cadence must be 30 or 60 FPS");
@@ -89,6 +87,14 @@ fn configure(args: &[String], out: &Path, settings: CaptureSettings) -> anyhow::
         inputs.push(serde_json::json!({"path":path,"sha256":hash}));
     }
     std::fs::copy(&args[3], out.join("packets.ndjson"))?;
+    // Preserve the source responses required to authenticate revision handoffs
+    // when replaying the saved capture later.
+    for name in ["requests.ndjson", "responses.ndjson", "attempt-plan.json", "source-audit.json"] {
+        let source = Path::new(&args[3]).with_file_name(name);
+        if source.exists() {
+            std::fs::copy(source, out.join(name))?;
+        }
+    }
     std::fs::write(out.join("config.json"), serde_json::to_vec_pretty(&serde_json::json!({
         "inputs":inputs,"tissue":tissue,"camera":args[5],"camera_position":camera,
         "camera_target":[0.,1.5,0.],"camera_fov_deg":38,"fps":fps,

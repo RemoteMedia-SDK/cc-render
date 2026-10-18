@@ -5,8 +5,8 @@ use super::tissue_surface::TissueSurface;
 use crate::cc_render::soft_tissue::{
     ContactMetrics, EmbeddedPoint, Frame, PlaneContact, Tissue, TissueAsset, VertexBinding,
 };
-use bevy::math::DVec3;
 use anyhow::Context;
+use bevy::math::DVec3;
 use parry_ccd::{
     bounding_volume::{Aabb, BoundingVolume},
     math::Point,
@@ -20,6 +20,8 @@ const RESIDUAL: f64 = 0.0001;
 // Numerical penalty, including each sample's represented rest area. This is
 // not an anatomical material measurement or a support-garment parameter.
 const PRESSURE_STIFFNESS: f64 = 1e10;
+const MAX_CONTACT_ROUNDS: usize = 8;
+const MAX_PENALTY_SCALE: f64 = 4096.0;
 
 #[derive(Debug, thiserror::Error)]
 #[error("tissue skin contact did not resolve within the sampled step")]
@@ -142,21 +144,15 @@ impl BodyContacts {
             broad_phase_ms = started.elapsed().as_secs_f64() * 1000.0,
             "tissue contact search profile"
         );
-        for _ in 0..4 {
-            let contacts = self.planes(&bounds, original, candidate, asset, old, end, CLEARANCE)?;
+        let mut penalty_scale = vec![1.0; original.len()];
+        for round in 0..MAX_CONTACT_ROUNDS {
+            let mut contacts =
+                self.planes(&bounds, original, candidate, asset, old, end, CLEARANCE)?;
             if contacts.iter().all(Vec::is_empty) {
                 return Ok(vec![ContactMetrics::default(); original.len()]);
             }
-            let mut solved = original.to_vec();
-            let mut metrics = Vec::new();
-            for (i, solver) in solved.iter_mut().enumerate() {
-                metrics.push(solver.step_with_contacts(
-                    dt,
-                    end.frames[i],
-                    DVec3::NEG_Y * 9.81,
-                    &contacts[i],
-                ).with_context(|| format!("tissue contact solve region {i}"))?);
-            }
+            let (solved, metrics) =
+                solve_contact_step(original, &mut contacts, &end.frames, dt, &penalty_scale)?;
             let inner = self.planes(
                 &bounds,
                 original,
@@ -168,10 +164,19 @@ impl BodyContacts {
             )?;
             let valid = inner.iter().all(Vec::is_empty)
                 && metrics.iter().all(|m| m.maximum_penetration_m <= RESIDUAL);
+            tracing::debug!(
+                round,
+                dt,
+                ?penalty_scale,
+                ?metrics,
+                valid,
+                "tissue contact re-solve"
+            );
             *candidate = solved;
             if valid {
                 return Ok(metrics);
             }
+            increase_penalty(&mut penalty_scale, &metrics);
         }
         Err(ContactUnresolved.into())
     }
@@ -223,7 +228,9 @@ impl BodyContacts {
                 let t = self.triangles[*face];
                 let from = [a, old.skin[t[0]], old.skin[t[1]], old.skin[t[2]]];
                 let to = [b, end.skin[t[0]], end.skin[t[1]], end.skin[t[2]]];
-                if let Some(witness) = sweep(from, to, clearance)? {
+                if let Some(witness) = sweep(from, to, clearance).with_context(||
+                    format!("skin sample {}, face {:?}, clearance {clearance}, from {from:?}, to {to:?}",
+                        sample.vertex, t))? {
                     let surface_point = (0..3)
                         .map(|i| to[i + 1] * witness.barycentric[i])
                         .sum::<DVec3>()
@@ -249,6 +256,41 @@ impl BodyContacts {
             "tissue contact search profile"
         );
         Ok(result)
+    }
+}
+
+fn solve_contact_step(
+    original: &[Tissue],
+    contacts: &mut [Vec<PlaneContact>],
+    frames: &[Frame],
+    dt: f64,
+    penalty_scale: &[f64],
+) -> anyhow::Result<(Vec<Tissue>, Vec<ContactMetrics>)> {
+    let mut solved = original.to_vec();
+    let mut metrics = Vec::with_capacity(solved.len());
+    for (i, solver) in solved.iter_mut().enumerate() {
+        for plane in &mut contacts[i] {
+            plane.stiffness_n_per_m *= penalty_scale[i];
+        }
+        metrics.push(
+            solver
+                .step_with_contacts(dt, frames[i], DVec3::NEG_Y * 9.81, &contacts[i])
+                .with_context(|| format!("tissue contact solve region {i}"))?,
+        );
+    }
+    Ok((solved, metrics))
+}
+
+fn increase_penalty(scales: &mut [f64], metrics: &[ContactMetrics]) {
+    // Finite penalty compliance does not vanish by repeating the same solve or
+    // reducing dt (which increases inertial resistance). Aim below the residual,
+    // bounded to avoid unbounded ill-conditioning. This is numerical contact
+    // enforcement, not tissue stiffness.
+    for (scale, metric) in scales.iter_mut().zip(metrics) {
+        if metric.maximum_penetration_m > RESIDUAL {
+            let increase = (2.0 * metric.maximum_penetration_m / RESIDUAL).clamp(2.0, 8.0);
+            *scale = (*scale * increase).min(MAX_PENALTY_SCALE);
+        }
     }
 }
 

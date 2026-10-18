@@ -26,7 +26,7 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 
 #[cfg(test)]
 #[path = "tissue_tests.rs"]
-mod tests;
+pub(super) mod tests;
 
 #[path = "tissue_trace.rs"]
 mod trace;
@@ -621,7 +621,7 @@ fn integrate_interval(
         if depth < 6
             && (matches!(
                 error.downcast_ref::<TissueError>(),
-                Some(TissueError::InvertedTet(_) | TissueError::NonlinearSolveFailed { .. })
+                Some(TissueError::InvertedTet(_) | TissueError::NonlinearSolveFailed { .. } | TissueError::DescentFailed)
             ) || error.is::<ContactUnresolved>())
         {
             let middle = (start_ms + end_ms) * 0.5;
@@ -650,7 +650,7 @@ fn integrate_interval(
             report.subdivisions += 1;
             return Ok(report);
         }
-        anyhow::bail!("region {index}, interval {start_ms}..{end_ms} ms, depth {depth}: {error}; prior {:?}; from {:?} to {:?}",
+        anyhow::bail!("region {index}, interval {start_ms}..{end_ms} ms, depth {depth}: {error:#}; prior {:?}; from {:?} to {:?}",
             solvers[index].metrics(), solvers[index].frame(), frames[index]);
     }
     *solvers = candidate;

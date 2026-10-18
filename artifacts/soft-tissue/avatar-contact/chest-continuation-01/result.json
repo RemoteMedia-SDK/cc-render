@@ -1,0 +1,38 @@
+{
+  "status": "incomplete_contact_validation",
+  "terminal_error": "2026-10-18T22:12:30.509806Z ERROR cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue failed; stopping renderer without pose repair or legacy fallback region 0, interval 7666.666666666667..7666.731770833334 ms, depth 6: tissue contact solve region 1: tissue nonlinear solve did not converge (force 0.0000011120567405179415 N, correction 0.00000000000009767122574986077 m); state was not committed; prior TissueMetrics { mass_kg: 1.0632727037632512, minimum_volume_ratio: 0.9101331628206566, maximum_volume_ratio: 1.1078756898164797, kinetic_energy_j: 0.0012794139412201002, elastic_energy_j: 0.006510115848627517, maximum_speed_m_s: 0.11015977372025991 }; from Frame { translation: DVec3(0.018178347498178482, 1.189070463180542, 0.03991268202662468), rotation: DQuat(0.08257284349605785, 0.09516391429641458, 0.0076170271197704914, 0.9920017821710893) } to Frame { translation: DVec3(0.01817934587597847, 1.1890703439712524, 0.03991382569074631), rotation: DQuat(0.0825744448171971, 0.09515306674861616, 0.0076157173850705025, 0.9920026994923834) }",
+  "tissue_tests": {
+    "passed": 87,
+    "failed": 0
+  },
+  "python_tests": {
+    "passed": 15,
+    "failed": 1,
+    "existing_failure": "test_root_acceptance_does_not_rewrite_the_candidate"
+  },
+  "first_contact_step": {
+    "maximum_penetration_m": 9.577697858759386e-05,
+    "pressure_scale": 2.6039547975407866,
+    "normal_force_n": 153.23886751377356,
+    "accepted": true
+  },
+  "limits": [
+    "This is not a completed contact video or general contact validation.",
+    "The next physical step exhausts bounded numerical retries.",
+    "At the final retry, force residual is 1.112e-6 N and correction 9.767e-14 m; the timestep-scaled force budget is approximately 1.332e-7 N (1e-8 N floor). Investigate numerical precision and scaling before altering force tolerances.",
+    "The pressure scale has a finite cap; rigid body motion and contact clearance/residual remain unchanged.",
+    "Replacement remains opt-in; do not enable it by default on this evidence."
+  ],
+  "jump_regression": {
+    "frames": 478,
+    "trace_frames": 478,
+    "last_pts_ms": 8000,
+    "source_packets_unchanged": true,
+    "maximum_node_difference_m": 0.0,
+    "maximum_anchor_difference_m": 0.0,
+    "maximum_anchor_quaternion_difference": 0.0,
+    "maximum_surface_envelope_difference_m": 0.0,
+    "peak_surface_displacement_mm": 32.55993127822876,
+    "maximum_active_contact_samples": 0
+  }
+}

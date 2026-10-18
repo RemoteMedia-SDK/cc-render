@@ -1,0 +1,63 @@
+[
+  {
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rub-736-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-chest-rub-736-start-front-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "240",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "60",
+      "CC_TISSUE_LAB_CLOCK": "fixed",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "CC_AVATAR_TISSUE_TRACE_NODES": "1",
+      "RUST_LOG": "info",
+      "CC_AVATAR_TISSUE_SNAPSHOT": "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/avatar-contact/chest-touch-01/bevy-rub-start-01/geometry.json",
+      "CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS": "50"
+    },
+    "sources": {
+      "Cargo.toml": "f8bde4f7449a26f371616119bd53cc9d54040c713fcffaf61cd651fa5709993f",
+      "artifacts/soft-tissue/quality-pressure/run_bevy.py": "87a130b9a0b0d09347171962225cf0967046a80e4fd70e44a6d7ec145ba7beac",
+      "examples/tissue_fit.rs": "a649999f2e099fbe9efb8dadbfdd2ce1bff5f565fcb7ed995c48051ee02a2507",
+      "examples/tissue_lab.rs": "c37f4be62330fae325c85d3ec568a12056d1180559bc7853713b4ffa483a2cc9",
+      "src/cc_render/bevy_app/tissue.rs": "fb963a4b05d36c833898555de55c4567a6a23efc1aff044d76bc10dd13cb0193",
+      "src/cc_render/bevy_app/tissue_collision.rs": "1c9cc79ccbe76eb1da6f761ee29ca4411e2a13a7814c3876d273b2f65d30c767",
+      "src/cc_render/bevy_app/tissue_collision_tests.rs": "cb8593df0d0dedb4be3e9de731cdd2f2b4c730748b2fa66a40fe0ea52196d110",
+      "src/cc_render/bevy_app/tissue_morph.rs": "806efa85da727f35b08c1189bd26cc2608b681d48f2f990bb8a1333f6006f99b",
+      "src/cc_render/bevy_app/tissue_motion.rs": "4ed3f2d8a366e6a9267cd7d72d2fdeb1fa1258ef8be9b9247a003660b63270b9",
+      "src/cc_render/bevy_app/tissue_surface.rs": "bf4ca72ae59720b706dcd0261827d07f1dc0f2a3124e403b2f99aef13781fe40",
+      "src/cc_render/bevy_app/tissue_surface_tests.rs": "2d29d1f1a476e15333765e2c8e38b0a88c95f25bb88f06757df2522ad4a8f896",
+      "src/cc_render/bevy_app/tissue_tests.rs": "e22efb198325ad8e7c208bceaa6716fc45be9d778f9645dec57b676ca8bd6303",
+      "src/cc_render/bevy_app/tissue_trace.rs": "e6e8ee88faa1b36c277792c7eb31c74ba1850a948adb26d5cc9f0deac12a9a99",
+      "src/cc_render/soft_tissue/asset.rs": "ffb279a6c3bc1fd72759e7fde0f1a55a38b9e4404e482f660f04ec117d55bdc3",
+      "src/cc_render/soft_tissue/contact.rs": "12ca6b9f48318d5b8faf661712e8de34af28f9c9f320899e10172cbe946abc15",
+      "src/cc_render/soft_tissue/contact_tests.rs": "295095a7d60396a035c7705a0f983adec75646402dc9df9d056db902ea580215",
+      "src/cc_render/soft_tissue/elasticity.rs": "ce8d42f0fce59c5a860305f1efcb7465ad213e43324ff5eee2b95d24d2995ff1",
+      "src/cc_render/soft_tissue/implicit.rs": "9889dcd2b8d5eff49ab6ef3d02cca87cdb7b7c2b0faea8277e3960863a4ac8d7",
+      "src/cc_render/soft_tissue/integration_tests.rs": "aa0f4d7c68eef6121275768f0dc40763511984d4576e25d76082b33b165cee86",
+      "src/cc_render/soft_tissue/isochoric.rs": "068076d9eee2205c25de27a5328ad279ef47942dc743d39c715d55f6c2198d26",
+      "src/cc_render/soft_tissue/material.rs": "a165f023c6f7c7a4e95a825c0c3a2c4145f7066229aa001c101b0e08b12a3068",
+      "src/cc_render/soft_tissue/mod.rs": "45d5d58ca231993af3f7257414e3db8cb8dcbaa9d9af9f8e97396ec164065b64",
+      "src/cc_render/soft_tissue/preconditioner.rs": "5a6bfdab319a64955c5a4fe4fb3f79a249e6d3629def32a7c4683e28770457ae",
+      "src/cc_render/soft_tissue/pressure.rs": "4c9440555015ea1254b80e26c3fb8a5018eb5c7e0918774d9728712f56f8b38f",
+      "src/cc_render/soft_tissue/pressure_tests.rs": "8de6979989f1696e6a41f176eba783d11c2e3e6f2cea64f17f09acb4f9a8bbbc",
+      "src/cc_render/soft_tissue/quality_pressure_tests.rs": "81f4f1387de4b88889497498cfb19848f8fb1ab57cba08fd4ccf824817ea5a85",
+      "src/cc_render/soft_tissue/solver.rs": "f4ac24818fb663839009a15842ecf27db7e864a654ad8bfc44f21ee5391b2cb3",
+      "src/cc_render/soft_tissue/tests.rs": "13ede3df1414ab8609d7f6176ca6b8bb70cbadcbc97001abf3541bf47d1e15f6",
+      "src/cc_render/soft_tissue/timestep.rs": "cda125434e22b319956cd2f9cf75dbf27e350ee8f11eea5ba1b78260cc80bb7f",
+      "src/cc_render/soft_tissue/viscosity.rs": "e2cd01ca1589122e4cb0014556975e7baa4c5c2c1e0785af0be1975f2c64369f"
+    },
+    "binary_sha256": "3f5e935eaf756c2b0d8f92e5dadaa2d0b2ea39745a4ce09b3f324a74d2cb3c51",
+    "asset_sha256": "211773a612cfb106654b814759e63a26403d1320b9ba2c86c38928b4e378486a",
+    "started_unix": 1792359761.1210363,
+    "exit_code": 1,
+    "completed_unix": 1792359769.2427924
+  }
+]

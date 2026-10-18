@@ -60,7 +60,7 @@ fn tissue_region_failure_does_not_commit_successful_sibling() {
     }
 }
 
-fn fixture_asset() -> TissueAsset {
+pub(in crate::cc_render::bevy_app) fn fixture_asset() -> TissueAsset {
     let positions = vec![
         [0.0, 0.0, 0.0],
         [0.1, 0.0, 0.0],

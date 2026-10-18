@@ -1,5 +1,4 @@
 use super::*;
-use crate::cc_render::soft_tissue::{Attachment, Material, RegionAsset};
 
 fn plane(z: f64) -> [DVec3; 3] {
     [
@@ -45,47 +44,10 @@ fn tissue_sweep_separates_parallel_motion_and_rejects_ambiguous_initial_intersec
         .is::<ContactUnresolved>());
 }
 
-#[test]
-fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overlap() {
-    let initial = vec![
-        [0.0, 0.0, 0.0],
-        [0.1, 0.0, 0.0],
-        [0.0, 0.1, 0.0],
-        [0.0, 0.0, 0.1],
-    ];
-    let asset = TissueAsset {
-        schema_version: 1,
-        source_sha256: vec![],
-        surfaces: vec![],
-        contact_surfaces: vec![],
-        contact_inactive_morph_targets: vec![],
-        regions: vec![RegionAsset {
-            name: "test".into(),
-            anchor_bone: "test".into(),
-            rest_positions: initial.clone(),
-            initial_positions: initial,
-            tetrahedra: vec![[0, 1, 2, 3]],
-            attachments: vec![
-                Attachment::Fixed,
-                Attachment::Fixed,
-                Attachment::Fixed,
-                Attachment::Free,
-            ],
-            material: Material {
-                pressure_discretization: Default::default(),
-                pressure_stabilization_pa: 0.0,
-                element_pressure_quality_cutoff: 0.0,
-                time_integration: Default::default(),
-                viscosity: None,
-                density_kg_m3: 950.0,
-                shear_pa: 1500.0,
-                strain_stiffening: 0.0,
-                bulk_pa: 30000.0,
-                strain_damping_per_second: 0.0,
-                iterations: 8,
-            },
-        }],
-    };
+fn contact_fixture(free_weight: f64) -> (TissueAsset, BodyContacts) {
+    let mut asset = super::super::tissue::tests::fixture_asset();
+    asset.regions[0].material.strain_damping_per_second = 0.0;
+    asset.regions[0].material.iterations = 8;
     let contact = BodyContacts {
         triangles: vec![[1, 2, 3]],
         samples: vec![SkinSample {
@@ -95,15 +57,24 @@ fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overla
                 vertex: 0,
                 region: 0,
                 tetrahedron: 0,
-                barycentric: [0.0, 0.0, 0.0, 1.0],
+                barycentric: [1.0 - free_weight, 0.0, 0.0, free_weight],
                 influence: 1.0,
             },
         }],
     };
-    let pose = |z| ContactPose {
+    (asset, contact)
+}
+
+fn contact_pose(z: f64) -> ContactPose {
+    ContactPose {
         frames: vec![Frame::IDENTITY],
         skin: [vec![DVec3::Z * 0.1], plane(z).to_vec()].concat(),
-    };
+    }
+}
+
+#[test]
+fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overlap() {
+    let (asset, contact) = contact_fixture(1.0);
     let original = vec![asset.regions[0].solver(Frame::IDENTITY).unwrap()];
     let unchanged = original[0].positions().to_vec();
     let mut candidate = original.clone();
@@ -116,8 +87,8 @@ fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overla
             &original,
             &mut candidate,
             &asset,
-            &pose(0.12),
-            &pose(0.12),
+            &contact_pose(0.12),
+            &contact_pose(0.12),
             1.0 / 120.0,
         )
         .unwrap();
@@ -127,8 +98,8 @@ fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overla
             &original,
             &mut candidate,
             &asset,
-            &pose(0.12),
-            &pose(0.09),
+            &contact_pose(0.12),
+            &contact_pose(0.09),
             1.0 / 120.0,
         )
         .unwrap();
@@ -138,6 +109,80 @@ fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overla
     assert!(candidate[0].metrics().minimum_volume_ratio > 0.8);
     assert_eq!(original[0].positions(), unchanged);
     assert_eq!(&candidate[0].positions()[..3], &unchanged[..3]);
+}
+
+#[test]
+fn tissue_contact_enforces_clearance_at_partly_fixed_skin() {
+    use crate::cc_render::soft_tissue::{PressureDiscretization, TimeIntegration, Viscosity};
+    let (mut asset, contact) = contact_fixture(0.22316298434880016);
+    let material = &mut asset.regions[0].material;
+    material.pressure_discretization = PressureDiscretization::AverageNodalBoundary;
+    material.pressure_stabilization_pa = 8000.0;
+    material.element_pressure_quality_cutoff = 0.15;
+    material.time_integration = TimeIntegration::Bdf2;
+    material.viscosity = Some(Viscosity {
+        shear_pa_s: 5.0,
+        bulk_pa_s: 5000.0,
+    });
+    material.shear_pa = 500.0;
+    material.bulk_pa = 500000.0;
+    material.strain_stiffening = 8.0;
+    material.iterations = 32;
+    // A partially fixed embedding reduces normal mobility. Smaller timesteps
+    // increase inertial resistance, so subdivision alone cannot fix the penalty.
+    for dt in [1.0 / 240.0, 1.0 / 960.0] {
+        let original = vec![asset.regions[0].solver(Frame::IDENTITY).unwrap()];
+        let unchanged = original[0].positions().to_vec();
+        let mut candidate = original.clone();
+        candidate[0]
+            .step(dt, Frame::IDENTITY, DVec3::NEG_Y * 9.81)
+            .unwrap();
+        let metrics = contact
+            .resolve(
+                &original,
+                &mut candidate,
+                &asset,
+                &contact_pose(0.102),
+                &contact_pose(0.099),
+                dt,
+            )
+            .unwrap();
+        assert!(metrics[0].active_contacts > 0 && metrics[0].normal_force_n > 0.0);
+        assert!(metrics[0].maximum_penetration_m <= RESIDUAL, "{metrics:?}");
+        let (point, _) = sample_position(
+            &contact.samples[0],
+            &asset,
+            &contact_pose(0.099),
+            &candidate[0],
+        );
+        assert!(point.z <= 0.099 - CLEARANCE + RESIDUAL);
+        assert_eq!(original[0].positions(), unchanged);
+        assert_eq!(&candidate[0].positions()[..3], &unchanged[..3]);
+        assert!(candidate[0].metrics().minimum_volume_ratio > 0.9);
+    }
+}
+
+#[test]
+fn tissue_contact_rejects_kinematic_skin_overlap() {
+    let (asset, contact) = contact_fixture(0.0);
+    let original = vec![asset.regions[0].solver(Frame::IDENTITY).unwrap()];
+    let unchanged = original[0].positions().to_vec();
+    let mut candidate = original.clone();
+    candidate[0]
+        .step(1.0 / 240.0, Frame::IDENTITY, DVec3::NEG_Y * 9.81)
+        .unwrap();
+    let error = contact
+        .resolve(
+            &original,
+            &mut candidate,
+            &asset,
+            &contact_pose(0.102),
+            &contact_pose(0.099),
+            1.0 / 240.0,
+        )
+        .unwrap_err();
+    assert!(error.is::<ContactUnresolved>());
+    assert_eq!(original[0].positions(), unchanged);
 }
 
 #[test]

@@ -165,6 +165,8 @@ pub enum TissueError {
     LinearSolveFailed(f64),
     #[error("tissue nonlinear solve did not converge (force {force_norm_n} N, correction {correction_m} m); state was not committed")]
     NonlinearSolveFailed { force_norm_n: f64, correction_m: f64 },
+    #[error("tissue nonlinear line search found no valid descent; state was not committed")]
+    DescentFailed,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]

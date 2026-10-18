@@ -1,0 +1,73 @@
+{
+  "cases": [
+    [
+      736,
+      "rub",
+      "A person rubs their chest with both hands."
+    ],
+    [
+      737,
+      "pat",
+      "A person pats their chest with both hands."
+    ]
+  ],
+  "sources": {
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/ardy_worker.py": "185025c14fd08e3266f1765b1f366ceec97e87e67a9e809afe9df92643d89ebf",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/motion_backend.py": "20c4e3848a9c2b801e3c24b02ba4061419aadae653e7cc351e4ea6f4714e58a1",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/motion_service.py": "1d5f3be2af4308d62d6ba25cb58ba520179a215719fae5ac2afc1df016078e1d",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/motion_policy.py": "ed8074589f78ea8e9a239a0214b0622eef4d047782b0b74f956a02c5ab9dea33",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/ardy_adapter.py": "8a370e48f7c024e9e89739cb3b1781d1cfeb5569463b1bed022e49530ea29a77",
+    "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py": "92fafdd96365fc368b7441931cf69f64b0d570dba16d084a8fa4a7ba35447fcb",
+    "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/avatar-contact/generate_chest_touch.py": "08b332b17f1e6298dec4d9189218b5db72e0b6db05288618e8dc217b5646b311"
+  },
+  "environment": {
+    "ARDY_MODEL": "core40",
+    "CUDA_VISIBLE_DEVICES": "1",
+    "ARDY_GPU": "1",
+    "TEXT_ENCODER_DEVICE": "cuda:0",
+    "ARDY_DEVICE": "cuda:0",
+    "TEXT_ENCODER_MODE": "local",
+    "LLM2VEC_QUANTIZE": "nf4",
+    "HF_HOME": "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/hf",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "PYTHONPATH": "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars"
+  },
+  "policy": "One eight-second attempt per semantic description. No pose modification or seed selection.",
+  "runs": [
+    {
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rub-736-01",
+        "--description",
+        "A person rubs their chest with both hands.",
+        "--seed",
+        "736",
+        "--session-id",
+        "tissue-lab-chest-rub-736"
+      ],
+      "started_unix": 1792359605.4570289,
+      "exit_code": 0,
+      "completed_unix": 1792359655.6073618,
+      "sources_unchanged": true
+    },
+    {
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-pat-737-01",
+        "--description",
+        "A person pats their chest with both hands.",
+        "--seed",
+        "737",
+        "--session-id",
+        "tissue-lab-chest-pat-737"
+      ],
+      "started_unix": 1792359655.6419253,
+      "exit_code": 0,
+      "completed_unix": 1792359704.8020802,
+      "sources_unchanged": true
+    }
+  ]
+}

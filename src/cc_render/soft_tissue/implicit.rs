@@ -269,7 +269,7 @@ impl Tissue {
             }
             scale *= 0.5;
         }
-        Err(TissueError::InvalidInput("implicit material descent"))
+        Err(TissueError::DescentFailed)
     }
 
     fn linearize(
@@ -472,6 +472,18 @@ impl Tissue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exhausted_tissue_descent_is_a_retryable_solver_failure() {
+        let tissue = super::super::tests::cube(Frame::IDENTITY, true);
+        let unchanged = tissue.positions.clone();
+        let delta = vec![DVec3::ZERO; unchanged.len()];
+        // No candidate can satisfy decrease in this objective. The exhausted
+        // search is a numerical failure, not malformed caller input.
+        let error = tissue.descend((&unchanged, 0.0), &delta, -1.0, |_| 1.0).unwrap_err();
+        assert!(matches!(error, TissueError::DescentFailed));
+        assert_eq!(tissue.positions, unchanged);
+    }
 
     #[test]
     fn tissue_descent_returns_energy_of_accepted_backtrack_without_rechecking_current_state() {
