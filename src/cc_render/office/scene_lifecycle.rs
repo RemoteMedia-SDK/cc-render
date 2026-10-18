@@ -571,13 +571,16 @@ mod tests {
         assert_eq!(update, Update::PhaseChanged);
         let declared = task.declared.as_ref().unwrap();
         assert_eq!(declared.results.last().unwrap().travel_m, Some(0.31));
+        assert!(task.take_couplings().is_empty());
         task.bind_generation(interact(3, "drawer", "open")).unwrap();
-        // Letting go: the release is queued, then the hand is free.
+        // Letting go as the release phase starts, before its motion can drag the drawer.
+        assert_eq!(task.take_couplings(), vec![CouplingCommand::Release { object: "drawer".into(), onto: None }]);
+        scene.occupied_hands.clear();
         displayed(&mut scene, 3, 3300);
-        task.observe(&scene);
+        assert_eq!(task.observe(&scene), Update::None);
         displayed(&mut scene, 3, 4400);
         assert_eq!(task.observe(&scene), Update::Completed);
-        assert_eq!(task.take_couplings(), vec![CouplingCommand::Release { object: "drawer".into(), onto: None }]);
+        assert!(task.take_couplings().is_empty(), "let go once");
     }
 
     #[test]

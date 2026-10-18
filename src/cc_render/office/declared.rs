@@ -77,6 +77,8 @@ pub struct DeclaredState {
     #[serde(skip)] grip: Option<crate::cc_render::Hand>,
     #[serde(skip)] grip_requested: Option<u64>,
     #[serde(skip)] travel_run: u32,
+    /// The current release phase let go of the grip as it started.
+    #[serde(skip)] let_go: bool,
 }
 
 pub enum Step { Running, PhaseDone, Done, Failed(String) }
@@ -88,7 +90,8 @@ impl DeclaredState {
         let mut state = Self { interaction: interaction.into(), index: 0, phase: String::new(), results: Vec::new(),
             progress: Vec::new(), declaration, object: object.id.clone(), started: None, last_pts: None,
             touch_counts: Vec::new(), hold_inside: Vec::new(), stand_since: None, couplings: Vec::new(),
-            hands_swapped: None, mirror: None, travel_m: None, grip: None, grip_requested: None, travel_run: 0 };
+            hands_swapped: None, mirror: None, travel_m: None, grip: None, grip_requested: None, travel_run: 0,
+            let_go: false };
         state.enter(0);
         Ok(state)
     }
@@ -118,6 +121,12 @@ impl DeclaredState {
         self.hold_inside = vec![0; phase.relations.len()];
         if let Some(Transition::SupportOn { .. }) = &phase.transition {
             self.couplings.push(CouplingCommand::SupportOn { object: self.object.clone() });
+        }
+        // A gripped handle is let go as its release phase starts: held through the phase's
+        // settle, the body letting go and standing up dragged the part along its rail.
+        self.let_go = matches!(&phase.transition, Some(Transition::Release { onto: None })) && self.grip.take().is_some();
+        if self.let_go {
+            self.couplings.push(CouplingCommand::Release { object: self.object.clone(), onto: None });
         }
     }
 
@@ -240,7 +249,7 @@ impl DeclaredState {
             }
             return Step::Running;
         }
-        if let Some(command) = self.transition(&phase, owner, office) {
+        if let Some(command) = self.transition(&phase, owner, office).filter(|_| !self.let_go) {
             if matches!(command, CouplingCommand::Release { .. }) { self.grip = None; }
             self.couplings.push(command);
         }
