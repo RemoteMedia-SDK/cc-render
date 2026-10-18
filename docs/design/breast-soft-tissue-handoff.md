@@ -52,25 +52,27 @@ their initial-intersection or no-contact outcomes.
 
 The bounded penalty update fixes the first contact step: residual overlap falls
 from about 130 µm to **95.777 µm**, below the unchanged 100 µm limit. Its 153.24 N
-reaction is a numerical observation, not anatomical force calibration. A later
-step exhausts bounded subdivision at **7666.666667–7666.731771 ms**, depth 6.
-The right region has force residual **1.112e-6 N** against an approximately
-**1.332e-7 N** timestep-scaled budget, despite a **9.767e-14 m** Newton correction.
-The underlying error correctly names region 1; the outer region-0 label remains
-a diagnostic limitation. No tolerance was relaxed.
+reaction is a numerical observation, not anatomical force calibration.
 
-Coordinate-centering improved one synthetic oblique contact case but **still
-failed the actual replay** near 7666.8 ms. It was removed from production. Its
-patch, frozen sources, probe results, tests, failed capture and baseline rebuild
-log remain in the [precision experiment](../../artifacts/soft-tissue/avatar-contact/origin-precision-01/README.md).
-These partial captures are not a successful contact video. See the
-[native contact checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md)
-for detailed findings and test logs.
+**Update (residual-precision checkpoint):** the later 7666.67 ms
+depth-6 failure was a line-search defect, not a precision floor. Measured on
+the bit-exact recorded state: gradient noise 4e-12 N, representability floor
+7e-9 N, condition 900, all far below the 1.33e-7 N limit; one Newton step
+reaches 7e-9 N. The energy Armijo test rejected it because trial energies carry
+~6e-15 J rounding against a ~1e-19 J decrease. `descend` now falls back to the
+Hager–Zhang approximate Wolfe test through the gradient; convergence limits are
+unchanged. The jump regression is identical in every value. The contact replay
+now stops at **7671.35 ms (ContactUnresolved)** on skin samples embedded 78–89 %
+in Fixed attachment nodes. See the
+[residual-precision checkpoint](../../artifacts/soft-tissue/avatar-contact/residual-precision-01/README.md).
+Coordinate-centering remains a rejected experiment
+([precision experiment](../../artifacts/soft-tissue/avatar-contact/origin-precision-01/README.md);
+[native contact checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md)).
 
 ## Verification and remaining limits
 
-- **87 focused tissue tests pass** on the saved baseline; the native recording
-  example's five tests also pass.
+- **89 focused tissue tests pass** with the line-search change (87 earlier + 2
+  regressions that fail without it); the native recording example's five pass.
 - Python: **15 pass, one existing failure** in
   `test_root_acceptance_does_not_rewrite_the_candidate`. Its source slice includes
   an unrelated `for` beyond `resolve_root`. Protected assertions were unchanged.
@@ -86,16 +88,15 @@ for detailed findings and test logs.
 
 ## Resume with one bounded investigation
 
-1. Reproduce seed 739 and capture the exact failed nonlinear state, objective,
-   gradient components and effective BDF2 timestep. Measure residual-evaluation
-   precision and conditioning before changing convergence acceptance. A tiny
-   Newton step alone does not establish residual convergence.
-2. Investigate that state without changing source poses, timing, material,
-   attachments or contact limits. Coordinate-centering is a rejected diagnostic,
-   not an established fix. Further seed searches are unnecessary for this failure.
-3. After a justified solver change, complete the same contact replay and render
-   its compression/release. Repeat the unchanged-jump regression, focused tests
-   and live performance check. Keep numerical checks separate from visual proof.
+1. Decide (owner) how contact should treat skin samples whose embedding is mostly
+   on Fixed attachment nodes (tet 587, nodes 52/41/164 Fixed, free weight
+   0.11–0.22). Candidates: a finer or compliant attachment rim under contactable
+   skin (asset change, needs fidelity evidence), or an approved rule for such
+   samples. Do not relax the 100 µm residual, project skin, or alter arm motion.
+2. Then complete the same seed-739 replay, render compression/release, repeat the
+   unchanged-jump regression, focused tests and live performance check.
+3. `CC_TISSUE_FAILED_STATE_DIR=<dir>` records any nonlinear failure; reload it with
+   the ignored `failed_state_precision` probe (usage in its doc comment).
 
 Run from this worktree:
 

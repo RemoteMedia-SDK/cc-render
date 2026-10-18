@@ -176,6 +176,9 @@ impl BodyContacts {
             if valid {
                 return Ok(metrics);
             }
+            if round + 1 == MAX_CONTACT_ROUNDS && tracing::enabled!(tracing::Level::DEBUG) {
+                log_unresolved_planes(&contacts, &inner, candidate, asset);
+            }
             increase_penalty(&mut penalty_scale, &metrics);
         }
         Err(ContactUnresolved.into())
@@ -279,6 +282,46 @@ fn solve_contact_step(
         );
     }
     Ok((solved, metrics))
+}
+
+/// Diagnostic only: the final planes of an unresolved step and how much of each
+/// sample's embedding the solver can move (barycentric weight on free nodes).
+fn log_unresolved_planes(
+    solved: &[Vec<PlaneContact>],
+    remaining: &[Vec<PlaneContact>],
+    tissue: &[Tissue],
+    asset: &TissueAsset,
+) {
+    for (region, planes) in solved.iter().enumerate() {
+        let attachments = &asset.regions[region].attachments;
+        let tetrahedra = &asset.regions[region].tetrahedra;
+        for plane in planes {
+            let ids = tetrahedra[plane.point.tetrahedron];
+            let free_weight: f64 = ids.iter().zip(plane.point.barycentric)
+                .filter(|(i, _)| !matches!(attachments[**i], crate::cc_render::soft_tissue::Attachment::Fixed))
+                .map(|(_, w)| w * plane.point.influence)
+                .sum();
+            let point = plane.point.offset + ids.iter().zip(plane.point.barycentric)
+                .map(|(i, w)| tissue[region].positions()[*i] * (w * plane.point.influence))
+                .sum::<DVec3>();
+            tracing::debug!(
+                region,
+                tetrahedron = plane.point.tetrahedron,
+                nodes = ?ids,
+                attachments = ?ids.map(|i| attachments[i]),
+                barycentric = ?plane.point.barycentric,
+                free_weight,
+                normal = ?plane.normal,
+                depth_m = -plane.normal.dot(point - plane.surface_point),
+                stiffness_n_per_m = plane.stiffness_n_per_m,
+                "unresolved tissue contact plane"
+            );
+        }
+        for plane in &remaining[region] {
+            tracing::debug!(region, tetrahedron = plane.point.tetrahedron, normal = ?plane.normal,
+                surface_point = ?plane.surface_point, "remaining inner tissue contact plane");
+        }
+    }
 }
 
 fn increase_penalty(scales: &mut [f64], metrics: &[ContactMetrics]) {

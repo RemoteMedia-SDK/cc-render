@@ -10,6 +10,9 @@ mod pressure_tests;
 #[cfg(test)]
 #[path = "quality_pressure_tests.rs"]
 mod quality_pressure_tests;
+#[cfg(test)]
+#[path = "failed_state_probe.rs"]
+mod failed_state_probe;
 
 struct Coupling {
     nodes: [usize; 2],
@@ -225,14 +228,18 @@ impl Tissue {
                     .map(|((x, p), m)| m * gravity.dot(*x - *p))
                     .sum::<f64>()
         };
-        let mut energy = objective(&x);
-        for _ in 0..max_iterations {
-            let mut system = self.linearize(&x, &self.positions, self.frame, f64::INFINITY, &[], &Dissipation::default());
+        let gradient = |x: &[DVec3]| {
+            let mut system = self.linearize(x, &self.positions, self.frame, f64::INFINITY, &[], &Dissipation::default());
             for (i, g) in system.gradient.iter_mut().enumerate() {
                 if self.inverse_mass[i] > 0.0 {
                     *g -= self.masses[i] * gravity;
                 }
             }
+            system
+        };
+        let mut energy = objective(&x);
+        for _ in 0..max_iterations {
+            let system = gradient(&x);
             let residual = system
                 .gradient
                 .iter()
@@ -245,26 +252,43 @@ impl Tissue {
                 return Ok(residual);
             }
             let delta = system.direction()?;
-            (x, energy) = self.descend((&x, energy), &delta, dot(&system.gradient, &delta), &objective)?;
+            let derivative = |candidate: &[DVec3]| dot(&gradient(candidate).gradient, &delta);
+            (x, energy) = self.descend((&x, energy), &delta, dot(&system.gradient, &delta), &objective, derivative)?;
         }
         Err(TissueError::InvalidInput("equilibrium did not converge"))
     }
 
+    /// `derivative(candidate)` is the objective gradient at `candidate` dotted
+    /// with `delta`, so `slope` is its value at the current state.
     fn descend(
         &self,
         current: (&[DVec3], f64),
         delta: &[DVec3],
         slope: f64,
         objective: impl Fn(&[DVec3]) -> f64,
+        derivative: impl Fn(&[DVec3]) -> f64,
     ) -> Result<(Vec<DVec3>, f64), TissueError> {
+        const ARMIJO: f64 = 1e-4;
+        const CURVATURE: f64 = 0.9;
         let (x, energy) = current;
         let mut scale = 1.0;
         for _ in 0..20 {
             let candidate: Vec<_> = x.iter().zip(delta).map(|(x, d)| *x + scale * *d).collect();
             if self.validate_positions(&candidate).is_ok() {
                 let candidate_energy = objective(&candidate);
-                if candidate_energy <= energy + 1e-4 * scale * slope + 1e-15 {
+                if candidate_energy <= energy + ARMIJO * scale * slope + 1e-15 {
                     return Ok((candidate, candidate_energy));
+                }
+                // Near convergence the decrease is below the energy's rounding
+                // (force times position ulp per term), so test the same Armijo
+                // condition on its quadratic model through the accurate gradient:
+                // approximate Wolfe, Hager and Zhang, doi:10.1137/030601880.
+                // Every objective term is nonnegative, so |energy| is its scale.
+                if candidate_energy <= energy + 1e-6 * energy.abs() {
+                    let candidate_slope = derivative(&candidate);
+                    if (2.0 * ARMIJO - 1.0) * slope >= candidate_slope && candidate_slope >= CURVATURE * slope {
+                        return Ok((candidate, candidate_energy));
+                    }
                 }
             }
             scale *= 0.5;
@@ -463,7 +487,10 @@ impl Tissue {
                 });
             }
             let slope = dot(&system.gradient, &delta);
-            (*x, energy) = self.descend((x, energy), &delta, slope, &objective)?;
+            let derivative = |candidate: &[DVec3]| {
+                dot(&self.linearize(candidate, predicted, frame, dt, contacts, damping).gradient, &delta)
+            };
+            (*x, energy) = self.descend((x, energy), &delta, slope, &objective, derivative)?;
         }
         unreachable!("the inclusive final iteration returns a convergence result")
     }
@@ -480,7 +507,7 @@ mod tests {
         let delta = vec![DVec3::ZERO; unchanged.len()];
         // No candidate can satisfy decrease in this objective. The exhausted
         // search is a numerical failure, not malformed caller input.
-        let error = tissue.descend((&unchanged, 0.0), &delta, -1.0, |_| 1.0).unwrap_err();
+        let error = tissue.descend((&unchanged, 0.0), &delta, -1.0, |_| 1.0, |_| 0.0).unwrap_err();
         assert!(matches!(error, TissueError::DescentFailed));
         assert_eq!(tissue.positions, unchanged);
     }
@@ -502,14 +529,53 @@ mod tests {
         };
         let direction = vec![DVec3::X * 0.5; x.len()];
         let slope = -0.125 * x.len() as f64;
-        let (accepted, accepted_energy) = tissue.descend((&x, energy), &direction, slope, objective).unwrap();
+        let (accepted, accepted_energy) = tissue.descend((&x, energy), &direction, slope, objective,
+            |p| quadratic_slope(&target, 2.0, &direction, p)).unwrap();
         assert_eq!(accepted, target);
         assert_eq!(accepted_energy, potential(&accepted));
         assert!(accepted_energy < energy && evaluations.get() > 1);
         let ascent = vec![-DVec3::X * 0.125; x.len()];
-        assert!(tissue.descend((&x, energy), &ascent, slope, objective).is_err());
+        assert!(tissue.descend((&x, energy), &ascent, slope, objective, |p| quadratic_slope(&target, 2.0, &ascent, p)).is_err());
         assert_eq!(x, tissue.positions);
         assert_eq!(energy, potential(&x));
+    }
+
+    /// Directional derivative of `0.5 * stiffness * |p - target|^2` along `d`.
+    fn quadratic_slope(target: &[DVec3], stiffness: f64, d: &[DVec3], p: &[DVec3]) -> f64 {
+        p.iter().zip(target).zip(d).map(|((p, t), d)| stiffness * (*p - *t).dot(*d)).sum()
+    }
+
+    #[test]
+    fn descent_accepts_newton_step_whose_decrease_is_below_energy_rounding() {
+        // Each trial energy carries 2e-14 J of evaluation error, far above the
+        // 1e-20 J model decrease, so the function-value test alone rejects all.
+        let tissue = super::super::tests::cube(Frame::IDENTITY, false);
+        let x = tissue.positions.clone();
+        let target: Vec<_> = x.iter().map(|p| *p + DVec3::new(1e-11, -2e-11, 0.5e-11)).collect();
+        let potential = |p: &[DVec3]| 0.01 + p.iter().zip(&target)
+            .map(|(p, t)| 0.5 * 1e4 * p.distance_squared(*t)).sum::<f64>();
+        let energy = potential(&x);
+        let noisy = |p: &[DVec3]| potential(p) + if p == x.as_slice() { 0.0 } else { 2e-14 };
+        let newton: Vec<_> = target.iter().zip(&x).map(|(t, p)| *t - *p).collect();
+        let slope = quadratic_slope(&target, 1e4, &newton, &x);
+        assert!(slope < 0.0 && -0.5 * slope < 1e-15);
+        let (accepted, _) = tissue.descend((&x, energy), &newton, slope, noisy,
+            |p| quadratic_slope(&target, 1e4, &newton, p)).unwrap();
+        assert_eq!(accepted, target);
+        // An overshoot still backtracks: at 2.5x the derivative has reversed
+        // past the Armijo bound; half of it lies before the minimizer.
+        let long: Vec<_> = newton.iter().map(|d| *d * 2.5).collect();
+        let long_slope = quadratic_slope(&target, 1e4, &long, &x);
+        let (accepted, _) = tissue.descend((&x, energy), &long, long_slope, noisy,
+            |p| quadratic_slope(&target, 1e4, &long, p)).unwrap();
+        let half: Vec<_> = x.iter().zip(&long).map(|(p, d)| *p + 0.5 * *d).collect();
+        assert_eq!(accepted, half);
+        // Energy that rises beyond its rounding scale is never accepted.
+        let rising = |p: &[DVec3]| noisy(p) + if p == x.as_slice() { 0.0 } else { 1e-6 };
+        assert!(matches!(
+            tissue.descend((&x, energy), &newton, slope, rising, |p| quadratic_slope(&target, 1e4, &newton, p)),
+            Err(TissueError::DescentFailed)
+        ));
     }
 
     #[test]
