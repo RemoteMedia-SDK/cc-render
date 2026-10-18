@@ -7,6 +7,14 @@ fn outer(a: DVec3, b: DVec3) -> DMat3 {
 }
 
 impl Tissue {
+    pub(super) fn element_bulk(&self, index: usize) -> f64 {
+        match self.material.pressure_discretization {
+            PressureDiscretization::Element => self.material.lambda(),
+            _ if self.element_pressure[index] => self.material.bulk_pa,
+            _ => self.material.pressure_stabilization_pa,
+        }
+    }
+
     pub(super) fn elastic_differential(&self, index: usize, x: &[DVec3], active: [bool; 4])
         -> ([DVec3; 4], [[DMat3; 4]; 4])
     {
@@ -17,11 +25,12 @@ impl Tissue {
         } else {
             corotated(tet, x, self.material.shear_pa, self.material.strain_stiffening, active)
         };
-        if self.element_pressure[index] {
+        let bulk = self.element_bulk(index);
+        if bulk > 0. {
             let f = tet.deformation(x);
             let cofactor = DMat3::from_cols(f.y_axis.cross(f.z_axis), f.z_axis.cross(f.x_axis), f.x_axis.cross(f.y_axis));
             let derivative = material::nodal_gradient(cofactor * tet.inverse_rest.transpose());
-            let coefficient = if isochoric { self.material.bulk_pa } else { self.material.lambda() } * tet.volume;
+            let coefficient = bulk * tet.volume;
             for (gradient, derivative) in gradient.iter_mut().zip(derivative) {
                 *gradient += coefficient * (f.determinant() - 1.) * derivative;
             }

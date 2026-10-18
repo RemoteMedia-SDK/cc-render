@@ -73,6 +73,8 @@ fn tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overla
             ],
             material: Material {
                 pressure_discretization: Default::default(),
+                pressure_stabilization_pa: 0.0,
+                element_pressure_quality_cutoff: 0.0,
                 time_integration: Default::default(),
                 viscosity: None,
                 density_kg_m3: 950.0,

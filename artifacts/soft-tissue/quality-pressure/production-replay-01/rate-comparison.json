@@ -1,0 +1,74 @@
+{
+  "rates": [
+    {
+      "rate_hz": 120,
+      "regions": [
+        {
+          "name": "left_breast",
+          "volume_ratio_range": [
+            0.5624351357564947,
+            1.5834610564813913
+          ],
+          "maximum_total_volume_change": 0.003619438016089216
+        },
+        {
+          "name": "right_breast",
+          "volume_ratio_range": [
+            0.6678990132861564,
+            1.484412782019635
+          ],
+          "maximum_total_volume_change": 0.0037983192808295207
+        }
+      ],
+      "maximum_node_error_vs_480_m": 0.0043820379218676994,
+      "rms_node_error_vs_480_m": 0.000293268781846367
+    },
+    {
+      "rate_hz": 240,
+      "regions": [
+        {
+          "name": "left_breast",
+          "volume_ratio_range": [
+            0.5617490432015646,
+            1.5456762891546578
+          ],
+          "maximum_total_volume_change": 0.004039972025176031
+        },
+        {
+          "name": "right_breast",
+          "volume_ratio_range": [
+            0.6766242291386668,
+            1.4727094493721435
+          ],
+          "maximum_total_volume_change": 0.004624466713675002
+        }
+      ],
+      "maximum_node_error_vs_480_m": 0.001375348458982968,
+      "rms_node_error_vs_480_m": 7.837161799452553e-05
+    },
+    {
+      "rate_hz": 480,
+      "regions": [
+        {
+          "name": "left_breast",
+          "volume_ratio_range": [
+            0.5399561677221133,
+            1.5380738854875238
+          ],
+          "maximum_total_volume_change": 0.0040504748315819405
+        },
+        {
+          "name": "right_breast",
+          "volume_ratio_range": [
+            0.6809052609460485,
+            1.4666555749308334
+          ],
+          "maximum_total_volume_change": 0.004650417770384552
+        }
+      ],
+      "maximum_node_error_vs_480_m": 0.0,
+      "rms_node_error_vs_480_m": 0.0
+    }
+  ],
+  "limitation": "480 Hz is a finer discrete reference, not the exact solution. Recorded-attachment replay omits contact and fractional display solves."
+}

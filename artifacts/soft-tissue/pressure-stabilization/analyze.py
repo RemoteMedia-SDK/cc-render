@@ -13,6 +13,14 @@ ROOT = HERE.parents[2]
 trace = [json.loads(line) for line in (HERE.parent/'lab-boundary-nodal-front-01/tissue.ndjson').read_text().splitlines()]
 times = np.asarray([row['pts_ms'] for row in trace])
 plan = json.loads((OUT/'manifest.json').read_text())
+quality_study = 'quality_cutoffs' in plan
+cases = plan.get('quality_cutoffs', plan.get('shares_pa', []))
+prefix = 'quality' if quality_study else 'share'
+parameter = 'quality_cutoff' if quality_study else 'share_pa'
+if 'cases' in plan:
+    cases = [case['id'] for case in plan['cases']]
+    prefix, parameter = 'case', 'case'
+assert cases and cases[0] in (0, 'reference') and len(set(cases)) == len(cases)
 rows = []
 baseline_surface = None
 
@@ -22,11 +30,11 @@ def volumes(points, cells):
     return np.linalg.det(np.swapaxes(p[..., 1:, :] - p[..., :1, :], -1, -2))/6.
 
 
-for share in plan['shares_pa']:
-    asset = json.loads((OUT/f'share-{share}-fitted.json').read_text())
-    run = json.loads((OUT/f'share-{share}-run.json').read_text())
+for share in cases:
+    asset = json.loads((OUT/f'{prefix}-{share}-fitted.json').read_text())
+    run = json.loads((OUT/f'{prefix}-{share}-run.json').read_text())
     counts = [len(region['rest_positions']) for region in asset['regions']]
-    positions = np.fromfile(OUT/f'share-{share}-positions.bin', dtype='<f8').reshape(run['steps'], sum(counts), 3)
+    positions = np.fromfile(OUT/f'{prefix}-{share}-positions.bin', dtype='<f8').reshape(run['steps'], sum(counts), 3)
     sample_times = 50. + np.arange(1, run['steps']+1)*1000./run['rate_hz']
     offset = 0
     surfaces, regions = [], []
@@ -65,7 +73,7 @@ for share in plan['shares_pa']:
     rms_ratio = float(np.sqrt(np.mean(displacement**2)/np.mean(baseline**2)))
     passes = all(region['volume_ratio_min_max'][0]>=.5 and region['volume_ratio_min_max'][1]<=2.
                  and region['maximum_total_volume_change']<.01 for region in regions)
-    rows.append({'share_pa': share, 'regions': regions,
+    rows.append({parameter: share, 'regions': regions,
                  'surface_peak_m': float(displacement.max()), 'surface_time_rms_m': float(np.sqrt(np.mean(displacement**2))),
                  'peak_ratio_to_baseline': peak_ratio, 'rms_ratio_to_baseline': rms_ratio,
                  'maximum_surface_change_m': float(np.linalg.norm(surface-baseline_surface, axis=2).max()),
@@ -76,5 +84,5 @@ report = {'cases': rows, 'limits': ['Equal-weight embedded vertices, not area-we
                                   'CPU timing is diagnostic only; study-01 overlapped a crate compilation.']}
 (OUT/'comparison.json').write_text(json.dumps(report, indent=2)+'\n')
 for row in rows:
-    print(row['share_pa'], [r['volume_ratio_min_max'] for r in row['regions']],
+    print(row[parameter], [r['volume_ratio_min_max'] for r in row['regions']],
           'peak/rms', row['peak_ratio_to_baseline'], row['rms_ratio_to_baseline'], 'pass', row['passes_declared_screen'])

@@ -7,6 +7,9 @@ use super::timestep::Dissipation;
 #[cfg(test)]
 #[path = "pressure_tests.rs"]
 mod pressure_tests;
+#[cfg(test)]
+#[path = "quality_pressure_tests.rs"]
+mod quality_pressure_tests;
 
 struct Coupling {
     nodes: [usize; 2],
@@ -318,9 +321,9 @@ impl Tissue {
             let evaluated = patch.evaluate(&self.tets, x);
             let damping = damping.pressures.get(p).copied().unwrap_or_default();
             let ratio = evaluated.ratio;
-            let stress = patch.volume * (self.material.bulk_pa * (ratio - 1.)
+            let stress = patch.volume * (self.material.nodal_bulk() * (ratio - 1.)
                 + damping.bulk * (ratio.ln() - damping.history_log_volume) / ratio);
-            let stiffness = patch.volume * (self.material.bulk_pa + damping.bulk / (ratio * ratio));
+            let stiffness = patch.volume * (self.material.nodal_bulk() + damping.bulk / (ratio * ratio));
             for (&i, &g) in patch.nodes.iter().zip(&evaluated.gradients) {
                 system.gradient[i] += stress * g;
                 system.diagonal[i] += stiffness * outer(g, g);

@@ -4,7 +4,7 @@ fn nodal_cube(attached: bool) -> Tissue {
     cube_with_pressure(attached, PressureDiscretization::AverageNodal)
 }
 
-fn cube_with_pressure(attached: bool, pressure: PressureDiscretization) -> Tissue {
+pub(super) fn cube_with_pressure(attached: bool, pressure: PressureDiscretization) -> Tissue {
     let old = super::super::tests::cube(Frame::IDENTITY, attached);
     let material = Material {
         pressure_discretization: pressure,
@@ -45,12 +45,17 @@ fn nodal_pressure_preserves_affine_energy_and_relaxes_nonuniform_volume() {
 #[test]
 fn nodal_pressure_full_objective_gradient_includes_viscosity_and_fixed_elimination() {
     for mode in [PressureDiscretization::AverageNodal, PressureDiscretization::AverageNodalBoundary] {
-        check_full_objective_gradient(mode);
+        check_full_objective_gradient(mode, 0.);
     }
 }
 
-fn check_full_objective_gradient(mode: PressureDiscretization) {
+fn check_full_objective_gradient(mode: PressureDiscretization, stabilization: f64) {
     let mut tissue = cube_with_pressure(true, mode);
+    tissue.material.pressure_stabilization_pa = stabilization;
+    check_objective_gradient(tissue);
+}
+
+pub(super) fn check_objective_gradient(mut tissue: Tissue) {
     tissue.positions[5] += DVec3::new(0.001, -0.002, 0.0003);
     tissue.previous = Some(History { positions: tissue.rest.clone(), velocities: tissue.velocities.clone(), dt: 1./240. });
     let step = IntegrationStep::new(&tissue, 1./300., DVec3::NEG_Y * 9.81);
@@ -123,4 +128,68 @@ fn fixed_edge_pressure_partition_preserves_homogeneous_material_energy() {
     let expected: f64 = tissue.tets.iter().map(|t| t.isochoric_energy(&x,tissue.material.shear_pa,tissue.material.strain_stiffening)).sum::<f64>()
         + 0.5*tissue.material.bulk_pa*total*(f.determinant()-1.).powi(2);
     assert!((expected-tissue.elastic_energy(&x)).abs() < 1e-12);
+}
+
+#[test]
+fn stabilized_pressure_preserves_affine_energy_and_penalizes_only_volume_variance() {
+    for mode in [PressureDiscretization::AverageNodal, PressureDiscretization::AverageNodalBoundary] {
+        let baseline = cube_with_pressure(true, mode);
+        let mut stabilized = baseline.clone();
+        stabilized.material.pressure_stabilization_pa = 2000.;
+        let f = DMat3::from_cols(DVec3::new(1.05, 0.1, 0.), DVec3::Y * 0.95, DVec3::Z * 1.02);
+        let mut x: Vec<_> = baseline.rest.iter().map(|p| f * *p).collect();
+        assert!((stabilized.elastic_energy(&x) - baseline.elastic_energy(&x)).abs() < 1e-12);
+        x[7] += DVec3::new(0.004, -0.002, 0.003);
+        // Independently sum the weighted variance of element Jacobians in
+        // each nodal patch. Fixed-edge elements are outside this partition.
+        let mut variance = 0.;
+        for node in 0..x.len() {
+            let incident: Vec<_> = baseline.tets.iter().zip(&baseline.element_pressure)
+                .filter(|(tet, local)| !**local && tet.ids.contains(&node)).collect();
+            let weight: f64 = incident.iter().map(|(tet, _)| tet.volume / 4.).sum();
+            if weight == 0. { continue; }
+            let mean: f64 = incident.iter().map(|(tet, _)| tet.volume / 4.
+                * tet.deformation(&x).determinant()).sum::<f64>() / weight;
+            variance += incident.iter().map(|(tet, _)| tet.volume / 4.
+                * (tet.deformation(&x).determinant() - mean).powi(2)).sum::<f64>();
+        }
+        let extra = stabilized.elastic_energy(&x) - baseline.elastic_energy(&x);
+        assert!(extra > 1e-8);
+        assert!((extra - 0.5 * 2000. * variance).abs() < 1e-12);
+        let rotation = DQuat::from_rotation_y(0.8);
+        let moved: Vec<_> = x.iter().map(|p| rotation * *p + DVec3::new(2., -1., 3.)).collect();
+        assert!((stabilized.elastic_energy(&moved) - stabilized.elastic_energy(&x)).abs() < 1e-10);
+        stabilized.material.pressure_stabilization_pa = stabilized.material.bulk_pa;
+        let fully_local: f64 = stabilized.tets.iter().map(|tet|
+            tet.isochoric_energy(&x, stabilized.material.shear_pa, stabilized.material.strain_stiffening)
+            + 0.5 * tet.volume * stabilized.material.bulk_pa
+                * (tet.deformation(&x).determinant() - 1.).powi(2)).sum();
+        assert!((stabilized.elastic_energy(&x) - fully_local).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn stabilized_pressure_gradient_includes_both_partitions_and_viscosity() {
+    for mode in [PressureDiscretization::AverageNodal, PressureDiscretization::AverageNodalBoundary] {
+        for stabilization in [2000., 30000.] {
+            check_full_objective_gradient(mode, stabilization);
+        }
+    }
+}
+
+#[test]
+fn pressure_stabilization_rejects_invalid_shares_and_defaults_to_zero() {
+    let material = nodal_cube(false).material;
+    for value in [-1., material.bulk_pa + 1., f64::NAN, f64::INFINITY] {
+        assert!(Material { pressure_stabilization_pa: value, ..material }.validate().is_err());
+    }
+    assert!(Material { pressure_discretization: PressureDiscretization::Element,
+        pressure_stabilization_pa: 1., ..material }.validate().is_err());
+    for value in [0., material.bulk_pa] {
+        assert!(Material { pressure_stabilization_pa: value, ..material }.validate().is_ok());
+    }
+    let mut encoded = serde_json::to_value(material).unwrap();
+    encoded.as_object_mut().unwrap().remove("pressure_stabilization_pa");
+    let decoded: Material = serde_json::from_value(encoded).unwrap();
+    assert_eq!(decoded.pressure_stabilization_pa, 0.);
 }

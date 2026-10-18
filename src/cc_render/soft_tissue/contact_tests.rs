@@ -56,9 +56,19 @@ fn continuum_viscous_contact_compression_and_release_preserve_attachments() {
 
 #[test]
 fn boundary_pressure_viscous_compression_and_release_preserve_attachments() {
+    boundary_pressure_compression(0.);
+}
+
+#[test]
+fn stabilized_boundary_pressure_compression_and_release_preserve_attachments() {
+    boundary_pressure_compression(8000.);
+}
+
+fn boundary_pressure_compression(stabilization: f64) {
     let old = tests::cube(Frame::IDENTITY, true);
     let material = Material {
         pressure_discretization: PressureDiscretization::AverageNodalBoundary,
+        pressure_stabilization_pa: stabilization,
         time_integration: TimeIntegration::Bdf2,
         viscosity: Some(Viscosity { shear_pa_s: 5., bulk_pa_s: 5000. }),
         strain_damping_per_second: 0.,

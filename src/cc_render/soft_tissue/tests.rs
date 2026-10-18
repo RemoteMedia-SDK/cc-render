@@ -4,6 +4,8 @@ use bevy::math::DMat3;
 fn parameters() -> Material {
     Material {
         pressure_discretization: Default::default(),
+        pressure_stabilization_pa: 0.0,
+        element_pressure_quality_cutoff: 0.0,
         time_integration: Default::default(),
         viscosity: None,
         density_kg_m3: 950.0,

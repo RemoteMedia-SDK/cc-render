@@ -7,6 +7,27 @@ use bevy::math::{DMat3, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+pub(super) fn mean_ratio_quality(points: [DVec3; 4]) -> f64 {
+    let six_volume = material::edges(points).determinant().abs();
+    let edge_sum: f64 = material::EDGE_PAIRS.iter()
+        .map(|[a, b]| (points[*a] - points[*b]).length_squared()).sum();
+    12. * (six_volume / 2.).powf(2./3.) / edge_sum
+}
+
+pub(super) fn element_partition(
+    tets: &[material::Tet], initial: &[DVec3],
+    attachments: &[super::solver::Attachment], material: super::solver::Material,
+) -> Vec<bool> {
+    tets.iter().map(|tet| match material.pressure_discretization {
+        PressureDiscretization::Element => true,
+        PressureDiscretization::AverageNodal => false,
+        PressureDiscretization::AverageNodalBoundary => tet.ids.iter()
+            .filter(|&&i| matches!(attachments[i], super::solver::Attachment::Fixed)).count() >= 2
+            || (material.element_pressure_quality_cutoff > 0.
+                && mean_ratio_quality(tet.ids.map(|i| initial[i])) < material.element_pressure_quality_cutoff),
+    }).collect()
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PressureDiscretization {

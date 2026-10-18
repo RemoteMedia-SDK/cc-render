@@ -24,6 +24,16 @@ pub use viscosity::Viscosity;
 pub struct Material {
     #[serde(default)]
     pub pressure_discretization: PressureDiscretization,
+    /// In boundary-nodal mode, use local pressure below this authored-shape
+    /// mean-ratio quality. Zero disables geometry selection. The partition is
+    /// fixed at construction, independent of motion and reference-shape fitting.
+    #[serde(default)]
+    pub element_pressure_quality_cutoff: f64,
+    /// Optional element-volume share of averaged pressure, in Pa. This
+    /// penalizes within-patch volume variation while preserving affine bulk
+    /// energy. Zero retains pure averaging; only valid for nodal pressure.
+    #[serde(default)]
+    pub pressure_stabilization_pa: f64,
     #[serde(default)]
     pub time_integration: TimeIntegration,
     /// Objective material strain-rate damping, in Pa s. Mutually exclusive
@@ -57,6 +67,10 @@ mod contact_tests;
 mod integration_tests;
 
 impl Material {
+    pub(super) fn nodal_bulk(self) -> f64 {
+        self.bulk_pa - self.pressure_stabilization_pa
+    }
+
     pub(super) fn lambda(self) -> f64 {
         self.bulk_pa - 2.0 * self.shear_pa / 3.0
     }
@@ -73,6 +87,20 @@ impl Material {
             || !(1..=64).contains(&self.iterations)
         {
             return Err(TissueError::InvalidInput("material"));
+        }
+        if !self.pressure_stabilization_pa.is_finite()
+            || !(0.0..=self.bulk_pa).contains(&self.pressure_stabilization_pa)
+            || (self.pressure_discretization == PressureDiscretization::Element
+                && self.pressure_stabilization_pa != 0.0)
+        {
+            return Err(TissueError::InvalidInput("pressure stabilization"));
+        }
+        if !self.element_pressure_quality_cutoff.is_finite()
+            || !(0.0..=1.0).contains(&self.element_pressure_quality_cutoff)
+            || (self.pressure_discretization != PressureDiscretization::AverageNodalBoundary
+                && self.element_pressure_quality_cutoff != 0.0)
+        {
+            return Err(TissueError::InvalidInput("element pressure quality cutoff"));
         }
         if let Some(viscosity) = self.viscosity {
             viscosity.validate()?;
@@ -275,12 +303,7 @@ impl Tissue {
             })
             .collect();
         let (damping_edges, damping_degree) = material_edges(&tets, rest.len());
-        let element_pressure: Vec<_> = tets.iter().map(|tet| match material.pressure_discretization {
-            PressureDiscretization::Element => true,
-            PressureDiscretization::AverageNodal => false,
-            PressureDiscretization::AverageNodalBoundary => tet.ids.iter()
-                .filter(|&&i| matches!(attachments[i], Attachment::Fixed)).count() >= 2,
-        }).collect();
+        let element_pressure = pressure::element_partition(&tets, &initial, &attachments, material);
         let mut pressure_patches = match material.pressure_discretization {
             PressureDiscretization::Element => Vec::new(),
             _ => pressure::Patch::build(&tets, rest.len(), &element_pressure),
@@ -380,11 +403,11 @@ impl Tissue {
             PressureDiscretization::Element => t.energy(x, self.material.shear_pa,
                 self.material.lambda(), self.material.strain_stiffening),
             _ => t.isochoric_energy(x, self.material.shear_pa, self.material.strain_stiffening)
-                + if self.element_pressure[i] { 0.5 * self.material.bulk_pa * t.volume
+                + if self.element_bulk(i) > 0. { 0.5 * self.element_bulk(i) * t.volume
                     * (t.deformation(x).determinant() - 1.).powi(2) } else { 0. },
         }).sum::<f64>()
             + self.pressure_patches.iter().map(|p| p.energy(&self.tets, x,
-                self.material.bulk_pa, pressure::Damping::default())).sum::<f64>()
+                self.material.nodal_bulk(), pressure::Damping::default())).sum::<f64>()
     }
 
     fn validate_positions(&self, positions: &[DVec3]) -> Result<(), TissueError> {

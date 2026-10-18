@@ -9,6 +9,9 @@ The user reviewed the [boundary-pressure comparison video](../../artifacts/soft-
 and said “Looks much much better.” That exact video remains the visual reference.
 The [review page](../../artifacts/soft-tissue/volume-audit/index.html) shows physics
 off/on with unchanged source motion and no displacement amplification.
+The newer [localized-volume comparison](../../artifacts/soft-tissue/quality-pressure/reviewed-vs-local-volume.mp4)
+retains broad movement while reducing local volume extremes; see its
+[implementation and evidence](breast-soft-tissue-local-volume.md).
 
 ## Scope and ownership
 
@@ -28,14 +31,17 @@ agents' worktrees are untouched.
 
 ## Current simulation
 
-Asset: `assets/tissue/beautiful_assistant.base-boundary-nodal-volume-prototype.json`.
+Current candidate: `assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
+The reviewed original remains `beautiful_assistant.base-boundary-nodal-volume-prototype.json`.
 The left/right cages have 241/233 nodes, 657/605 tetrahedra and 130/128 fixed chest
 attachments. An offline fit supplies the unloaded reference coordinates.
 
 The f64 finite-element solver combines isochoric corotated shear, strain
 hardening, bulk-volume resistance and objective continuum viscosity. The hybrid
-pressure mode uses element pressure on tetrahedra with a fixed edge and average
-nodal pressure elsewhere. The partitions do not double-count bulk response.
+pressure mode uses element pressure on tetrahedra with a fixed edge or low
+authored-shape quality, and average nodal pressure elsewhere. A small element
+share in the nodal partition penalizes local volume variation. The partitions
+do not double-count bulk response.
 This is an engineering formulation, not an anatomical calibration.
 
 | Parameter | Selected value |
@@ -44,6 +50,8 @@ This is an engineering formulation, not an anatomical calibration.
 | Shear / bulk modulus | 500 / 500,000 Pa |
 | Strain-hardening coefficient | 8 |
 | Shear / bulk viscosity | 5 / 5,000 Pa s |
+| Element-pressure quality cutoff | 0.15 |
+| Element / nodal bulk share in averaged cells | 8,000 / 492,000 Pa |
 | Runtime / reviewed-capture rate | 120 / 240 Hz |
 | Maximum nonlinear iterations | 32 |
 
@@ -80,9 +88,11 @@ The reviewed clip contains all 478 frames through 8 seconds, with unchanged
 attachments and source packets. It reaches 36.15 mm peak skin displacement.
 At its comparison frame, 44.85% of the skin patch moves more than 10 mm, showing
 broad deformation. Whole-region volume changes remain below 0.28%, but local
-volume ratios reach 0.310–2.732; the extreme local distortion remains unresolved.
+volume ratios reach 0.310–2.732. The new candidate reduces the captured range to
+0.562–1.533, with 32.56 mm peak movement and 40.77% of the patch moving over
+10 mm at the comparison frame. Local distortion is reduced, not eliminated.
 
-All 76 focused tissue tests pass, covering forces, viscosity, time convergence,
+All 84 focused tissue tests pass, covering forces, viscosity, time convergence,
 rollback, attachment fidelity, parallel region solves and compression/release.
 The Python suite has 15 passes and one existing ownership source-slice failure;
 no protected assertions were weakened. These checks do not establish anatomical
@@ -90,26 +100,29 @@ material accuracy or comprehensive contact behavior.
 
 ## Runtime measurements
 
-The latest dev-profile optimization delivers 170 / 174 readbacks over 7.934
+The preceding dev-profile optimization delivers 170 / 174 readbacks over 7.934
 source seconds in two runs, taking 8.062 / 8.048 wall seconds after the first
 frame. Its p95 delivery gap is 114 / 112 ms, versus 183 ms at the preceding
 checkpoint. This is still uneven playback; readback timing is not browser
 presentation. The package now uses one codegen unit; its measured rebuild took
 110 seconds. These shared-host runs do not establish release-build performance.
 
-At 240 Hz, all 478 frames have identical mechanical values to the preceding
-BDF2-policy capture, and differ from the strict solver by at most 0.751 um in
+For that earlier compiler optimization, all 478 frames have identical mechanical
+values to the preceding BDF2-policy capture, and differ from the strict solver by at most 0.751 um in
 node position, with identical attachments. See the
 [accuracy report](breast-soft-tissue-accuracy.md) and
 [runtime optimization record](breast-soft-tissue-runtime.md) for exact conditions,
 rejected candidates and shared-host timing limitations.
+The new material candidate delivers 158 readbacks in its tracing-disabled live
+run, with a 132 ms p95 gap and 228 ms end drift. It is a volume-behavior
+improvement, not a demonstrated throughput improvement.
 
 Remaining work is smooth live playback, reduced local distortion and rendered
 active-contact validation before enabling the replacement by default.
 The [uniform pressure-share experiment](../../artifacts/soft-tissue/pressure-stabilization/README.md)
-was rejected: it reduced expansion but left excessive compression in thin
-right-side elements, then suppressed movement before meeting the distortion
-limits. Its optional parameter was removed; the reviewed material is unchanged.
+was rejected on its own: it reduced expansion but left excessive compression
+in thin right-side elements. Combining a small share with geometry-selected
+element pressure passes the declared volume and broad-movement screens.
 
 ## Implementation and history
 

@@ -1,0 +1,10 @@
+<!-- ripwire exemplar for "tetrahedral volume quality function" (task -> kind=fn, low-confidence: weak match, fell back to fn): the repo's best-in-class fn to imitate — chosen by ROLE, NEVER by text similarity to your task: candidates are first filtered to cognitive complexity at or under the ccx ceiling (4x the complexity bar), then ordered non-fixture path before test-fixture path, tested before untested, higher fan-in, lower complexity, fewer lines, lowest id. low_confidence=1 marks a weak task-to-kind match that fell back to fn; over_ccx_bar=1 marks a corpus where nothing was under the ceiling, so the pick is the least bad rather than a clean one; candidates= counts the ELIGIBLE instances of the kind (post-ceiling), not every instance. On the root, the three attributes that ARE that ordering's evidence: in=reuse-count (callers), ccx=cognitive complexity, tested=1 when a test reaches it (OMITTED, never 0, when none does). The body follows in a bodies section, its callee signatures in a calls child; both disclose truncation the house way: total= is how many qualified, shown= how many are printed, capped=1 when the two differ (calls omits shown= and capped= when its list is complete). Copy its shape, not its text. --><exemplar kind="fn" candidates="1519" n="update" p="src/cc_render/bevy_app/wet_surfaces.rs:70" in="59" ccx="3" root="." tested="1" low_confidence="1"><bodies shown="1" total="1" capped="0"><b t="fn" l="70" p="src/cc_render/bevy_app/wet_surfaces.rs" n="update"><![CDATA[fn update(weather: Res<super::weather_transition::AppliedWeather>, mut materials: ResMut<Assets<WetMaterial>>) {
+    for (_, material) in materials.iter_mut() {
+        material.extension.sky = weather.current.sky;
+        material.extension.coating.x = weather.surface_wetness;
+        let strength = material.extension.coating.z;
+        if strength > 0.0 {
+            material.base.lightmap_exposure = strength * weather.current.lighting.environment;
+        }
+    }
+}]]></b></bodies></exemplar>
