@@ -29,7 +29,7 @@ struct System<'a> {
     gradient: Vec<DVec3>,
 }
 
-impl System<'_> {
+impl<'a> System<'a> {
     fn multiply(&self, input: &[DVec3]) -> Vec<DVec3> {
         let mut output: Vec<_> = input
             .iter()
@@ -45,13 +45,42 @@ impl System<'_> {
     }
 
     fn direction(&self) -> Result<Vec<DVec3>, TissueError> {
+        self.direction_cached(&mut None)
+    }
+
+    fn factor(&self) -> Option<super::preconditioner::Factor<'a>> {
+        super::preconditioner::Factor::new(self.pattern, &self.diagonal, |i| self.couplings[i].block)
+    }
+
+    fn direction_cached(
+        &self,
+        cache: &mut Option<super::preconditioner::Factor<'a>>,
+    ) -> Result<Vec<DVec3>, TissueError> {
+        let reused = cache.is_some();
+        if !reused {
+            *cache = self.factor();
+        }
+        match self.direction_preconditioned(cache.as_ref()) {
+            // A changing tangent can make an older factor ineffective. Retry
+            // with the current matrix before reporting a linear failure.
+            Err(TissueError::LinearSolveFailed(_)) if reused => {
+                *cache = self.factor();
+                self.direction_preconditioned(cache.as_ref())
+            }
+            result => result,
+        }
+    }
+
+    fn direction_preconditioned(
+        &self,
+        factor: Option<&super::preconditioner::Factor<'_>>,
+    ) -> Result<Vec<DVec3>, TissueError> {
         let mut result = vec![DVec3::ZERO; self.gradient.len()];
         let mut residual: Vec<_> = self.gradient.iter().map(|g| -*g).collect();
         let norm_squared = dot(&residual, &residual);
         if norm_squared == 0.0 {
             return Ok(result);
         }
-        let factor = super::preconditioner::Factor::new(self.pattern, &self.diagonal, |i| self.couplings[i].block);
         let precondition = |r: &[DVec3]| -> Vec<_> {
             if let Some(factor) = &factor {
                 return factor.apply(r);
@@ -361,13 +390,17 @@ impl Tissue {
     ) -> Result<(), TissueError> {
         // Check the final accepted descent too. Reaching the iteration budget
         // is not convergence; the caller may retry a smaller physical step.
+        // Reuse only the SPD preconditioner within this physical step. Every
+        // iteration still assembles the current physical matrix and verifies
+        // its true residual; neither the force law nor tolerances change.
+        let mut factor = None;
         for iteration in 0..=self.material.iterations {
             let system = self.linearize(x, predicted, frame, dt, contacts, damping);
             let force_squared = dot(&system.gradient, &system.gradient);
             if force_squared == 0.0 {
                 return Ok(());
             }
-            let delta = system.direction().map_err(|error| {
+            let delta = system.direction_cached(&mut factor).map_err(|error| {
                 tracing::debug!(iteration, contacts = contacts.len(), dt, "tissue nonlinear solve context");
                 error
             })?;

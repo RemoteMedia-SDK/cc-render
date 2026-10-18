@@ -54,19 +54,48 @@ fn continuum_viscous_contact_compression_and_release_preserve_attachments() {
     compression_and_recovery(TimeIntegration::Bdf2, Some(Viscosity {shear_pa_s:15.,bulk_pa_s:300.}));
 }
 
+#[test]
+fn boundary_pressure_viscous_compression_and_release_preserve_attachments() {
+    let old = tests::cube(Frame::IDENTITY, true);
+    let material = Material {
+        pressure_discretization: PressureDiscretization::AverageNodalBoundary,
+        time_integration: TimeIntegration::Bdf2,
+        viscosity: Some(Viscosity { shear_pa_s: 5., bulk_pa_s: 5000. }),
+        strain_damping_per_second: 0.,
+        strain_stiffening: 8.,
+        shear_pa: 500.,
+        bulk_pa: 500000.,
+        iterations: 32,
+        ..old.material
+    };
+    let tissue = Tissue::new(
+        old.rest.clone(), old.rest, old.tets.iter().map(|tet| tet.ids).collect(),
+        old.attachments, material, Frame::IDENTITY,
+    ).unwrap();
+    assert!(!tissue.pressure_patches.is_empty());
+    assert!(tissue.element_pressure.iter().any(|local| *local));
+    // This nearly incompressible, coarse clamped cube needs a harder penalty
+    // plane than the 30 kPa legacy fixture. Keep its 0.1 mm penetration limit.
+    check_compression_and_recovery(tissue, 2_500_000.0);
+}
+
 fn compression_and_recovery(method: TimeIntegration, viscosity: Option<Viscosity>) {
     let mut tissue = tests::cube(Frame::IDENTITY, true);
     tissue.material.time_integration = method;
     tissue.material.viscosity = viscosity;
     if viscosity.is_some() { tissue.material.strain_damping_per_second = 0.; }
     tissue.material.iterations = 32;
+    check_compression_and_recovery(tissue, 250_000.0);
+}
+
+fn check_compression_and_recovery(mut tissue: Tissue, stiffness_n_per_m: f64) {
     let initial = tissue.positions.clone();
     let mut measured = ContactMetrics::default();
     for tick in 1..=120 {
         let x = 0.11 - 0.02 * (tick as f64 / 60.0).min(1.0);
         let planes: Vec<_> = [1, 3, 5, 7]
             .map(|i| PlaneContact {
-                stiffness_n_per_m: 250_000.0,
+                stiffness_n_per_m,
                 ..plane(&tissue, i, x)
             })
             .into();
