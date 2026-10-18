@@ -5,6 +5,8 @@ See the [current visual baseline](breast-soft-tissue-boundary-checkpoint.md)
 for the exact video, implementation, tests and remaining performance/volume limits.
 The [runtime optimization follow-up](breast-soft-tissue-runtime.md) preserves
 that motion while reducing solver cost; live playback remains below target.
+The latest [BDF2 accuracy policy](breast-soft-tissue-accuracy.md) records its
+timestep-scaled limits, rejected candidates and independent convergence checks.
 The [pressure-discretization investigation](breast-soft-tissue-pressure.md)
 records the preceding candidates. The
 [paused checkpoint](breast-soft-tissue-paused.md) records the previous skin-volume

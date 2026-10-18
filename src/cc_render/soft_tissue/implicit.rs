@@ -21,6 +21,20 @@ fn dot(a: &[DVec3], b: &[DVec3]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a.dot(*b)).sum()
 }
 
+fn nonlinear_limits(dt: f64, integration: TimeIntegration) -> (f64, f64) {
+    if integration == TimeIntegration::ImplicitEuler {
+        // Retain the established first-order solver's convergence policy.
+        return (1e-4, 1e-7);
+    }
+    // BDF2 uses this effective differentiation interval for both x and v.
+    // Since a position error contributes error/dt to velocity, scale its
+    // budget as dt^4 (velocity dt^3). The force budget scales as dt^2.
+    // Cap at the 120 Hz BDF2 budgets; numerical floors avoid demanding
+    // arbitrarily small residuals during fractional/retried steps.
+    let scale = (dt * 180.0).min(1.0);
+    ((1e-3 * scale.powi(2)).max(1e-8), (1e-6 * scale.powi(4)).max(1e-12))
+}
+
 struct System<'a> {
     pattern: &'a super::preconditioner::Pattern,
     couplings: Vec<Coupling>,
@@ -405,6 +419,7 @@ impl Tissue {
         // The objective is fixed for this physical solve. Retain the energy
         // already evaluated at each accepted trial, never across timesteps.
         let mut energy = objective(x);
+        let (force_limit, correction_limit) = nonlinear_limits(dt, self.material.time_integration);
         // Check the final accepted descent too. Reaching the iteration budget
         // is not convergence; the caller may retry a smaller physical step.
         // Reuse only the SPD preconditioner within this physical step. Every
@@ -423,10 +438,13 @@ impl Tissue {
             })?;
             // Both force balance and the remaining Newton correction must be
             // small. A force-only check is insufficient for compliant modes.
-            // Engineering limits: 0.1 mN global free-force norm and 0.1 um per
-            // node. The configured iteration count remains the upper bound.
+            // These are numerical stopping limits, not material damping.
+            // Independent time-convergence and trajectory comparisons are
+            // recorded in breast-soft-tissue-runtime.md.
             let correction_squared = delta.iter().map(|d| d.length_squared()).fold(0.0, f64::max);
-            if force_squared <= 1e-8 && correction_squared <= 1e-14 {
+            if force_squared <= force_limit * force_limit
+                && correction_squared <= correction_limit * correction_limit
+            {
                 return Ok(());
             }
             if iteration == self.material.iterations {

@@ -1,5 +1,9 @@
 # Runtime optimization after the visual baseline, 2026-10-18
 
+The latest [BDF2 accuracy follow-up](breast-soft-tissue-accuracy.md) improves
+120 Hz throughput with bounded measured trajectory error and unchanged tests.
+It supersedes the fixed nonlinear stopping limits described below.
+
 The reviewed visual baseline remains commit `12d54a8` and its
 [boundary-pressure video](../../artifacts/soft-tissue/volume-audit/tracked-off-on-boundary.mp4).
 This change improves solver throughput without changing the material, timestep,

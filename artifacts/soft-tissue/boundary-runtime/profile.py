@@ -13,6 +13,11 @@ ROOT = HERE.parents[2]
 label = sys.argv[1]
 assert label.replace('-', '').isalnum()
 flags = sys.argv[2:]
+rates = [flag for flag in flags if flag.startswith('--rate=')]
+assert len(rates) <= 1
+rate = int(rates[0].split('=', 1)[1]) if rates else 240
+assert rate in (120, 240, 480)
+flags = [flag for flag in flags if not flag.startswith('--rate=')]
 assert flags in ([], ['--reuse-factor'])
 out = HERE / label
 out.mkdir(exist_ok=False)
@@ -23,7 +28,7 @@ replay = HERE.parent / 'solver-runtime/replay.rs'
 inputs = [asset, trace, replay, Path(__file__).resolve(), *sorted(source.glob('*.rs'))]
 (out/'inputs.json').write_text(json.dumps({
     'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-    'rate_hz': 240,
+    'rate_hz': rate,
     'experiments': flags,
     'files': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs},
 }, indent=2)+'\n')
@@ -125,7 +130,7 @@ pub fn profile() {
         subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
     with (out/'run.json').open('x') as log, (out/'counters.json').open('x') as counters:
         subprocess.run([str(scratch/'replay'), str(asset), str(trace),
-                        str(out/'positions.bin'), '240', '50'],
+                        str(out/'positions.bin'), str(rate), '50'],
                        stdout=log, stderr=counters, check=True)
 print((out/'run.json').read_text())
 print((out/'counters.json').read_text())
