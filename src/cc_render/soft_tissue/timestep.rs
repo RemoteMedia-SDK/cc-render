@@ -42,16 +42,19 @@ pub(super) struct IntegrationStep {
 pub(super) struct Dissipation {
     pub edges: Vec<EdgeDamping>,
     pub elements: Vec<viscosity::Element>,
+    pub pressures: Vec<pressure::Damping>,
 }
 
 impl Dissipation {
-    pub fn energy(&self, x: &[DVec3], tets: &[Tet]) -> f64 {
+    pub fn energy(&self, x: &[DVec3], tets: &[Tet], patches: &[pressure::Patch]) -> f64 {
         self.edges.iter().map(|e| e.energy(x)).sum::<f64>()
             + self
                 .elements
                 .iter()
                 .map(|e| e.energy(&tets[e.tet], x))
                 .sum::<f64>()
+            + patches.iter().zip(&self.pressures)
+                .map(|(p, d)| p.energy(tets, x, 0., *d)).sum::<f64>()
     }
 }
 
@@ -89,7 +92,7 @@ impl IntegrationStep {
             .collect();
         let edges = if bdf2 && tissue.material.strain_damping_per_second > 0.0 {
             tissue
-                .edges
+                .damping_edges
                 .iter()
                 .filter_map(|&[a, b]| {
                     let inverse_mass = tissue.inverse_mass[a] + tissue.inverse_mass[b];
@@ -132,11 +135,18 @@ impl IntegrationStep {
                                 older * tet.deformation(&old.positions).determinant().ln()
                             }),
                         shear: viscosity.shear_pa_s / dt,
-                        bulk: viscosity.bulk_pa_s / dt,
+                        bulk: if tissue.element_pressure[i] { viscosity.bulk_pa_s / dt } else { 0. },
                     })
                     .collect()
             });
-        let damping = Dissipation { edges, elements };
+        let pressures = tissue.material.viscosity.map_or_else(Vec::new, |viscosity| {
+            tissue.pressure_patches.iter().map(|patch| pressure::Damping {
+                history_log_volume: current * patch.ratio(&tissue.tets, &tissue.positions).ln()
+                    + previous.map_or(0., |old| older * patch.ratio(&tissue.tets, &old.positions).ln()),
+                bulk: viscosity.bulk_pa_s / dt,
+            }).collect()
+        });
+        let damping = Dissipation { edges, elements, pressures };
         Self {
             dt,
             baseline,

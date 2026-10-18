@@ -1,7 +1,11 @@
 # Base-avatar volumetric tissue
 
-**Paused at the user's request. Visible bounce remains unsatisfactory.**
-See the [paused checkpoint](breast-soft-tissue-paused.md) for the latest skin-volume
+**2026-10-18: the latest boundary-pressure video received positive visual feedback.**
+See the [current visual baseline](breast-soft-tissue-boundary-checkpoint.md)
+for the exact video, implementation, tests and remaining performance/volume limits.
+The [pressure-discretization investigation](breast-soft-tissue-pressure.md)
+records the preceding candidates. The
+[paused checkpoint](breast-soft-tissue-paused.md) records the previous skin-volume
 candidate, retained evidence, test limitations and temporary-file preservation.
 The simulation description below records the preceding viscosity checkpoint;
 its cage dimensions and asset selection are superseded by that checkpoint note.

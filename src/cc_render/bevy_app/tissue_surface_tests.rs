@@ -60,6 +60,7 @@ fn tissue_surface_matches_world_displacement_and_preserves_zero_deformation() {
             tetrahedra: vec![[0, 1, 2, 3]],
             attachments: vec![Attachment::Fixed; 4],
             material: Material {
+                pressure_discretization: Default::default(),
                 time_integration: Default::default(),
                 viscosity: None,
                 density_kg_m3: 950.0,

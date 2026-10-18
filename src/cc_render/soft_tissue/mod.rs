@@ -6,8 +6,11 @@
 mod asset;
 mod contact;
 mod material;
+mod isochoric;
+mod pressure;
 mod solver;
 
 pub use asset::{RegionAsset, SurfaceBinding, TissueAsset, VertexBinding};
 pub use contact::{ContactMetrics, EmbeddedPoint, PlaneContact};
+pub use pressure::PressureDiscretization;
 pub use solver::{Attachment, Frame, Material, Tissue, TissueError, TissueMetrics, TimeIntegration, Viscosity};

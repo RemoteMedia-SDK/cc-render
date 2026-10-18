@@ -1,11 +1,14 @@
 use super::material::{self, Tet};
 use super::{contact, ContactMetrics, PlaneContact};
+use super::{pressure, PressureDiscretization};
 use bevy::math::{DQuat, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 #[path = "implicit.rs"]
 mod implicit;
+#[path = "elasticity.rs"]
+mod elasticity;
 #[path = "preconditioner.rs"]
 mod preconditioner;
 #[path = "timestep.rs"]
@@ -19,6 +22,8 @@ pub use viscosity::Viscosity;
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Material {
+    #[serde(default)]
+    pub pressure_discretization: PressureDiscretization,
     #[serde(default)]
     pub time_integration: TimeIntegration,
     /// Objective material strain-rate damping, in Pa s. Mutually exclusive
@@ -152,6 +157,9 @@ pub struct Tissue {
     material: Material,
     pub(super) tets: Vec<Tet>,
     edges: Vec<[usize; 2]>,
+    damping_edges: Vec<[usize; 2]>,
+    pressure_patches: Vec<pressure::Patch>,
+    element_pressure: Vec<bool>,
     factor_pattern: std::sync::Arc<preconditioner::Pattern>,
     damping_degree: f64,
     masses: Vec<f64>,
@@ -266,7 +274,21 @@ impl Tissue {
                 }
             })
             .collect();
-        let (edges, damping_degree) = material_edges(&tets, rest.len());
+        let (damping_edges, damping_degree) = material_edges(&tets, rest.len());
+        let element_pressure: Vec<_> = tets.iter().map(|tet| match material.pressure_discretization {
+            PressureDiscretization::Element => true,
+            PressureDiscretization::AverageNodal => false,
+            PressureDiscretization::AverageNodalBoundary => tet.ids.iter()
+                .filter(|&&i| matches!(attachments[i], Attachment::Fixed)).count() >= 2,
+        }).collect();
+        let mut pressure_patches = match material.pressure_discretization {
+            PressureDiscretization::Element => Vec::new(),
+            _ => pressure::Patch::build(&tets, rest.len(), &element_pressure),
+        };
+        let mut edges: BTreeSet<_> = damping_edges.iter().copied().collect();
+        for patch in &pressure_patches { patch.extend_edges(&mut edges); }
+        let edges: Vec<_> = edges.into_iter().collect();
+        for patch in &mut pressure_patches { patch.index_edges(&edges)?; }
         let factor_pattern = std::sync::Arc::new(preconditioner::Pattern::new(
             rest.len(),
             edges.iter().copied().filter(|edge| edge.iter().all(|i| inverse_mass[*i] > 0.0)),
@@ -287,6 +309,9 @@ impl Tissue {
             material,
             tets,
             edges,
+            damping_edges,
+            pressure_patches,
+            element_pressure,
             factor_pattern,
             damping_degree,
             masses,
@@ -341,24 +366,25 @@ impl Tissue {
                 .zip(&self.velocities)
                 .map(|(m, v)| 0.5 * m * v.length_squared())
                 .sum(),
-            elastic_energy_j: self
-                .tets
-                .iter()
-                .map(|t| {
-                    t.energy(
-                        &self.positions,
-                        self.material.shear_pa,
-                        self.material.lambda(),
-                        self.material.strain_stiffening,
-                    )
-                })
-                .sum(),
+            elastic_energy_j: self.elastic_energy(&self.positions),
             maximum_speed_m_s: self
                 .velocities
                 .iter()
                 .map(|v| v.length())
                 .fold(0.0, f64::max),
         }
+    }
+
+    fn elastic_energy(&self, x: &[DVec3]) -> f64 {
+        self.tets.iter().enumerate().map(|(i, t)| match self.material.pressure_discretization {
+            PressureDiscretization::Element => t.energy(x, self.material.shear_pa,
+                self.material.lambda(), self.material.strain_stiffening),
+            _ => t.isochoric_energy(x, self.material.shear_pa, self.material.strain_stiffening)
+                + if self.element_pressure[i] { 0.5 * self.material.bulk_pa * t.volume
+                    * (t.deformation(x).determinant() - 1.).powi(2) } else { 0. },
+        }).sum::<f64>()
+            + self.pressure_patches.iter().map(|p| p.energy(&self.tets, x,
+                self.material.bulk_pa, pressure::Damping::default())).sum::<f64>()
     }
 
     fn validate_positions(&self, positions: &[DVec3]) -> Result<(), TissueError> {
@@ -384,7 +410,7 @@ impl Tissue {
     fn damp_strain(&self, positions: &[DVec3], velocities: &mut [DVec3], dt: f64) {
         let fraction =
             1.0 - (-self.material.strain_damping_per_second * dt / self.damping_degree).exp();
-        for [a, b] in &self.edges {
+        for [a, b] in &self.damping_edges {
             let w = self.inverse_mass[*a] + self.inverse_mass[*b];
             if w == 0.0 {
                 continue;

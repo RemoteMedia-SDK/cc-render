@@ -86,6 +86,7 @@ fn fixture_asset() -> TissueAsset {
                 Attachment::Free,
             ],
             material: Material {
+                pressure_discretization: Default::default(),
                 time_integration: Default::default(),
                 viscosity: None,
                 density_kg_m3: 950.0,

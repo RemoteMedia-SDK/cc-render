@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Base-avatar tissue: current visual baseline</title>
+<style>body{max-width:1100px;margin:30px auto;padding:0 20px;background:#111923;color:#e4edf5;font:17px/1.5 system-ui}video{width:100%;background:#080c10}a{color:#93c9ff}p{max-width:850px}</style>
+<h1>Current tissue comparison</h1>
+<p>Physics off on the left; boundary-pressure simulation on the right.</p>
+<video controls loop preload="metadata" src="tracked-off-on-boundary.mp4"></video>
+<p><a href="tracked-off-on-boundary.mp4">Open or download the video</a></p>
+<p>Base avatar · Unchanged ARDY jump · Identical crop and source timing · No displacement multiplier.</p>
+<p>The user reviewed this candidate on 2026-10-18: “Looks much much better.” It is the visual baseline for further work.</p>
+<p>Peak surface displacement: 36.15 mm. At 7.633 s, 44.85% of the measured skin patch moves more than 10 mm.</p>
+<p><strong>Offline capture.</strong> Live playback is still too slow. Some local volume distortion remains; the material is not anatomically calibrated and this jump has no active contacts.</p>
+<p><a href="../../../docs/design/breast-soft-tissue-boundary-checkpoint.md">Implementation and checkpoint notes</a> · <a href="rate-comparison.json">Timing and timestep measurements</a> · <a href="surface-comparison.json">Surface measurements</a> · <a href="../locking-audit/index.html">Earlier candidates</a></p>
+</html>

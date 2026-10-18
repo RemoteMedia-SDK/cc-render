@@ -27,6 +27,11 @@ opt-level = 3
 [profile.dev.package.parry3d-f64]
 opt-level = 3
 
+# The implicit tissue kernel runs inside this crate. Keep its matrix assembly
+# and solves optimized in the interactive lab while retaining dev debug info.
+[profile.dev.package.cc-render-plugin]
+opt-level = 3
+
 [lib]
 name = "cc_render_plugin"
 crate-type = ["cdylib", "rlib"]

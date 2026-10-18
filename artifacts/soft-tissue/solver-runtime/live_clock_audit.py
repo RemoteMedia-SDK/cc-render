@@ -17,7 +17,7 @@ def lines(path):
 
 
 def inspect(name, source):
-    folder = ROOT / ("lab-front-" + name)
+    folder = ROOT / (name if name.startswith("lab-") else "lab-front-" + name)
     config = json.loads((folder / "config.json").read_text())
     capture = json.loads((folder / "capture.json").read_text())
     frames = lines(folder / "frames.ndjson")

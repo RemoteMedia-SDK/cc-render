@@ -1,0 +1,60 @@
+{
+  "purpose": "Hybrid volume discretization: element pressure along fixed chest edges, nodal pressure inside; unchanged 500 Pa shear material, mesh and motion",
+  "base_commit": "33bcb3d3934497e226c1152e171eb263fb96e36d",
+  "sources": {
+    "src/cc_render/soft_tissue/tests.rs": "5502d55ff34abbf50d184afdde9eb386aa6a1748e1cb08782a844d393b4d8518",
+    "src/cc_render/soft_tissue/pressure.rs": "bd8fb9ba2f66417ae33acb04f8624befb3d5eba51c56c8d7bdc3a35c41a42e4e",
+    "src/cc_render/soft_tissue/material.rs": "a165f023c6f7c7a4e95a825c0c3a2c4145f7066229aa001c101b0e08b12a3068",
+    "src/cc_render/soft_tissue/preconditioner.rs": "5a6bfdab319a64955c5a4fe4fb3f79a249e6d3629def32a7c4683e28770457ae",
+    "src/cc_render/soft_tissue/contact.rs": "12ca6b9f48318d5b8faf661712e8de34af28f9c9f320899e10172cbe946abc15",
+    "src/cc_render/soft_tissue/solver.rs": "dec94e5cf59b8ea44c32ebece1cadc68a4af60eac5cf0b5cab3625164a91ab48",
+    "src/cc_render/soft_tissue/asset.rs": "ffb279a6c3bc1fd72759e7fde0f1a55a38b9e4404e482f660f04ec117d55bdc3",
+    "src/cc_render/soft_tissue/mod.rs": "45d5d58ca231993af3f7257414e3db8cb8dcbaa9d9af9f8e97396ec164065b64",
+    "src/cc_render/soft_tissue/isochoric.rs": "f3fafe6a053fd0f781be75615e87a22104aa3ed97a99a095f23bf8eba1cfaf7c",
+    "src/cc_render/soft_tissue/implicit.rs": "24e81fc784a4cacecbb73dc56ed8f8416c0a2b432aa457af523f93c68d411b39",
+    "src/cc_render/soft_tissue/integration_tests.rs": "aa0f4d7c68eef6121275768f0dc40763511984d4576e25d76082b33b165cee86",
+    "src/cc_render/soft_tissue/pressure_tests.rs": "a871a414f5d9362197034010af3e413cb63bf9be448284bbe584898295789ccc",
+    "src/cc_render/soft_tissue/viscosity.rs": "786ec22b8ee5418f721a9d497e90e47cf00928bd49ebfaa4a75db5e9e47ce636",
+    "src/cc_render/soft_tissue/elasticity.rs": "e5a740d453a120df8f3681a35d94aa0de2ca9e4f20ed16bbc7ab7c1504cd6fe6",
+    "src/cc_render/soft_tissue/timestep.rs": "cda125434e22b319956cd2f9cf75dbf27e350ee8f11eea5ba1b78260cc80bb7f",
+    "src/cc_render/soft_tissue/contact_tests.rs": "75cd0d11fed0ac811502cf23903a2e21d5d9b81b9f0e5e0a3697e8518728d92f",
+    "examples/tissue_fit.rs": "a649999f2e099fbe9efb8dadbfdd2ce1bff5f565fcb7ed995c48051ee02a2507",
+    "examples/tissue_lab.rs": "c37f4be62330fae325c85d3ec568a12056d1180559bc7853713b4ffa483a2cc9",
+    "src/cc_render/bevy_app/tissue_trace.rs": "e6e8ee88faa1b36c277792c7eb31c74ba1850a948adb26d5cc9f0deac12a9a99"
+  },
+  "fit_argv": [
+    "target/debug/examples/tissue_fit",
+    "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/volume-audit/boundary-unfitted.json",
+    "assets/tissue/beautiful_assistant.base-boundary-nodal-volume-prototype.json"
+  ],
+  "unfitted_sha256": "69ad3f193192eb77932bcd7a0d291f914992e90997b24c020b7e322195594750",
+  "fit_binary_sha256": "48fc5daf7d10314732769ca930cca5a3b3fcc58d1774be08b9229be6781ba338",
+  "fit_exit_code": 0,
+  "argv": [
+    "target/debug/examples/tissue_lab",
+    "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+    "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+    "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+    "assets/tissue/beautiful_assistant.base-boundary-nodal-volume-prototype.json",
+    "front",
+    "artifacts/soft-tissue/lab-boundary-nodal-front-01"
+  ],
+  "environment": {
+    "CC_RENDER_FAST": "0",
+    "CC_RENDER_CLOCK_TRACE": "0",
+    "CC_AVATAR_TISSUE_HZ": "240",
+    "CC_AVATAR_TISSUE_ITERATIONS": "32",
+    "CC_TISSUE_LAB_FPS": "60",
+    "CC_TISSUE_LAB_CLOCK": "fixed",
+    "CC_TISSUE_LAB_TRACE_ONLY": "0",
+    "CC_AVATAR_TISSUE_TRACE_NODES": "1",
+    "RUST_LOG": "info",
+    "CC_AVATAR_TISSUE_SNAPSHOT": "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/volume-audit/boundary-front-01-geometry.json",
+    "CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS": "7633"
+  },
+  "binary_sha256": "926d6e9dc5f20e9c4010ee034185ddff359845e20427ac6fbe11b538c9b5da1d",
+  "asset_sha256": "f540787631f462bb51ac967e2efe88a5bd8abfe6bfb30a1b44f0ceb22391c296",
+  "started_unix": 1792350606.988814,
+  "exit_code": 0,
+  "completed_unix": 1792350634.3306499
+}

@@ -1,0 +1,55 @@
+{
+  "purpose": "Average nodal pressure at unchanged mesh, material constants and ARDY source motion",
+  "base_commit": "33bcb3d3934497e226c1152e171eb263fb96e36d",
+  "sources": {
+    "src/cc_render/soft_tissue/tests.rs": "5502d55ff34abbf50d184afdde9eb386aa6a1748e1cb08782a844d393b4d8518",
+    "src/cc_render/soft_tissue/pressure.rs": "a60ed09383c4f064816be39d738f077a847565fec6ee99c7ff82c130977a6f8e",
+    "src/cc_render/soft_tissue/material.rs": "a165f023c6f7c7a4e95a825c0c3a2c4145f7066229aa001c101b0e08b12a3068",
+    "src/cc_render/soft_tissue/preconditioner.rs": "5a6bfdab319a64955c5a4fe4fb3f79a249e6d3629def32a7c4683e28770457ae",
+    "src/cc_render/soft_tissue/contact.rs": "12ca6b9f48318d5b8faf661712e8de34af28f9c9f320899e10172cbe946abc15",
+    "src/cc_render/soft_tissue/solver.rs": "6f71193b27d4c0b9e3f5710a19f4b42e8a6114fc60bd78ee09e01a5fd7acaa46",
+    "src/cc_render/soft_tissue/asset.rs": "ffb279a6c3bc1fd72759e7fde0f1a55a38b9e4404e482f660f04ec117d55bdc3",
+    "src/cc_render/soft_tissue/mod.rs": "53038d0ac99fe522c1884b067945e79ea163c247cb2a58adaeffb94195537478",
+    "src/cc_render/soft_tissue/implicit.rs": "b35dc45b32a6c321417a86bff43d73e534e3494263fc1aee4537059435289d19",
+    "src/cc_render/soft_tissue/integration_tests.rs": "aa0f4d7c68eef6121275768f0dc40763511984d4576e25d76082b33b165cee86",
+    "src/cc_render/soft_tissue/pressure_tests.rs": "1d8010c7a760c31d338df758945cb529024d52479799e3cb0be3289e9d2b8841",
+    "src/cc_render/soft_tissue/viscosity.rs": "786ec22b8ee5418f721a9d497e90e47cf00928bd49ebfaa4a75db5e9e47ce636",
+    "src/cc_render/soft_tissue/timestep.rs": "e571cf2735ec0bab02eb6891f9ef87d56a78be9557ffe7f943b5e844af79883f",
+    "src/cc_render/soft_tissue/contact_tests.rs": "75cd0d11fed0ac811502cf23903a2e21d5d9b81b9f0e5e0a3697e8518728d92f",
+    "examples/tissue_fit.rs": "a649999f2e099fbe9efb8dadbfdd2ce1bff5f565fcb7ed995c48051ee02a2507",
+    "examples/tissue_lab.rs": "c37f4be62330fae325c85d3ec568a12056d1180559bc7853713b4ffa483a2cc9"
+  },
+  "fit_argv": [
+    "target/debug/examples/tissue_fit",
+    "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/locking-audit/nodal-unfitted.json",
+    "assets/tissue/beautiful_assistant.base-nodal-volume-prototype.json"
+  ],
+  "fit_binary_sha256": "91d223582fdd1d5735c4d59a8341b127cb280cffa511ea4c6cd73c308116c322",
+  "fit_exit_code": 0,
+  "argv": [
+    "target/debug/examples/tissue_lab",
+    "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+    "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+    "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+    "assets/tissue/beautiful_assistant.base-nodal-volume-prototype.json",
+    "front",
+    "artifacts/soft-tissue/lab-nodal-volume-front-01"
+  ],
+  "environment": {
+    "CC_RENDER_FAST": "0",
+    "CC_RENDER_CLOCK_TRACE": "0",
+    "CC_AVATAR_TISSUE_HZ": "240",
+    "CC_AVATAR_TISSUE_ITERATIONS": "32",
+    "CC_TISSUE_LAB_FPS": "60",
+    "CC_TISSUE_LAB_CLOCK": "fixed",
+    "CC_TISSUE_LAB_TRACE_ONLY": "0",
+    "RUST_LOG": "info",
+    "CC_AVATAR_TISSUE_SNAPSHOT": "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/locking-audit/nodal-front-01-geometry.json",
+    "CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS": "7633"
+  },
+  "binary_sha256": "b9c620ec42c4b293381cd731cfa7d2a3df099b113fbe6db33c99786b41c93c74",
+  "asset_sha256": "5317bcc961e33f68075f11c49741954d45a043df5fea16e804356eb69e3a3b3b",
+  "started_unix": 1792349217.5817308,
+  "exit_code": -15,
+  "completed_unix": 1792349307.2987761
+}

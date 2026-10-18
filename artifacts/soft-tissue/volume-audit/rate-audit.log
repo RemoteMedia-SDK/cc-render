@@ -1,0 +1,162 @@
+{
+  "runs": {
+    "unoptimized_fixed240": {
+      "directory": "lab-boundary-nodal-front-01",
+      "output_fps": 60,
+      "tissue_hz": 240,
+      "capture": {
+        "frames": 478,
+        "images_saved": 478,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 26.67053294
+      },
+      "first_source_ms": 50,
+      "source_span_seconds": 7.95,
+      "first_frame_wall_ms": 6118.896168,
+      "playback_capture_seconds": 20.550553309,
+      "playback_wall_over_source": 2.584975258993711,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        37.88387999999941,
+        68.53008600000173,
+        90.67069396000029,
+        896.2275849999969
+      ],
+      "stage_seconds": {
+        "sampling": 2.6615507869999995,
+        "elasticity": 13.482529456999995,
+        "collision": 1.6890842629999996
+      },
+      "peak_surface_displacement_mm": 36.151353269815445,
+      "minimum_element_volume_ratio": 0.3098243978497577,
+      "maximum_skin_error_mm": 0.001970167946824451,
+      "maximum_active_contact_samples": 0
+    },
+    "optimized_fixed240": {
+      "directory": "lab-boundary-opt240-01",
+      "output_fps": 60,
+      "tissue_hz": 240,
+      "capture": {
+        "frames": 478,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 33.305147191
+      },
+      "first_source_ms": 50,
+      "source_span_seconds": 7.95,
+      "first_frame_wall_ms": 6680.695495,
+      "playback_capture_seconds": 26.623367574999996,
+      "playback_wall_over_source": 3.348851267295597,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        48.24403700000039,
+        102.70970519999933,
+        137.40094556000042,
+        174.19676900000013
+      ],
+      "stage_seconds": {
+        "sampling": 4.709553106999999,
+        "elasticity": 16.669385075000008,
+        "collision": 1.2729844240000008
+      },
+      "peak_surface_displacement_mm": 36.151353269815445,
+      "minimum_element_volume_ratio": 0.3098243978497577,
+      "maximum_skin_error_mm": 0.001970167946824451,
+      "maximum_active_contact_samples": 0
+    },
+    "optimized_fixed120": {
+      "directory": "lab-boundary-opt120-01",
+      "output_fps": 60,
+      "tissue_hz": 120,
+      "capture": {
+        "frames": 478,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 21.201772891
+      },
+      "first_source_ms": 50,
+      "source_span_seconds": 7.95,
+      "first_frame_wall_ms": 5830.189111000001,
+      "playback_capture_seconds": 15.370481299000003,
+      "playback_wall_over_source": 1.9333938740880507,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        29.54303499999878,
+        56.9869584,
+        78.68879723999883,
+        94.88337099999626
+      ],
+      "stage_seconds": {
+        "sampling": 2.633245178000001,
+        "elasticity": 9.761929994999994,
+        "collision": 0.6991987319999998
+      },
+      "peak_surface_displacement_mm": 35.73738783597946,
+      "minimum_element_volume_ratio": 0.31587043752550104,
+      "maximum_skin_error_mm": 0.001970167946824451,
+      "maximum_active_contact_samples": 0
+    },
+    "live120": {
+      "directory": "lab-boundary-live120-01",
+      "capture": {
+        "frames": 37,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 22.616583302
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "playback_wall_seconds": 14.949072763,
+      "presentations_per_source_second": 4.537433829089992,
+      "source_gap_ms_p50_p95_p99_max": [
+        250.0,
+        250.0,
+        250.0,
+        250.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        359.2673034999998,
+        867.0014694999991,
+        982.7269968499995,
+        1022.1224189999994
+      ],
+      "source_gaps_above_50ms": 34,
+      "relative_clock_drift_ms_min_max_end": [
+        0.0,
+        7247.193916,
+        7015.072763
+      ],
+      "maximum_skin_error_mm": 0.0005870376707193914,
+      "peak_surface_displacement_mm": 23.987894877791405,
+      "minimum_element_volume_ratio": 0.38782522957719956,
+      "maximum_active_contacts": 0
+    }
+  },
+  "optimization_parity": {
+    "frames": 478,
+    "max_node_difference_mm": 0.0,
+    "rms_node_difference_mm": 0.0,
+    "max_surface_envelope_difference_mm": 0.0,
+    "max_attachment_translation_difference_m": 0.0
+  },
+  "120_vs_240_hz": {
+    "frames": 478,
+    "max_node_difference_mm": 3.5183491631768122,
+    "rms_node_difference_mm": 0.22391814972431312,
+    "max_surface_envelope_difference_mm": 2.1498315036296844,
+    "max_attachment_translation_difference_m": 1.201947465904182e-07
+  },
+  "limits": [
+    "Single runs on a shared host, not a controlled performance benchmark.",
+    "Live timestamps measure GPU readback delivery, not browser presentation or end-to-end network latency.",
+    "Fixed comparisons include all volume nodes, but do not certify all intermediate source times.",
+    "No active avatar contacts in this jump; this is not a rendered compression test."
+  ]
+}

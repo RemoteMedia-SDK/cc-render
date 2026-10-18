@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/locking-audit/run_nodal.py", line 40, in <module>
+    result.check_returncode()
+  File "/home/acidhax/miniconda3/lib/python3.11/subprocess.py", line 502, in check_returncode
+    raise CalledProcessError(self.returncode, self.args, self.stdout,
+subprocess.CalledProcessError: Command '['target/debug/examples/tissue_lab', '../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb', '../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json', 'artifacts/soft-tissue/lab-jump-01/packets.ndjson', 'assets/tissue/beautiful_assistant.base-nodal-volume-prototype.json', 'front', 'artifacts/soft-tissue/lab-nodal-volume-front-01']' died with <Signals.SIGTERM: 15>.

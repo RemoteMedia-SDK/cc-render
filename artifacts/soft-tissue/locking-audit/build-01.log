@@ -1,0 +1,102 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+error[E0061]: this method takes 3 arguments but 2 arguments were supplied
+   --> src/cc_render/soft_tissue/implicit.rs:498:50
+    |
+498 |                     let plus: f64 = step.damping.energy(&x, &tissue.tets);
+    |                                                  ^^^^^^------------------ argument #3 of type `&[Patch]` is missing
+    |
+note: method defined here
+   --> src/cc_render/soft_tissue/timestep.rs:49:12
+    |
+ 49 |     pub fn energy(&self, x: &[DVec3], tets: &[Tet], patches: &[pressure::Patch]) -> f64 {
+    |            ^^^^^^                                   ---------------------------
+help: provide the argument
+    |
+498 |                     let plus: f64 = step.damping.energy(&x, &tissue.tets, /* &[Patch] */);
+    |                                                                         ++++++++++++++++
+
+error[E0061]: this method takes 3 arguments but 2 arguments were supplied
+   --> src/cc_render/soft_tissue/implicit.rs:500:51
+    |
+500 |                     let minus: f64 = step.damping.energy(&x, &tissue.tets);
+    |                                                   ^^^^^^------------------ argument #3 of type `&[Patch]` is missing
+    |
+note: method defined here
+   --> src/cc_render/soft_tissue/timestep.rs:49:12
+    |
+ 49 |     pub fn energy(&self, x: &[DVec3], tets: &[Tet], patches: &[pressure::Patch]) -> f64 {
+    |            ^^^^^^                                   ---------------------------
+help: provide the argument
+    |
+500 |                     let minus: f64 = step.damping.energy(&x, &tissue.tets, /* &[Patch] */);
+    |                                                                          ++++++++++++++++
+
+error[E0061]: this method takes 3 arguments but 2 arguments were supplied
+   --> src/cc_render/soft_tissue/implicit.rs:512:53
+    |
+512 |             let energy = |p: &[DVec3]| step.damping.energy(p, &tissue.tets);
+    |                                                     ^^^^^^----------------- argument #3 of type `&[Patch]` is missing
+    |
+note: method defined here
+   --> src/cc_render/soft_tissue/timestep.rs:49:12
+    |
+ 49 |     pub fn energy(&self, x: &[DVec3], tets: &[Tet], patches: &[pressure::Patch]) -> f64 {
+    |            ^^^^^^                                   ---------------------------
+help: provide the argument
+    |
+512 |             let energy = |p: &[DVec3]| step.damping.energy(p, &tissue.tets, /* &[Patch] */);
+    |                                                                           ++++++++++++++++
+
+warning: value assigned to `own_rest_local` is never read
+   --> src/cc_render/bevy_app/pose.rs:637:9
+    |
+637 |         own_rest_local[1] = lhip_own;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: taking a mutable reference to a `const` item
+   --> src/cc_render/cloth_pair_tests.rs:240:13
+    |
+240 |             &mut DVec3::ZERO,
+    |             ^^^^^^^^^^^^^^^^
+    |
+    = note: each usage of a `const` item creates a new temporary
+    = note: the mutable reference will refer to this temporary, not the original `const` item
+note: `const` item defined here
+   --> /home/acidhax/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glam-0.29.3/src/f64/dvec3.rs:28:5
+    |
+ 28 |     pub const ZERO: Self = Self::splat(0.0);
+    |     ^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(const_item_mutation)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/cc_render/cloth_self_collision.rs:488:13
+    |
+488 |         let mut particles = GripParticles {
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0061`.
+warning: `cc-render-plugin` (lib test) generated 5 warnings
+error: could not compile `cc-render-plugin` (lib test) due to 3 previous errors; 5 warnings emitted

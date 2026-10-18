@@ -4,6 +4,10 @@ use super::*;
 use bevy::math::DMat3;
 use super::timestep::Dissipation;
 
+#[cfg(test)]
+#[path = "pressure_tests.rs"]
+mod pressure_tests;
+
 struct Coupling {
     nodes: [usize; 2],
     block: DMat3,
@@ -224,39 +228,29 @@ impl Tissue {
                 block: DMat3::ZERO,
             })
             .collect();
-        for tet in &self.tets {
-            let f = tet.deformation(x);
-            let shape = material::nodal_gradient(tet.inverse_rest.transpose());
-            let cofactor = DMat3::from_cols(
-                f.y_axis.cross(f.z_axis),
-                f.z_axis.cross(f.x_axis),
-                f.x_axis.cross(f.y_axis),
-            );
-            let volume_gradient = shape.map(|g| cofactor * g);
-            let strain = f - material::polar_rotation(f);
-            let strain_gradient = shape.map(|g| strain * g);
-            let shear_base = 2.0 * self.material.shear_pa * tet.volume;
-            let shear_weight = shear_base
-                * (1.0 + self.material.strain_stiffening * material::squared_norm(strain));
-            let hardening_weight = 2.0 * shear_base * self.material.strain_stiffening;
-            let volume_weight = self.material.lambda() * tet.volume;
-            let shear_stress = shear_weight * strain;
-            let pressure = volume_weight * (f.determinant() - 1.0);
-            for k in 0..4 {
-                let i = tet.ids[k];
-                gradient[i] += shear_stress * shape[k] + pressure * volume_gradient[k];
-                diagonal[i] += DMat3::IDENTITY * (shear_weight * shape[k].length_squared())
-                    + hardening_weight * outer(strain_gradient[k], strain_gradient[k])
-                    + volume_weight * outer(volume_gradient[k], volume_gradient[k]);
+        for (index, tet) in self.tets.iter().enumerate() {
+            let (force, blocks) = self.elastic_differential(index, x);
+            for a in 0..4 {
+                gradient[tet.ids[a]] += force[a];
+                diagonal[tet.ids[a]] += blocks[a][a];
             }
             for (index, [a, b]) in tet.edge_indices.iter().zip(material::EDGE_PAIRS) {
-                let mut block = DMat3::IDENTITY * (shear_weight * shape[a].dot(shape[b]))
-                    + hardening_weight * outer(strain_gradient[a], strain_gradient[b])
-                    + volume_weight * outer(volume_gradient[a], volume_gradient[b]);
-                if tet.ids[a] > tet.ids[b] {
-                    block = block.transpose();
-                }
-                couplings[*index].block += block;
+                couplings[*index].block += if tet.ids[a] > tet.ids[b] { blocks[a][b].transpose() } else { blocks[a][b] };
+            }
+        }
+        for (p, patch) in self.pressure_patches.iter().enumerate() {
+            let evaluated = patch.evaluate(&self.tets, x);
+            let damping = damping.pressures.get(p).copied().unwrap_or_default();
+            let ratio = evaluated.ratio;
+            let stress = patch.volume * (self.material.bulk_pa * (ratio - 1.)
+                + damping.bulk * (ratio.ln() - damping.history_log_volume) / ratio);
+            let stiffness = patch.volume * (self.material.bulk_pa + damping.bulk / (ratio * ratio));
+            for (&i, &g) in patch.nodes.iter().zip(&evaluated.gradients) {
+                gradient[i] += stress * g;
+                diagonal[i] += stiffness * outer(g, g);
+            }
+            for &(index, a, b) in &patch.couplings {
+                couplings[index].block += stiffness * outer(evaluated.gradients[a], evaluated.gradients[b]);
             }
         }
         for contact in contacts {
@@ -340,11 +334,7 @@ impl Tissue {
             .zip(&self.masses)
             .map(|((x, p), m)| 0.5 * m * x.distance_squared(*p) / (dt * dt))
             .sum();
-        let elastic: f64 = self
-            .tets
-            .iter()
-            .map(|t| t.energy(x, self.material.shear_pa, self.material.lambda(), self.material.strain_stiffening))
-            .sum();
+        let elastic = self.elastic_energy(x);
         let attachments: f64 = self
             .attachments
             .iter()
@@ -402,7 +392,7 @@ impl Tissue {
                         .iter()
                         .map(|c| c.energy(x, &self.tets))
                         .sum::<f64>()
-                    + damping.energy(x, &self.tets)
+                    + damping.energy(x, &self.tets, &self.pressure_patches)
             })?;
         }
         unreachable!("the inclusive final iteration returns a convergence result")
@@ -484,9 +474,9 @@ mod tests {
             for i in 0..x.len() {
                 for axis in 0..3 {
                     x[i][axis] += epsilon;
-                    let plus: f64 = step.damping.energy(&x, &tissue.tets);
+                    let plus: f64 = step.damping.energy(&x, &tissue.tets, &tissue.pressure_patches);
                     x[i][axis] -= 2.*epsilon;
-                    let minus: f64 = step.damping.energy(&x, &tissue.tets);
+                    let minus: f64 = step.damping.energy(&x, &tissue.tets, &tissue.pressure_patches);
                     x[i][axis] += epsilon;
                     let expected = (plus-minus)/(2.*epsilon);
                     assert!((full.gradient[i][axis]-base.gradient[i][axis]-expected).abs() < 1e-6);
@@ -498,7 +488,7 @@ mod tests {
             assert!(direction.iter().zip(a.iter().zip(&b)).map(|(v,(a,b))| v.dot(*a-*b)).sum::<f64>() >= -1e-8);
             let rotation = DQuat::from_rotation_x(0.4);
             let moved: Vec<_> = x.iter().map(|p| rotation * *p + DVec3::splat(2.)).collect();
-            let energy = |p: &[DVec3]| step.damping.energy(p, &tissue.tets);
+            let energy = |p: &[DVec3]| step.damping.energy(p, &tissue.tets, &tissue.pressure_patches);
             assert!((energy(&x)-energy(&moved)).abs() < 1e-10);
         }
     }

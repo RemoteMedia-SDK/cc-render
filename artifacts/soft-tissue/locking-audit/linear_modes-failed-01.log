@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/locking-audit/linear_modes.py", line 70, in <module>
+    out = {'asset_sha256': hashlib.sha256(ASSET.read_bytes()).hexdigest(), 'limitation': 'Unstressed small-strain diagnostic, not loaded nonlinear runtime prediction.', 'regions': [audit(r) for r in asset['regions']]}
+                                                                                                                                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/locking-audit/linear_modes.py", line 70, in <listcomp>
+    out = {'asset_sha256': hashlib.sha256(ASSET.read_bytes()).hexdigest(), 'limitation': 'Unstressed small-strain diagnostic, not loaded nonlinear runtime prediction.', 'regions': [audit(r) for r in asset['regions']]}
+                                                                                                                                                                                     ^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/locking-audit/linear_modes.py", line 61, in audit
+    force = (masses[:, None] * np.eye(3)[None, :, :]).reshape(count, 3)[dofs]
+             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+ValueError: operands could not be broadcast together with shapes (241,1) (1,3,3) 

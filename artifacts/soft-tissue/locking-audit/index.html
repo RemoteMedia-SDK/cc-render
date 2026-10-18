@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Base-avatar tissue investigation</title>
+<style>body{max-width:1100px;margin:30px auto;padding:0 20px;background:#111923;color:#e4edf5;font:17px/1.5 system-ui}video{width:100%;background:#080c10}a{color:#93c9ff}h2{margin-top:2em}p{max-width:850px}</style>
+<h1>Base-avatar tissue investigation</h1>
+<p><strong><a href="../volume-audit/index.html">Latest boundary-pressure comparison and visual baseline</a></strong></p>
+<p>2026-10-18 · Unchanged ARDY jump · Source-time playback · No displacement multiplier.</p>
+<p><strong>Diagnostic candidates, not accepted physics.</strong> Whole-volume movement is visible, but excessive local volume changes still need correction. Left: physics off. Right: simulation.</p>
+<h2>Softer material sensitivity</h2>
+<p>Peak surface displacement 43.1 mm. At the 7.633 s comparison frame, 56.6% of the measured patch moves more than 10 mm. The material is not anatomically calibrated.</p>
+<video controls loop preload="metadata" src="tracked-off-on-soft-isochoric.mp4"></video>
+<h2>Pressure and shear correction, original stiffness</h2>
+<p>Same mesh and material constants as the previous checkpoint. Peak surface displacement 19.5 mm.</p>
+<video controls loop preload="metadata" src="tracked-off-on-isochoric.mp4"></video>
+<h2>Initial pressure-only diagnostic</h2>
+<video controls loop preload="metadata" src="tracked-off-on-nodal.mp4"></video>
+<p><a href="capture-comparison.json">Measurements and limitations</a> · <a href="../../../docs/design/breast-soft-tissue-pressure.md">Implementation and verification notes</a></p>
+</html>

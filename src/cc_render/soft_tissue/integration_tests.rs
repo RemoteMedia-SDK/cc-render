@@ -63,7 +63,7 @@ fn implicit_euler_matches_closed_form_but_damps_an_undamped_oscillator() {
 fn isolated_edge_damping_matches_exponential_decay_and_preserves_momentum() {
     for rate in [60, 120, 240, 480] {
         let mut tissue = tests::cube(Frame::IDENTITY, false);
-        tissue.edges = vec![[0, 1]];
+        tissue.damping_edges = vec![[0, 1]];
         tissue.damping_degree = 1.;
         tissue.material.strain_damping_per_second = 4.;
         let mut velocities = vec![DVec3::ZERO; tissue.positions.len()];
