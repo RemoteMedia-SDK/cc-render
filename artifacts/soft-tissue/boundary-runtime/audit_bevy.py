@@ -5,6 +5,9 @@ import sys
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+label = sys.argv[1] if len(sys.argv) == 2 else 'cache'
+assert len(sys.argv) <= 2 and label.replace('-', '').isalnum()
+OUT = HERE if label == 'cache' else HERE / ('bevy-' + label)
 ARTIFACTS = HERE.parent
 sys.path.insert(0, str(ARTIFACTS/'solver-runtime'))
 from startup_cadence_audit import inspect as fixed
@@ -12,9 +15,9 @@ from live_clock_audit import inspect as live
 
 packets = (ARTIFACTS/'lab-jump-01/packets.ndjson').read_bytes()
 baseline, old = fixed('lab-boundary-nodal-front-01', packets)
-current, new = fixed('lab-boundary-cache240-01', packets)
+current, new = fixed('lab-boundary-'+label+'240-01', packets)
 before_live = live('lab-boundary-live120-01', packets)[0]
-after_live = live('lab-boundary-cache-live120-01', packets)[0]
+after_live = live('lab-boundary-'+label+'-live120-01', packets)[0]
 assert old.keys() == new.keys()
 nodes, anchors, rotations, surface = [], [], [], []
 for time in old:
@@ -36,7 +39,7 @@ report = {
                'Live captures have different sample times and cannot prove mechanical parity.',
                'Readbacks are not browser presentations. The jump contains no active contacts.'],
 }
-(HERE/'bevy-comparison.json').write_text(json.dumps(report, indent=2)+'\n')
+(OUT/'bevy-comparison.json').write_text(json.dumps(report, indent=2)+'\n')
 print(json.dumps(report, indent=2))
 assert max(nodes) < 1e-6, 'Deformation changed by more than one micrometre'
 assert max(anchors) < 1e-7 and max(rotations) < 1e-7, 'Attachment sampling changed'

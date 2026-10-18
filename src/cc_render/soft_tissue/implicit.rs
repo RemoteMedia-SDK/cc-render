@@ -30,6 +30,34 @@ struct System<'a> {
 }
 
 impl<'a> System<'a> {
+    fn add_element(&mut self, tet: &Tet, force: [DVec3; 4], blocks: [[DMat3; 4]; 4]) {
+        for a in 0..4 {
+            self.gradient[tet.ids[a]] += force[a];
+            self.diagonal[tet.ids[a]] += blocks[a][a];
+        }
+        for (index, [a, b]) in tet.edge_indices.iter().zip(material::EDGE_PAIRS) {
+            self.couplings[*index].block += if tet.ids[a] > tet.ids[b] {
+                blocks[a][b].transpose()
+            } else {
+                blocks[a][b]
+            };
+        }
+    }
+
+    fn eliminate_fixed(&mut self, inverse_mass: &[f64]) {
+        self.couplings.retain(|c| c.nodes.iter().all(|i| inverse_mass[*i] > 0.0));
+        let gradient = &mut self.gradient;
+        self.inverse_diagonal = self.diagonal.iter_mut().enumerate().map(|(i, d)| {
+            if inverse_mass[i] == 0.0 {
+                gradient[i] = DVec3::ZERO;
+                *d = DMat3::ZERO;
+                DMat3::ZERO
+            } else {
+                d.inverse()
+            }
+        }).collect();
+    }
+
     fn multiply(&self, input: &[DVec3]) -> Vec<DVec3> {
         let mut output: Vec<_> = input
             .iter()
@@ -248,8 +276,8 @@ impl Tissue {
                 gradient[i] += stiffness * (x[i] - frame.point(self.attachment_positions[i]));
             }
         }
-        let mut diagonal: Vec<_> = diagonal_mass.iter().map(|m| DMat3::IDENTITY * *m).collect();
-        let mut couplings: Vec<_> = self
+        let diagonal: Vec<_> = diagonal_mass.iter().map(|m| DMat3::IDENTITY * *m).collect();
+        let couplings: Vec<_> = self
             .edges
             .iter()
             .map(|nodes| Coupling {
@@ -257,15 +285,18 @@ impl Tissue {
                 block: DMat3::ZERO,
             })
             .collect();
+        let mut system = System {
+            pattern: &self.factor_pattern,
+            couplings,
+            diagonal,
+            inverse_diagonal: Vec::new(),
+            gradient,
+        };
         for (index, tet) in self.tets.iter().enumerate() {
-            let (force, blocks) = self.elastic_differential(index, x);
-            for a in 0..4 {
-                gradient[tet.ids[a]] += force[a];
-                diagonal[tet.ids[a]] += blocks[a][a];
-            }
-            for (index, [a, b]) in tet.edge_indices.iter().zip(material::EDGE_PAIRS) {
-                couplings[*index].block += if tet.ids[a] > tet.ids[b] { blocks[a][b].transpose() } else { blocks[a][b] };
-            }
+            let active = tet.ids.map(|i| self.inverse_mass[i] > 0.0);
+            if !active.iter().any(|free| *free) { continue; }
+            let (force, blocks) = self.elastic_differential(index, x, active);
+            system.add_element(tet, force, blocks);
         }
         for (p, patch) in self.pressure_patches.iter().enumerate() {
             let evaluated = patch.evaluate(&self.tets, x);
@@ -275,11 +306,11 @@ impl Tissue {
                 + damping.bulk * (ratio.ln() - damping.history_log_volume) / ratio);
             let stiffness = patch.volume * (self.material.bulk_pa + damping.bulk / (ratio * ratio));
             for (&i, &g) in patch.nodes.iter().zip(&evaluated.gradients) {
-                gradient[i] += stress * g;
-                diagonal[i] += stiffness * outer(g, g);
+                system.gradient[i] += stress * g;
+                system.diagonal[i] += stiffness * outer(g, g);
             }
             for &(index, a, b) in &patch.couplings {
-                couplings[index].block += stiffness * outer(evaluated.gradients[a], evaluated.gradients[b]);
+                system.couplings[index].block += stiffness * outer(evaluated.gradients[a], evaluated.gradients[b]);
             }
         }
         for contact in contacts {
@@ -295,13 +326,13 @@ impl Tissue {
                 .map(|w| contact.normal * (contact.point.influence * w));
             let stiffness = contact.stiffness_n_per_m;
             for a in 0..4 {
-                gradient[ids[a]] -= stiffness * depth * derivatives[a];
-                diagonal[ids[a]] += stiffness * outer(derivatives[a], derivatives[a]);
+                system.gradient[ids[a]] -= stiffness * depth * derivatives[a];
+                system.diagonal[ids[a]] += stiffness * outer(derivatives[a], derivatives[a]);
             }
             for (index, [a, b]) in tet.edge_indices.iter().zip(material::EDGE_PAIRS) {
                 // Both derivatives are parallel to the same normal, so
                 // this block is symmetric even when node order is reversed.
-                couplings[*index].block += stiffness * outer(derivatives[a], derivatives[b]);
+                system.couplings[*index].block += stiffness * outer(derivatives[a], derivatives[b]);
             }
         }
         for edge in &damping.edges {
@@ -314,46 +345,22 @@ impl Tissue {
             // Exact gradient; retain a positive semidefinite tangent when an
             // edge shortens below its history-derived length target.
             let block = edge.stiffness * (axial + (1.0 - edge.target_length / length).max(0.0) * (DMat3::IDENTITY - axial));
-            gradient[a] -= g;
-            gradient[b] += g;
-            diagonal[a] += block;
-            diagonal[b] += block;
-            couplings[self.edges.binary_search(&edge.nodes).expect("damping edge is indexed")].block -= block;
+            system.gradient[a] -= g;
+            system.gradient[b] += g;
+            system.diagonal[a] += block;
+            system.diagonal[b] += block;
+            system.couplings[self.edges.binary_search(&edge.nodes).expect("damping edge is indexed")].block -= block;
         }
         for element in &damping.elements {
             let tet = &self.tets[element.tet];
-            let (forces, blocks) = element.differential(tet, x);
-            for a in 0..4 {
-                gradient[tet.ids[a]] += forces[a];
-                diagonal[tet.ids[a]] += blocks[a][a];
-            }
-            for (index, [a, b]) in tet.edge_indices.iter().zip(material::EDGE_PAIRS) {
-                let block = if tet.ids[a] > tet.ids[b] { blocks[a][b].transpose() } else { blocks[a][b] };
-                couplings[*index].block += block;
-            }
+            let active = tet.ids.map(|i| self.inverse_mass[i] > 0.0);
+            if !active.iter().any(|free| *free) { continue; }
+            let (forces, blocks) = element.differential(tet, x, active);
+            system.add_element(tet, forces, blocks);
         }
         // Eliminate fixed degrees of freedom from the displacement solve.
-        couplings.retain(|c| c.nodes.iter().all(|i| self.inverse_mass[*i] > 0.0));
-        let inverse_diagonal = diagonal
-            .iter_mut()
-            .enumerate()
-            .map(|(i, d)| {
-                if self.inverse_mass[i] == 0.0 {
-                    gradient[i] = DVec3::ZERO;
-                    *d = DMat3::ZERO;
-                    DMat3::ZERO
-                } else {
-                    d.inverse()
-                }
-            })
-            .collect();
-        System {
-            pattern: &self.factor_pattern,
-            couplings,
-            diagonal,
-            inverse_diagonal,
-            gradient,
-        }
+        system.eliminate_fixed(&self.inverse_mass);
+        system
     }
 
     fn objective(&self, x: &[DVec3], predicted: &[DVec3], frame: Frame, dt: f64) -> f64 {

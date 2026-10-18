@@ -53,7 +53,8 @@ impl Element {
     }
 
     /// Exact gradient and Gauss-Newton PSD tangent of the strain potential.
-    pub fn differential(&self, tet: &Tet, x: &[DVec3]) -> ([DVec3; 4], [[DMat3; 4]; 4]) {
+    /// Tangent blocks touching inactive (fixed) nodes are omitted.
+    pub fn differential(&self, tet: &Tet, x: &[DVec3], active: [bool; 4]) -> ([DVec3; 4], [[DMat3; 4]; 4]) {
         let f = tet.deformation(x);
         let shape = material::nodal_gradient(tet.inverse_rest.transpose());
         let transformed = shape.map(|g| f * g);
@@ -75,7 +76,9 @@ impl Element {
         // blocks; mirror the remaining six instead of recomputing them.
         let mut blocks = [[DMat3::ZERO; 4]; 4];
         for i in 0..4 {
+            if !active[i] { continue; }
             for j in i..4 {
+                if !active[j] { continue; }
                 let block = tet.volume
                     * (self.shear
                         * scale
@@ -123,7 +126,7 @@ mod tests {
                 energy < 1e-20,
                 "isochoric shear {amount}: bulk energy {energy}"
             );
-            let (gradient, _) = element.differential(tet, &x);
+            let (gradient, _) = element.differential(tet, &x, [true; 4]);
             assert!(gradient.iter().all(|g| g.length() < 1e-10));
         }
     }
@@ -144,7 +147,7 @@ mod tests {
             let x: Vec<_> = tissue.rest.iter().map(|p| scale * f * *p).collect();
             // Scaling an already distorted state changes only its volume.
             assert!(element.energy(tet, &x) < 1e-24);
-            let (gradient, _) = element.differential(tet, &x);
+            let (gradient, _) = element.differential(tet, &x, [true; 4]);
             assert!(gradient.iter().all(|g| g.length() < 1e-10));
         }
         element.shear = 0.;
@@ -154,7 +157,7 @@ mod tests {
             let log_volume = 3. * scale.ln();
             let expected = 0.5 * tet.volume * element.bulk * log_volume.powi(2);
             assert!((element.energy(tet, &x) - expected).abs() < 1e-10);
-            let (gradient, _) = element.differential(tet, &x);
+            let (gradient, _) = element.differential(tet, &x, [true; 4]);
             // Nodal virtual work reconstructs Cauchy stress independently.
             let stress: DMat3 = (0..4)
                 .map(|i| outer(gradient[i], x[tet.ids[i]]))
@@ -225,8 +228,8 @@ mod tests {
                 shear,
                 bulk,
             };
-            let (gradient, hessian) = element.differential(tet, &x);
-            let (rotated, _) = element.differential(tet, &moved);
+            let (gradient, hessian) = element.differential(tet, &x, [true; 4]);
+            let (rotated, _) = element.differential(tet, &moved, [true; 4]);
             assert!((element.energy(tet, &x) - element.energy(tet, &moved)).abs() < 1e-10);
             for a in 0..4 {
                 assert!(rotated[a].distance(q * gradient[a]) < 1e-9);

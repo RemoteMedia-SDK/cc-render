@@ -4,11 +4,17 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tarfile
 import time
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+label = sys.argv[1] if len(sys.argv) == 2 else 'cache'
+assert len(sys.argv) <= 2 and label.replace('-', '').isalnum()
+OUT = HERE if label == 'cache' else HERE / ('bevy-' + label)
+if OUT != HERE:
+    OUT.mkdir(exist_ok=False)
 os.chdir(ROOT)
 baseline = json.loads((HERE.parent/'volume-audit/launch-boundary-01.json').read_text())
 asset = Path(baseline['argv'][4])
@@ -16,12 +22,12 @@ assert hashlib.sha256(asset.read_bytes()).hexdigest() == baseline['asset_sha256'
 sources = sorted(set(baseline['sources']) | {'Cargo.toml'}
                  | {str(p) for p in Path('src/cc_render/bevy_app').glob('tissue*.rs')})
 hashes = {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sources}
-with tarfile.open(HERE/'bevy-source.tar.gz', 'x:gz') as archive:
+with tarfile.open(OUT/'bevy-source.tar.gz', 'x:gz') as archive:
     for path in sources:
         archive.add(path, arcname=path)
 runs = []
-for name, rate, fps, clock in [('boundary-cache240', 240, 60, 'fixed'),
-                                ('boundary-cache-live120', 120, 30, 'live')]:
+for name, rate, fps, clock in [('boundary-'+label+'240', 240, 60, 'fixed'),
+                                ('boundary-'+label+'-live120', 120, 30, 'live')]:
     args = baseline['argv'].copy()
     args[-1] = 'artifacts/soft-tissue/lab-'+name+'-01'
     assert not Path(args[-1]).exists()
@@ -35,11 +41,11 @@ for name, rate, fps, clock in [('boundary-cache240', 240, 60, 'fixed'),
            'binary_sha256': hashlib.sha256(Path(args[0]).read_bytes()).hexdigest(),
            'asset_sha256': baseline['asset_sha256'], 'started_unix': time.time()}
     runs.append(run)
-    (HERE/'bevy-launches.json').write_text(json.dumps(runs, indent=2)+'\n')
-    with (HERE/(name+'.log')).open('x') as log:
+    (OUT/'bevy-launches.json').write_text(json.dumps(runs, indent=2)+'\n')
+    with (OUT/(name+'.log')).open('x') as log:
         result = subprocess.run(args, env={**os.environ, **environment}, stdout=log,
                                 stderr=subprocess.STDOUT)
     run.update(exit_code=result.returncode, completed_unix=time.time())
-    (HERE/'bevy-launches.json').write_text(json.dumps(runs, indent=2)+'\n')
+    (OUT/'bevy-launches.json').write_text(json.dumps(runs, indent=2)+'\n')
     print(name, result.returncode, flush=True)
     result.check_returncode()

@@ -43,7 +43,8 @@ impl Tet {
 
     /// Exact force and PSD tangent with rotation held fixed in the tangent,
     /// matching the existing corotated solver's local/global approximation.
-    pub fn isochoric_differential(&self, x: &[DVec3], mu: f64, stiffening: f64)
+    /// Tangent blocks touching inactive (fixed) nodes are omitted.
+    pub fn isochoric_differential(&self, x: &[DVec3], mu: f64, stiffening: f64, active: [bool; 4])
         -> ([DVec3; 4], [[DMat3; 4]; 4])
     {
         let f = self.deformation(x);
@@ -64,7 +65,9 @@ impl Tet {
         let gradient = strain_grad.map(|g| weight * g);
         let mut blocks = [[DMat3::ZERO; 4]; 4];
         for i in 0..4 {
+            if !active[i] { continue; }
             for j in i..4 {
+                if !active[j] { continue; }
                 let metric = DMat3::IDENTITY * shape[i].dot(shape[j])
                     - (outer(mapped[i], volume_grad[j]) + outer(volume_grad[i], mapped[j])) / 3.
                     + material::squared_norm(f) / 9. * outer(volume_grad[i], volume_grad[j]);

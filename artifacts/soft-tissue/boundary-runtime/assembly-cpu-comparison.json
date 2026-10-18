@@ -1,0 +1,137 @@
+{
+  "assembly-before-01": {
+    "positions_sha256": "b3f9783248aacff46d99073aff1499ad213c90e28d8e350c58698b93ea56dcd2",
+    "run": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.00505867475100304,
+          "kinetic_energy_j": 0.6469446783344294,
+          "mass_kg": 1.0634024797141943,
+          "maximum_speed_m_s": 1.2041350272023712,
+          "maximum_volume_ratio": 1.4713334801724867,
+          "minimum_volume_ratio": 0.7537967440600272
+        },
+        {
+          "elastic_energy_j": 0.006083790286301931,
+          "kinetic_energy_j": 0.6350251110225289,
+          "mass_kg": 1.0460004851341846,
+          "maximum_speed_m_s": 1.203393521691275,
+          "maximum_volume_ratio": 1.5298701030425872,
+          "minimum_volume_ratio": 0.5392572499359616
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 15.766211084,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 85,
+      "wall_seconds": 15.826227692
+    },
+    "counters": {
+      "cg_steps": 117531,
+      "descent_ns": 3422159273,
+      "direction_ns": 4163372909,
+      "elastic_assembly_ns": 3318540161,
+      "factor_ns": 1522233434,
+      "linear_solves": 18520,
+      "linearizations": 18520,
+      "linearize_ns": 7663141448,
+      "multiply_ns": 794671605,
+      "precondition_ns": 1571985524,
+      "pressure_assembly_ns": 1147171443,
+      "viscous_assembly_ns": 2896185813
+    }
+  },
+  "assembly-after-01": {
+    "positions_sha256": "b3f9783248aacff46d99073aff1499ad213c90e28d8e350c58698b93ea56dcd2",
+    "run": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.00505867475100304,
+          "kinetic_energy_j": 0.6469446783344294,
+          "mass_kg": 1.0634024797141943,
+          "maximum_speed_m_s": 1.2041350272023712,
+          "maximum_volume_ratio": 1.4713334801724867,
+          "minimum_volume_ratio": 0.7537967440600272
+        },
+        {
+          "elastic_energy_j": 0.006083790286301931,
+          "kinetic_energy_j": 0.6350251110225289,
+          "mass_kg": 1.0460004851341846,
+          "maximum_speed_m_s": 1.203393521691275,
+          "maximum_volume_ratio": 1.5298701030425872,
+          "minimum_volume_ratio": 0.5392572499359616
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 13.571296515,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 85,
+      "wall_seconds": 13.612514993
+    },
+    "counters": {
+      "cg_steps": 117531,
+      "descent_ns": 3379280450,
+      "direction_ns": 3830297659,
+      "elastic_assembly_ns": 2511020602,
+      "factor_ns": 1321130183,
+      "linear_solves": 18520,
+      "linearizations": 18520,
+      "linearize_ns": 5876357219,
+      "multiply_ns": 754410623,
+      "precondition_ns": 1494774213,
+      "pressure_assembly_ns": 921745468,
+      "viscous_assembly_ns": 2168065082
+    }
+  },
+  "assembly-after-02": {
+    "positions_sha256": "b3f9783248aacff46d99073aff1499ad213c90e28d8e350c58698b93ea56dcd2",
+    "run": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.00505867475100304,
+          "kinetic_energy_j": 0.6469446783344294,
+          "mass_kg": 1.0634024797141943,
+          "maximum_speed_m_s": 1.2041350272023712,
+          "maximum_volume_ratio": 1.4713334801724867,
+          "minimum_volume_ratio": 0.7537967440600272
+        },
+        {
+          "elastic_energy_j": 0.006083790286301931,
+          "kinetic_energy_j": 0.6350251110225289,
+          "mass_kg": 1.0460004851341846,
+          "maximum_speed_m_s": 1.203393521691275,
+          "maximum_volume_ratio": 1.5298701030425872,
+          "minimum_volume_ratio": 0.5392572499359616
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 12.62711787,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 85,
+      "wall_seconds": 12.656731823
+    },
+    "counters": {
+      "cg_steps": 117531,
+      "descent_ns": 3270866133,
+      "direction_ns": 3541501940,
+      "elastic_assembly_ns": 2307845739,
+      "factor_ns": 1146043126,
+      "linear_solves": 18520,
+      "linearizations": 18520,
+      "linearize_ns": 5361743556,
+      "multiply_ns": 716220466,
+      "precondition_ns": 1431034938,
+      "pressure_assembly_ns": 802412371,
+      "viscous_assembly_ns": 2018438316
+    }
+  }
+}

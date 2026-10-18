@@ -81,7 +81,46 @@ unchanged input packets and checks source-clock delivery. `evidence-manifest.jso
 inventories local evidence; `bevy-traces.tar.gz` preserves the new render traces.
 All necessary work is under this worktree, not `/tmp`.
 
-The next measured optimization target is elastic/viscous assembly and line-search
-evaluation. Continue checking against the reviewed video before accepting any
-change. Local element distortion, active avatar compression/contact and material
-calibration remain separate unfinished work.
+The following change targets elastic/viscous assembly. Continue checking against
+the reviewed video before accepting any change. Local element distortion, active
+avatar compression/contact and material calibration remain separate unfinished work.
+
+## Fixed-node assembly follow-up
+
+After `c8b427b`, matrix assembly omits tangent blocks involving fixed nodes and
+skips fully fixed tetrahedra. About 44% of the upper-triangular element blocks in
+the selected mesh are later discarded by constraint elimination; computing them
+does not contribute to the free-node system. Forces at active nodes, energy,
+volume checks, compliant attachments, source motion and material laws are unchanged.
+The active mask is computed from the same inverse masses used by elimination.
+Shared `System::add_element` and `eliminate_fixed` methods consolidate the assembly
+logic. Existing derivative tests request the complete tangent and retain all
+their assertions.
+
+The CPU replay before this change took 15.77 seconds. The first version took
+13.57 seconds and the consolidated version 12.63 seconds. All 1,908 steps across
+both regions produce **byte-identical position files**, with unchanged subdivision
+and iteration counts. Elastic/viscous assembly time fell from 6.21 to 4.33 seconds.
+These are single shared-host runs; the measured CPU reduction is not a guaranteed
+end-to-end speedup. See `boundary-runtime/assembly-cpu-comparison.json`.
+
+73 tissue tests pass again. The structural delta is clean with no acknowledgements;
+the changed internal viscosity method has no incompatible indexed callers.
+Python remains at 15 passes and the existing ownership source-slice failure.
+The initial structural findings and intermediate performance result are retained.
+
+Bevy completed all 478 fixed-clock frames. Compared with the reviewed video,
+attachments and displacement envelopes are identical; node differences remain
+below 9.05e-15 m. The new trace is also byte-identical in node coordinates to the
+preceding cached-factor capture. Live playback produced 91 readbacks in 9.88 wall
+seconds for 7.934 source seconds, with 1.95 seconds of accumulated drift. This
+still fails the interactive target. Fixed-clock capture took 19.36 seconds,
+versus 18.06 previously; host variation prevents claiming a reliable renderer
+speedup from these runs alone. No active contacts occurred.
+
+Launches, source archives, trace archive, comparison report and input hashes are
+in `boundary-runtime/bevy-free-assembly/`. CPU source snapshots and positions are
+in the adjacent `assembly-before-01`, `assembly-after-01` and `assembly-after-02`
+folders; position binaries remain locally outside Git. The reviewed video stays
+unchanged. The next candidate is repeated body/skin sampling at shared physical
+step boundaries, which currently repeats read-only work within the same frame.

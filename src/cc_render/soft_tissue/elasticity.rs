@@ -7,31 +7,35 @@ fn outer(a: DVec3, b: DVec3) -> DMat3 {
 }
 
 impl Tissue {
-    pub(super) fn elastic_differential(&self, index: usize, x: &[DVec3])
+    pub(super) fn elastic_differential(&self, index: usize, x: &[DVec3], active: [bool; 4])
         -> ([DVec3; 4], [[DMat3; 4]; 4])
     {
         let tet = &self.tets[index];
         let isochoric = self.material.pressure_discretization != PressureDiscretization::Element;
         let (mut gradient, mut blocks) = if isochoric {
-            tet.isochoric_differential(x, self.material.shear_pa, self.material.strain_stiffening)
+            tet.isochoric_differential(x, self.material.shear_pa, self.material.strain_stiffening, active)
         } else {
-            corotated(tet, x, self.material.shear_pa, self.material.strain_stiffening)
+            corotated(tet, x, self.material.shear_pa, self.material.strain_stiffening, active)
         };
         if self.element_pressure[index] {
             let f = tet.deformation(x);
             let cofactor = DMat3::from_cols(f.y_axis.cross(f.z_axis), f.z_axis.cross(f.x_axis), f.x_axis.cross(f.y_axis));
             let derivative = material::nodal_gradient(cofactor * tet.inverse_rest.transpose());
             let coefficient = if isochoric { self.material.bulk_pa } else { self.material.lambda() } * tet.volume;
-            for i in 0..4 {
-                gradient[i] += coefficient * (f.determinant() - 1.) * derivative[i];
-                for j in 0..4 { blocks[i][j] += coefficient * outer(derivative[i], derivative[j]); }
+            for (gradient, derivative) in gradient.iter_mut().zip(derivative) {
+                *gradient += coefficient * (f.determinant() - 1.) * derivative;
+            }
+            for i in (0..4).filter(|&i| active[i]) {
+                for j in (0..4).filter(|&j| active[j]) {
+                    blocks[i][j] += coefficient * outer(derivative[i], derivative[j]);
+                }
             }
         }
         (gradient, blocks)
     }
 }
 
-fn corotated(tet: &Tet, x: &[DVec3], mu: f64, stiffening: f64)
+fn corotated(tet: &Tet, x: &[DVec3], mu: f64, stiffening: f64, active: [bool; 4])
     -> ([DVec3; 4], [[DMat3; 4]; 4])
 {
     let f = tet.deformation(x);
@@ -41,8 +45,11 @@ fn corotated(tet: &Tet, x: &[DVec3], mu: f64, stiffening: f64)
     let weight = 2. * mu * tet.volume * (1. + stiffening * material::squared_norm(strain));
     let hardening = 4. * mu * tet.volume * stiffening;
     let gradient = strain_gradient.map(|g| weight * g);
-    let blocks = std::array::from_fn(|i| std::array::from_fn(|j|
-        DMat3::IDENTITY * (weight * shape[i].dot(shape[j]))
-            + hardening * outer(strain_gradient[i], strain_gradient[j])));
+    let blocks = std::array::from_fn(|i| std::array::from_fn(|j| {
+        if active[i] && active[j] {
+            DMat3::IDENTITY * (weight * shape[i].dot(shape[j]))
+                + hardening * outer(strain_gradient[i], strain_gradient[j])
+        } else { DMat3::ZERO }
+    }));
     (gradient, blocks)
 }
