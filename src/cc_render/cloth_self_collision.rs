@@ -1,5 +1,5 @@
 //! Swept spatial broad phase and shared-vertex exclusions for self contact.
-use super::pair::FeaturePair;
+use super::pair::{ClothFriction, FeaturePair};
 use super::*;
 use parry_ccd::{bounding_volume::Aabb, math::Point, partitioning::Qbvh};
 
@@ -8,6 +8,7 @@ pub(super) struct ContactLayer<'a> {
     pub triangles: &'a [[usize; 3]],
     pub radius: f64,
     pub fixed: &'a [FixedClothCollider],
+    pub friction: ClothFriction,
 }
 
 fn layer_for<'a, 'b>(layers: &'a [ContactLayer<'b>], vertex: usize) -> &'a ContactLayer<'b> {
@@ -250,12 +251,14 @@ impl SelfCollisionTopology {
         triangles: &[[usize; 3]],
         fixed: &[FixedClothCollider],
         thickness: f64,
+        friction: ClothFriction,
     ) -> Result<(), ClothError> {
         let layers = [ContactLayer {
             range: 0..particles.positions.len(),
             triangles,
             radius: thickness * 0.5,
             fixed,
+            friction,
         }];
         self.resolve_layers(particles, triangles, &layers)
     }
@@ -402,9 +405,12 @@ impl SelfCollisionTopology {
             }
             evaluations += 1;
             let gap = radii[ids[0]] + radii[ids[pair.split()]];
+            let friction = layer_for(layers, ids[0])
+                .friction
+                .between(layer_for(layers, ids[pair.split()]).friction);
             pair_resolved[k] = 0;
             let moved =
-                pair.project_with_support(particles, gap + reserve, axis, |ids, p, d| {
+                pair.project_with_support(particles, gap + reserve, axis, friction, |ids, p, d| {
                     let d = std::array::from_fn(|k| {
                         let layer = layer_for(layers, ids[k]);
                         pair::fixed_support_direction(
@@ -812,6 +818,7 @@ mod tests {
                 &triangles,
                 &fixed,
                 0.001,
+                ClothFriction::LEGACY,
             )
             .unwrap();
         assert!(

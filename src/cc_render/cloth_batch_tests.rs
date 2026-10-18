@@ -18,6 +18,8 @@ fn patch(y: f32, mass: f64, thickness: f32, substeps: usize) -> ClothSolver {
             bend_compliance: 0.05,
             air_drag_per_second: 0.,
             spring_damping_ratio: 1.,
+            cloth_static_friction: 0.2,
+            cloth_kinetic_friction: 0.2,
             substeps,
         },
     )

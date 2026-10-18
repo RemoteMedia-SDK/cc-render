@@ -4,7 +4,8 @@
 //! Small-step XPBD with accumulated multipliers across material passes
 //! (Macklin et al., https://mmacklin.com/xpbd.pdf). Opposite-vertex springs
 //! approximate bending;
-//! they are not a calibrated shell material. Swept self-contact is frictionless;
+//! they are not a calibrated shell material. Swept self-contact carries
+//! per-material Coulomb friction (`cloth_pair`);
 //! dynamic-body coupling and runtime hand admission are not implemented here.
 //! The crate-private contact clamp is an explicitly limited coupling prototype.
 use std::collections::BTreeMap;
@@ -45,9 +46,33 @@ pub struct ClothParameters {
     pub air_drag_per_second: f64,
     pub spring_damping_ratio: f64,
     pub substeps: usize,
+    /// Coulomb coefficient of this fabric's surface against cloth below
+    /// which a contact sticks (static). Authored per material; the default
+    /// is the solver's former global 0.2.
+    #[serde(default = "legacy_stick_friction")]
+    pub cloth_static_friction: f64,
+    /// Coulomb coefficient once that contact slides (kinetic), at most the
+    /// static one.
+    #[serde(default = "legacy_slide_friction")]
+    pub cloth_kinetic_friction: f64,
+}
+
+fn legacy_stick_friction() -> f64 {
+    pair::ClothFriction::LEGACY.stick
+}
+
+fn legacy_slide_friction() -> f64 {
+    pair::ClothFriction::LEGACY.slide
 }
 
 impl ClothParameters {
+    fn friction(&self) -> pair::ClothFriction {
+        pair::ClothFriction {
+            stick: self.cloth_static_friction,
+            slide: self.cloth_kinetic_friction,
+        }
+    }
+
     fn validate(&self) -> Result<(), ClothError> {
         if !self.total_mass_kg.is_finite()
             || self.total_mass_kg <= 0.0
@@ -58,9 +83,12 @@ impl ClothParameters {
                 self.bend_compliance,
                 self.air_drag_per_second,
                 self.spring_damping_ratio,
+                self.cloth_static_friction,
+                self.cloth_kinetic_friction,
             ]
             .iter()
             .any(|v| !v.is_finite() || *v < 0.0)
+            || self.cloth_kinetic_friction > self.cloth_static_friction
             || !(1..=256).contains(&self.substeps)
         {
             return Err(ClothError::InvalidInput);
@@ -411,6 +439,22 @@ impl ClothSolver {
         self.velocities = velocities;
     }
 
+    /// Diagnostics: `[kinetic, gravity potential, stretch, bend]` energies in
+    /// joules of the committed state, the same estimates the energy probe uses.
+    #[cfg(test)]
+    pub(crate) fn energy_terms(&self, gravity: DVec3) -> [f64; 4] {
+        let mut e = [0.; 4];
+        for ((p, v), w) in self.positions.iter().zip(&self.velocities).zip(&self.inverse_mass) {
+            e[0] += 0.5 * v.length_squared() / w;
+            e[1] -= gravity.dot(*p) / w;
+        }
+        for s in &self.springs {
+            let r = self.positions[s.vertices[0]].distance(self.positions[s.vertices[1]]) - s.rest;
+            e[if s.stretch { 2 } else { 3 }] += 0.5 * r * r / s.compliance.max(1e-30);
+        }
+        e
+    }
+
     pub fn max_speed(&self) -> f64 {
         self.velocities
             .iter()
@@ -507,7 +551,13 @@ impl ClothSolver {
                 constraints.project(self, &mut particles, interval, pass)?;
             }
             self.self_collision
-                .resolve(&mut particles, &self.triangles, colliders, radius * 2.)?;
+                .resolve(
+                    &mut particles,
+                    &self.triangles,
+                    colliders,
+                    radius * 2.,
+                    self.parameters.friction(),
+                )?;
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
             damp_edge_velocities(&self.springs, &self.inverse_mass, &mut velocities, h);
         }

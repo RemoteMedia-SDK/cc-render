@@ -331,6 +331,7 @@ impl ClothBatch {
                 triangles: &layer.solver.triangles,
                 radius: layer.solver.parameters.thickness_m as f64 * 0.5,
                 fixed: layer.colliders,
+                friction: layer.solver.parameters.friction(),
             })
             .collect();
         for substep in 0..substeps {

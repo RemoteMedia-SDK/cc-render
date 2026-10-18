@@ -663,3 +663,49 @@ fn bake_settled_drape() {
         );
     }
 }
+
+/// A baked drape (`starts_at_rest`) must really rest under its own authored
+/// parameters, not only because the live batch adopts it as asleep. Woken
+/// without that adoption, every layer must fall asleep after the first quiet
+/// window (0.5 s, limit 1 s) and no particle may drift past the sleep bound.
+fn baked_drape_rests_when_simulated(scene: &str) {
+    let (mut solvers, colliders) = authored_layers(scene);
+    let start: Vec<Vec<DVec3>> = solvers.iter().map(|s| s.positions.clone()).collect();
+    let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
+    let gravity = bevy_rapier3d::prelude::RapierConfiguration::new(1.)
+        .gravity
+        .as_dvec3();
+    let mut tick = 0;
+    while !batch.resting() {
+        let mut layers: Vec<_> = solvers
+            .iter_mut()
+            .zip(&colliders)
+            .map(|(solver, colliders)| ClothLayerStep {
+                solver,
+                colliders,
+                grips: &mut [],
+            })
+            .collect();
+        batch.step(&mut layers, 1. / 60., gravity).unwrap();
+        tick += 1;
+        assert!(tick <= 60, "{scene}: baked drape still moving after 1 s");
+    }
+    let drift = solvers
+        .iter()
+        .zip(&start)
+        .flat_map(|(s, a)| s.positions.iter().zip(a).map(|(p, q)| p.distance(*q)))
+        .fold(0., f64::max);
+    println!("BAKED_REST {}", serde_json::json!({"scene": scene, "rest_tick": tick, "max_drift_m": drift}));
+    assert!(drift <= REST_DRIFT_M, "{scene}: baked drape drifted {drift} m");
+}
+
+#[test]
+#[ignore = "release: the moving bedding costs about a second per tick"]
+fn baked_bedding_rests_when_simulated() {
+    baked_drape_rests_when_simulated("scene-bedding-settled.json");
+}
+
+#[test]
+fn baked_vanity_sheet_rests_when_simulated() {
+    baked_drape_rests_when_simulated("scene-vanity-drawers.json");
+}

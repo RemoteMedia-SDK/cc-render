@@ -33,6 +33,8 @@ pub mod cloth_solver;
 #[cfg(test)]
 pub(crate) mod cloth_profile;
 pub(crate) mod cloth_grip;
+#[cfg(test)]
+mod cloth_turndown_tests;
 pub mod scene_cloth;
 
 pub use node::{CcRenderConfig, CcRenderNode};
