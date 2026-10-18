@@ -1,0 +1,104 @@
+<ctx task="tissue Bevy surface playback" route="routed: subtoken+body BM25 (--for&apos;s default) — no strong name hit, multi-word conceptual query" root="." est_tokens="4044" budget_tokens="6000"><!-- ripwire task bundle for "tissue Bevy surface playback" [doc mentions: 1 doc discussing 1 top-ranked symbol surfaced; doc_mentions= on the root repeats the doc count]: one-call orientation under ONE budget — sections in FIXED order ranking > bodies > callers > notes > tests, quotas per section are FIXED (rank40/body30/caller15/note5/test10, percent of budget), unused quota ROLLS FORWARD to the next section — a small budget still zeroes a section, but never past its own share. each truncates rank-adaptively; every truncation reported here (no silent caps): on every section shown=rows kept, total=rows that qualified, capped=1 when they differ. bodies fill rank-first, so a bigger budget can keep FEWER, larger bodies — the count is not a quality measure. Row keys: n=name (chain it), id=canonical(when scoped), in=reuse-count (absent = not measured, never a false 0), l=line, p=path, t=kind, cx=cyclomatic, ccx=cognitive, rel=caller|callee, r=rank in this ranking (rows in r= order); far=ranked but over 1 hop out; of_top denominator is per-section. callers: sorted by shared desc (ties=site order); shared=# of top-K anchors reached, omitted at 1. On the root: est_tokens= prices the delivered bundle in tokens (markup at the map rate, bodies at the body rate), budget_tokens= is the token target; over_ceiling= is 1 when est_tokens exceeds it (the bundle is then complete, not trimmed). budget=12744 bytes (6000-token target, ceiling 14160) | ranking: full | bodies: kept 5 of 6 (capped) | callers: 13 of 13 | notes: none | tests: none | far: 5 of 5 --><!-- root= on this element is the crawl root every p= below is RELATIVE to (single-root runs only; absent => p= is the path ingest itself used, unchanged). --><sigs><d l="92" n="equilibrate" id="src/cc_render/soft_tissue/implicit.rs::Tissue::equilibrate" p="src/cc_render/soft_tissue/implicit.rs" cx="7" ccx="10" in="3" r="1" next="--expand=src/cc_render/soft_tissue/implicit.rs:equilibrate"><doc>Offline authoring/reference solve. Does not advance playback time and must never be used to reset moving tissue during runtime</doc>pub fn equilibrate( &amp;mut self, gravity: DVec3, max_iterations: usize, ) -&gt; Result&lt;f64, TissueError&gt;</d><d l="78" n="validate" id="src/cc_render/soft_tissue/asset.rs::TissueAsset::validate" p="src/cc_render/soft_tissue/asset.rs" cx="3" ccx="2" in="1" r="2">pub fn validate(&amp;self) -&gt; anyhow::Result&lt;()&gt;</d><d l="9" n="TissueAsset" p="src/cc_render/soft_tissue/asset.rs" cx="0" ccx="0" in="0" r="3">pub struct TissueAsset</d><d l="126" n="validate_bindings" id="src/cc_render/soft_tissue/asset.rs::TissueAsset::validate_bindings" p="src/cc_render/soft_tissue/asset.rs" cx="2" ccx="1" in="1" r="4">fn validate_bindings(&amp;self, surface: &amp;SurfaceBinding) -&gt; anyhow::Result&lt;()&gt;</d><d l="188" n="body_soft_physics" id="src/cc_render/bevy_app/physics/cc5_json.rs::Cc5Physics::body_soft_physics" p="src/cc_render/bevy_app/physics/cc5_json.rs" cx="5" ccx="4" in="2" r="5"><doc>Best-effort body soft-physics lookup: returns the first soft-physics entry whose mesh name suggests a body / skin surface (`Body`, `Skin`, `Torso`). Used to read `Mass`, `Damping`, and `Stiffness Freq</doc>pub fn body_soft_physics(&amp;self) -&gt; Option&lt;&amp;Cc5SoftPhysics&gt;</d><d l="87" n="TissueError" p="src/cc_render/soft_tissue/solver.rs" cx="0" ccx="0" in="0" r="6">pub enum TissueError</d><d l="28" n="solver" id="src/cc_render/soft_tissue/asset.rs::RegionAsset::solver" p="src/cc_render/soft_tissue/asset.rs" cx="1" ccx="0" in="4" r="7">pub fn solver(&amp;self, frame: Frame) -&gt; Result&lt;Tissue, TissueError&gt;</d><far of_top="12" shown="5" total="5" capped="0"><s t="other" n="soft_tissue" p="src/cc_render/mod.rs:35"/><s t="cls" n="TissueMetrics" p="src/cc_render/soft_tissue/solver.rs:97"/><s t="cls" n="Tissue" p="src/cc_render/soft_tissue/solver.rs:107"/><s t="method" n="material_contact" p="src/cc_render/deformable_surface.rs:249"/><s t="cls" n="PlaybackCursor" p="examples/condo_capture/native_recording.rs:93"/></far></sigs><bodies shown="5" total="6" capped="1"><b t="method" l="92" p="src/cc_render/soft_tissue/implicit.rs" n="equilibrate"><![CDATA[pub fn equilibrate(
+        &mut self,
+        gravity: DVec3,
+        max_iterations: usize,
+    ) -> Result<f64, TissueError> {
+        if !gravity.is_finite() || !(1..=4096).contains(&max_iterations) {
+            return Err(TissueError::InvalidInput("equilibrium parameters"));
+        }
+        let mut x = self.positions.clone();
+        let objective = |x: &[DVec3]| {
+            self.objective(x, &self.positions, self.frame, f64::INFINITY)
+                - x.iter()
+                    .zip(&self.positions)
+                    .zip(&self.masses)
+                    .map(|((x, p), m)| m * gravity.dot(*x - *p))
+                    .sum::<f64>()
+        };
+        for _ in 0..max_iterations {
+            let mut system = self.linearize(&x, &self.positions, self.frame, f64::INFINITY);
+            for (i, g) in system.gradient.iter_mut().enumerate() {
+                if self.inverse_mass[i] > 0.0 {
+                    *g -= self.masses[i] * gravity;
+                }
+            }
+            let residual = system
+                .gradient
+                .iter()
+                .map(|g| g.length())
+                .fold(0.0, f64::max);
+            if residual < 2e-5 {
+                self.positions = x;
+                self.velocities.fill(DVec3::ZERO);
+                return Ok(residual);
+            }
+            let delta = system.direction();
+            x = self.descend(&x, &delta, dot(&system.gradient, &delta), &objective)?;
+        }
+        Err(TissueError::InvalidInput("equilibrium did not converge"))
+    }]]><calls total="6"><c n="Err" l="18">type Err = anyhow::Error</c><c n="dot" l="18">fn dot(a: &amp;[DVec3], b: &amp;[DVec3]) -&gt; f64</c><c n="direction" l="54">fn direction(&amp;self) -&gt; Vec&lt;DVec3&gt;</c><c n="descend" l="132">fn descend( &amp;self, x: &amp;[DVec3], delta: &amp;[DVec3], slope: f64, objective: impl Fn(&amp;[DVec3]) -&gt; f64, ) -&gt; Result&lt;Vec&lt;DVec3&gt;, TissueError&gt;</c><c n="linearize" l="153">fn linearize(&amp;self, x: &amp;[DVec3], predicted: &amp;[DVec3], frame: Frame, dt: f64) -&gt; System</c><c n="objective" l="220">fn objective(&amp;self, x: &amp;[DVec3], predicted: &amp;[DVec3], frame: Frame, dt: f64) -&gt; f64</c></calls></b><b t="method" l="78" p="src/cc_render/soft_tissue/asset.rs" n="validate"><![CDATA[pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.schema_version == 1
+                && (1..=8).contains(&self.regions.len())
+                && (1..=64).contains(&self.surfaces.len()),
+            "unsupported tissue asset version or size"
+        );
+        let mut names = BTreeSet::new();
+        for region in &self.regions {
+            anyhow::ensure!(
+                !region.name.is_empty()
+                    && !region.anchor_bone.is_empty()
+                    && names.insert(&region.name),
+                "missing or duplicate tissue region"
+            );
+            anyhow::ensure!(
+                region
+                    .attachments
+                    .iter()
+                    .filter(|a| matches!(a, Attachment::Fixed))
+                    .count()
+                    >= 3,
+                "tissue requires a distributed fixed attachment footprint"
+            );
+            region.solver(Frame::IDENTITY)?;
+        }
+        let mut hashes = BTreeSet::new();
+        for surface in &self.surfaces {
+            anyhow::ensure!(
+                surface.positions_sha256.len() == 64
+                    && surface
+                        .positions_sha256
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit())
+                    && hashes.insert(&surface.positions_sha256),
+                "invalid or duplicate tissue surface hash"
+            );
+            anyhow::ensure!(
+                (1..=1_000_000).contains(&surface.vertex_count)
+                    && !surface.vertices.is_empty()
+                    && surface.vertices.len() <= 100_000,
+                "tissue surface capacity"
+            );
+            self.validate_bindings(surface)?;
+        }
+        Ok(())
+    }]]><calls total="2"><c n="solver" l="28">pub fn solver(&amp;self, frame: Frame) -&gt; Result&lt;Tissue, TissueError&gt;</c><c n="validate_bindings" l="126">fn validate_bindings(&amp;self, surface: &amp;SurfaceBinding) -&gt; anyhow::Result&lt;()&gt;</c></calls></b><b t="cls" l="9" p="src/cc_render/soft_tissue/asset.rs" n="TissueAsset"><![CDATA[pub struct TissueAsset {
+    pub schema_version: u32,
+    pub regions: Vec<RegionAsset>,
+    pub surfaces: Vec<SurfaceBinding>,
+}]]></b><b t="method" l="188" p="src/cc_render/bevy_app/physics/cc5_json.rs" n="body_soft_physics"><![CDATA[pub fn body_soft_physics(&self) -> Option<&Cc5SoftPhysics> {
+        for (mesh, sp) in &self.soft_physics_by_mesh {
+            let n = mesh.to_lowercase();
+            if n.contains("body") || n.contains("skin") || n.contains("torso") {
+                return Some(sp);
+            }
+        }
+        None
+    }]]></b><b t="cls" l="87" p="src/cc_render/soft_tissue/solver.rs" n="TissueError"><![CDATA[pub enum TissueError {
+    #[error("invalid tissue {0}")]
+    InvalidInput(&'static str),
+    #[error("tissue step inverted or collapsed tetrahedron {0}; state was not committed")]
+    InvertedTet(usize),
+    #[error("tissue step produced nonfinite state; state was not committed")]
+    Nonfinite,
+}]]></b><!-- body omitted (over budget): validate_bindings --></bodies><callers of_top="6" shown="13" total="13" capped="0"><s t="fn" n="main" p="examples/tissue_fit.rs:6" rel="caller">fn main() -&gt; anyhow::Result&lt;()&gt;</s><s t="method" n="body_soft_physics_picks_body_mesh" p="src/cc_render/bevy_app/physics/cc5_json.rs:634" rel="caller">fn body_soft_physics_picks_body_mesh()</s><s t="fn" n="breast_tuning" p="src/cc_render/bevy_app/physics/secondary.rs:72" rel="caller">fn breast_tuning(cc5_physics: Option&lt;&amp;super::cc5_json::Cc5Physics&gt;) -&gt; BreastTuning</s><s t="cls" n="Err" p="src/cc_render/scene_weather.rs:18" rel="callee">type Err = anyhow::Error</s><s t="method" n="solver" p="src/cc_render/soft_tissue/asset.rs:28" rel="callee">pub fn solver(&amp;self, frame: Frame) -&gt; Result&lt;Tissue, TissueError&gt;</s><s t="method" n="from_json" p="src/cc_render/soft_tissue/asset.rs:68" rel="caller">pub fn from_json(bytes: &amp;[u8]) -&gt; anyhow::Result&lt;Self&gt;</s><s t="method" n="fitted_prototype_reproduces_the_authored_loaded_shape" p="src/cc_render/soft_tissue/asset.rs:220" rel="caller">fn fitted_prototype_reproduces_the_authored_loaded_shape()</s><s t="fn" n="dot" p="src/cc_render/soft_tissue/implicit.rs:18" rel="callee">fn dot(a: &amp;[DVec3], b: &amp;[DVec3]) -&gt; f64</s><s t="method" n="direction" p="src/cc_render/soft_tissue/implicit.rs:54" rel="callee">fn direction(&amp;self) -&gt; Vec&lt;DVec3&gt;</s><s t="method" n="descend" p="src/cc_render/soft_tissue/implicit.rs:132" rel="callee">fn descend( &amp;self, x: &amp;[DVec3], delta: &amp;[DVec3], slope: f64, objective: impl Fn(&amp;[DVec3]) -&gt; f64…</s><s t="method" n="linearize" p="src/cc_render/soft_tissue/implicit.rs:153" rel="callee">fn linearize(&amp;self, x: &amp;[DVec3], predicted: &amp;[DVec3], frame: Frame, dt: f64) -&gt; System</s><s t="method" n="objective" p="src/cc_render/soft_tissue/implicit.rs:220" rel="callee">fn objective(&amp;self, x: &amp;[DVec3], predicted: &amp;[DVec3], frame: Frame, dt: f64) -&gt; f64</s><s t="method" n="offline_equilibrium_satisfies_force_balance_without_advancing_motion" p="src/cc_render/soft_tissue/implicit.rs:308" rel="caller">fn offline_equilibrium_satisfies_force_balance_without_advancing_motion()</s></callers></ctx>

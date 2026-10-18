@@ -1,0 +1,26 @@
+{
+  "variant": "refit without rebalance",
+  "identical_response": true,
+  "before_ms": {
+    "sampling_ms": 2918.864860000001,
+    "elasticity_ms": 35739.83528600002,
+    "collision_ms": 18762.811614
+  },
+  "after_ms": {
+    "sampling_ms": 2868.0014429999987,
+    "elasticity_ms": 36024.243513999994,
+    "collision_ms": 14448.195238000002
+  },
+  "capture": {
+    "frames": 478,
+    "last_pts_ms": 8000,
+    "realtime_performance_claim": false,
+    "sent_packets": 160,
+    "wall_seconds": 62.776527464
+  },
+  "limitations": "Offline stage timings; compilation and tests overlapped the start of this capture. Not a controlled benchmark.",
+  "collision_stage_reduction_fraction": 0.2299557478251616,
+  "source_sha256": "a2daf547459c35beafc613691ae18616e9af6b62845e5304cf7e0bc4dab97076",
+  "tests": "53 focused tissue tests pass; Python 8 pass, 1 existing failure",
+  "decision": "retain bounds-only update; long-session tree quality and solver performance remain pending"
+}

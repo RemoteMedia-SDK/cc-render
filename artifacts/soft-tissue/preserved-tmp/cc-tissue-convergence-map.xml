@@ -1,0 +1,25 @@
+<ctx task="solve_implicit" route="routed: name-exact BM25 — query names a symbol (solve_implicit); anchors: solve_implicit(src/.../implicit.rs)" root="." confidence="high" margin_pct="0" at="ea65ebb68+dirty" est_tokens="1280"><!-- ripwire lens for "solve_implicit" [relevance floor: kept 1 of 40 - the other 39 scored zero on this query, so the bundle shrank instead of padding] [confidence= derives from the ranked head's largest relative score drop (margin_pct=, whole percent, 0 = none; the same gap the adaptive flag cuts at). low = flat ranking: treat the set as a starting point, not an answer]: reusable building blocks + quality facts for what you're about to touch (cx=complexity ccx=cognitive in=reuse-count churn=recent-commits amp=change-amplification clone=1(duplicated) tested=1) — prefer composing/reusing these; watch the high-churn/high-amp/cloned ones; tail: file-grain tail, WEAKER evidence than the ranked rows (paths only): every positive-score file NOT among the shown sigs rows — the files of trimmed rows first, best-symbol rank order; rows are t p=file; total=such files, shown=printed, capped=1 when they differ. r= on a ranked row is its 1-based rank in this lens ranking, rows in r= order, p= the file (a gap = a budget-trimmed row) --><!-- root= is the crawl root; p= below is RELATIVE to it (single-root only; absent => p= is ingest's own path, unchanged); at=this commit(+dirty). est_tokens= prices this bundle in tokens --><sigs><d l="284" n="solve_implicit" id="src/cc_render/soft_tissue/implicit.rs::Tissue::solve_implicit" p="src/cc_render/soft_tissue/implicit.rs" cx="3" ccx="3" in="1" amp="1" tested="1" r="1" next="--expand=src/cc_render/soft_tissue/implicit.rs:solve_implicit">pub(super) fn solve_implicit( &amp;self, x: &amp;mut Vec&lt;DVec3&gt;, predicted: &amp;[DVec3], frame: Frame, dt: f64, contacts: &amp;[PlaneContact], ) -&gt; Result&lt;(), TissueError&gt;</d></sigs><tail total="0" shown="0" capped="0"></tail><bodies shown="1" total="1" capped="0"><b t="method" l="284" p="src/cc_render/soft_tissue/implicit.rs" n="solve_implicit"><![CDATA[pub(super) fn solve_implicit(
+        &self,
+        x: &mut Vec<DVec3>,
+        predicted: &[DVec3],
+        frame: Frame,
+        dt: f64,
+        contacts: &[PlaneContact],
+    ) -> Result<(), TissueError> {
+        for _ in 0..self.material.iterations {
+            let system = self.linearize(x, predicted, frame, dt, contacts);
+            if dot(&system.gradient, &system.gradient) < 1e-16 {
+                break;
+            }
+            let delta = system.direction();
+            let slope = dot(&system.gradient, &delta);
+            *x = self.descend(x, &delta, slope, |x| {
+                self.objective(x, predicted, frame, dt)
+                    + contacts
+                        .iter()
+                        .map(|c| c.energy(x, &self.tets))
+                        .sum::<f64>()
+            })?;
+        }
+        Ok(())
+    }]]><calls total="7"><c n="energy" l="73">pub(super) fn energy(&amp;self, positions: &amp;[DVec3], tets: &amp;[Tet]) -&gt; f64</c><c n="dot" l="15">fn dot(a: &amp;[DVec3], b: &amp;[DVec3]) -&gt; f64</c><c n="direction" l="41">fn direction(&amp;self) -&gt; Vec&lt;DVec3&gt;</c><c n="descend" l="119">fn descend( &amp;self, x: &amp;[DVec3], delta: &amp;[DVec3], slope: f64, objective: impl Fn(&amp;[DVec3]) -&gt; f64, ) -&gt; Result&lt;Vec&lt;DVec3&gt;, TissueError&gt;</c><c n="linearize" l="140">fn linearize( &amp;self, x: &amp;[DVec3], predicted: &amp;[DVec3], frame: Frame, dt: f64, contacts: &amp;[PlaneContact], ) -&gt; System</c><c n="objective" l="257">fn objective(&amp;self, x: &amp;[DVec3], predicted: &amp;[DVec3], frame: Frame, dt: f64) -&gt; f64</c><c n="energy" l="90">pub fn energy(&amp;self, positions: &amp;[DVec3], mu: f64, lambda: f64) -&gt; f64</c></calls></b></bodies></ctx>

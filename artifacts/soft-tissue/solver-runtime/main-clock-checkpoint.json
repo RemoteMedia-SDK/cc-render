@@ -1,0 +1,67 @@
+{
+  "objective_status": "active; volumetric replacement remains opt-in and not production-ready",
+  "clock_change": "Headless realtime selects the current main-loop instant; fixed offline stepping and virtual pause retain existing behavior.",
+  "recorded_unix": 1792286815.5012288,
+  "source_manifest": "main-clock-inputs.json",
+  "source_archive": "main-clock-source.tar.gz",
+  "runtime_audit": "main-clock-comparison.json",
+  "runtime_audit_script": "main_clock_audit.py",
+  "launches": "main-clock-launches.json",
+  "video": "main-clock-front.mp4",
+  "video_validation": "main-clock-video-validation.json",
+  "review_page": "../temporal-integration/index.html",
+  "visual_inspection": {
+    "frames_source_ms": [
+      2203,
+      7202
+    ],
+    "scope": "Framing and surface continuity at two raw frames, not whole-motion anatomical acceptance"
+  },
+  "checks": {
+    "build_exit": 0,
+    "clock_tests_passed": 3,
+    "fixed_clock_frames_identical": 478,
+    "gpu_trace_runs_completed": 4,
+    "additional_image_capture_completed": true,
+    "source_packets_per_run": 160,
+    "python_passed": 8,
+    "python_failed": 1,
+    "python_failure": "Existing root-acceptance source-slice failure; protected test unchanged.",
+    "quality": {
+      "baseline": "git-HEAD",
+      "regressions": "433",
+      "minor": "19",
+      "acked": "0",
+      "stale": "0",
+      "preexisting-worse": "27",
+      "new-symbol": "406",
+      "gating": "8",
+      "register-macro-excluded": "0",
+      "at": "ea65ebb68+dirty"
+    },
+    "diff_check_exit": 0,
+    "local_review_links_checked": 46
+  },
+  "full_library_test": {
+    "session_id": 31629,
+    "host_pid": 1499268,
+    "declared_tests": 469,
+    "status": "terminated",
+    "latest_bedding_tick": [
+      "120",
+      "1186.963"
+    ],
+    "failures_reported": false,
+    "suspension_record": "main-clock-test-suspension.json",
+    "note": "Session 31629 collected after process disappearance; no full-suite success. See nonlinear-rate-test-suspension.json.",
+    "exit_code": 143,
+    "terminal_result_missing": true
+  },
+  "next_work": [
+    "Collect full-library-test result without restarting it.",
+    "Material calibration and active contact on the actual avatar remain unproven.",
+    "Pausing body time while position-affecting facial morphs change still requires policy resolution.",
+    "Interactive frame deadlines, final audit and production enablement remain unfinished."
+  ],
+  "user_correction": "Ignore prior arm-obscuration complaint; arm motion and camera unchanged."
+}

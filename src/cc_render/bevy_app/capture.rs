@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 use bevy::render::{
-    extract_resource::ExtractResource,
+    extract_resource::{ExtractResource, ExtractResourcePlugin},
     render_asset::RenderAssets,
     render_resource::{
         Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
@@ -44,6 +44,62 @@ pub(crate) struct CapturedFrame {
     pub width: u32,
     pub height: u32,
     pub pts_ms: u64,
+    pub body_pts_ms: Option<u64>,
+    pub tissue_pts_ms: Option<u64>,
+}
+
+/// Set only after successful tissue deformation, then extracted alongside the
+/// mesh for this render. A later main-world scene-state read is not equivalent.
+#[derive(Resource, Clone, Copy, Default, ExtractResource)]
+pub(crate) struct TissueFramePts(pub Option<u64>);
+
+#[derive(Resource, Clone, Copy, Default, ExtractResource)]
+pub(crate) struct BodyFramePts(pub Option<u64>);
+
+pub(super) fn install_body_clock(app: &mut App, step: Option<std::time::Duration>) {
+    app.add_plugins(ExtractResourcePlugin::<BodyFramePts>::default())
+        .init_resource::<BodyFramePts>()
+        .add_systems(PostUpdate, stamp_body_frame.after(bevy::transform::TransformSystem::TransformPropagate));
+    if let Some(step) = step {
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(step));
+    } else {
+        // Headless playback is paced by the main runner. Bevy 0.15's automatic
+        // clock instead consumes an older render-thread completion timestamp;
+        // variable simulation cost then feeds back into the next source step.
+        // Sample the current monotonic instant before TimePlugin updates its
+        // real/virtual clocks. Virtual pause and explicit offline steps remain
+        // managed by their existing paths.
+        app.add_systems(First, sample_realtime_clock.before(bevy::time::TimeSystem));
+    }
+    if std::env::var("CC_RENDER_CLOCK_TRACE").as_deref() == Ok("1") {
+        app.add_systems(First, trace_main_clock.after(bevy::time::TimeSystem));
+    }
+}
+
+fn sample_realtime_clock(mut strategy: ResMut<bevy::time::TimeUpdateStrategy>) {
+    *strategy = bevy::time::TimeUpdateStrategy::ManualInstant(bevy::utils::Instant::now());
+}
+
+fn trace_main_clock(time: Res<Time<Real>>, body: Res<BodyFramePts>) {
+    let now = bevy::utils::Instant::now();
+    tracing::info!(clock = %serde_json::json!({
+        "previous_body_pts_ms":body.0,
+        "wall_elapsed_ms":now.duration_since(time.startup()).as_secs_f64()*1000.,
+        "selected_instant_age_ms":time.last_update().and_then(|at| now.checked_duration_since(at)).map(|age| age.as_secs_f64()*1000.),
+        "real_elapsed_ms":time.elapsed_secs_f64()*1000.,
+        "real_delta_ms":time.delta_secs_f64()*1000.,
+    }), "headless frame clock");
+}
+
+#[cfg(test)]
+#[path = "frame_clock_tests.rs"]
+mod frame_clock_tests;
+
+fn stamp_body_frame(
+    timeline: Res<crate::cc_render::office::timeline::PoseTimeline>,
+    mut stamp: ResMut<BodyFramePts>,
+) {
+    stamp.0 = timeline.displayed_pts_ms();
 }
 
 /// Holds the most-recent `ArkitPose::pts_ms` applied by the main
@@ -70,13 +126,20 @@ pub(crate) struct MonotonicCaptureClock {
     pub frame_interval_ms: u64,
 }
 
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct FrameStamps<'w> {
+    facial: Option<Res<'w, LastAppliedPts>>,
+    tissue: Option<Res<'w, TissueFramePts>>,
+    body: Res<'w, BodyFramePts>,
+}
+
 pub(crate) fn copy_render_target_to_cpu(
     target: Option<Res<CaptureTarget>>,
     images: Res<RenderAssets<GpuImage>>,
     device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
     tx: Res<CaptureChannelTx>,
-    pts: Option<Res<LastAppliedPts>>,
+    stamps: FrameStamps,
     mut clock: ResMut<MonotonicCaptureClock>,
     mut count: bevy::ecs::system::Local<u64>,
 ) {
@@ -177,11 +240,13 @@ pub(crate) fn copy_render_target_to_cpu(
     // while the mouth is already at content_time≈warmup_gap_ms).
     // Monotonic clock is bumped for diagnostics only.
     clock.frame_count += 1;
-    let pose_pts_ms = pts.map(|p| p.0).unwrap_or(0);
+    let pose_pts_ms = stamps.facial.map(|p| p.0).unwrap_or(0);
     let _ = tx.tx.try_send(CapturedFrame {
         pixels: tight,
         width: t.width,
         height: t.height,
         pts_ms: pose_pts_ms,
+        body_pts_ms: stamps.body.0,
+        tissue_pts_ms: stamps.tissue.and_then(|p| p.0),
     });
 }

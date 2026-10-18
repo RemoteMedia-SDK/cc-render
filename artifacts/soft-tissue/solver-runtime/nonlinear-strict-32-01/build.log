@@ -1,0 +1,67 @@
+warning: unused imports: `RegionAsset`, `SurfaceBinding`, and `VertexBinding`
+  --> /tmp/tissue-runtime-_kifvau2/soft_tissue/mod.rs:11:17
+   |
+11 | pub use asset::{RegionAsset, SurfaceBinding, TissueAsset, VertexBinding};
+   |                 ^^^^^^^^^^^  ^^^^^^^^^^^^^^               ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `EmbeddedPoint`
+  --> /tmp/tissue-runtime-_kifvau2/soft_tissue/mod.rs:12:35
+   |
+12 | pub use contact::{ContactMetrics, EmbeddedPoint, PlaneContact};
+   |                                   ^^^^^^^^^^^^^
+
+warning: unused imports: `TimeIntegration`, `TissueMetrics`, and `Viscosity`
+  --> /tmp/tissue-runtime-_kifvau2/soft_tissue/mod.rs:13:68
+   |
+13 | pub use solver::{Attachment, Frame, Material, Tissue, TissueError, TissueMetrics, TimeIntegration, Viscosity};
+   |                                                                    ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^
+
+warning: method `volume_constraint` is never used
+  --> /tmp/tissue-runtime-_kifvau2/soft_tissue/material.rs:81:8
+   |
+57 | impl Tet {
+   | -------- method in this implementation
+...
+81 |     fn volume_constraint(&self, positions: &[DVec3]) -> (f64, [DVec3; 4]) {
+   |        ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `rest` is never read
+   --> /tmp/tissue-runtime-_kifvau2/soft_tissue/solver.rs:149:5
+    |
+148 | pub struct Tissue {
+    |            ------ field in this struct
+149 |     rest: Vec<DVec3>,
+    |     ^^^^
+    |
+    = note: `Tissue` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: methods `velocities`, `rest_positions`, and `frame` are never used
+   --> /tmp/tissue-runtime-_kifvau2/soft_tissue/solver.rs:305:12
+    |
+217 | impl Tissue {
+    | ----------- methods in this implementation
+...
+305 |     pub fn velocities(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^
+...
+308 |     pub fn rest_positions(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^^^^^
+...
+311 |     pub fn frame(&self) -> Frame {
+    |            ^^^^^
+
+warning: method `equilibrate` is never used
+   --> /tmp/tissue-runtime-_kifvau2/soft_tissue/implicit.rs:161:12
+    |
+158 | impl Tissue {
+    | ----------- method in this implementation
+...
+161 |     pub fn equilibrate(
+    |            ^^^^^^^^^^^
+
+warning: 7 warnings emitted
+

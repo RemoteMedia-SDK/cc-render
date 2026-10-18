@@ -268,6 +268,7 @@ impl CcRenderNode {
             width: config.width,
             height: config.height,
             fps: config.fps,
+            offline_frame_step: None,
             scene_glb_path: config.scene_glb_path.clone(),
             scene_package_path: config.scene_package_path.clone(),
             // Physics on by default — needed for hair / breast /
@@ -1576,6 +1577,8 @@ mod realtime_speech_tests {
                 width: 1,
                 height: 1,
                 pts_ms: self.poses.lock().last().map_or(0, |p| p.pts_ms),
+                body_pts_ms: None,
+                tissue_pts_ms: None,
             });
         }
     }

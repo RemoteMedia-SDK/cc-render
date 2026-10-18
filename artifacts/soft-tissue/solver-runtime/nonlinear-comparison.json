@@ -1,0 +1,245 @@
+{
+  "source_packets_unchanged_and_semantic_only": true,
+  "source_timestamps_and_attachment_frames_unchanged": true,
+  "cpu": {
+    "nonlinear-balance-8-01": {
+      "directory": "nonlinear-balance-8-01",
+      "observed_solves": 3819,
+      "met_both_limits": 3679,
+      "missed_either_limit": 140,
+      "force_norm_n_p50_p95_p99_max": [
+        4.068643102074976e-05,
+        9.66096025142285e-05,
+        0.006841814773221247,
+        1.6280738015068061
+      ],
+      "correction_um_p50_p95_p99_max": [
+        0.014464343159127735,
+        0.05019526088963019,
+        3.2740531847298615,
+        123.47416945925248
+      ],
+      "run": {
+        "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+        "metrics": [
+          {
+            "elastic_energy_j": 0.02820839573581177,
+            "kinetic_energy_j": 0.4630951858035724,
+            "mass_kg": 0.7092840233607869,
+            "maximum_speed_m_s": 1.2626055889205394,
+            "maximum_volume_ratio": 1.031428145623053,
+            "minimum_volume_ratio": 0.9545480086413951
+          },
+          {
+            "elastic_energy_j": 0.028974078819956672,
+            "kinetic_energy_j": 0.46207129794209123,
+            "mass_kg": 0.7034397124915243,
+            "maximum_speed_m_s": 1.2700569463914628,
+            "maximum_volume_ratio": 1.0401334788527716,
+            "minimum_volume_ratio": 0.9761721485777182
+          }
+        ],
+        "rate_hz": 240,
+        "regions": 2,
+        "solve_seconds": 13.093398229,
+        "source_start_ms": 50.0,
+        "steps": 1908,
+        "subdivisions": 3,
+        "wall_seconds": 13.119984526
+      },
+      "timing_claim": false
+    },
+    "nonlinear-balance-32-01": {
+      "directory": "nonlinear-balance-32-01",
+      "observed_solves": 3819,
+      "met_both_limits": 3809,
+      "missed_either_limit": 10,
+      "force_norm_n_p50_p95_p99_max": [
+        4.052135749613974e-05,
+        9.126532900438502e-05,
+        9.796997870909566e-05,
+        0.04333152273735788
+      ],
+      "correction_um_p50_p95_p99_max": [
+        0.014138598391608009,
+        0.04567491342529641,
+        0.07082165183967612,
+        30.160316390580412
+      ],
+      "run": {
+        "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+        "metrics": [
+          {
+            "elastic_energy_j": 0.02821065694122809,
+            "kinetic_energy_j": 0.4630928456408573,
+            "mass_kg": 0.7092840233607869,
+            "maximum_speed_m_s": 1.2625987174634996,
+            "maximum_volume_ratio": 1.0314273495669197,
+            "minimum_volume_ratio": 0.9545542138537342
+          },
+          {
+            "elastic_energy_j": 0.02897372265777623,
+            "kinetic_energy_j": 0.4620710402700158,
+            "mass_kg": 0.7034397124915243,
+            "maximum_speed_m_s": 1.2700563911154892,
+            "maximum_volume_ratio": 1.0401315051998568,
+            "minimum_volume_ratio": 0.9761721897439573
+          }
+        ],
+        "rate_hz": 240,
+        "regions": 2,
+        "solve_seconds": 14.520850738,
+        "source_start_ms": 50.0,
+        "steps": 1908,
+        "subdivisions": 3,
+        "wall_seconds": 14.546728577
+      },
+      "timing_claim": false
+    },
+    "nonlinear-strict-32-01": {
+      "directory": "nonlinear-strict-32-01",
+      "observed_solves": 3829,
+      "met_both_limits": 3829,
+      "missed_either_limit": 0,
+      "force_norm_n_p50_p95_p99_max": [
+        4.0640517388294185e-05,
+        9.09790775155529e-05,
+        9.727589334198403e-05,
+        9.988823732250159e-05
+      ],
+      "correction_um_p50_p95_p99_max": [
+        0.014122284967247814,
+        0.04544717640517903,
+        0.0671717604824279,
+        0.09363318551511779
+      ],
+      "run": {
+        "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+        "metrics": [
+          {
+            "elastic_energy_j": 0.02820909737925368,
+            "kinetic_energy_j": 0.46309474412042845,
+            "mass_kg": 0.7092840233607869,
+            "maximum_speed_m_s": 1.2626042381999165,
+            "maximum_volume_ratio": 1.0314282542167186,
+            "minimum_volume_ratio": 0.9545492960711257
+          },
+          {
+            "elastic_energy_j": 0.028966392376789354,
+            "kinetic_energy_j": 0.4620493647401798,
+            "mass_kg": 0.7034397124915243,
+            "maximum_speed_m_s": 1.2700108505308632,
+            "maximum_volume_ratio": 1.0401062341622576,
+            "minimum_volume_ratio": 0.9761885316932444
+          }
+        ],
+        "rate_hz": 240,
+        "regions": 2,
+        "solve_seconds": 13.113835489,
+        "source_start_ms": 50.0,
+        "steps": 1908,
+        "subdivisions": 13,
+        "wall_seconds": 13.144060867
+      },
+      "timing_claim": false
+    }
+  },
+  "full_node_difference_from_strict_mm_p50_p95_p99_max": {
+    "nonlinear-balance-8-01": [
+      8.570804993246924e-06,
+      0.03186841223698635,
+      0.10469097340168639,
+      1.7909758766112196
+    ],
+    "nonlinear-balance-32-01": [
+      4.828488605203358e-08,
+      0.031221831576091628,
+      0.10108125916392538,
+      0.9280305735692356
+    ]
+  },
+  "fixed_capture": {
+    "directory": "lab-front-nonlinear-strict-fixed-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 16.19013936
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 5481.301442999999,
+    "playback_capture_seconds": 10.707755146,
+    "playback_wall_over_source": 1.3468874397484276,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      21.074370000000272,
+      33.92277600000015,
+      56.89384259999962,
+      131.72371300000032
+    ],
+    "stage_seconds": {
+      "sampling": 2.0753218959999993,
+      "elasticity": 6.373757913999996,
+      "collision": 0.7522692049999993
+    },
+    "peak_surface_displacement_mm": 37.87859156727791,
+    "minimum_element_volume_ratio": 0.8556109607309785,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "fixed_physics_change": {
+    "common_source_timestamps": 478,
+    "identical_traced_physics_and_source": false,
+    "maximum_surface_envelope_difference_mm": 0.29715802520513535,
+    "maximum_centroid_offset_difference_mm": 0.1388926004580117
+  },
+  "visual_capture": {
+    "directory": "lab-front-nonlinear-strict-video-01",
+    "capture": {
+      "frames": 176,
+      "images_saved": 176,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 14.844874268
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 66,
+    "source_span_seconds": 7.934,
+    "playback_wall_seconds": 8.071705229,
+    "presentations_per_source_second": 22.056970002520796,
+    "source_gap_ms_p50_p95_p99_max": [
+      34.0,
+      116.89999999999995,
+      154.81999999999994,
+      202.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      33.539835999998104,
+      120.51552659999895,
+      154.498359239999,
+      298.4615920000015
+    ],
+    "source_gaps_above_50ms": 30,
+    "relative_clock_drift_ms_min_max_end": [
+      -1.0672139999996944,
+      328.94087599999966,
+      137.70522900000014
+    ],
+    "maximum_skin_error_mm": 0.0008371217194311702,
+    "peak_surface_displacement_mm": 26.547228917479515,
+    "minimum_element_volume_ratio": 0.8584364202525315,
+    "maximum_active_contacts": 0
+  },
+  "limitations": [
+    "Numerical acceptance limits are engineering choices, not anatomical calibration.",
+    "CPU replay interpolates saved attachment observations; it is not native body/contact acceptance.",
+    "GPU captures overlap a separate bedding test; timings are not an isolated performance comparison.",
+    "Both GPU captures have zero active contacts; actual-avatar compression remains unverified."
+  ]
+}

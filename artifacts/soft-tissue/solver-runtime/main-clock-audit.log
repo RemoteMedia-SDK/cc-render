@@ -1,0 +1,304 @@
+{
+  "source_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+  "source_packets_unchanged_and_semantic_only": true,
+  "body_and_tissue_stamps_correlated_in_gpu_readback": true,
+  "baseline": {
+    "directory": "lab-front-render-clock-probe-01",
+    "capture": {
+      "frames": 229,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 14.837371375
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 88,
+    "source_span_seconds": 7.912,
+    "playback_wall_seconds": 7.941836626999999,
+    "presentations_per_source_second": 28.816986855409503,
+    "source_gap_ms_p50_p95_p99_max": [
+      33.5,
+      57.299999999999955,
+      66.72999999999999,
+      80.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      33.72686650000014,
+      71.32861450000117,
+      82.70629946000126,
+      96.92970599999899
+    ],
+    "source_gaps_above_50ms": 23,
+    "relative_clock_drift_ms_min_max_end": [
+      -9.040550999999141,
+      85.82524999999987,
+      29.83662699999877
+    ],
+    "maximum_skin_error_mm": 0.0010612305292346988,
+    "peak_surface_displacement_mm": 31.434644013643265,
+    "minimum_element_volume_ratio": 0.8774342617051161,
+    "maximum_active_contacts": 0,
+    "clock": {
+      "samples": 228,
+      "selected_instant_age_ms_p50_p95_p99_max": [
+        40.76769899999999,
+        56.656767499999994,
+        64.5646971,
+        77.673497
+      ],
+      "main_loop_interval_ms_p50_p95_p99_max": [
+        33.39152600000125,
+        44.55789569999977,
+        60.32831427999936,
+        65.22767099999874
+      ],
+      "selected_delta_ms_p50_p95_p99_max": [
+        33.652106,
+        57.11272669999998,
+        66.53600474000001,
+        79.64318800000001
+      ],
+      "selected_delta_lag1_correlation": -0.7567174780066445,
+      "main_loop_delta_lag1_correlation": -0.02608517415451602,
+      "clock_identity_residual_max_ms": 2.7142732506035827e-12
+    }
+  },
+  "runs": {
+    "main-clock-on-01": {
+      "directory": "lab-front-main-clock-on-01",
+      "capture": {
+        "frames": 231,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 14.76593283
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "playback_wall_seconds": 7.973006802,
+      "presentations_per_source_second": 28.989160574741618,
+      "source_gap_ms_p50_p95_p99_max": [
+        33.0,
+        42.0,
+        51.71000000000001,
+        69.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        33.73148100000071,
+        66.44371349999983,
+        67.44692160000066,
+        85.4790809999995
+      ],
+      "source_gaps_above_50ms": 4,
+      "relative_clock_drift_ms_min_max_end": [
+        -1.3270940000002156,
+        103.00530700000127,
+        39.00680199999988
+      ],
+      "maximum_skin_error_mm": 0.0009480699134222785,
+      "peak_surface_displacement_mm": 32.844178378582,
+      "minimum_element_volume_ratio": 0.8536127822474107,
+      "maximum_active_contacts": 0,
+      "clock": {
+        "samples": 230,
+        "selected_instant_age_ms_p50_p95_p99_max": [
+          0.00756,
+          0.012008999999999997,
+          0.015396400000000017,
+          0.01831
+        ],
+        "main_loop_interval_ms_p50_p95_p99_max": [
+          33.38957600000049,
+          42.24148360000035,
+          51.197057599999276,
+          69.09484299999986
+        ],
+        "selected_delta_ms_p50_p95_p99_max": [
+          33.389406,
+          42.244151599999995,
+          51.1947468,
+          69.09183300000001
+        ],
+        "selected_delta_lag1_correlation": 0.752884032207974,
+        "main_loop_delta_lag1_correlation": 0.7528249589470506,
+        "clock_identity_residual_max_ms": 3.126388037344441e-12
+      }
+    },
+    "main-clock-off-01": {
+      "directory": "lab-front-main-clock-off-01",
+      "capture": {
+        "frames": 239,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 14.024222677
+      },
+      "fps_target": 30,
+      "tissue": false,
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "playback_wall_seconds": 7.945642329000001,
+      "presentations_per_source_second": 29.997479203428284,
+      "source_gap_ms_p50_p95_p99_max": [
+        33.0,
+        34.0,
+        34.0,
+        34.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        33.72851599999922,
+        33.76988800000045,
+        40.39937092000008,
+        55.83692599999995
+      ],
+      "source_gaps_above_50ms": 0,
+      "relative_clock_drift_ms_min_max_end": [
+        -0.9966399999984787,
+        33.0055710000006,
+        11.642329000001155
+      ],
+      "maximum_skin_error_mm": null,
+      "peak_surface_displacement_mm": null,
+      "minimum_element_volume_ratio": null,
+      "maximum_active_contacts": null,
+      "clock": {
+        "samples": 238,
+        "selected_instant_age_ms_p50_p95_p99_max": [
+          0.006305,
+          0.0112605,
+          0.014005299999999998,
+          0.018070000000000003
+        ],
+        "main_loop_interval_ms_p50_p95_p99_max": [
+          33.387015999999676,
+          33.396187999999896,
+          33.401374799999466,
+          33.40844600000037
+        ],
+        "selected_delta_ms_p50_p95_p99_max": [
+          33.386596,
+          33.393732,
+          33.395568159999996,
+          33.398006
+        ],
+        "selected_delta_lag1_correlation": -0.11954649839627858,
+        "main_loop_delta_lag1_correlation": -0.2600557028445937,
+        "clock_identity_residual_max_ms": 3.105071755271638e-12
+      }
+    },
+    "main-clock-on-02": {
+      "directory": "lab-front-main-clock-on-02",
+      "capture": {
+        "frames": 231,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 14.707783894
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "playback_wall_seconds": 7.953043922000002,
+      "presentations_per_source_second": 28.989160574741618,
+      "source_gap_ms_p50_p95_p99_max": [
+        33.0,
+        42.0,
+        51.71000000000001,
+        67.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        33.73483099999976,
+        66.3908640500003,
+        67.42835340999943,
+        67.56382200000007
+      ],
+      "source_gaps_above_50ms": 4,
+      "relative_clock_drift_ms_min_max_end": [
+        -1.6202320000002146,
+        98.9579130000011,
+        19.043922000001658
+      ],
+      "maximum_skin_error_mm": 0.0013500155988819748,
+      "peak_surface_displacement_mm": 36.22595593333244,
+      "minimum_element_volume_ratio": 0.830989490203693,
+      "maximum_active_contacts": 0,
+      "clock": {
+        "samples": 230,
+        "selected_instant_age_ms_p50_p95_p99_max": [
+          0.007575,
+          0.012036499999999997,
+          0.014927500000000003,
+          0.01787
+        ],
+        "main_loop_interval_ms_p50_p95_p99_max": [
+          33.39030600000115,
+          42.05838199999998,
+          51.79362671999792,
+          66.87796199999957
+        ],
+        "selected_delta_ms_p50_p95_p99_max": [
+          33.389536,
+          42.055724,
+          51.79399832,
+          66.878362
+        ],
+        "selected_delta_lag1_correlation": 0.7669312734070333,
+        "main_loop_delta_lag1_correlation": 0.7669089698602346,
+        "clock_identity_residual_max_ms": 2.8563817977556027e-12
+      }
+    }
+  },
+  "fixed_clock_run": {
+    "directory": "lab-front-main-clock-fixed-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 15.933950188
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 5682.7920189999995,
+    "playback_capture_seconds": 10.250073358000002,
+    "playback_wall_over_source": 1.2893174035220127,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      21.1004899999989,
+      29.501964799998312,
+      37.09176123999999,
+      52.7037849999997
+    ],
+    "stage_seconds": {
+      "sampling": 1.9326932809999997,
+      "elasticity": 6.101387320000001,
+      "collision": 0.7491124850000002
+    },
+    "peak_surface_displacement_mm": 37.85074129700661,
+    "minimum_element_volume_ratio": 0.8552568517101171,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "fixed_clock_physics_regression": {
+    "common_source_timestamps": 478,
+    "identical_traced_physics_and_source": true,
+    "maximum_surface_envelope_difference_mm": 0.0,
+    "maximum_centroid_offset_difference_mm": 0.0
+  },
+  "limitations": [
+    "Local prerecorded motion and renderer readback, not live inference/network/browser presentation.",
+    "Live runs differ in first observation and sample times; their physics traces are not byte-comparable.",
+    "Clock correction does not certify deadlines, anatomical material calibration or active avatar contact.",
+    "Displayed volume minima do not bound unsampled extrema."
+  ]
+}

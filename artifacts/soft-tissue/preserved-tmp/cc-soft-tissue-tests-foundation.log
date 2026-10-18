@@ -1,0 +1,187 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+warning: value assigned to `own_rest_local` is never read
+   --> src/cc_render/bevy_app/pose.rs:637:9
+    |
+637 |         own_rest_local[1] = lhip_own;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: taking a mutable reference to a `const` item
+   --> src/cc_render/cloth_pair_tests.rs:240:13
+    |
+240 |             &mut DVec3::ZERO,
+    |             ^^^^^^^^^^^^^^^^
+    |
+    = note: each usage of a `const` item creates a new temporary
+    = note: the mutable reference will refer to this temporary, not the original `const` item
+note: `const` item defined here
+   --> /home/acidhax/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glam-0.29.3/src/f64/dvec3.rs:28:5
+    |
+ 28 |     pub const ZERO: Self = Self::splat(0.0);
+    |     ^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(const_item_mutation)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/cc_render/cloth_self_collision.rs:488:13
+    |
+488 |         let mut particles = GripParticles {
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated items `neutral` and `to_json` are never used
+   --> src/arkit.rs:110:12
+    |
+ 99 | impl BlendshapeFrame {
+    | -------------------- associated items in this implementation
+...
+110 |     pub fn neutral(pts_ms: u64) -> Self {
+    |            ^^^^^^^
+...
+115 |     pub fn to_json(&self) -> Value {
+    |            ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `frame_interval_ms` is never read
+  --> src/cc_render/bevy_app/capture.rs:70:9
+   |
+68 | pub(crate) struct MonotonicCaptureClock {
+   |                   --------------------- field in this struct
+69 |     pub frame_count: u64,
+70 |     pub frame_interval_ms: u64,
+   |         ^^^^^^^^^^^^^^^^^
+
+warning: struct `LatestPose` is never constructed
+   --> src/cc_render/bevy_app/pose.rs:923:19
+    |
+923 | pub(crate) struct LatestPose {
+    |                   ^^^^^^^^^^
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:36:9
+   |
+22 |     Capsule {
+   |     ------- field in this variant
+...
+36 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:50:9
+   |
+38 |     Box {
+   |     --- field in this variant
+...
+50 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `palm_override` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:23:9
+   |
+20 |     Pursuing {
+   |     -------- field in this variant
+...
+23 |         palm_override: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `ceiling_y` is never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:81:9
+   |
+79 | pub struct PlayVolumeRaw {
+   |            ------------- field in this struct
+80 |     pub half_extents_xz: f32,
+81 |     pub ceiling_y: f32,
+   |         ^^^^^^^^^
+   |
+   = note: `PlayVolumeRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `id` is never read
+   --> src/cc_render/office/controller.rs:165:9
+    |
+164 | pub(crate) struct PushForceIntent {
+    |                   --------------- field in this struct
+165 |     pub id: String,
+    |         ^^
+    |
+    = note: `PushForceIntent` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: function `apply_furniture_push` is never used
+   --> src/cc_render/office/systems.rs:190:4
+    |
+190 | fn apply_furniture_push(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `damp_seated_idle` is never used
+  --> src/cc_render/office/contact.rs:25:15
+   |
+25 | pub(crate) fn damp_seated_idle(
+   |               ^^^^^^^^^^^^^^^^
+
+warning: variant `Occupy` is never constructed
+ --> src/cc_render/office/scene_lifecycle.rs:8:33
+  |
+8 | pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
+  |                 -----           ^^^^^^
+  |                 |
+  |                 variant in this enum
+  |
+  = note: `Phase` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: method `awaiting_revision` is never used
+  --> src/cc_render/office/scene_lifecycle.rs:79:19
+   |
+36 | impl SceneLifecycle {
+   | ------------------- method in this implementation
+...
+79 |     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: `cc-render-plugin` (lib test) generated 17 warnings (run `cargo fix --lib -p cc-render-plugin --tests` to apply 3 suggestions)
+    Finished `test` profile [optimized + debuginfo] target(s) in 9.46s
+     Running unittests src/lib.rs (target/debug/deps/cc_render_plugin-c4bf21d4a9d00cc3)
+
+running 12 tests
+test cc_render::soft_tissue::solver::tests::bulk_and_shear_are_independent_material_responses ... ok
+test cc_render::soft_tissue::solver::tests::invalid_topology_and_failed_step_are_rejected_without_mutating_state ... ok
+test cc_render::soft_tissue::solver::tests::material_gradients_match_finite_differences ... ok
+test cc_render::soft_tissue::solver::tests::mass_is_density_times_volume_and_not_sum_of_inverse_tet_masses ... ok
+test cc_render::soft_tissue::solver::tests::strain_damping_preserves_rigid_velocity_and_dissipates_deformation ... ok
+test cc_render::soft_tissue::asset::tests::real_avatar_asset_is_volumetric_and_bound_to_body_and_outfit ... ok
+test cc_render::soft_tissue::asset::tests::malformed_embedding_and_assets_fail_closed ... ok
+test cc_render::soft_tissue::solver::tests::rigid_coordinate_changes_leave_dynamics_equivalent ... ok
+test cc_render::soft_tissue::solver::tests::coupled_material_preserves_the_unloaded_equilibrium ... ok
+test cc_render::soft_tissue::solver::tests::constant_velocity_does_not_drag_free_or_attached_tissue ... ok
+test cc_render::soft_tissue::solver::tests::gravitational_sag_preserves_volume_and_settles ... ok
+left_breast: TissueMetrics { mass_kg: 0.7094052259298372, minimum_volume_ratio: 0.9016924658006381, maximum_volume_ratio: 1.1082386415512917, kinetic_energy_j: 1.3189877827542739e-8, elastic_energy_j: 0.03023799206402656, maximum_speed_m_s: 0.00039950795037583506 }
+right_breast: TissueMetrics { mass_kg: 0.7035588341835316, minimum_volume_ratio: 0.960553648793192, maximum_volume_ratio: 1.0715516905432645, kinetic_energy_j: 4.039365416276237e-8, elastic_energy_j: 0.029688869544083545, maximum_speed_m_s: 0.0007076134218252326 }
+test cc_render::soft_tissue::asset::tests::real_cages_settle_under_gravity_without_residual_element_vibration ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 404 filtered out; finished in 13.09s
+

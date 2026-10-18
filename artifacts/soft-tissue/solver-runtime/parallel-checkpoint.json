@@ -1,0 +1,68 @@
+{
+  "status": "active; isolated opt-in prototype",
+  "change": "Concurrent independent region solves inside the existing transactional interval",
+  "focused_tests": {
+    "passed": 58,
+    "failed": 0,
+    "log": "parallel-tests-02.log"
+  },
+  "python_tests": {
+    "passed": 8,
+    "failed": 1,
+    "log": "parallel-python-tests.log",
+    "failure": "Existing root-acceptance source-slice failure; no test weakened."
+  },
+  "quality_gate": {
+    "baseline": "git-HEAD",
+    "regressions": "376",
+    "minor": "19",
+    "acked": "0",
+    "stale": "0",
+    "preexisting-worse": "27",
+    "new-symbol": "349",
+    "gating": "8",
+    "register-macro-excluded": "0",
+    "at": "ea65ebb68+dirty"
+  },
+  "gpu_evidence": "parallel-gpu-comparison.json",
+  "source_hashes": {
+    "src/cc_render/soft_tissue/asset.rs": "ffb279a6c3bc1fd72759e7fde0f1a55a38b9e4404e482f660f04ec117d55bdc3",
+    "src/cc_render/soft_tissue/contact.rs": "12ca6b9f48318d5b8faf661712e8de34af28f9c9f320899e10172cbe946abc15",
+    "src/cc_render/soft_tissue/contact_tests.rs": "75cd0d11fed0ac811502cf23903a2e21d5d9b81b9f0e5e0a3697e8518728d92f",
+    "src/cc_render/soft_tissue/implicit.rs": "7b3db54f7b51f3e664ef434db1cc24701f06068e7ee96def793f03edd93dd737",
+    "src/cc_render/soft_tissue/integration_tests.rs": "40aadf7c8a8fdc31500642d685ecee9076bac41d6ca0b0f1ab14edf4d0cd073f",
+    "src/cc_render/soft_tissue/material.rs": "a165f023c6f7c7a4e95a825c0c3a2c4145f7066229aa001c101b0e08b12a3068",
+    "src/cc_render/soft_tissue/mod.rs": "ae2627114f6fdb43cb0355b20d08d0d8289dca600b0323d98649795fe3309011",
+    "src/cc_render/soft_tissue/preconditioner.rs": "c5c00535a52b0562481b9085afd7dbdc2d2f169a145cf1ad154e56692237d773",
+    "src/cc_render/soft_tissue/solver.rs": "d38ee31e29813b0f430754142dfd949063634ad361a7d54190459222bed72975",
+    "src/cc_render/soft_tissue/tests.rs": "598ad5c738c1fbbe135cb3ce59fb8225e4903789b702837e116f50794ad9c8a2",
+    "src/cc_render/soft_tissue/timestep.rs": "82474276f9491641271e1312ea33f38d3a0fe50adb4f64b33f9ab1ecfb216787",
+    "src/cc_render/soft_tissue/viscosity.rs": "19194f31965ca52e19461dd98df5815ef7836ebd37eaeb6e63c8d658503ebfc1",
+    "src/cc_render/bevy_app/tissue.rs": "d2a217e20e7dcf9e2b3fb38287ab6aa4d0e5ff4ca2e49218a4039dd5b46b07a4",
+    "src/cc_render/bevy_app/tissue_collision.rs": "6256ba9d1790f987f413dd9331c92a87ad7ff51b078bbac769c33211c4731c65",
+    "src/cc_render/bevy_app/tissue_collision_tests.rs": "8e8f47a58834ee847913ab55a7dd3f28f2ac10c83364f93113f59d203d48f725",
+    "src/cc_render/bevy_app/tissue_morph.rs": "806efa85da727f35b08c1189bd26cc2608b681d48f2f990bb8a1333f6006f99b",
+    "src/cc_render/bevy_app/tissue_motion.rs": "b9e9832f9d2903882b38af3462149670083b75cf46955f672e912d97abb8d9d6",
+    "src/cc_render/bevy_app/tissue_surface.rs": "bf4ca72ae59720b706dcd0261827d07f1dc0f2a3124e403b2f99aef13781fe40",
+    "src/cc_render/bevy_app/tissue_surface_tests.rs": "c74529a7e8e55d8ce5f4944b310278b119ae124f2249464d6d42f1dd121beefe",
+    "src/cc_render/bevy_app/tissue_tests.rs": "2b9b0a99dd17a7b38cc63cbd57212605d511998ab6e89008c3e2eaacc3b24183",
+    "src/cc_render/bevy_app/tissue_trace.rs": "c13cd0b06ec56262e4bccda93eaec082245f0a523ebb621809f76da508ba47c5",
+    "examples/tissue_lab.rs": "9923b148ff425bd2021da937581e8e8726d8297b822003783a071ea5ba726ec9",
+    "scripts/avatars/review_tissue_lab.py": "19ccb713bf122edc31bf3bd2f08f20f630e000dfe70aab6d2f05595f18ccf90f",
+    "docs/design/breast-soft-tissue.md": "39259abe8299c4c411269f51f5ca9ac91dae6c056c8491ad39d95f1099b666d1",
+    "Cargo.lock": "0a8de666e23338edef37e15229869cf68168c173b962545b255db7f1f33c692b",
+    "artifacts/soft-tissue/solver-runtime/profile.py": "8ac335ae77750afd48a2801f8a01e8912b4a7494b509a925fc1980015ace851e",
+    "artifacts/soft-tissue/solver-runtime/replay.rs": "fac6ebb3fbdf582418df155e726e6d85b19baab9300946d991696a166b49d657",
+    "artifacts/soft-tissue/temporal-integration/index.html": "d204e88bb1343378572c243b9927572f90fcf120aef2761fbee3ca63f5f9ec8f"
+  },
+  "binary_sha256": "7c349e04176aa53397468196484227cd468b4b89759c8c65988ee764a6bcf222",
+  "remaining": [
+    "interactive runtime performance",
+    "material calibration and visual realism assessment",
+    "broader active contacts on the actual avatar",
+    "facial geometry at paused body time",
+    "final code and ownership audit, existing failing gates"
+  ],
+  "no_body_motion_or_camera_change": true,
+  "all_started_processes_collected": true
+}

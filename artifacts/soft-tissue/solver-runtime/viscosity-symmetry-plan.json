@@ -1,0 +1,20 @@
+{
+  "scope": "Symmetric viscosity matrix reuse only; identical material, nonlinear acceptance, input motion, base avatar and camera.",
+  "runs": [
+    {
+      "name": "viscosity-symmetry-live120-01",
+      "clock": "live",
+      "fps": 30,
+      "rate": 120,
+      "save_images": false
+    },
+    {
+      "name": "viscosity-symmetry-review-01",
+      "clock": "fixed",
+      "fps": 60,
+      "rate": 240,
+      "save_images": true
+    }
+  ],
+  "note": "The prior long library test has terminated; no test/build workload overlaps these captures. Image capture is separate from timing."
+}

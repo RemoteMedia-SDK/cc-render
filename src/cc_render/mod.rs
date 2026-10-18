@@ -32,6 +32,7 @@ pub mod deformable_surface;
 pub mod cloth_solver;
 pub(crate) mod cloth_grip;
 pub mod scene_cloth;
+pub mod soft_tissue;
 
 pub use node::{CcRenderConfig, CcRenderNode};
 #[allow(unused_imports)]

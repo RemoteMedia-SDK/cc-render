@@ -1,0 +1,56 @@
+{
+  "source": "full-factor-integrated-opt3-01/positions.bin",
+  "positions_sha256": "eab623555d3fa5158aa3fded21a8e35e9bff1b20d59882c7c4b4adad24ec3dfc",
+  "asset_sha256": "47bf193e8ae3fea176bf855daa574560fb10ee395b9bb5e0acf70a47bc0bb529",
+  "regions": [
+    {
+      "region": "left_breast",
+      "nodes": 256,
+      "tetrahedra": 828,
+      "rest_volume_ml": 746.6147614324071,
+      "total_volume_ratio_min_max": [
+        0.9804865066648742,
+        1.0105088357528935
+      ],
+      "minimum_local_volume_ratio": 0.7415762613158476,
+      "maximum_local_volume_ratio": 1.1141847637932343,
+      "worst_element_index": 14,
+      "worst_element_source_ms": 7754.166666666667,
+      "worst_element_rest_volume_fraction": 3.056605011696755e-05,
+      "maximum_rest_volume_fraction_over_5_percent_strain": 0.007951808312394427,
+      "maximum_rest_volume_fraction_over_10_percent_strain": 0.00013950258719054977,
+      "worst_element_fixed_nodes": 1,
+      "worst_element_nodes": [
+        23,
+        87,
+        88,
+        124
+      ]
+    },
+    {
+      "region": "right_breast",
+      "nodes": 256,
+      "tetrahedra": 819,
+      "rest_volume_ml": 740.4628552542358,
+      "total_volume_ratio_min_max": [
+        0.9814475297550509,
+        1.0106608008802036
+      ],
+      "minimum_local_volume_ratio": 0.8880533601981905,
+      "maximum_local_volume_ratio": 1.062770811736903,
+      "worst_element_index": 218,
+      "worst_element_source_ms": 7704.166666666667,
+      "worst_element_rest_volume_fraction": 0.00037027146459172623,
+      "maximum_rest_volume_fraction_over_5_percent_strain": 0.005267852994122319,
+      "maximum_rest_volume_fraction_over_10_percent_strain": 0.00037027146459172623,
+      "worst_element_fixed_nodes": 1,
+      "worst_element_nodes": [
+        2,
+        66,
+        67,
+        123
+      ]
+    }
+  ],
+  "limitations": "Analysis of every saved CPU replay substep at 240 Hz, not the live 120 Hz GPU captures; no active contact or fractional display solves. A small affected volume does not excuse an inaccurate local solve."
+}

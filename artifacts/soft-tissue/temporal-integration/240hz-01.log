@@ -1,0 +1,593 @@
+2026-10-17T22:08:44.795036Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Linux 24.04 Ubuntu", kernel: "6.8.0-147-generic", cpu: "AMD Ryzen 9 7950X 16-Core Processor", core_count: "16", memory: "62.5 GiB" }
+2026-10-17T22:08:44.892464Z  WARN wgpu_hal::vulkan::instance: InstanceFlags::VALIDATION requested, but unable to find layer: VK_LAYER_KHRONOS_validation
+2026-10-17T22:08:44.892494Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Searching for implicit layer manifest files
+2026-10-17T22:08:44.892501Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892503Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   In following locations:
+2026-10-17T22:08:44.892505Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892507Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.config/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892509Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892511Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/xdg-ubuntu/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892512Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892514Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892516Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892517Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892519Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892521Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892522Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892524Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/ubuntu/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892526Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892528Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/gnome/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892529Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892531Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892533Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892534Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892536Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892538Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/local/share/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892539Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892541Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892543Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892544Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/snapd/desktop/vulkan/implicit_layer.d
+2026-10-17T22:08:44.892546Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892589Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   Found the following files:
+2026-10-17T22:08:44.892595Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892597Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/implicit_layer.d/nvidia_layers.json
+2026-10-17T22:08:44.892599Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892601Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json
+2026-10-17T22:08:44.892603Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892604Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json
+2026-10-17T22:08:44.892606Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892608Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json
+2026-10-17T22:08:44.892609Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892611Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json
+2026-10-17T22:08:44.892613Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892615Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+2026-10-17T22:08:44.892616Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892629Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /etc/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+2026-10-17T22:08:44.892631Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892646Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json (file version 1.0.0)
+2026-10-17T22:08:44.892648Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892659Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json (file version 1.0.0)
+2026-10-17T22:08:44.892661Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892673Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json (file version 1.0.0)
+2026-10-17T22:08:44.892675Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892686Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json (file version 1.0.0)
+2026-10-17T22:08:44.892688Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892699Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json (file version 1.0.0)
+2026-10-17T22:08:44.892701Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892709Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Searching for explicit layer manifest files
+2026-10-17T22:08:44.892710Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892714Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   In following locations:
+2026-10-17T22:08:44.892716Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892718Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.config/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892719Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892721Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/xdg-ubuntu/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892723Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892724Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892726Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892728Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892729Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892731Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892733Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892734Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/ubuntu/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892736Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892738Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/gnome/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892739Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892741Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892743Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892744Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892746Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892748Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/local/share/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892750Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892751Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892753Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892755Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/snapd/desktop/vulkan/explicit_layer.d
+2026-10-17T22:08:44.892756Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892787Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   Found the following files:
+2026-10-17T22:08:44.892789Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892791Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/explicit_layer.d/VkLayer_INTEL_nullhw.json
+2026-10-17T22:08:44.892792Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892794Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_overlay.json
+2026-10-17T22:08:44.892798Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892806Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_INTEL_nullhw.json (file version 1.0.0)
+2026-10-17T22:08:44.892808Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892818Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_overlay.json (file version 1.0.0)
+2026-10-17T22:08:44.892820Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892826Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Searching for driver manifest files
+2026-10-17T22:08:44.892827Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892829Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   In following locations:
+2026-10-17T22:08:44.892831Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892832Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.config/vulkan/icd.d
+2026-10-17T22:08:44.892834Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892836Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/xdg-ubuntu/vulkan/icd.d
+2026-10-17T22:08:44.892837Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892839Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/vulkan/icd.d
+2026-10-17T22:08:44.892841Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892842Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/icd.d
+2026-10-17T22:08:44.892844Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892846Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/icd.d
+2026-10-17T22:08:44.892847Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892849Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/ubuntu/vulkan/icd.d
+2026-10-17T22:08:44.892851Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892852Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/gnome/vulkan/icd.d
+2026-10-17T22:08:44.892854Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892856Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/flatpak/exports/share/vulkan/icd.d
+2026-10-17T22:08:44.892857Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892859Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/flatpak/exports/share/vulkan/icd.d
+2026-10-17T22:08:44.892861Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892862Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/local/share/vulkan/icd.d
+2026-10-17T22:08:44.892864Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892866Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d
+2026-10-17T22:08:44.892867Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892871Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/snapd/desktop/vulkan/icd.d
+2026-10-17T22:08:44.892873Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892912Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   Found the following files:
+2026-10-17T22:08:44.892914Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892915Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/icd.d/nvidia_icd.json
+2026-10-17T22:08:44.892917Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892919Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/nouveau_icd.json
+2026-10-17T22:08:44.892920Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892922Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/lvp_icd.json
+2026-10-17T22:08:44.892924Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892925Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/virtio_icd.json
+2026-10-17T22:08:44.892927Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892929Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/intel_icd.json
+2026-10-17T22:08:44.892930Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892932Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/gfxstream_vk_icd.json
+2026-10-17T22:08:44.892934Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892935Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/radeon_icd.json
+2026-10-17T22:08:44.892937Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892939Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/intel_hasvk_icd.json
+2026-10-17T22:08:44.892940Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892942Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/asahi_icd.json
+2026-10-17T22:08:44.892944Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892952Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /etc/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+2026-10-17T22:08:44.892954Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892967Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/nouveau_icd.json, version 1.0.1
+2026-10-17T22:08:44.892969Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892978Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/lvp_icd.json, version 1.0.1
+2026-10-17T22:08:44.892980Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.892990Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/virtio_icd.json, version 1.0.1
+2026-10-17T22:08:44.892992Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893002Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/intel_icd.json, version 1.0.1
+2026-10-17T22:08:44.893005Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893015Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/gfxstream_vk_icd.json, version 1.0.1
+2026-10-17T22:08:44.893017Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893026Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/radeon_icd.json, version 1.0.1
+2026-10-17T22:08:44.893028Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893038Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/intel_hasvk_icd.json, version 1.0.1
+2026-10-17T22:08:44.893040Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893049Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/asahi_icd.json, version 1.0.1
+2026-10-17T22:08:44.893051Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893482Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Insert instance layer "VK_LAYER_MESA_device_select" (libVkLayer_MESA_device_select.so)
+2026-10-17T22:08:44.893487Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893491Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	vkCreateInstance layer callstack setup to:
+2026-10-17T22:08:44.893493Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893495Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Application>
+2026-10-17T22:08:44.893496Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893498Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-17T22:08:44.893500Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893501Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Loader>
+2026-10-17T22:08:44.893503Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893504Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-17T22:08:44.893506Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893508Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   VK_LAYER_MESA_device_select
+2026-10-17T22:08:44.893509Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893511Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           Type: Implicit
+2026-10-17T22:08:44.893513Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893515Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	               Disable Env Var:  NODEVICE_SELECT
+2026-10-17T22:08:44.893516Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893518Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           Manifest: /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+2026-10-17T22:08:44.893520Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893521Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           Library:  libVkLayer_MESA_device_select.so
+2026-10-17T22:08:44.893523Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893527Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-17T22:08:44.893529Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.893530Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Drivers>
+2026-10-17T22:08:44.893532Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:44.966395Z  INFO wgpu_hal::vulkan::instance: Enabling debug utils
+2026-10-17T22:08:45.051046Z  INFO wgpu_hal::gles::egl: Using X11 platform
+2026-10-17T22:08:45.058055Z  WARN wgpu_hal::gles::egl: No config found!
+2026-10-17T22:08:45.058070Z  WARN wgpu_hal::gles::egl: EGL says it can present to the window but not natively
+2026-10-17T22:08:45.083196Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-17T22:08:45.083220Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083224Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-17T22:08:45.083227Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083243Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-17T22:08:45.083246Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083280Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.083282Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083302Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.083304Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083310Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-17T22:08:45.083312Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083315Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.083318Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083321Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.083323Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083326Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-17T22:08:45.083329Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083341Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-17T22:08:45.083344Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083346Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-17T22:08:45.083348Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083356Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-17T22:08:45.083358Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083364Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.083367Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083378Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.083380Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083383Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-17T22:08:45.083386Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083389Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.083396Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083401Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.083403Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083406Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-17T22:08:45.083409Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083990Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-17T22:08:45.083994Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.083997Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-17T22:08:45.083998Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084007Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-17T22:08:45.084009Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084014Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.084016Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084020Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.084022Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084024Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-17T22:08:45.084026Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084027Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.084029Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084031Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.084033Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084034Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-17T22:08:45.084036Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084040Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-17T22:08:45.084041Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084043Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-17T22:08:45.084045Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084049Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-17T22:08:45.084054Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084058Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.084060Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084064Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-17T22:08:45.084066Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084068Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-17T22:08:45.084069Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084071Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.084073Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084074Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-17T22:08:45.084076Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.084078Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-17T22:08:45.084080Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127403Z  WARN wgpu_hal::gles::adapter: Max vertex attribute stride unknown. Assuming it is 2048
+2026-10-17T22:08:45.127450Z  INFO wgpu_core::instance: Adapter AdapterInfo { name: "NVIDIA GeForce RTX 4090", vendor: 4318, device: 9860, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "595.71.05", backend: Vulkan }
+2026-10-17T22:08:45.127503Z  INFO bevy_render::renderer: AdapterInfo { name: "NVIDIA GeForce RTX 4090", vendor: 4318, device: 9860, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "595.71.05", backend: Vulkan }
+2026-10-17T22:08:45.127667Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+2026-10-17T22:08:45.127671Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127674Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	vkCreateDevice layer callstack setup to:
+2026-10-17T22:08:45.127676Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127678Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Application>
+2026-10-17T22:08:45.127680Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127681Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-17T22:08:45.127683Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127685Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Loader>
+2026-10-17T22:08:45.127686Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127688Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-17T22:08:45.127690Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127691Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Device>
+2026-10-17T22:08:45.127693Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.127804Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	       Using "NVIDIA GeForce RTX 4090" with driver: "libGLX_nvidia.so.0"
+2026-10-17T22:08:45.127811Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x738b100ad970, name: ?)
+2026-10-17T22:08:45.349657Z  INFO gilrs_core::platform::platform::gamepad: Gamepad /dev/input/event10 (       MonsGeek Keyboard System Control) connected.
+2026-10-17T22:08:45.349789Z  WARN gilrs::gamepad: No mapping found for UUID 03000000-5131-0000-2950-000011010000
+	Default mapping will be used.
+2026-10-17T22:08:45.709434Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue requested; legacy breast springs excluded rate=240 passes=8 fingerprint=23060843839654603f26d7aae6a955cf09c86bb2b39de8bf70bfc5e70d1062a9
+2026-10-17T22:08:45.748335Z  INFO cc_render: physics: loaded sidecar "artifacts/soft-tissue/lab-front-bdf2-240hz-01/physics.json"
+2026-10-17T22:08:45.766014Z ERROR bevy_asset::server: Path not found: /home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/env/pisa_diffuse_rgb9e5_zstd.ktx2
+2026-10-17T22:08:45.766016Z ERROR bevy_asset::server: Path not found: /home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/env/pisa_specular_rgb9e5_zstd.ktx2
+2026-10-17T22:08:45.767113Z  INFO bevy_input::gamepad: Gamepad 2v1#4294967298 connected.
+2026-10-17T22:08:45.767673Z  INFO cc_render: apply_arkit_pose tick #1: morph=0 morph_only=0 mesh_no_morph=1 all_mesh=1 named=5 proto_layout=0 avatar_parts=[<none>] scene_roots=[Scene[beautiful_assistant.smpl_aligned.glb#Scene0] in_assets=false state=Some("Loading")]
+2026-10-17T22:08:45.767702Z  INFO cc_render: arkit_map: 52 keys: [browDownLeft,browDownRight,browInnerUp,browOuterUpLeft,browOuterUpRight,cheekPuff,cheekSquintLeft,cheekSquintRight,eyeBlinkLeft,eyeBlinkRight,eyeLookDownLeft,eyeLookDownRight,eyeLookInLeft,eyeLookInRight,eyeLookOutLeft,eyeLookOutRight,eyeLookUpLeft,eyeLookUpRight,eyeSquintLeft,eyeSquintRight]
+2026-10-17T22:08:45.767713Z  INFO cc_render:   arkit_map['jawOpen'] -> [CC_Base_Body|CC_Base_TearLine|CC_Base_EyeOcclusion::Jaw_Open*1.00]
+2026-10-17T22:08:45.767716Z  INFO cc_render:   arkit_map['JawOpen'] -> NOT FOUND
+2026-10-17T22:08:45.767720Z  INFO cc_render:   arkit_map['mouthClose'] -> [CC_Base_Body::Mouth_Lips_Together_DL*1.00, CC_Base_Body::Mouth_Lips_Together_DR*1.00, CC_Base_Body::Mouth_Lips_Together_UL*1.00, CC_Base_Body::Mouth_Lips_Together_UR*1.00]
+2026-10-17T22:08:45.767724Z  INFO cc_render:   arkit_map['eyeBlinkLeft'] -> [CC_Base_Body|CC_Base_TearLine|CC_Base_EyeOcclusion::Eye_Blink_L*1.00]
+2026-10-17T22:08:45.833471Z  INFO cc_render: [render-app] tick #1: capturing 720×900 (first frame)
+2026-10-17T22:08:45.872248Z  INFO naga::back::spv::writer: Skip function Some("sample_input_3x3_tent")
+2026-10-17T22:08:46.792969Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:46.792991Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:46.793004Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:46.793018Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:46.796372Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:46.796509Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:46.796620Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:46.796750Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:46.952593Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:46.952675Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:46.952882Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:46.952947Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.024402Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.024550Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.025988Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.026129Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.184061Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.184156Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.195338Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.195445Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.270185Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.270229Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.285416Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.285474Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.301703Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.301744Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.316629Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.316642Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.316657Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.316682Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.318009Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.318015Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.319384Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.319391Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.320731Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.320737Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.322383Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.322396Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.323952Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.323961Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.323992Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.323999Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.325515Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.325524Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.325717Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.325791Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.331354Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.331364Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.332729Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.332735Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.334111Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.334118Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.335460Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.335467Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.337074Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.337084Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.338693Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.338703Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.338734Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.338741Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.339066Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.339110Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.340264Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.340278Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.340461Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.340540Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.351472Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.351504Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.351537Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.351543Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.351566Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.351571Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.351612Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.351621Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.353663Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.353740Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.353875Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.353985Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.354159Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.354193Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.354438Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.354493Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.354729Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.354780Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.354844Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.354857Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.355347Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.355449Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.355582Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.355601Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.366626Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.366655Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.366686Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.366692Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.366714Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.366720Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.366761Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.366770Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.369008Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.369118Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.369290Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.369324Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.369565Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.369620Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.369852Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.369903Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.380222Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.380484Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.380983Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.381082Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:47.381226Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-17T22:08:47.381252Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-17T22:08:48.072748Z  INFO cc_render: face_bones: captured jaw=true l_eye=true r_eye=true upper_jaw=true tongue1=true tongue2=true tongue3=true
+2026-10-17T22:08:48.072768Z  WARN cc_render: skeletal: baked animation disabled (default); set CC_RENDER_DISABLE_BAKED_ANIM=0 to re-enable
+2026-10-17T22:08:48.072797Z  INFO cc_render: skeletal: captured FK rest data for 22 SMPL-mapped bones (pelvis_rest_translation=Vec3(0.0, 1.0113971, 3.461865e-8) pelvis_world=Some(Vec3(0.0, 1.0113971, 3.461865e-8)) eye_axis_world=Some(Vec3(-0.9999708, 0.00030606307, 0.0076329233)))
+2026-10-17T22:08:48.072840Z  INFO cc_render: auto-orient: CC_AVATAR_AUTO_FACE_CAMERA=0, skipping
+2026-10-17T22:08:48.072878Z  INFO cc_render: physics: spawned body colliders for SMPL-22 bones
+2026-10-17T22:08:48.072876Z  INFO cc_render: physics: breast tuning BreastTuning { mass: 2.0, stiffness: 1260.0, damping: 30.0, limit: 0.03 }
+2026-10-17T22:08:48.072889Z  WARN cc_render: physics: zero secondary-motion bones matched on this avatar (150 bind-pose bones scanned). Patterns tried: []. Sample bone names: ["Home HUD", "PhysicsGround", "Home floor", "CC_Base_L_ToeBaseShareBone", "CC_Base_L_PinkyToe1", "CC_Base_L_RingToe1", "CC_Base_L_MidToe1", "CC_Base_L_IndexToe1", "CC_Base_L_BigToe1", "CC_Base_L_CalfTwist02", "CC_Base_L_KneeShareBone", "CC_Base_L_ThighTwist02"]. Override patterns via the physics sidecar's `secondary_motion.auto_detect_patterns` field.
+2026-10-17T22:08:48.073180Z  INFO cc_render: morph_target_names[CC_Base_Tongue] n=1 HAS_DELTA_IMAGE=true has_Jaw_Open=false *Open*=[]
+2026-10-17T22:08:48.073188Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073192Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073195Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073198Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073201Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073204Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073206Z  INFO cc_render: morph_target_names[CC_Base_TearLine] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073209Z  INFO cc_render: morph_target_names[CC_Base_TearLine] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073212Z  INFO cc_render: morph_target_names[CC_Base_EyeOcclusion] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.073215Z  INFO cc_render: morph_target_names[CC_Base_EyeOcclusion] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-17T22:08:48.454629Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-17T22:08:48.454678Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-17T22:08:48.481507Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-17T22:08:48.481551Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-17T22:08:48.485786Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-17T22:08:48.485825Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-17T22:08:48.488617Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-17T22:08:48.488670Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-17T22:08:50.126925Z  INFO cc_render_plugin::cc_render::bevy_app::tissue_surface: contact position morphs captured from render image mesh=CC_Base_Body position_targets=3
+2026-10-17T22:08:50.130703Z  INFO cc_render_plugin::cc_render::bevy_app::tissue_surface: contact position morphs captured from render image mesh=kinematic body contact position_targets=4
+2026-10-17T22:08:50.131626Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: source-time body contact bound counts=(45940, 1502)
+2026-10-17T22:08:50.131634Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue surfaces bound surfaces=2 regions=2
+2026-10-17T22:08:50.306356Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_Tongue]: 45108 bytes, 14858 nonzero bytes, max_byte=255, scanned 11277 floats, 3759 nonzero, max_abs_float=0.036484, dims=(7, 1611, 1), format=R32Float
+2026-10-17T22:08:50.325097Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_Body]: 39214080 bytes, 2418821 nonzero bytes, max_byte=255, scanned 50000 floats, 597 nonzero, max_abs_float=0.004088, dims=(90, 1702, 64), format=R32Float
+2026-10-17T22:08:50.325502Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_TearLine]: 560052 bytes, 31524 nonzero bytes, max_byte=255, scanned 50000 floats, 6946 nonzero, max_abs_float=0.010106, dims=(3, 993, 47), format=R32Float
+2026-10-17T22:08:50.325860Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_EyeOcclusion]: 551592 bytes, 33618 nonzero bytes, max_byte=255, scanned 50000 floats, 6888 nonzero, max_abs_float=0.010430, dims=(2, 1467, 47), format=R32Float
+2026-10-17T22:08:51.292090Z  INFO cc_render: ready: scene fully loaded — meshes=29 materials=29 settle_frames=60 — driver may start recording
+2026-10-17T22:08:51.359099Z  INFO cc_render: skeletal: burst-edge #1 (idle=79, active=false, pts_ms=50, root=(0.001,0.928,-0.003), R_Shoulder=(0.294,0.294,0.470,0.778), R_Elbow=(0.003,0.309,0.003,0.951))
+2026-10-17T22:08:51.359144Z  INFO cc_render: skeletal: stream active, paused AnimationPlayer (1 player(s))
+2026-10-17T22:08:59.414210Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=1000 tick=228 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":7.125534,"elasticity_ms":97.83938699999999,"collision_ms":38.623177999999996} skin_error_m=4.805480091749757e-7 maximum_displacement_m=0.030638914555311203 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.030638914555311203,"minimum_face_alignment":0.5481995,"worst_triangle":[1311,1315,1296]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.9111196208838835,"maximum_volume_ratio":1.0504399481673647,"kinetic_energy_j":0.2058947763323533,"elastic_energy_j":0.03502192797869454,"maximum_speed_m_s":1.0048457291936899},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.8732182591796898,"maximum_volume_ratio":1.0502342023851243,"kinetic_energy_j":0.17500445521629612,"elastic_energy_j":0.038632986322067984,"maximum_speed_m_s":0.8932008563216532}]
+2026-10-17T22:09:07.932612Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=2000 tick=468 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":5.8376719999999995,"elasticity_ms":83.766989,"collision_ms":36.271868000000005} skin_error_m=4.3392836387637365e-7 maximum_displacement_m=0.02457110770046711 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.02457110770046711,"minimum_face_alignment":0.72735095,"worst_triangle":[1773,1771,1776]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.9910636758960718,"maximum_volume_ratio":1.0177806984305573,"kinetic_energy_j":0.008220850683742056,"elastic_energy_j":0.016399103794703843,"maximum_speed_m_s":0.3158937753355827},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9865192045089103,"maximum_volume_ratio":1.0229078488821224,"kinetic_energy_j":0.00554618319137007,"elastic_energy_j":0.022890657202205712,"maximum_speed_m_s":0.263531193499669}]
+2026-10-17T22:09:12.378744Z  INFO cc_render: apply_arkit_pose tick #300: morph=15 morph_only=15 mesh_no_morph=18 all_mesh=29 named=174 proto_layout=11 avatar_parts=[CC_Base_Body,CC_Base_Body.0,CC_Base_Body.1,CC_Base_Body.2,CC_Base_Body.3,CC_Base_Body.4,CC_Base_Body.5,CC_Base_BoneRoot... (124 total)] scene_roots=[Scene[beautiful_assistant.smpl_aligned.glb#Scene0] in_assets=true state=Some("Loaded")]
+2026-10-17T22:09:15.733894Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=3000 tick=708 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":5.866674000000001,"elasticity_ms":78.404827,"collision_ms":34.694016} skin_error_m=4.5783196376971053e-7 maximum_displacement_m=0.011376535519957542 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.011376535519957542,"minimum_face_alignment":0.98884714,"worst_triangle":[1421,1420,1467]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.9701543360821016,"maximum_volume_ratio":1.0240865096513971,"kinetic_energy_j":0.010982422135847667,"elastic_energy_j":0.05891535640307235,"maximum_speed_m_s":0.35680124155638393},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9778582763467649,"maximum_volume_ratio":1.0302084131010747,"kinetic_energy_j":0.02781938810929766,"elastic_energy_j":0.038913056341465045,"maximum_speed_m_s":0.5841586802605584}]
+2026-10-17T22:09:23.076038Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=4000 tick=948 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":5.767162,"elasticity_ms":95.77715599999999,"collision_ms":34.609236} skin_error_m=6.76978629326853e-7 maximum_displacement_m=0.015409190207719803 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.015409190207719803,"minimum_face_alignment":0.9776467,"worst_triangle":[5449,5663,5450]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.8138572373632542,"maximum_volume_ratio":1.0882060173856622,"kinetic_energy_j":1.8135232219784962,"elastic_energy_j":0.04239607237012126,"maximum_speed_m_s":3.1817822996982374},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9647791626145965,"maximum_volume_ratio":1.033198934136469,"kinetic_energy_j":1.9044579090658202,"elastic_energy_j":0.07425367450482222,"maximum_speed_m_s":3.27000526580528}]
+2026-10-17T22:09:31.037293Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=5000 tick=1188 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":6.415961,"elasticity_ms":95.539897,"collision_ms":37.599559} skin_error_m=5.230286352272107e-7 maximum_displacement_m=0.029078394174575806 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.029078394174575806,"minimum_face_alignment":0.8510863,"worst_triangle":[1688,1669,1691]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.947582513464675,"maximum_volume_ratio":1.032326794371486,"kinetic_energy_j":0.05548860950107891,"elastic_energy_j":0.16947441452889184,"maximum_speed_m_s":0.9358201585668062},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9635626016574734,"maximum_volume_ratio":1.047108147430812,"kinetic_energy_j":0.0813271431329205,"elastic_energy_j":0.12448203422971038,"maximum_speed_m_s":1.137392664387104}]
+2026-10-17T22:09:38.384342Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=6000 tick=1428 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":5.737855,"elasticity_ms":80.945378,"collision_ms":34.714794999999995} skin_error_m=5.136039239053156e-7 maximum_displacement_m=0.024929385632276535 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.024929385632276535,"minimum_face_alignment":0.8972202,"worst_triangle":[1637,1635,1642]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.9243469054332928,"maximum_volume_ratio":1.081971012942154,"kinetic_energy_j":0.02209512179540822,"elastic_energy_j":0.15145229739396193,"maximum_speed_m_s":0.5326803898759864},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9527190086137094,"maximum_volume_ratio":1.0235415904761362,"kinetic_energy_j":0.06133313404927934,"elastic_energy_j":0.06740535038874805,"maximum_speed_m_s":0.8733488635957903}]
+2026-10-17T22:09:47.770498Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=7000 tick=1668 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":8.057525,"elasticity_ms":121.199638,"collision_ms":40.113108000000004} skin_error_m=7.777207106769019e-7 maximum_displacement_m=0.019424675032496452 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.019424675032496452,"minimum_face_alignment":0.95970136,"worst_triangle":[1420,1487,1467]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.948187901922174,"maximum_volume_ratio":1.0431459096204607,"kinetic_energy_j":0.645501642324268,"elastic_energy_j":0.09816187356044585,"maximum_speed_m_s":1.9970432860960472},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9633818126571899,"maximum_volume_ratio":1.0231356049527331,"kinetic_energy_j":0.7112347592009078,"elastic_energy_j":0.03258644381774484,"maximum_speed_m_s":2.198393757738756}]
+2026-10-17T22:09:52.852016Z  INFO cc_render: apply_arkit_pose tick #600: morph=15 morph_only=15 mesh_no_morph=18 all_mesh=29 named=174 proto_layout=11 avatar_parts=[CC_Base_Body,CC_Base_Body.0,CC_Base_Body.1,CC_Base_Body.2,CC_Base_Body.3,CC_Base_Body.4,CC_Base_Body.5,CC_Base_BoneRoot... (124 total)] scene_roots=[Scene[beautiful_assistant.smpl_aligned.glb#Scene0] in_assets=true state=Some("Loaded")]
+2026-10-17T22:09:57.531990Z  INFO cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue frame pts_ms=8000 tick=1908 integration={"subdivisions":0,"active_contact_samples":0,"maximum_penetration_m":0.0,"maximum_normal_force_n":0.0,"sampling_ms":9.762165,"elasticity_ms":113.393444,"collision_ms":65.258481} skin_error_m=4.842304232499576e-7 maximum_displacement_m=0.03727901726961136 surfaces=[{"mesh_name":"CC_Base_Body","maximum_displacement_m":0.03727901726961136,"minimum_face_alignment":0.71817476,"worst_triangle":[1421,1420,1467]}] metrics=[{"mass_kg":0.7092840233607869,"minimum_volume_ratio":0.8993236953731465,"maximum_volume_ratio":1.078279680559674,"kinetic_energy_j":0.5658410072465506,"elastic_energy_j":0.39224168911369733,"maximum_speed_m_s":1.8086116590323462},{"mass_kg":0.7034397124915243,"minimum_volume_ratio":0.9282825131553588,"maximum_volume_ratio":1.0476620665054088,"kinetic_energy_j":0.7507737053157395,"elastic_energy_j":0.3402508522462666,"maximum_speed_m_s":2.438283605410024}]
+2026-10-17T22:09:58.091436Z  WARN cc_render: cc-render-bevy thread exited

@@ -1,0 +1,35 @@
+{
+  "name": "surface-rim-front-01",
+  "camera": "front",
+  "asset": "assets/tissue/beautiful_assistant.base-rim-attached-prototype.json",
+  "images": true,
+  "snapshot": true,
+  "output": "artifacts/soft-tissue/lab-surface-rim-front-01",
+  "argv": [
+    "target/debug/examples/tissue_lab",
+    "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+    "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+    "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+    "assets/tissue/beautiful_assistant.base-rim-attached-prototype.json",
+    "front",
+    "artifacts/soft-tissue/lab-surface-rim-front-01"
+  ],
+  "environment": {
+    "CC_RENDER_FAST": "0",
+    "CC_RENDER_CLOCK_TRACE": "0",
+    "CC_AVATAR_TISSUE_HZ": "240",
+    "CC_AVATAR_TISSUE_ITERATIONS": "32",
+    "CC_TISSUE_LAB_FPS": "60",
+    "CC_TISSUE_LAB_CLOCK": "fixed",
+    "CC_TISSUE_LAB_TRACE_ONLY": "0",
+    "RUST_LOG": "info",
+    "CC_AVATAR_TISSUE_SNAPSHOT": "artifacts/soft-tissue/surface-volume-transfer/surface-rim-front-01-geometry.json",
+    "CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS": "7633"
+  },
+  "started_unix": 1792292006.445409,
+  "binary_sha256": "699e1a0c712fd068006601b1ab5b70941f51bcc340fefc029476c1dcfccaba0a",
+  "asset_sha256": "f81d0384434ddf0bd26fc23962c2b523bb72d7ae028158e4b64f5a86edc92ceb",
+  "pid": 1624634,
+  "exit_code": 0,
+  "completed_unix": 1792292023.0954788
+}

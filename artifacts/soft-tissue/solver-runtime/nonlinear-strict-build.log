@@ -1,0 +1,436 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+warning: unused import: `Footprint`
+  --> src/cc_render/office/pathfinder.rs:23:23
+   |
+23 | use super::metadata::{Footprint, SceneMetadata, SceneObject};
+   |                       ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `TissueRequest` is more private than the item `auto_detect_chains`
+   --> src/cc_render/bevy_app/physics/secondary.rs:125:1
+    |
+125 | / pub(crate) fn auto_detect_chains(
+126 | |     mut commands: Commands,
+127 | |     bones: Query<
+128 | |         (Entity, &Name, &Transform, Option<&Parent>),
+...   |
+139 | |     tissue: Option<Res<crate::cc_render::bevy_app::tissue::TissueRequest>>,
+140 | | ) {
+    | |_^ function `auto_detect_chains` is reachable at visibility `pub(in crate::cc_render)`
+    |
+note: but type `TissueRequest` is only usable at visibility `pub(in crate::cc_render::bevy_app)`
+   --> src/cc_render/bevy_app/tissue.rs:35:1
+    |
+ 35 | pub(super) struct TissueRequest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: associated items `neutral` and `to_json` are never used
+   --> src/arkit.rs:110:12
+    |
+ 99 | impl BlendshapeFrame {
+    | -------------------- associated items in this implementation
+...
+110 |     pub fn neutral(pts_ms: u64) -> Self {
+    |            ^^^^^^^
+...
+115 |     pub fn to_json(&self) -> Value {
+    |            ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `frame_interval_ms` is never read
+   --> src/cc_render/bevy_app/capture.rs:126:9
+    |
+124 | pub(crate) struct MonotonicCaptureClock {
+    |                   --------------------- field in this struct
+125 |     pub frame_count: u64,
+126 |     pub frame_interval_ms: u64,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: function `fk_retarget_smpl_to_cc5` is never used
+  --> src/cc_render/bevy_app/pose.rs:42:15
+   |
+42 | pub(crate) fn fk_retarget_smpl_to_cc5(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `LatestPose` is never constructed
+   --> src/cc_render/bevy_app/pose.rs:923:19
+    |
+923 | pub(crate) struct LatestPose {
+    |                   ^^^^^^^^^^
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:36:9
+   |
+22 |     Capsule {
+   |     ------- field in this variant
+...
+36 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:50:9
+   |
+38 |     Box {
+   |     --- field in this variant
+...
+50 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `drag` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:71:9
+   |
+68 | pub struct Cc5SoftPhysics {
+   |            -------------- field in this struct
+...
+71 |     pub drag: f32,
+   |         ^^^^
+   |
+   = note: `Cc5SoftPhysics` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `palm_override` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:23:9
+   |
+20 |     Pursuing {
+   |     -------- field in this variant
+...
+23 |         palm_override: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `prop_entity` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:27:9
+   |
+25 |     Attached {
+   |     -------- field in this variant
+26 |         target: PropId,
+27 |         prop_entity: Entity,
+   |         ^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `detect_chains` is never used
+  --> src/cc_render/bevy_app/physics/secondary.rs:63:15
+   |
+63 | pub(crate) fn detect_chains<'a>(
+   |               ^^^^^^^^^^^^^
+
+warning: fields `palm_offset_local` and `play_volume` are never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:19:9
+   |
+15 | pub struct SidecarRaw {
+   |            ---------- fields in this struct
+...
+19 |     pub palm_offset_local: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^^^^^
+...
+25 |     pub play_volume: Option<PlayVolumeRaw>,
+   |         ^^^^^^^^^^^
+   |
+   = note: `SidecarRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `half_extents_xz` and `ceiling_y` are never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:80:9
+   |
+79 | pub struct PlayVolumeRaw {
+   |            ------------- fields in this struct
+80 |     pub half_extents_xz: f32,
+   |         ^^^^^^^^^^^^^^^
+81 |     pub ceiling_y: f32,
+   |         ^^^^^^^^^
+   |
+   = note: `PlayVolumeRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `handle`, `pose`, `linear_velocity`, `angular_velocity`, and `ccd_enabled` are never read
+  --> src/cc_render/bevy_app/physics/substeps.rs:11:9
+   |
+10 | pub(crate) struct BodyBoundary {
+   |                   ------------ fields in this struct
+11 |     pub handle: RigidBodyHandle,
+   |         ^^^^^^
+12 |     pub pose: Isometry<f32>,
+   |         ^^^^
+13 |     pub linear_velocity: Vector3<f32>,
+   |         ^^^^^^^^^^^^^^^
+14 |     pub angular_velocity: Vector3<f32>,
+   |         ^^^^^^^^^^^^^^^^
+15 |     pub ccd_enabled: bool,
+   |         ^^^^^^^^^^^
+   |
+   = note: `BodyBoundary` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `sequence`, `start_seconds`, `end_seconds`, `before`, and `after` are never read
+  --> src/cc_render/bevy_app/physics/substeps.rs:34:9
+   |
+33 | pub(crate) struct PhysicsInterval {
+   |                   --------------- fields in this struct
+34 |     pub sequence: u64,
+   |         ^^^^^^^^
+35 |     pub start_seconds: f64,
+   |         ^^^^^^^^^^^^^
+36 |     pub end_seconds: f64,
+   |         ^^^^^^^^^^^
+37 |     pub before: Vec<BodyBoundary>,
+   |         ^^^^^^
+38 |     pub after: Vec<BodyBoundary>,
+   |         ^^^^^
+   |
+   = note: `PhysicsInterval` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `material_vertices` is never used
+   --> src/cc_render/deformable_surface.rs:244:19
+    |
+103 | impl DeformedSurface {
+    | -------------------- method in this implementation
+...
+244 |     pub(super) fn material_vertices(&self, point: &MaterialPoint) -> Option<[usize; 3]> {
+    |                   ^^^^^^^^^^^^^^^^^
+
+warning: struct `RigidClothSweep` is never constructed
+ --> src/cc_render/cloth_moving_sweep.rs:9:19
+  |
+9 | pub(crate) struct RigidClothSweep<'a> {
+  |                   ^^^^^^^^^^^^^^^
+
+warning: struct `RigidSweepHit` is never constructed
+  --> src/cc_render/cloth_moving_sweep.rs:17:19
+   |
+17 | pub(crate) struct RigidSweepHit {
+   |                   ^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/cc_render/cloth_moving_sweep.rs:26:19
+    |
+ 25 | impl<'a> RigidClothSweep<'a> {
+    | ---------------------------- associated items in this implementation
+ 26 |     pub(crate) fn new(
+    |                   ^^^
+...
+ 43 |     fn turn(&self, fraction: f64) -> DQuat {
+    |        ^^^^
+...
+ 49 |     fn unmove(&self, point: DVec3, fraction: f64) -> DVec3 {
+    |        ^^^^^^
+...
+ 54 |     fn hit(&self, fraction: f64, witness: Witness, weights: [f64; 3]) -> RigidSweepHit {
+    |        ^^^
+...
+ 70 |     pub(crate) fn triangle(
+    |                   ^^^^^^^^
+...
+121 |     fn motion_bounds(&self, old: [DVec3; 3], end: [DVec3; 3]) -> Result<(f64, f64), ClothError> {
+    |        ^^^^^^^^^^^^^
+...
+147 |     pub(crate) fn contact_velocity(
+    |                   ^^^^^^^^^^^^^^^^
+...
+164 |     fn witness(
+    |        ^^^^^^^
+
+warning: struct `RigidContactBody` is never constructed
+ --> src/cc_render/cloth_rigid_impact.rs:7:19
+  |
+7 | pub(crate) struct RigidContactBody {
+  |                   ^^^^^^^^^^^^^^^^
+
+warning: associated items `from_rapier`, `validate`, and `inertia_response` are never used
+  --> src/cc_render/cloth_rigid_impact.rs:22:19
+   |
+19 | impl RigidContactBody {
+   | --------------------- associated items in this implementation
+...
+22 |     pub(crate) fn from_rapier(
+   |                   ^^^^^^^^^^^
+...
+60 |     fn validate(&self) -> Result<(), ClothError> {
+   |        ^^^^^^^^
+...
+73 |     fn inertia_response(&self, torque: DVec3) -> DVec3 {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: struct `NormalImpact` is never constructed
+  --> src/cc_render/cloth_rigid_impact.rs:79:19
+   |
+79 | pub(crate) struct NormalImpact {
+   |                   ^^^^^^^^^^^^
+
+warning: methods `normal_impact` and `validate_impact_inputs` are never used
+   --> src/cc_render/cloth_rigid_impact.rs:93:19
+    |
+ 88 | impl RigidSweepHit {
+    | ------------------ methods in this implementation
+...
+ 93 |     pub(crate) fn normal_impact(
+    |                   ^^^^^^^^^^^^^
+...
+149 |     fn validate_impact_inputs(
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `validate` is never used
+  --> src/cc_render/cloth_grip.rs:25:8
+   |
+24 | impl ClampMaterial {
+   | ------------------ method in this implementation
+25 |     fn validate(self) -> Result<(), ClothError> {
+   |        ^^^^^^^^
+
+warning: variant `Released` is never constructed
+  --> src/cc_render/cloth_grip.rs:43:5
+   |
+41 | pub(crate) enum ClampState {
+   |                 ---------- variant in this enum
+42 |     Held,
+43 |     Released,
+   |     ^^^^^^^^
+   |
+   = note: `ClampState` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: associated function `from_pose` is never used
+  --> src/cc_render/cloth_grip.rs:54:8
+   |
+53 | impl ColliderFrame {
+   | ------------------ associated function in this implementation
+54 |     fn from_pose(pose: &Isometry<f32>) -> Result<Self, ClothError> {
+   |        ^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/cc_render/cloth_grip.rs:99:19
+    |
+ 95 | impl ClothGrip {
+    | -------------- associated items in this implementation
+...
+ 99 |     pub(crate) fn capture(
+    |                   ^^^^^^^
+...
+141 |     pub(crate) fn observe_pose(&mut self, pose: &Isometry<f32>) -> Result<(), ClothError> {
+    |                   ^^^^^^^^^^^^
+...
+146 |     pub(crate) fn release(&mut self) {
+    |                   ^^^^^^^
+...
+152 |     pub(crate) fn state(&self) -> ClampState {
+    |                   ^^^^^
+...
+155 |     pub(crate) fn material_point(&self) -> &MaterialPoint {
+    |                   ^^^^^^^^^^^^^^
+...
+158 |     pub(crate) fn peak_required_force_n(&self) -> f64 {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+161 |     pub(crate) fn peak_applied_force_n(&self) -> f64 {
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: method `volume_constraint` is never used
+  --> src/cc_render/soft_tissue/material.rs:81:8
+   |
+57 | impl Tet {
+   | -------- method in this implementation
+...
+81 |     fn volume_constraint(&self, positions: &[DVec3]) -> (f64, [DVec3; 4]) {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: struct `PushForceIntent` is never constructed
+   --> src/cc_render/office/controller.rs:164:19
+    |
+164 | pub(crate) struct PushForceIntent {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: method `push_force_intent` is never used
+    --> src/cc_render/office/controller.rs:1262:19
+     |
+ 557 | impl OfficeController {
+     | --------------------- method in this implementation
+...
+1262 |     pub(crate) fn push_force_intent(&self) -> Option<PushForceIntent> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `room_route` is never used
+  --> src/cc_render/office/furniture_push.rs:19:15
+   |
+19 | pub(super) fn room_route(
+   |               ^^^^^^^^^^
+
+warning: function `grid_furniture_route` is never used
+  --> src/cc_render/office/furniture_push.rs:55:4
+   |
+55 | fn grid_furniture_route(
+   |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: variant `Occupy` is never constructed
+ --> src/cc_render/office/scene_lifecycle.rs:8:33
+  |
+8 | pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
+  |                 -----           ^^^^^^
+  |                 |
+  |                 variant in this enum
+  |
+  = note: `Phase` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: method `awaiting_revision` is never used
+  --> src/cc_render/office/scene_lifecycle.rs:79:19
+   |
+36 | impl SceneLifecycle {
+   | ------------------- method in this implementation
+...
+79 |     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: associated function `anchor` is never used
+  --> src/cc_render/office/scene_delivery.rs:13:19
+   |
+12 | impl SceneDelivery {
+   | ------------------ associated function in this implementation
+13 |     pub(crate) fn anchor(office: &OfficeSnapshot, generated_until: u64) -> Option<u64> {
+   |                   ^^^^^^
+
+warning: `cc-render-plugin` (lib) generated 38 warnings (run `cargo fix --lib -p cc-render-plugin` to apply 3 suggestions)
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m64" "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/examples/rustcYI0To5/symbols.o" "<17 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/{libcc_render_plugin,libhmac_sha256-0a28704b24655b8f,libpollster-32f4f246dd57ace7,libbevy_rapier3d-f3d6bdd44a121090,librapier3d-9ee5bcbad2acfe14,libbit_vec-d331a1b0fc00c357,libcrossbeam-62afe85081713ab4,libcrossbeam_queue-8ef1ed24da898361,libparry3d-b146c0f9bf9e2307,libparry3d_f64-bf3bfbea14b80bd8,librustc_hash-92ed93349319887c,librstar-a89c533cede35d14,libheapless-4b4eb51e715516be,libhash32-a45735a17489f795,libordered_float-813f276ca1780d5c,libena-fc26a37e33f02b05,libspade-426d21947cd1be5e,librobust-f1d1e9b8008582eb,libnalgebra-a94de0525d2ea6fb,libmatrixmultiply-585d9bc224720aaa,librawpointer-5a7e01c7898d55a2,libnum_rational-0e8d7908d296d8f9,libnum_integer-5fa416d77ef33d85,libtypenum-5591c8b453d52105,libsimba-3d6104fd88ee8e38,libwide-98188bc0e87f46a7,libsafe_arch-9d7f4eb5d99acee1,libnum_complex-6f78c9e8ba2c945a,libanyhow-a7feb7a1f8205b42,libbevy-3efa22f826ea2e39,libbevy_internal-c01e6906f2a75cc1,libbevy_winit-ebb3064d269e65bf,libapprox-c23df8cbbf4242a4,libaccesskit_winit-b42ce66e9c9e92f5,libwinit-74d1ae728c96331e,libx11rb-cbe108e6dfc3ddf9,libgethostname-5c48d0d5e797b658,libas_raw_xcb_connection-46f2eb6f606a59be,libx11rb_protocol-2be860bfd86ab032,libcalloop-c0b0fadfa7b5e294,librustix-0f48fdd7c5ae2450,liblinux_raw_sys-540fcf93a1a9f413,libpolling-b1eb96cfc163d3c1,librustix-293504496e87d1d1,liblinux_raw_sys-77dcce11f264a29b,libx11_dl-637bf1342ed6586f,libxkbcommon_dl-a7978223c902bed4,libxkeysym-25b3065681811415,libdlib-75dfe681b781981a,libcursor_icon-9a5a4a9cd132a4fb,libdpi-34b32c5585ffa0a0,libbevy_ui-9a2c906188c8d0c4,libtaffy-f08a1a628bf7b759,libgrid-0ec625d54bceb0d2,libbevy_text-37f945f3aadd9f40,libcosmic_text-290cc52e557af75a,libunicode_linebreak-efcb54da0eb1ab9e,libsys_locale-816b6c854ae2c3de,libswash-ba594485ba01a239,libyazi-d001b0ded01f55a9,libskrifa-3d693a351f92f63e,libread_fonts-961922e030b0cda7,libfont_types-1d2fe34c1bf0b709,libzeno-afd79c9cb333e4d3,librayon-eb3dc15920527b0d,librayon_core-e78a8fafe59e289c,libcrossbeam_deque-d3f4507e311be973,libcrossbeam_epoch-662b148b545e726b,libself_cell-2807d94cdcfdef94,librustybuzz-b22e37f0918d0e6f,libunicode_bidi_mirroring-28dfbd71b42e5e24,libunicode_ccc-0f11529b36652458,libunicode_properties-5ea88b507f12d9f1,libttf_parser-dfb2eb9ddfc0abd4,libunicode_script-72e5767d42955617,libunicode_segmentation-9c3526a129ef7e2c,libunicode_bidi-38664a28bc363a6e,libfontdb-eff616d8dc5b6732,libfontconfig_parser-e49ceaf7db6be8fb,libroxmltree-f210b2fb150f8d61,libmemmap2-ad349d5e2f7cd272,libslotmap-9f6cf976c4bd4e81,libttf_parser-c3fce5492bc3dfff,librangemap-adcb6a061d6e0ae1,libbevy_state-ee582d38529f009c,libbevy_log-7e777547d810a4a1,libtracing_subscriber-f60cc9fd4d14dda7,libsharded_slab-278f36f16c9e9f26,libmatchers-957f2de3b037510f,libnu_ansi_term-5b85742c84951e35,libtracing_log-7b8a57a9af52f2fb,libbevy_gltf-bc0373bf519dc729,libpercent_encoding-d5cf4996a753c9a0,libbase64-92b9100617465faa,libgltf-02188acee78668b4,libgltf_json-f306dac1e0647318,liblazy_static-a0eb4272ea9ded35,libbevy_scene-08ff2a73b90e5a08,libbevy_gizmos-c4d6fc0e61be3a7e,libbevy_sprite-722d705e58fa8415,librectangle_pack-c674554c53c81410,libbevy_picking-1baa091e973c5cc6,libguillotiere-b72e5595e15f1824,libsvg_fmt-21301781e980bbec,libeuclid-1cb2e2fff635ba23,libbevy_pbr-b8647ee84c266211,libbevy_gilrs-550fad6f96a281e0,libgilrs-4997840cbbc206f5,libfnv-b22923a5caa358ee,libgilrs_core-df413819cfbff522,liblibudev_sys-ee16379b2d869cc7,libinotify-4ac6dd523109b804,libinotify_sys-ebda8ed8f15bf537,libvec_map-bba317eaccfc0c34,libbevy_core_pipeline-dacc696b226c539e,libradsort-08456cde2cc77356,libbevy_audio-c4a6d1fc29f62c6a,librodio-d0fbf76673820638,liblewton-28ba0988f6c35c96,libogg-e66c4b265f55f60e,libtinyvec-8255cfdfbba774c5,libbyteorder-d38f6ce4bed85619,libcpal-103eebb6e66a6509,libdasp_sample-f59e20e18100d07d,libalsa-65cb7505f155fce5,libalsa_sys-316f2caad763a3a6,libbevy_animation-313d0afbfa1e28da,libbevy_render-a6b60498f18fc934,libnaga_oil-f474bd27b7f9da08,libdata_encoding-9932057509a9e2be,libunicode_ident-11eba7bdd88b30d5,libregex-e74c222ccd6abb6d,libregex_automata-4efbf6ca40a6c175,libaho_corasick-6d03f0914f216192,libregex_syntax-eefb3c1017192feb,liboffset_allocator-00c0cc5ef199a46b,libbevy_mesh-fd00ca553b9cc42d,libbevy_mikktspace-034d46c880675a42,libhexasphere-3674c12e27253aad,libconstgebra-b3c9242beb9a45db,libconst_soft_float-71fff24f121b1e88,libbevy_diagnostic-83f0670b2869bda2,libsysinfo-7e05f97efaeba913,libbevy_time-67c5682742ab1473,libconst_fnv1a_hash-bb5b0cc1009b1b44,libbevy_window-768724764b45668f,libbevy_input-2d4d782deeade354,libbevy_image-e8be4a7d5a517350,libruzstd-f23f5595ca73914c,libtwox_hash-9ec30793eaffb0d7,libktx2-7eebd9e07a131ed4,libbitflags-eb1a85369f0f77d2,libimage-aaa17238d65d8942,libbyteorder_lite-440b8a8c9757f933,libmoxcms-5b7d6f8ecbc25696,libpxfm-fb98cedbc00c4892,libpng-19880da348b1fbe6,libflate2-49d2f819d814f38d,libminiz_oxide-301482a861e8fb7d,libfdeflate-0a9b7a9041f31d7d,libsimd_adler32-a4a531081756f27a,libcrc32fast-71c3045371567a3c,libzune_jpeg-693cef46f81a57de,libzune_core-c40273e8a4f752bd,libbevy_asset-7a698b0edc14e53c,libblake3-f4ab509df3db7441,libconstant_time_eq-9867a6a09fc543b1,libcpufeatures-7bca377fab91d08e,libasync_broadcast-ee5c60ce81a34150,libevent_listener-2ff4047a1d8546e0,libron-2bfda36f969ff1e2,libbase64-5c7b1c294984eb25,libstackfuture-dc051d5aa6d2fa69,libatomicow-725b5475b6f01e1f,libasync_fs-0b35e29031bf0c02,libblocking-82a9999780e94688,libpiper-ffe8344cdc540cef,libatomic_waker-174dbcbc430f1497,libasync_lock-3ff6f84c4b9b909b,libwgpu-81fb945f7f0667c5,libstatic_assertions-d95867a6a8ae40a9,libwgpu_core-bcc9c71da5f49cd3,libwgpu_hal-01ff6f98978ab62b,librenderdoc_sys-f6570e7925aa61ab,libkhronos_egl-0fea277cb87acb61,libprofiling-e43ed8157aef2ec6,libgpu_descriptor-1c223289cb7f0079,libhashbrown-894f490cf2f282fb,libfoldhash-15cc86e2ac1125dd,libgpu_descriptor_types-cc30954afc26e7ec,libgpu_alloc-13ce0f226a5537a5,libgpu_alloc_types-74fba548043f4d2b,libash-1862194385401e1d,liblibloading-c5498f8863308380,libglow-5609b1bcb0254486,libnaga-4d3bcfb7c4320488,librustc_hash-aa1e4af2614b378b,libhexf_parse-dc35480b883236f5,libunicode_xid-ead3bec718561bae,liblog-e6ed18f9ca976d5c,libbit_set-483e69297459985d,libbit_vec-d9d3ebc7470f7161,libcodespan_reporting-7d2d14af4e237d53,libunicode_width-dfbf859776f4c33f,libtermcolor-f6e22084922b165d,libspirv-1ae80bab34d6874b,libraw_window_handle-53d64a994d7eeb20,libbevy_transform-c6891c9d7f7cd5b1,libbevy_hierarchy-03fc48e911382a29,libbevy_core-10ecfa0f89a8b281,libbevy_color-c0b1f2ac1a260dda,libencase-45edfb3fe29140a6,libwgpu_types-9b08c3a9bac77ae0,libbevy_math-ceed3a9aba1c8c32,librand_distr-c92d41109d17bb8d,libitertools-ced6ab73b3a1998e,libeither-be605f429423824a,libbevy_a11y-772a27c0be51e553,libaccesskit-97dd21c5933aa26b,libbevy_app-b326e85b5daaf867,libctrlc-34c487758b0bdb6f,libnix-45c11509e5a58c54,libbevy_ecs-318bcecb11916ed3,libbitflags-8a7db4a2c9222bc4,libnonmax-526de5706ded3892,libdisqualified-362197fc48c332bc,libbevy_tasks-462a9217771ba726,libasync_channel-311dd90d9d6fc24b,libevent_listener_strategy-f93e3d77c37def37,libevent_listener-383f4769bfb9134e,libasync_executor-805e0fdc8908ea83,libslab-210800515f9031ac,libfutures_lite-8ee68aad41df17dd,libfutures_io-f17547ea85dec9f0,libfutures_core-1736ec615f78c058,libparking-6afd991ae9183a4c,libfastrand-1f5a8519d7f4c814,libconcurrent_queue-f86d2460aba0a6a3,libasync_task-a2471e461fd63f89,libarrayvec-911369b4bec51ac8,libfixedbitset-4791146548c25993,libbevy_reflect-8ce74da0cbba179a,libuuid-79fe9987c5d94e1e,libsmol_str-b88a407b8cb65fe5,libpetgraph-2ecfbfa3279770f5,libindexmap-64eb6bc0523c5025,libequivalent-7b2891bec10d68f6,libhashbrown-15ed51a5269d2438,libfixedbitset-b8446cded3e7d65b,liberased_serde-e3414c2cdff50fec,libtypeid-4eba94d197867783,libglam-2a76604bed20edcc,librand-73f7f6ce3a1fdc81,librand_chacha-b4d4c7a59b8c0724,libppv_lite86-9699b3e9b1cc0e55,librand_core-420a163a0bc5cc1d,libgetrandom-7b204cd87a0c0445,libbytemuck-b4d78ee2703d3db1,libdowncast_rs-d1ae4726c9ff7c60,libderive_more-abd2c94791c38470,libbevy_ptr-38f098b6b844ba51,libbevy_utils-f6103b3c51558fdd,libtracing-0b6626e27a591053,libtracing_core-53cc1e5847e52ee2,libhashbrown-b050233c42548f9d,liballocator_api2-d2bc7f0ac7fe916a,libahash-c2f81e776e5b8da8,libgetrandom-1bb65ad1ebe81346,libonce_cell-a7005c5321cbb984,libzerocopy-79ead61ff7b623db,libthread_local-ed97173ba0b9fe82,libremotemedia_plugin_sdk-005ab32832bb108b,libtokio-dfb8cd3acc51d887,libpin_project_lite-e9aed6603527e256,librmp_serde-f79055d5e11311ef,librmp-6a8bb396daf9ce7d,libnum_traits-c24640a9dba57493,libremotemedia_traits-2eaf3405687393ea,libschemars-cd37d8b1544fbb73,libdyn_clone-4626cf0c468784b6,libarc_swap-2d63676d0dce2082,libremotemedia_types-b44a1a39b68df1d7,libthiserror-4762883463cac86b,libloadable_node_abi-ee13c02ca44993aa,libinventory-be97ee33170ed5e4,libasync_ffi-a3e7cc0efc392c34,libabi_stable-faae324b32f79da0,libconst_panic-cca1295573e43f17,libtypewit-3469140a2d9410e0,librepr_offset-c128a2af8db9750a,libtstr-07d7d301e9a4e274,libgenerational_arena-5d69eb0a778084b0,liblibloading-b4a29caa4d6b5774,libserde_json-cbf33c0e9dc21f75,libmemchr-67b800f1390637da,libitoa-6c14e58e79a4c2f8,libzmij-2b52d5cd73caf495,libparking_lot-fdf4d88431bd3a5b,libparking_lot_core-ce858a83dc971170,liblibc-814693cd53c8e1fe,libcfg_if-cabd88e68866b60b,libsmallvec-4a1bda29853f905f,liblock_api-bfbc6cfcac4b6a6f,libscopeguard-c9e8cabe4c69e622,libcrossbeam_channel-a1f2fe5b4c9100b6,libcrossbeam_utils-13e8a6533cc788cc,libserde-8f03ba271801197c,libserde_core-5fa61731a0875bd3,libabi_stable_shared-7f09f9edbcf83ae5,libcore_extensions-23e6c0faad8b5055}.rlib" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-ldl" "-ludev" "-lasound" "-ldl" "-ldl" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/examples/rustcYI0To5/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/build/blake3-cfb5a1e92d24db47/out" "-L" "/usr/lib/x86_64-linux-gnu" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/examples/tissue_lab-1ee36135fc08dd50" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-Wl,-O1" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+          Stack dump without symbol names (ensure you have llvm-symbolizer in your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point to it):
+          0  libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678b57097 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) + 39
+          1  libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678b5798d
+          2  libc.so.6                          0x0000716672845330
+          3  libc.so.6                          0x00007166729a1713
+          4  libLLVM.so.22.1-rust-1.96.0-stable 0x000071667c0718f7
+          5  libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678aff651
+          6  libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678afe250 llvm::parallelFor(unsigned long, unsigned long, llvm::function_ref<void (unsigned long)>) + 192
+          7  rust-lld                           0x000063525173b0bd
+          8  rust-lld                           0x00006352516c481a
+          9  libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678aff522
+          10 libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678afecda
+          11 libLLVM.so.22.1-rust-1.96.0-stable 0x0000716678a642b0
+          12 libc.so.6                          0x000071667289cb84
+          13 libc.so.6                          0x0000716672929ecc
+          collect2: fatal error: ld terminated with signal 7 [Bus error], core dumped
+          compilation terminated.
+          
+
+error: could not compile `cc-render-plugin` (example "tissue_lab") due to 1 previous error

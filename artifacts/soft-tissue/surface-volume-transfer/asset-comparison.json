@@ -1,0 +1,30 @@
+{
+  "source_asset_sha256": "f8ca101c687adc00850f768bad057f0f16e8ac7ee7cf4f2d111963cd4a9f3e4b",
+  "candidate_asset_sha256": "c7d500c0060911129cb0f35667418e2057dfe8307acf46c3657a1bee8b1376ff",
+  "builder_sha256": "140b6e1f1c26e0a50ecb2c02112b2c1121d993b0bc9cf01de0ce0259e16f22c0",
+  "physical_regions_exactly_unchanged": true,
+  "transition_width_m": 0.02,
+  "embedding_maximum_residual_m": [
+    0.01092461501899904,
+    0.011321604380447192
+  ],
+  "surface_comparison": [
+    {
+      "label": "Previous bone-weight attenuation",
+      "bindings": 1502,
+      "patch_area_cm2": 511.8804845491317,
+      "area_weighted_influence": 0.2425673674794433,
+      "area_fraction_below_quarter": 0.656678348910181,
+      "area_fraction_above_0_9": 0.04047639171175593
+    },
+    {
+      "label": "Geometric 20 mm boundary transition",
+      "bindings": 1412,
+      "patch_area_cm2": 511.8804845491317,
+      "area_weighted_influence": 0.7132030445645472,
+      "area_fraction_below_quarter": 0.2269764326049075,
+      "area_fraction_above_0_9": 0.6039277565835839
+    }
+  ],
+  "limitation": "Legacy weights still identify the patch; magnitude is replaced by geometry-based boundary transfer. The blend approximates coupling to kinematic chest skin."
+}

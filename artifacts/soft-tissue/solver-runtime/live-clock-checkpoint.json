@@ -1,0 +1,79 @@
+{
+  "status": "progress; goal remains active; opt-in isolated prototype",
+  "change": "Dedicated lab supports live Bevy clock with normal scheduler pacing; fixed-clock frame-completeness checks remain unchanged.",
+  "source_manifest": "live-clock-inputs.json",
+  "source_archive": "live-clock-source.tar.gz",
+  "runtime_source_changes": [
+    "examples/tissue_lab.rs"
+  ],
+  "solver_source_unchanged_from_62_test_pass": true,
+  "validation": {
+    "example_native_stream_tests_pass": 5,
+    "clock_mode_guard": "live-clock-guard-validation.json",
+    "python_pass": 8,
+    "python_existing_fail": 1,
+    "python_failure": "test_root_acceptance_does_not_rewrite_the_candidate source slice includes remember_homes; test unchanged",
+    "quality_major_gating": 8,
+    "quality_clean": false,
+    "quality_at": "ea65ebb68+dirty"
+  },
+  "gpu_runs": {
+    "declared_trace_only_runs": 3,
+    "successful_trace_only_runs": 3,
+    "successful_image_run": 1,
+    "source_packets_per_run": 160,
+    "last_source_ms": 8000,
+    "timing_report": "live-clock-comparison.json",
+    "launches": [
+      "live-clock-launches.json",
+      "live-video-launch.json"
+    ]
+  },
+  "live_on_presentations_per_source_second": [
+    27.514830241070303,
+    27.30030333670374
+  ],
+  "control_presentations_per_source_second": 29.997479203428284,
+  "largest_live_on_source_gap_ms": 98,
+  "video": {
+    "video": "artifacts/soft-tissue/solver-runtime/live-front.mp4",
+    "frames": 217,
+    "first_source_ms": 88,
+    "last_source_ms": 8000,
+    "encoded_pts_match_every_captured_source_timestamp": true,
+    "cadence": "Variable frame rate from actual live Bevy source timestamps; no inserted/interpolated images.",
+    "capture": "lab-front-live-video-01",
+    "clock": "live",
+    "tissue_hz": 120,
+    "target_fps": 30
+  },
+  "visual_inspection": {
+    "frames": [
+      "../lab-front-live-video-01/000058.png",
+      "../lab-front-live-video-01/000197.png"
+    ],
+    "source_ms": [
+      2215,
+      7211
+    ],
+    "scope": "Base-avatar framing and surface continuity at two frames; not full-motion anatomical acceptance."
+  },
+  "next_evidence_needed": [
+    "Resolve live frame-spacing irregularity, distinguishing renderer clock/pacing from solver cost",
+    "Assess mechanical sensitivity with differing initial observations and source sampling",
+    "Actual-avatar active compression/contact",
+    "Material calibration and visual acceptance",
+    "Paused facial/body-clock policy",
+    "Final integration/code audit and default replacement"
+  ],
+  "artifacts": {
+    "artifacts/soft-tissue/solver-runtime/live-clock-comparison.json": "37553140f3d58ff4f22751f153171992172fe050bbd2bfde40a701237859b44c",
+    "artifacts/soft-tissue/solver-runtime/live_clock_audit.py": "dfa072aae809c2f44cf623da150e0843c05cd3e4452cf8cf0df5e50715ac8277",
+    "artifacts/soft-tissue/solver-runtime/live-clock-timing.png": "1a3287a659a0bf775121c6091f97659c1f242470206c940fbaa2a3e746e6f671",
+    "artifacts/soft-tissue/solver-runtime/live-front.mp4": "7ead0ca1bd7e16884afd240a10aa5d8339c6557282ad4678bdf98ab702d3e412",
+    "artifacts/soft-tissue/solver-runtime/live-video-validation.json": "35571d57cafa0f0babe76d4e084bf27f195c88593d0bab45e420bd1d902c48d7",
+    "artifacts/soft-tissue/solver-runtime/live-clock-quality.xml": "37d28ea80949b4f994223d86c251259672b25d4251da21a144627016511f66c1",
+    "docs/design/breast-soft-tissue.md": "06118d3bbd224681d729125a55e856b8c54c58c5da9d387cc3505d5dabd880f8",
+    "artifacts/soft-tissue/temporal-integration/index.html": "2ae243d4e3e543cbebb90bd1105a4ebd808d99b6aff203d86ff3092b2e4ecb69"
+  }
+}

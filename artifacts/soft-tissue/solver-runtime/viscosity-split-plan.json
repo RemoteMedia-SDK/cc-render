@@ -1,0 +1,20 @@
+{
+  "scope": "Replace trace-Green bulk and raw-Green deviatoric rates with objective isochoric-Green and log-volume rates. Coefficients, asset geometry, camera and body motion unchanged.",
+  "runs": [
+    {
+      "name": "viscosity-split-live120-01",
+      "clock": "live",
+      "fps": 30,
+      "rate": 120,
+      "save_images": false
+    },
+    {
+      "name": "viscosity-split-review-01",
+      "clock": "fixed",
+      "fps": 60,
+      "rate": 240,
+      "save_images": true
+    }
+  ],
+  "note": "One live timing and one offline visual run; not a controlled host benchmark. No own builds/tests overlap capture."
+}

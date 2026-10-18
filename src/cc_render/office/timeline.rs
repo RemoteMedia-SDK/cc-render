@@ -35,6 +35,9 @@ pub struct PoseTimeline {
     revision: u64,
     queue: VecDeque<SkeletalPose>,
     displayed: Option<SkeletalPose>,
+    // Exact source knots retained for read-only secondary-physics resampling.
+    // `displayed` may be an interpolated pose, so it cannot replace these.
+    committed_knots: VecDeque<SkeletalPose>,
     epoch: Option<(f64, u64)>,
     watermark: u64,
     starved: bool,
@@ -43,12 +46,44 @@ pub struct PoseTimeline {
     pub stale_frames: u64,
     pub underruns: u64,
 }
+
+pub(crate) struct MotionWindow {
+    pub session: String,
+    pub displayed_ms: u64,
+    pub knots: Vec<SkeletalPose>,
+}
+
 impl PoseTimeline {
+    pub(crate) fn displayed_pts_ms(&self) -> Option<u64> {
+        self.displayed.as_ref().map(|pose| pose.pts_ms)
+    }
+
+    fn remember_displayed_boundary(&mut self) {
+        if let Some(held) = self.displayed.as_ref().filter(|p|
+            self.committed_knots.back().is_none_or(|last| p.pts_ms > last.pts_ms)) {
+            self.committed_knots.push_back(held.clone());
+        }
+        while self.committed_knots.len() > 136 { self.committed_knots.pop_front(); }
+    }
+    /// Includes the source knot immediately before the requested time and one
+    /// known future knot for interpolation. Never authorizes extrapolation.
+    pub(crate) fn motion_window(&self, after_ms: Option<f64>) -> Option<MotionWindow> {
+        self.displayed.as_ref()?;
+        let start = after_ms.and_then(|at| self.committed_knots.iter()
+            .rposition(|p| p.pts_ms as f64 <= at)).unwrap_or(0);
+        let mut knots: Vec<_> = self.committed_knots.iter().skip(start).cloned().collect();
+        if let Some(next) = self.queue.front() { knots.push(next.clone()); }
+        else if let Some(held) = self.displayed.as_ref().filter(|p| knots.last().is_none_or(|last| p.pts_ms > last.pts_ms)) {
+            knots.push(held.clone());
+        }
+        Some(MotionWindow { session: self.session.clone()?, displayed_ms: self.watermark, knots })
+    }
     pub fn invalidate(&mut self, revision: u64) {
         self.schedule_revision(revision, None);
     }
     pub fn schedule_revision(&mut self, revision: u64, handoff: Option<u64>) {
         if revision > self.revision {
+            self.remember_displayed_boundary();
             self.rejection = None;
             self.queue
                 .retain(|p| handoff.is_some_and(|at| p.pts_ms <= at));
@@ -86,6 +121,7 @@ impl PoseTimeline {
             return;
         }
         if id.generation_revision > self.revision {
+            self.remember_displayed_boundary();
             self.queue.clear();
             self.revision = id.generation_revision;
         }
@@ -118,7 +154,10 @@ impl PoseTimeline {
         let (epoch, base) = self.epoch?;
         let pts = base + ((now - epoch).max(0.) * 1000.) as u64;
         while self.queue.front().is_some_and(|p| p.pts_ms <= pts) {
-            self.displayed = self.queue.pop_front();
+            let pose = self.queue.pop_front().expect("checked front");
+            self.committed_knots.push_back(pose.clone());
+            self.displayed = Some(pose);
+            while self.committed_knots.len() > 136 { self.committed_knots.pop_front(); }
         }
         let a = self.displayed.as_ref()?;
         let Some(b) = self.queue.front() else {
@@ -151,6 +190,7 @@ impl PoseTimeline {
         mut permits: impl FnMut(&SkeletalPose) -> bool,
     ) -> Option<SkeletalPose> {
         let previous = self.displayed.clone();
+        let previous_knots = self.committed_knots.clone();
         let pose = self.sample(now)?;
         if permits(&pose) {
             return Some(pose);
@@ -170,6 +210,7 @@ impl PoseTimeline {
             "displayed_before":previous.as_ref().map(diagnostic_pose),
         }));
         self.displayed = previous;
+        self.committed_knots = previous_knots;
         self.watermark = self.displayed.as_ref().map_or(0, |p| p.pts_ms);
         self.queue.clear();
         self.starved = true;
@@ -181,6 +222,10 @@ impl PoseTimeline {
 #[cfg(test)]
 #[path = "timeline_live11_tests.rs"]
 mod live11_tests;
+
+#[cfg(test)]
+#[path = "timeline_tissue_tests.rs"]
+mod tissue_tests;
 
 #[cfg(test)]
 mod tests {

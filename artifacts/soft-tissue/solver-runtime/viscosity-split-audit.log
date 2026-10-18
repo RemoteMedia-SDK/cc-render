@@ -1,0 +1,267 @@
+{
+  "source_manifest": "viscosity-split-inputs.json",
+  "source_packets_unchanged_and_semantic_only": true,
+  "all_478_displayed_anchor_frames_unchanged": true,
+  "cpu_before": {
+    "run": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.02820909737925368,
+          "kinetic_energy_j": 0.46309474412042845,
+          "mass_kg": 0.7092840233607869,
+          "maximum_speed_m_s": 1.2626042381999165,
+          "maximum_volume_ratio": 1.0314282542167186,
+          "minimum_volume_ratio": 0.9545492960711257
+        },
+        {
+          "elastic_energy_j": 0.028966392376789354,
+          "kinetic_energy_j": 0.4620493647401798,
+          "mass_kg": 0.7034397124915243,
+          "maximum_speed_m_s": 1.2700108505308632,
+          "maximum_volume_ratio": 1.0401062341622576,
+          "minimum_volume_ratio": 0.9761885316932444
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 10.995733636,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 13,
+      "wall_seconds": 11.079082183
+    },
+    "counters": {
+      "cg_steps": 19567,
+      "descent_ns": 2668292574,
+      "direction_ns": 3629329140,
+      "linear_solves": 19567,
+      "linearize_ns": 4539722677,
+      "multiply_ns": 63768914,
+      "true_relative_residual": {
+        "above_1e_minus_7": 0,
+        "above_1e_minus_9": 0,
+        "count": 19567,
+        "maximum": 2.0003785200712483e-11,
+        "median": 1.7459777544518345e-13,
+        "p95": 1.4098422076577582e-12
+      }
+    },
+    "accepted_solves": 3829,
+    "maximum_force_n": 9.988823732250159e-05,
+    "maximum_correction_um": 0.09363318551511779
+  },
+  "cpu_after": {
+    "run": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.00219412245013303,
+          "kinetic_energy_j": 0.4102497575438998,
+          "mass_kg": 0.7092840233607869,
+          "maximum_speed_m_s": 1.14387376437577,
+          "maximum_volume_ratio": 1.016187221206203,
+          "minimum_volume_ratio": 0.9740152106981765
+        },
+        {
+          "elastic_energy_j": 0.00253003487741636,
+          "kinetic_energy_j": 0.41189296590684227,
+          "mass_kg": 0.7034397124915243,
+          "maximum_speed_m_s": 1.1464706662386381,
+          "maximum_volume_ratio": 1.0214906641875046,
+          "minimum_volume_ratio": 0.9866649168270643
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 10.675354492,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 3,
+      "wall_seconds": 10.705096884
+    },
+    "counters": {
+      "cg_steps": 17027,
+      "descent_ns": 2595436950,
+      "direction_ns": 2598720695,
+      "linear_solves": 17027,
+      "linearize_ns": 5086555661,
+      "multiply_ns": 49442082,
+      "true_relative_residual": {
+        "above_1e_minus_7": 0,
+        "above_1e_minus_9": 0,
+        "count": 17027,
+        "maximum": 1.2298922193381454e-11,
+        "median": 2.3967615091199363e-13,
+        "p95": 1.4246753728800396e-12
+      }
+    },
+    "accepted_solves": 3819,
+    "maximum_force_n": 9.99879192280392e-05,
+    "maximum_correction_um": 0.0645627424773712
+  },
+  "cpu_maximum_node_difference_mm": 34.53490161390784,
+  "gpu_before": {
+    "directory": "lab-front-viscosity-symmetry-review-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 478,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 20.881524737
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 6822.261523,
+    "playback_capture_seconds": 14.058176334,
+    "playback_wall_over_source": 1.7683240671698113,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      23.668892000001506,
+      55.173273999998855,
+      73.91647723999917,
+      216.3376530000005
+    ],
+    "stage_seconds": {
+      "sampling": 2.6639460829999995,
+      "elasticity": 8.234129804000005,
+      "collision": 1.061116648
+    },
+    "peak_surface_displacement_mm": 37.87859156727791,
+    "minimum_element_volume_ratio": 0.8556109607309785,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "gpu_after": {
+    "directory": "lab-front-viscosity-split-review-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 478,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 20.76128298
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 6697.172514,
+    "playback_capture_seconds": 14.063026776000001,
+    "playback_wall_over_source": 1.7689341856603775,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      24.65754199999901,
+      54.54967000000142,
+      64.7391712400008,
+      91.89612399999896
+    ],
+    "stage_seconds": {
+      "sampling": 2.6634699400000006,
+      "elasticity": 8.131930102000002,
+      "collision": 1.053394758
+    },
+    "peak_surface_displacement_mm": 42.745430022478104,
+    "minimum_element_volume_ratio": 0.887513930106546,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "gpu_comparison": {
+    "common_source_timestamps": 478,
+    "identical_traced_physics_and_source": false,
+    "maximum_surface_envelope_difference_mm": 32.78453927487135,
+    "maximum_centroid_offset_difference_mm": 13.493278466580005
+  },
+  "gpu_480hz": {
+    "directory": "lab-front-viscosity-split-480hz-01",
+    "output_fps": 60,
+    "tissue_hz": 480,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 25.567054501
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 6773.041419,
+    "playback_capture_seconds": 18.792911690999997,
+    "playback_wall_over_source": 2.3638882630188673,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      33.775416000000405,
+      86.43257699999958,
+      107.4925994000004,
+      112.68673399999898
+    ],
+    "stage_seconds": {
+      "sampling": 4.277786503000002,
+      "elasticity": 10.731875377999993,
+      "collision": 1.615731226999999
+    },
+    "peak_surface_displacement_mm": 42.95375943183899,
+    "minimum_element_volume_ratio": 0.8934828074008299,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "240_vs_480hz": {
+    "common_source_timestamps": 478,
+    "identical_traced_physics_and_source": false,
+    "maximum_surface_envelope_difference_mm": 1.2925919145345688,
+    "maximum_centroid_offset_difference_mm": 0.5570908966095203
+  },
+  "rate_comparison_maximum_anchor_difference": {
+    "anchor_world_m": 1.201947465904182e-07,
+    "anchor_rotation_xyzw": 1.8645162622862052e-07
+  },
+  "live_timing": {
+    "directory": "lab-front-viscosity-split-live120-01",
+    "capture": {
+      "frames": 95,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 15.237073866
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 66,
+    "source_span_seconds": 7.934,
+    "playback_wall_seconds": 8.211475965000002,
+    "presentations_per_source_second": 11.847743887068313,
+    "source_gap_ms_p50_p95_p99_max": [
+      61.5,
+      207.19999999999993,
+      250.0,
+      250.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      64.4258109999987,
+      216.8682203499995,
+      263.6974269699995,
+      265.6847170000001
+    ],
+    "source_gaps_above_50ms": 62,
+    "relative_clock_drift_ms_min_max_end": [
+      0.0,
+      504.63075500000014,
+      277.47596500000145
+    ],
+    "maximum_skin_error_mm": 0.0006094921033447254,
+    "peak_surface_displacement_mm": 34.98015180230141,
+    "minimum_element_volume_ratio": 0.8686849782671168,
+    "maximum_active_contacts": 0
+  },
+  "limits": [
+    "Constitutive correction, not empirical anatomical calibration.",
+    "CPU replay omits body contact and fractional display solves.",
+    "One live shared-host timing run; no controlled performance comparison.",
+    "Fixed-clock PNG capture is offline visual review, not interactive performance.",
+    "The jump activates zero contacts; avatar compression remains unverified.",
+    "The 240/480 Hz envelope/centroid comparison does not bound every vertex or establish a converged reference.",
+    "Cross-rate attachment samples differ slightly; their measured maximum translation and quaternion-chord differences are reported, not treated as bit-identical forcing."
+  ]
+}

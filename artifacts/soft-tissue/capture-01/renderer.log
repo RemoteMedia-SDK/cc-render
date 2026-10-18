@@ -1,0 +1,17 @@
+2026-10-17T18:46:38.189501Z  WARN wgpu_hal::vulkan::instance: Unable to find extension: VK_KHR_surface
+2026-10-17T18:46:38.189531Z  WARN wgpu_hal::vulkan::instance: Unable to find extension: VK_KHR_xlib_surface
+2026-10-17T18:46:38.189535Z  WARN wgpu_hal::vulkan::instance: Unable to find extension: VK_KHR_xcb_surface
+2026-10-17T18:46:38.189537Z  WARN wgpu_hal::vulkan::instance: Unable to find extension: VK_KHR_wayland_surface
+2026-10-17T18:46:38.189540Z  WARN wgpu_hal::vulkan::instance: Unable to find extension: VK_EXT_swapchain_colorspace
+2026-10-17T18:46:38.189543Z  WARN wgpu_hal::vulkan::instance: Unable to find extension: VK_KHR_get_physical_device_properties2
+2026-10-17T18:46:38.190122Z  WARN wgpu_hal::vulkan::instance: InstanceFlags::VALIDATION requested, but unable to find layer: VK_LAYER_KHRONOS_validation
+2026-10-17T18:46:38.211307Z ERROR wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	loader_scanned_icd_add: Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0
+2026-10-17T18:46:38.211340Z ERROR wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7adf34158ec0, name: ?)
+2026-10-17T18:46:38.211346Z ERROR wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	vkCreateInstance: Found no drivers!
+2026-10-17T18:46:38.211349Z ERROR wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7adf34158ec0, name: ?)
+
+thread 'cc-render-bevy' (3) panicked at /home/acidhax/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_render-0.15.3/src/renderer/mod.rs:196:10:
+Unable to find a GPU! Make sure you have installed required drivers! For extra information, see: https://github.com/bevyengine/bevy/blob/latest/docs/linux_dependencies.md
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

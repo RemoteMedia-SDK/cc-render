@@ -1,0 +1,38 @@
+{
+  "recorded_unix": 1792291530.0400589,
+  "scope": "Surface embedding influence only: preserve existing FEM, source motion, clock and camera positions. Compare shape in front and side views.",
+  "files": {
+    "target/debug/examples/tissue_lab": "699e1a0c712fd068006601b1ab5b70941f51bcc340fefc029476c1dcfccaba0a",
+    "assets/tissue/beautiful_assistant.base-viscous-prototype.json": "f8ca101c687adc00850f768bad057f0f16e8ac7ee7cf4f2d111963cd4a9f3e4b",
+    "assets/tissue/beautiful_assistant.base-geometric-transfer-prototype.json": "c7d500c0060911129cb0f35667418e2057dfe8307acf46c3657a1bee8b1376ff",
+    "scripts/avatars/build_tissue_asset.py": "140b6e1f1c26e0a50ecb2c02112b2c1121d993b0bc9cf01de0ce0259e16f22c0",
+    "artifacts/soft-tissue/lab-jump-01/packets.ndjson": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb"
+  },
+  "runs": [
+    {
+      "name": "surface-old-front-01",
+      "camera": "front",
+      "asset": "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "images": false,
+      "snapshot": true
+    },
+    {
+      "name": "surface-geometric-front-01",
+      "camera": "front",
+      "asset": "assets/tissue/beautiful_assistant.base-geometric-transfer-prototype.json",
+      "images": true,
+      "snapshot": true
+    },
+    {
+      "name": "surface-geometric-side-01",
+      "camera": "side",
+      "asset": "assets/tissue/beautiful_assistant.base-geometric-transfer-prototype.json",
+      "images": true,
+      "snapshot": false
+    }
+  ],
+  "fps": 60,
+  "tissue_hz": 240,
+  "source_snapshot_ms": 7633,
+  "performance_claim": false
+}

@@ -1,0 +1,38 @@
+{
+  "status": "progress; goal incomplete",
+  "source_files": {
+    "src/cc_render/bevy_app/tissue_collision.rs": "a2daf547459c35beafc613691ae18616e9af6b62845e5304cf7e0bc4dab97076",
+    "src/cc_render/bevy_app/tissue_collision_tests.rs": "89ad46c4c0474f4d6c443ad6ead2dd1c1e6ceeda13d576629aa0884db38b5151"
+  },
+  "completed_captures": [
+    "lab-front-viscous-120hz-01",
+    "lab-side-viscous-240hz-01",
+    "lab-front-viscous-240hz-32-01",
+    "lab-front-viscous-refit-240hz-01",
+    "lab-front-viscous-refit-only-240hz-01"
+  ],
+  "focused_tests": {
+    "passed": 53,
+    "failed": 0
+  },
+  "python_tests": {
+    "passed": 8,
+    "failed": 1,
+    "failure": "existing test_root_acceptance_does_not_rewrite_the_candidate source-slice failure"
+  },
+  "quality_gate_major_findings": 8,
+  "current_broadphase": "cached bounds-only refit, no per-step rebalance",
+  "reports": [
+    "viscous-120-240-comparison.json",
+    "viscous-240-480-comparison.json",
+    "viscous-iteration-comparison.json",
+    "broadphase-refit-only-comparison.json"
+  ],
+  "pending": [
+    "solver runtime profile and optimization",
+    "long-session broad-phase quality",
+    "broader avatar contact coverage",
+    "body pause and facial animation policy",
+    "production integration and final audit"
+  ]
+}

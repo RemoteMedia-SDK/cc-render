@@ -1,0 +1,52 @@
+[
+  {
+    "mode": "paced",
+    "directory": "lab-front-full-factor-paced-30fps-120hz-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-full-factor-paced-30fps-120hz-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "61600056c98f7b8c53c833ac20c7a2984307acbb736f0a591eb0c591218d812a",
+    "started_unix": 1792284120.4304569,
+    "pid": 1480373,
+    "exit_code": 0,
+    "completed_unix": 1792284136.1243565
+  },
+  {
+    "mode": "uncapped",
+    "directory": "lab-front-full-factor-fast-30fps-120hz-02",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-full-factor-fast-30fps-120hz-02"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "1",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "61600056c98f7b8c53c833ac20c7a2984307acbb736f0a591eb0c591218d812a",
+    "started_unix": 1792284136.6035109,
+    "pid": 1480610,
+    "exit_code": 0,
+    "completed_unix": 1792284148.005528
+  }
+]

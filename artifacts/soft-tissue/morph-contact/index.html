@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Base avatar · numerical response checks</title>
+<style>
+body{max-width:1200px;margin:36px auto;padding:0 24px;background:#111923;color:#e8edf4;font:16px system-ui;line-height:1.5}
+button{padding:10px 18px;margin:4px}video{display:block;max-width:100%;max-height:80vh;margin:20px auto}img{width:100%;background:white}a{color:#9dceff}
+</style>
+<h1>Base avatar · numerical response checks</h1>
+<p>Same eight-second ARDY recording, same material and fixed front camera. Only the physics timestep changes. These are offline captures, with original source timestamps preserved.</p>
+<p><a href="../lab-review-hardening-8/index.html">Front/side material comparison</a> · <a href="jawleft-jump.mp4">Jaw-morph integration check</a> · <a href="validation.json">Morph measurements</a></p>
+<button onclick="pick('timestep-comparison.mp4')">120 vs 240 Hz</button>
+<button onclick="pick('timestep-240-480-comparison.mp4')">240 vs 480 Hz</button>
+<button onclick="v.playbackRate=1">Normal speed</button>
+<button onclick="v.playbackRate=.25">¼ speed</button>
+<button onclick="v.currentTime=0;v.play()">Replay</button>
+<video id="v" controls loop playsinline src="timestep-comparison.mp4"></video>
+<p>Smaller steps change the response noticeably. Similar peak amplitudes alone do not establish stable motion: compare timing and settling throughout the sequence. Neither run is an anatomical reference.</p>
+<img src="timestep-response.png" alt="Response at 120 and 240 Hz">
+<img src="timestep-240-480-response.png" alt="Response at 240 and 480 Hz">
+<p><a href="timestep-comparison.json">120/240 Hz measurements</a> · <a href="timestep-240-480-comparison.json">240/480 Hz measurements</a></p>
+<p>The jaw-morph run exercises the imported shoulder geometry at a constant facial weight. No tissue contact activates during this jump, so that clip does not validate compression or changing facial contact.</p>
+<script>
+const v=document.getElementById('v');
+function pick(source){const speed=v.playbackRate;v.src=source;v.playbackRate=speed;v.play();}
+</script>

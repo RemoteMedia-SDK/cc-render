@@ -1,0 +1,41 @@
+{
+  "files": {
+    "src/cc_render/soft_tissue/tests.rs": "598ad5c738c1fbbe135cb3ce59fb8225e4903789b702837e116f50794ad9c8a2",
+    "src/cc_render/soft_tissue/material.rs": "a165f023c6f7c7a4e95a825c0c3a2c4145f7066229aa001c101b0e08b12a3068",
+    "src/cc_render/soft_tissue/preconditioner.rs": "5a6bfdab319a64955c5a4fe4fb3f79a249e6d3629def32a7c4683e28770457ae",
+    "src/cc_render/soft_tissue/contact.rs": "12ca6b9f48318d5b8faf661712e8de34af28f9c9f320899e10172cbe946abc15",
+    "src/cc_render/soft_tissue/solver.rs": "ff9a127a08f72067bc8e12b2f453eed0a4f8cf952ded7a8cd86fcafea5ab5955",
+    "src/cc_render/soft_tissue/asset.rs": "ffb279a6c3bc1fd72759e7fde0f1a55a38b9e4404e482f660f04ec117d55bdc3",
+    "src/cc_render/soft_tissue/mod.rs": "ae2627114f6fdb43cb0355b20d08d0d8289dca600b0323d98649795fe3309011",
+    "src/cc_render/soft_tissue/implicit.rs": "0968cf0ea9cdf49d8a144ff9dc035dde44e5d2384a81ee82f9a0bb8736bb9a01",
+    "src/cc_render/soft_tissue/integration_tests.rs": "60216107ccefd871f0153df6168592d451bddb8962e0d423bc402ab25281e0bb",
+    "src/cc_render/soft_tissue/viscosity.rs": "786ec22b8ee5418f721a9d497e90e47cf00928bd49ebfaa4a75db5e9e47ce636",
+    "src/cc_render/soft_tissue/timestep.rs": "e19a27d792bde5aee353affa3735675e38377e84d53a1e731557a0972d0984d6",
+    "src/cc_render/soft_tissue/contact_tests.rs": "75cd0d11fed0ac811502cf23903a2e21d5d9b81b9f0e5e0a3697e8518728d92f",
+    "examples/tissue_fit.rs": "a649999f2e099fbe9efb8dadbfdd2ce1bff5f565fcb7ed995c48051ee02a2507"
+  },
+  "build_argv": [
+    "rustc",
+    "--edition=2021",
+    "-C",
+    "opt-level=3",
+    "-L",
+    "dependency=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps",
+    "/tmp/tissue-surface-fit-3575pr7a/fit.rs",
+    "-o",
+    "/tmp/tissue-surface-fit-3575pr7a/fit",
+    "--extern",
+    "bevy=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/libbevy-3efa22f826ea2e39.rlib",
+    "--extern",
+    "serde=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/libserde-8f03ba271801197c.rlib",
+    "--extern",
+    "serde_json=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/libserde_json-cbf33c0e9dc21f75.rlib",
+    "--extern",
+    "anyhow=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/libanyhow-a7feb7a1f8205b42.rlib",
+    "--extern",
+    "thiserror=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/libthiserror-4762883463cac86b.rlib",
+    "--extern",
+    "tracing=/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/deps/libtracing-0b6626e27a591053.rlib"
+  ],
+  "run_exit_code": 0
+}

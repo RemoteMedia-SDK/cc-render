@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "target/debug/examples/tissue_lab",
+    "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+    "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+    "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+    "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+    "front",
+    "artifacts/soft-tissue/lab-invalid-live-fast-01"
+  ],
+  "settings": {
+    "CC_TISSUE_LAB_CLOCK": "live",
+    "CC_RENDER_FAST": "1"
+  },
+  "exit_code": 1,
+  "message": "Error: live-clock lab requires normal renderer pacing; use fixed clock for uncapped profiling",
+  "rejected_before_renderer_initialization": true
+}

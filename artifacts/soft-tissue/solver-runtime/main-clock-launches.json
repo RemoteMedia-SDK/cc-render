@@ -1,0 +1,134 @@
+[
+  {
+    "name": "main-clock-fixed-01",
+    "clock": "fixed",
+    "fps": 60,
+    "tissue_hz": 240,
+    "timing_claim": false,
+    "output": "artifacts/soft-tissue/lab-front-main-clock-fixed-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-main-clock-fixed-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "240",
+      "CC_TISSUE_LAB_FPS": "60",
+      "CC_TISSUE_LAB_CLOCK": "fixed",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "4803cf84a00b0d1f12bcdca91994fa58e1ddce0f51852da2b8b1f121404469e4",
+    "log": "main-clock-fixed-01.log",
+    "started_unix": 1792286264.104072,
+    "overlapping_library_test": true,
+    "pid": 1510826,
+    "exit_code": 0,
+    "completed_unix": 1792286280.7123551
+  },
+  {
+    "name": "main-clock-on-01",
+    "tissue": true,
+    "clock": "live",
+    "fps": 30,
+    "tissue_hz": 120,
+    "output": "artifacts/soft-tissue/lab-front-main-clock-on-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-main-clock-on-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "1",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "4803cf84a00b0d1f12bcdca91994fa58e1ddce0f51852da2b8b1f121404469e4",
+    "log": "main-clock-on-01.log",
+    "started_unix": 1792286481.591347,
+    "overlapping_library_test": false,
+    "pid": 1513715,
+    "exit_code": 0,
+    "completed_unix": 1792286497.0401826
+  },
+  {
+    "name": "main-clock-off-01",
+    "tissue": false,
+    "clock": "live",
+    "fps": 30,
+    "tissue_hz": 120,
+    "output": "artifacts/soft-tissue/lab-front-main-clock-off-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "off",
+      "front",
+      "artifacts/soft-tissue/lab-front-main-clock-off-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "1",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "4803cf84a00b0d1f12bcdca91994fa58e1ddce0f51852da2b8b1f121404469e4",
+    "log": "main-clock-off-01.log",
+    "started_unix": 1792286497.510616,
+    "overlapping_library_test": false,
+    "pid": 1513966,
+    "exit_code": 0,
+    "completed_unix": 1792286512.1651156
+  },
+  {
+    "name": "main-clock-on-02",
+    "tissue": true,
+    "clock": "live",
+    "fps": 30,
+    "tissue_hz": 120,
+    "output": "artifacts/soft-tissue/lab-front-main-clock-on-02",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-main-clock-on-02"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "1",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "4803cf84a00b0d1f12bcdca91994fa58e1ddce0f51852da2b8b1f121404469e4",
+    "log": "main-clock-on-02.log",
+    "started_unix": 1792286512.6296098,
+    "overlapping_library_test": false,
+    "pid": 1514240,
+    "exit_code": 0,
+    "completed_unix": 1792286528.0132372
+  }
+]

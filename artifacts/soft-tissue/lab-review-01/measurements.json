@@ -1,0 +1,27 @@
+{
+  "first_source_flight_s": [
+    0.8,
+    1.3
+  ],
+  "flight_definition": "Both source toes exceed their first-200ms median by 30mm; 20Hz observation, not sole contact.",
+  "peak_surface_displacement_mm": 79.13711667060852,
+  "peak_surface_time_s": 1.416,
+  "settling_definition": "Free-node centroid offset stays within 2mm of fitted initial shape for 0.5s after first source landing, before 3.2s.",
+  "centroid_settling_s_after_landing": 0.7,
+  "minimum_volume_ratio": 0.8315073371887081,
+  "maximum_skin_error_mm": 0.001970167946824451,
+  "maximum_active_contacts": 0,
+  "frames_per_view": 478,
+  "source_start_ms": 50,
+  "source_end_ms": 8000,
+  "maximum_frame_gap_ms": 17,
+  "camera_independent_trajectory": true,
+  "source_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+  "limitations": [
+    "Offline render, not real-time performance",
+    "Repeated model-generated jumps after the first landing",
+    "No anatomical material calibration",
+    "Initial settling and continued body movement affect response",
+    "Vertex-face contact only; this sequence is not a compression acceptance test"
+  ]
+}

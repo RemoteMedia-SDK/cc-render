@@ -1,0 +1,21 @@
+{
+  "scope": "Strict nonlinear acceptance and bounded retry; material coefficients, motion packets, base GLB, pose and camera unchanged.",
+  "runs": [
+    {
+      "name": "nonlinear-strict-fixed-01",
+      "clock": "fixed",
+      "fps": 60,
+      "tissue_hz": 240,
+      "save_images": false
+    },
+    {
+      "name": "nonlinear-strict-video-01",
+      "clock": "live",
+      "fps": 30,
+      "tissue_hz": 120,
+      "save_images": true
+    }
+  ],
+  "performance_claim": false,
+  "note": "Existing library bedding test still runs. Captures verify numerical completion, source fidelity and images; timings are not an isolated benchmark."
+}

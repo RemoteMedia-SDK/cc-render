@@ -1,0 +1,200 @@
+{
+  "recorded_unix": 1792290709.8724935,
+  "objective_status": "active; isolated opt-in replacement implemented, live performance and active-avatar contact remain unfinished",
+  "goal_turn_classification": "progress: reproduced spurious bulk damping under isochoric shear; implemented and verified objective shape/volume split; preserved motion and captured updated review",
+  "source_manifest": "viscosity-split-inputs.json",
+  "source_archive": "viscosity-split-source.tar.gz",
+  "changed_kernel_files": [
+    "viscosity.rs",
+    "timestep.rs",
+    "integration_tests.rs"
+  ],
+  "constitutive_model": {
+    "shape": "Ebar=(J^(-2/3)*F^T*F-I)/2",
+    "volume": "ln J",
+    "potential": "V * [eta_s/dt_eff * norm(Ebar-history)^2 + eta_b/(2*dt_eff) * (ln J-history_ln_J)^2]",
+    "tangent": "exact gradient; PSD Gauss-Newton tangent",
+    "history": "variable-step BDF2 strain samples; BE startup/growth restart",
+    "coefficients_and_asset_unchanged": true,
+    "anatomical_fit": false
+  },
+  "evidence": {
+    "regression_failed_before": "viscosity-volume-regression-before.log",
+    "cpu": "viscosity-split-01",
+    "comparison": "viscosity-split-comparison.json",
+    "rate_launch": "viscosity-split-rate-launch.json",
+    "video_validation": "viscosity-split-video-validation.json",
+    "response_plot": "viscosity-split-response.png"
+  },
+  "checks": {
+    "tissue_tests_passed": 67,
+    "lab_tests_passed": 5,
+    "python_passed": 8,
+    "python_failed": 1,
+    "python_failure": "Existing root-acceptance source-slice scan failure; protected test unchanged",
+    "quality": {
+      "baseline": "git-HEAD",
+      "regressions": "457",
+      "minor": "19",
+      "acked": "0",
+      "stale": "0",
+      "preexisting-worse": "27",
+      "new-symbol": "430",
+      "gating": "8",
+      "register-macro-excluded": "0",
+      "at": "ea65ebb68+dirty"
+    },
+    "contract": {
+      "sym": "differential",
+      "t": "method",
+      "p": "src/cc_render/soft_tissue/viscosity.rs:56",
+      "status": "new-symbol",
+      "defs": "1",
+      "callers": "4",
+      "incompatible": "0",
+      "at": "ea65ebb68+dirty",
+      "graph_ambiguous": "363",
+      "graph_unresolved": "1298",
+      "counts_floor": "1",
+      "root": ".",
+      "next": "--test-gate=src/cc_render/soft_tissue/viscosity.rs"
+    },
+    "diff_check_exit": 0,
+    "review_local_links_checked": 61,
+    "broad_suite": "Prior 469-test run terminated exit 143 without a final result; not rerun this turn"
+  },
+  "cpu_acceptance": {
+    "accepted_solves": 3819,
+    "maximum_force_n": 9.99879192280392e-05,
+    "maximum_correction_um": 0.0645627424773712
+  },
+  "review": {
+    "page": "../temporal-integration/index.html",
+    "video": "viscosity-split-front.mp4",
+    "frames": 478,
+    "source_end_ms": 8000,
+    "fps": 60,
+    "tissue_hz": 240,
+    "raw_frames_inspected_ms": [
+      2200,
+      7633
+    ],
+    "scope": "Two-frame surface-continuity review and complete-source video encoding, not full-motion anatomical acceptance"
+  },
+  "gpu": {
+    "directory": "lab-front-viscosity-split-review-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 478,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 20.76128298
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 6697.172514,
+    "playback_capture_seconds": 14.063026776000001,
+    "playback_wall_over_source": 1.7689341856603775,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      24.65754199999901,
+      54.54967000000142,
+      64.7391712400008,
+      91.89612399999896
+    ],
+    "stage_seconds": {
+      "sampling": 2.6634699400000006,
+      "elasticity": 8.131930102000002,
+      "collision": 1.053394758
+    },
+    "peak_surface_displacement_mm": 42.745430022478104,
+    "minimum_element_volume_ratio": 0.887513930106546,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "live": {
+    "directory": "lab-front-viscosity-split-live120-01",
+    "capture": {
+      "frames": 95,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 15.237073866
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 66,
+    "source_span_seconds": 7.934,
+    "playback_wall_seconds": 8.211475965000002,
+    "presentations_per_source_second": 11.847743887068313,
+    "source_gap_ms_p50_p95_p99_max": [
+      61.5,
+      207.19999999999993,
+      250.0,
+      250.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      64.4258109999987,
+      216.8682203499995,
+      263.6974269699995,
+      265.6847170000001
+    ],
+    "source_gaps_above_50ms": 62,
+    "relative_clock_drift_ms_min_max_end": [
+      0.0,
+      504.63075500000014,
+      277.47596500000145
+    ],
+    "maximum_skin_error_mm": 0.0006094921033447254,
+    "peak_surface_displacement_mm": 34.98015180230141,
+    "minimum_element_volume_ratio": 0.8686849782671168,
+    "maximum_active_contacts": 0
+  },
+  "timestep_comparison": {
+    "common_source_timestamps": 478,
+    "identical_traced_physics_and_source": false,
+    "maximum_surface_envelope_difference_mm": 1.2925919145345688,
+    "maximum_centroid_offset_difference_mm": 0.5570908966095203
+  },
+  "rate_anchor_differences": {
+    "anchor_world_m": 1.201947465904182e-07,
+    "anchor_rotation_xyzw": 1.8645162622862052e-07
+  },
+  "failed_checks_retained": [
+    {
+      "path": "viscosity-volume-regression-before.log",
+      "reason": "Expected original-material regression failure, fixed by split law"
+    },
+    {
+      "path": "viscosity-split-encode.log",
+      "reason": "PATH selected conda ffmpeg without preset support; /usr/bin/ffmpeg retry succeeded"
+    },
+    {
+      "path": "viscosity-split-rate-anchor-exact-check.log",
+      "reason": "Cross-rate anchors differ by up to 1.202e-7 m and 1.865e-7 quaternion chord; comparison now reports measured differences instead of claiming identical forcing"
+    }
+  ],
+  "limitations": [
+    "Constitutive correction, not empirical anatomical calibration.",
+    "CPU replay omits body contact and fractional display solves.",
+    "One live shared-host timing run; no controlled performance comparison.",
+    "Fixed-clock PNG capture is offline visual review, not interactive performance.",
+    "The jump activates zero contacts; avatar compression remains unverified.",
+    "The 240/480 Hz envelope/centroid comparison does not bound every vertex or establish a converged reference.",
+    "Cross-rate attachment samples differ slightly; their measured maximum translation and quaternion-chord differences are reported, not treated as bit-identical forcing.",
+    "Current live rate misses the 30 FPS target.",
+    "Material constants remain engineering choices.",
+    "Paused-body/position-affecting-face-morph behavior remains unresolved.",
+    "Existing Python and quality gates are non-clean; no merge-ready or production-default claim."
+  ],
+  "next_actions": [
+    "Profile strict solver cost under live sampling and improve throughput without loosening convergence or changing body motion.",
+    "Exercise actual avatar contact with preserved model-owned motion; existing jump has zero active contacts.",
+    "Review corrected response and establish loading-appropriate material calibration targets."
+  ],
+  "user_correction": "Arm-obscuration complaint rescinded; arms and camera unchanged.",
+  "processes": "All build/test/profile/GPU/encoding/audit handles from this turn terminal and collected; no pending process."
+}

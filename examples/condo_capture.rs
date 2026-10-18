@@ -133,6 +133,9 @@ fn capture_asset_paths(args: &[String], folder: &Path, package: &serde_json::Val
 }
 
 fn record_inputs(args: &[String], out: &Path, seconds: f32) -> anyhow::Result<()> {
+    if let Some(path) = std::env::var_os("CC_AVATAR_TISSUE_ASSET") {
+        std::fs::copy(path, out.join("tissue-asset.json"))?;
+    }
     let scene = Path::new(&args[3]);
     let folder = scene.parent().unwrap_or(Path::new("."));
     std::fs::copy(scene, out.join("scene-package.json"))?;
@@ -234,7 +237,9 @@ fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weath
     let mut count = 0;
     let mut replay = native_recording::PlaybackCursor::default();
     let mut states = std::fs::File::create(out.join("states.ndjson"))?;
+    let mut frame_times = std::fs::File::create(out.join("frame-times.ndjson"))?;
     while count < target {
+        anyhow::ensure!(renderer.is_ready(), "renderer withdrew readiness during capture; inspect renderer log");
         anyhow::ensure!(started.elapsed() < options.timeout, "capture timeout");
         weather.advance(renderer, count)?;
         replay.feed(renderer, &poses, started.elapsed().as_millis() as u64);
@@ -243,6 +248,11 @@ fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weath
             let now = Instant::now();
             intervals.push(now.duration_since(previous).as_secs_f64() * 1000.0);
             previous = now;
+            writeln!(frame_times, "{}", serde_json::json!({
+                "frame": count, "facial_pts_ms": frame.pts_ms,
+                "tissue_pts_ms": frame.tissue_pts_ms,
+                "arrival_elapsed_ms": now.duration_since(started).as_secs_f64() * 1000.0,
+            }))?;
             input.write_all(&frame.pixels)?;
             weather.observe(renderer, count)?;
             writeln!(

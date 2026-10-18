@@ -1,0 +1,92 @@
+<ctx task="integrate_interval" route="routed: name-exact BM25 — query names a symbol (integrate_interval); anchors: integrate_interval(src/.../tissue.rs)" root="." confidence="high" margin_pct="0" at="ea65ebb68+dirty" bundle="auto" bodies="1" est_tokens="2065"><!-- ripwire lens for "integrate_interval" [relevance floor: kept 1 of 40 - the other 39 scored zero on this query, so the bundle shrank instead of padding] [confidence= derives from the ranked head's largest relative score drop (margin_pct=, whole percent, 0 = none; the same gap the adaptive flag cuts at). low = flat ranking: treat the set as a starting point, not an answer]: reusable building blocks + quality facts for what you're about to touch (cx=complexity ccx=cognitive in=reuse-count churn=recent-commits amp=change-amplification clone=1(duplicated) tested=1) — prefer composing/reusing these; watch the high-churn/high-amp/cloned ones; bundle=auto: the top-ranked FULL bodies ride inline after the signatures in a bodies section (bodies=N on this root counts them; bodies=0 reason=budget when none fit the remaining budget whole; the signatures-only flag (no-bodies mode) opts out) — read them here instead of opening the files. The bodies element discloses the house way: total=requested, shown=printed, capped=1 when they differ; each body's calls child lists its callee signatures, total= always, shown=/capped= only when that list is cut; tail: file-grain tail, WEAKER evidence than the ranked rows (paths only): every positive-score file NOT among the shown sigs rows — the files of trimmed rows first, best-symbol rank order; rows are t p=file; total=such files, shown=printed, capped=1 when they differ. r= on a ranked row is its 1-based rank in this lens ranking, rows in r= order, p= the file (a gap = a budget-trimmed row) --><!-- root= is the crawl root; p= below is RELATIVE to it (single-root only; absent => p= is ingest's own path, unchanged); at=this commit(+dirty). est_tokens= prices this bundle in tokens --><sigs><d l="558" n="integrate_interval" p="src/cc_render/bevy_app/tissue.rs" cx="9" ccx="9" in="3" amp="3" tested="1" r="1" next="--expand=src/cc_render/bevy_app/tissue.rs:integrate_interval">fn integrate_interval( solvers: &amp;mut Vec&lt;Tissue&gt;, start_ms: f64, end_ms: f64, depth: usize, pose_at: &amp;impl Fn(f64) -&gt; anyhow::Result&lt;ContactPose&gt;, contacts: &amp;BodyContacts, asset: &amp;TissueAsset, ) -&gt; anyhow::Result&lt;IntegrationReport&gt;</d></sigs><tail total="0" shown="0" capped="0"></tail><bodies shown="1" total="1" capped="0"><b t="fn" l="558" p="src/cc_render/bevy_app/tissue.rs" n="integrate_interval"><![CDATA[fn integrate_interval(
+    solvers: &mut Vec<Tissue>,
+    start_ms: f64,
+    end_ms: f64,
+    depth: usize,
+    pose_at: &impl Fn(f64) -> anyhow::Result<ContactPose>,
+    contacts: &BodyContacts,
+    asset: &TissueAsset,
+) -> anyhow::Result<IntegrationReport> {
+    let started = std::time::Instant::now();
+    let old = pose_at(start_ms)?;
+    let end = pose_at(end_ms)?;
+    let frames = &end.frames;
+    anyhow::ensure!(
+        frames.len() == solvers.len(),
+        "tissue attachment count changed"
+    );
+    let mut candidate = solvers.clone();
+    let mut failure = None;
+    let mut report = IntegrationReport::default();
+    report.sampling_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let elasticity = std::time::Instant::now();
+    if let Err((index, error)) = step_regions(
+        &mut candidate,
+        frames,
+        (end_ms - start_ms) / 1000.0,
+        bevy::tasks::ComputeTaskPool::try_get().map(|pool| &**pool),
+    ) {
+        failure = Some((index, anyhow::Error::from(error)));
+    }
+    report.elasticity_ms = elasticity.elapsed().as_secs_f64() * 1000.0;
+    let collision = std::time::Instant::now();
+    if failure.is_none() {
+        match contacts.resolve(
+            solvers,
+            &mut candidate,
+            asset,
+            &old,
+            &end,
+            (end_ms - start_ms) / 1000.0,
+        ) {
+            Ok(metrics) => {
+                report.active_contact_samples = metrics.iter().map(|m| m.active_contacts).sum();
+                report.maximum_penetration_m = metrics
+                    .iter()
+                    .map(|m| m.maximum_penetration_m)
+                    .fold(0.0, f64::max);
+                report.maximum_normal_force_n = metrics.iter().map(|m| m.normal_force_n).sum();
+            }
+            Err(error) => failure = Some((0, error)),
+        }
+    }
+    report.collision_ms = collision.elapsed().as_secs_f64() * 1000.0;
+    if let Some((index, error)) = failure {
+        if depth < 6
+            && (matches!(
+                error.downcast_ref::<TissueError>(),
+                Some(TissueError::InvertedTet(_))
+            ) || error.is::<ContactUnresolved>())
+        {
+            let middle = (start_ms + end_ms) * 0.5;
+            let mut split = solvers.clone();
+            let left = integrate_interval(
+                &mut split,
+                start_ms,
+                middle,
+                depth + 1,
+                pose_at,
+                contacts,
+                asset,
+            )?;
+            let right = integrate_interval(
+                &mut split,
+                middle,
+                end_ms,
+                depth + 1,
+                pose_at,
+                contacts,
+                asset,
+            )?;
+            *solvers = split;
+            report.merge(left);
+            report.merge(right);
+            report.subdivisions += 1;
+            return Ok(report);
+        }
+        anyhow::bail!("region {index}, interval {start_ms}..{end_ms} ms, depth {depth}: {error}; prior {:?}; from {:?} to {:?}",
+            solvers[index].metrics(), solvers[index].frame(), frames[index]);
+    }
+    *solvers = candidate;
+    Ok(report)
+}]]><calls total="4"><c n="pose_at" l="297">fn pose_at( &amp;self, knots: &amp;[crate::cc_render::renderer::SkeletalPose], at: f64, ) -&gt; anyhow::Result&lt;ContactPose&gt;</c><c n="merge" l="520">fn merge(&amp;mut self, other: Self)</c><c n="step_regions" l="538">fn step_regions( trial: &amp;mut [Tissue], frames: &amp;[Frame], dt: f64, pool: Option&lt;&amp;bevy::tasks::TaskPool&gt;, ) -&gt; Result&lt;(), (usize, TissueError)&gt;</c><c n="resolve" l="116">pub fn resolve( &amp;self, original: &amp;[Tissue], candidate: &amp;mut Vec&lt;Tissue&gt;, asset: &amp;TissueAsset, old: &amp;ContactPose, end: &amp;ContactPose, dt: f64, ) -&gt; anyhow::Result&lt;Vec&lt;ContactMetrics&gt;&gt;</c></calls></b></bodies></ctx>

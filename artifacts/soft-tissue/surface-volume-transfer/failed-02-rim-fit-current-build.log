@@ -1,0 +1,186 @@
+warning: unused imports: `RegionAsset`, `SurfaceBinding`, and `VertexBinding`
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/mod.rs:11:17
+   |
+11 | pub use asset::{RegionAsset, SurfaceBinding, TissueAsset, VertexBinding};
+   |                 ^^^^^^^^^^^  ^^^^^^^^^^^^^^               ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `EmbeddedPoint`
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/mod.rs:12:35
+   |
+12 | pub use contact::{ContactMetrics, EmbeddedPoint, PlaneContact};
+   |                                   ^^^^^^^^^^^^^
+
+warning: unused imports: `TimeIntegration`, `TissueMetrics`, and `Viscosity`
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/mod.rs:13:68
+   |
+13 | pub use solver::{Attachment, Frame, Material, Tissue, TissueError, TissueMetrics, TimeIntegration, Viscosity};
+   |                                                                    ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^
+
+warning: methods `validate` and `energy` are never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/contact.rs:43:19
+   |
+42 | impl PlaneContact {
+   | ----------------- methods in this implementation
+43 |     pub(super) fn validate(&self, tetrahedra: usize) -> Result<(), TissueError> {
+   |                   ^^^^^^^^
+...
+73 |     pub(super) fn energy(&self, positions: &[DVec3], tets: &[Tet]) -> f64 {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ContactMetrics` is never constructed
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/contact.rs:81:12
+   |
+81 | pub struct ContactMetrics {
+   |            ^^^^^^^^^^^^^^
+
+warning: function `metrics` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/contact.rs:88:15
+   |
+88 | pub(super) fn metrics(
+   |               ^^^^^^^
+
+warning: method `volume_constraint` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/material.rs:81:8
+   |
+57 | impl Tet {
+   | -------- method in this implementation
+...
+81 |     fn volume_constraint(&self, positions: &[DVec3]) -> (f64, [DVec3; 4]) {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: method `interpolate` is never used
+   --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/solver.rs:106:12
+    |
+ 98 | impl Frame {
+    | ---------- method in this implementation
+...
+106 |     pub fn interpolate(self, to: Self, alpha: f64) -> Self {
+    |            ^^^^^^^^^^^
+
+warning: variant `NonlinearSolveFailed` is never constructed
+   --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/solver.rs:134:5
+    |
+124 | pub enum TissueError {
+    |          ----------- variant in this enum
+...
+134 |     NonlinearSolveFailed { force_norm_n: f64, correction_m: f64 },
+    |     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `TissueError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `rest` and `damping_degree` are never read
+   --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/solver.rs:149:5
+    |
+148 | pub struct Tissue {
+    |            ------ fields in this struct
+149 |     rest: Vec<DVec3>,
+    |     ^^^^
+...
+156 |     damping_degree: f64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `Tissue` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: multiple methods are never used
+   --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/solver.rs:305:12
+    |
+217 | impl Tissue {
+    | ----------- methods in this implementation
+...
+305 |     pub fn velocities(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^
+...
+308 |     pub fn rest_positions(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^^^^^
+...
+311 |     pub fn frame(&self) -> Frame {
+    |            ^^^^^
+...
+317 |     pub fn initialize_motion(&mut self, next_frame: Frame, dt: f64) -> Result<(), TissueError> {
+    |            ^^^^^^^^^^^^^^^^^
+...
+376 |     fn place_fixed_attachments(&self, positions: &mut [DVec3], frame: Frame) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+384 |     fn damp_strain(&self, positions: &[DVec3], velocities: &mut [DVec3], dt: f64) {
+    |        ^^^^^^^^^^^
+...
+402 |     pub fn step(&mut self, dt: f64, frame: Frame, gravity: DVec3) -> Result<(), TissueError> {
+    |            ^^^^
+...
+409 |     pub fn step_with_contacts(
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `solve_implicit` is never used
+   --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/implicit.rs:363:19
+    |
+130 | impl Tissue {
+    | ----------- method in this implementation
+...
+363 |     pub(super) fn solve_implicit(
+    |                   ^^^^^^^^^^^^^^
+
+warning: fields `positions`, `velocities`, and `dt` are never read
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/timestep.rs:16:9
+   |
+15 | pub(super) struct History {
+   |                   ------- fields in this struct
+16 |     pub positions: Vec<DVec3>,
+   |         ^^^^^^^^^
+17 |     pub velocities: Vec<DVec3>,
+   |         ^^^^^^^^^^
+18 |     pub dt: f64,
+   |         ^^
+   |
+   = note: `History` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: method `energy` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/timestep.rs:28:12
+   |
+27 | impl EdgeDamping {
+   | ---------------- method in this implementation
+28 |     pub fn energy(&self, x: &[DVec3]) -> f64 {
+   |            ^^^^^^
+
+warning: struct `IntegrationStep` is never constructed
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/timestep.rs:34:19
+   |
+34 | pub(super) struct IntegrationStep {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: method `energy` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/timestep.rs:48:12
+   |
+47 | impl Dissipation {
+   | ---------------- method in this implementation
+48 |     pub fn energy(&self, x: &[DVec3], tets: &[Tet]) -> f64 {
+   |            ^^^^^^
+
+warning: associated function `new` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/timestep.rs:59:12
+   |
+58 | impl IntegrationStep {
+   | -------------------- associated function in this implementation
+59 |     pub fn new(tissue: &Tissue, interval: f64, gravity: DVec3) -> Self {
+   |            ^^^
+
+warning: function `isochoric_green` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/viscosity.rs:26:15
+   |
+26 | pub(super) fn isochoric_green(f: DMat3) -> DMat3 {
+   |               ^^^^^^^^^^^^^^^
+
+warning: method `energy` is never used
+  --> /tmp/tissue-surface-fit-tscivbb1/soft_tissue/viscosity.rs:47:12
+   |
+46 | impl Element {
+   | ------------ method in this implementation
+47 |     pub fn energy(&self, tet: &Tet, x: &[DVec3]) -> f64 {
+   |            ^^^^^^
+
+warning: 19 warnings emitted
+

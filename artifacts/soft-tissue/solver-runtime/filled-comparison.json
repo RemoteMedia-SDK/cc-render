@@ -1,0 +1,31 @@
+{
+  "variants": [
+    {
+      "variant": "restart-opt3-01",
+      "solve_seconds": 17.57117982,
+      "cg_iterations": 1428408,
+      "linear_solves": 18132,
+      "maximum_true_relative_residual": 9.99995779861456e-10,
+      "maximum_node_difference_mm": 0.0
+    },
+    {
+      "variant": "filled-opt3-01",
+      "solve_seconds": 17.231525389,
+      "cg_iterations": 962172,
+      "linear_solves": 18132,
+      "maximum_true_relative_residual": 9.9998466224249e-10,
+      "maximum_node_difference_mm": 1.2538585058534396e-08
+    },
+    {
+      "variant": "filled-lowshift-opt3-01",
+      "solve_seconds": 17.239493459,
+      "cg_iterations": 927951,
+      "linear_solves": 18132,
+      "maximum_true_relative_residual": 9.9998466224249e-10,
+      "maximum_node_difference_mm": 1.2550963780550844e-08
+    }
+  ],
+  "decision": "Retain current preconditioner. Additional fill lowers CG iterations but gives only about 2 percent total improvement in these single shared-host runs; this does not justify a production change.",
+  "production_code_changed": false,
+  "limitations": "Isolated sequential CPU kernel. No full-renderer throughput claim. Compiler optimization alone reduced this workload from 22.13 to 17.57 seconds with byte-identical node trajectories."
+}

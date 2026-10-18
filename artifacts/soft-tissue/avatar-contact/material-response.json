@@ -1,0 +1,51 @@
+{
+  "asset_sha256": "47bf193e8ae3fea176bf855daa574560fb10ee395b9bb5e0acf70a47bc0bb529",
+  "scope": "Analytical small-strain linearization of the implemented homogeneous Kelvin-Voigt material; not measured anatomical response or a calibration fit.",
+  "shear_storage_pa": 1500.0,
+  "shear_viscosity_pa_s": 15.0,
+  "young_modulus_pa": 4495.504495504496,
+  "poisson_ratio": 0.4985014985014985,
+  "shear_retardation_s": 0.01,
+  "samples": [
+    {
+      "frequency_hz": 0.2,
+      "shear_loss_pa": 18.84955592153876,
+      "loss_to_storage_ratio": 0.012566370614359173
+    },
+    {
+      "frequency_hz": 1,
+      "shear_loss_pa": 94.24777960769379,
+      "loss_to_storage_ratio": 0.06283185307179585
+    },
+    {
+      "frequency_hz": 2,
+      "shear_loss_pa": 188.49555921538757,
+      "loss_to_storage_ratio": 0.1256637061435917
+    },
+    {
+      "frequency_hz": 5,
+      "shear_loss_pa": 471.23889803846896,
+      "loss_to_storage_ratio": 0.3141592653589793
+    },
+    {
+      "frequency_hz": 10,
+      "shear_loss_pa": 942.4777960769379,
+      "loss_to_storage_ratio": 0.6283185307179586
+    }
+  ],
+  "literature_frequency_windows_hz": {
+    "Sridhar_Insana_2007": [
+      0.0015915494309189536,
+      0.15915494309189535
+    ],
+    "Kumar_et_al_2018": [
+      50,
+      400
+    ]
+  },
+  "sources": [
+    "https://ws.engr.illinois.edu/blogs/getfile/151/30849",
+    "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0205717"
+  ],
+  "interpretation": "The cited studies concern different loading, frequency and observation regimes. Neither directly calibrates the current jump response. No material values were changed."
+}

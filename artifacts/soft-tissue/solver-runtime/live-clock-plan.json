@@ -1,0 +1,28 @@
+{
+  "clock": "live",
+  "fps": 30,
+  "tissue_hz": 120,
+  "motion": "lab-jump-01 unchanged packets; 500 ms bounded prefetch",
+  "runs": [
+    {
+      "name": "live-on-01",
+      "tissue": true
+    },
+    {
+      "name": "live-off-01",
+      "tissue": false
+    },
+    {
+      "name": "live-on-02",
+      "tissue": true
+    }
+  ],
+  "measures": [
+    "GPU-correlated body/tissue timestamps",
+    "source and consumer frame gaps",
+    "source span versus elapsed wall time",
+    "source packet and skinning fidelity"
+  ],
+  "acceptance_scope": "Local renderer with prerecorded semantic ARDY motion; excludes live generation, speech, network and client presentation.",
+  "failure_policy": "Preserve every run; no source timing or pose repair."
+}

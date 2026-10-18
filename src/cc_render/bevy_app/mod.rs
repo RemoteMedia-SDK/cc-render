@@ -10,6 +10,11 @@ pub(super) mod overrides;
 pub(super) mod pose;
 pub(crate) mod twist;
 mod skinning;
+mod tissue;
+mod tissue_collision;
+mod tissue_motion;
+mod tissue_morph;
+mod tissue_surface;
 mod visibility;
 mod environment;
 mod mechanisms;
@@ -125,10 +130,12 @@ struct SceneReadiness<'w, 's> {
     lightmaps: Query<'w, 's, (&'static Name, &'static bevy::pbr::Lightmap)>,
     mechanisms: Option<Res<'w, mechanisms::MechanismReadiness>>,
     cloth: Option<Res<'w, cloth::ClothReadiness>>,
+    tissue: Option<Res<'w, tissue::TissueReadiness>>,
 }
 
 impl SceneReadiness<'_, '_> {
     fn environment_loaded(&self, assets: &AssetServer) -> bool {
+        if self.tissue.as_ref().is_some_and(|t| !t.ready) { return false; }
         let Some(package) = &self.package else { return true };
         if self.mechanisms.as_ref().is_some_and(|m| !m.ready(package)) { return false; }
         if self.cloth.as_ref().is_some_and(|c| !c.ready(package)) { return false; }
@@ -306,6 +313,8 @@ fn forward_frames(rx: Res<FrameBridgeRx>, sink: Res<FrameSinkTx>, mut count: Loc
             width: c.width,
             height: c.height,
             pts_ms: c.pts_ms,
+            body_pts_ms: c.body_pts_ms,
+            tissue_pts_ms: c.tissue_pts_ms,
         });
     }
 }
@@ -495,6 +504,7 @@ pub(super) fn run(
     .add_plugins(ScheduleRunnerPlugin::run_loop(tick))
     .add_plugins(ExtractResourcePlugin::<capture::CaptureTarget>::default())
     .add_plugins(ExtractResourcePlugin::<LastAppliedPts>::default())
+    .add_plugins(ExtractResourcePlugin::<capture::TissueFramePts>::default())
     .insert_resource(DirectionalLightShadowMap { size: 4096 })
     .insert_resource(GlbAsset {
         filename: glb_filename,
@@ -613,6 +623,11 @@ pub(super) fn run(
         environment::install(&mut app, package);
     }
     app.init_resource::<super::office::timeline::PoseTimeline>();
+    capture::install_body_clock(&mut app, config.offline_frame_step);
+    if let Err(error) = tissue::install(&mut app, &config.glb_path) {
+        tracing::error!(%error, "volumetric tissue setup failed");
+        return;
+    }
     if let Some(mut phys) = config.physics.clone() {
         let office_enabled = packaged || std::env::var("CC_OFFICE").as_deref() == Ok("1");
         if office_enabled {

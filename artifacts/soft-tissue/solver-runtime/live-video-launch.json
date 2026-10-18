@@ -1,0 +1,25 @@
+{
+  "purpose": "One full-image live-clock capture; preserve all frames and source packets. Timing is separate from trace-only runs.",
+  "argv": [
+    "target/debug/examples/tissue_lab",
+    "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+    "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+    "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+    "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+    "front",
+    "artifacts/soft-tissue/lab-front-live-video-01"
+  ],
+  "environment": {
+    "CC_RENDER_FAST": "0",
+    "CC_AVATAR_TISSUE_HZ": "120",
+    "CC_TISSUE_LAB_FPS": "30",
+    "CC_TISSUE_LAB_CLOCK": "live",
+    "CC_TISSUE_LAB_TRACE_ONLY": "0",
+    "RUST_LOG": "info"
+  },
+  "binary_sha256": "fdb3ad88047de750109ddc3842b2853eb500b5636300c6bfe22013462b0eb9ab",
+  "started_unix": 1792284655.003125,
+  "pid": 1488458,
+  "exit_code": 0,
+  "completed_unix": 1792284670.4060302
+}

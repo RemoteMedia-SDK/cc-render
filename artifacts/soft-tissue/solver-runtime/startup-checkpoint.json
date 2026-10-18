@@ -1,0 +1,50 @@
+{
+  "status": "opt-in prototype; goal remains active",
+  "change": "Initialize tissue at first observed source timestamp; support 30 or 60 FPS in isolated studio lab.",
+  "source_manifest": "startup-inputs.json",
+  "matching_source_binary_asset_and_packet_hashes": 165,
+  "rust_tissue_tests": {
+    "passed": 60,
+    "failed": 0,
+    "log": "startup-tests.log"
+  },
+  "python_tests": {
+    "passed": 8,
+    "failed": 1,
+    "log": "startup-python-tests.log",
+    "existing_failure": "test_root_acceptance_does_not_rewrite_the_candidate; source slice extends into remember_homes"
+  },
+  "quality": {
+    "major_gating_findings": 8,
+    "clean": false,
+    "evidence": "startup-quality.xml",
+    "revision": "ea65ebb68+dirty"
+  },
+  "gpu_audit": "startup-cadence-comparison.json",
+  "sixty_fps_regression": "All 478 source timestamps and traced physics values identical after excluding performance timers.",
+  "thirty_fps_results": "Both 120 and 240 Hz complete 240 frames, all 160 unchanged packets, final source timestamp 8000 ms.",
+  "failed_attempt_preserved": "../lab-front-opt3-30fps-240hz-01",
+  "review_page": "../temporal-integration/index.html",
+  "review_static_links_checked": 34,
+  "remaining": [
+    "Material calibration and visual acceptance",
+    "Actual-avatar active contact validation",
+    "Interactive runtime performance",
+    "Paused facial/body-clock policy",
+    "Final code and integration audit"
+  ],
+  "unchanged": [
+    "Body/root motion",
+    "Arm pose and camera",
+    "Material coefficients",
+    "Production default build and tissue enablement",
+    "Other worktrees"
+  ],
+  "artifacts": {
+    "artifacts/soft-tissue/solver-runtime/startup-cadence-comparison.json": "1c89951b0debcfd77e180f4f4f6d98c8d237a7d9010950653201549deab7cb08",
+    "artifacts/soft-tissue/solver-runtime/startup_cadence_audit.py": "a76c74174fd6c529292c908c00dfa958bf440d77eb29485eb90006639f4b2996",
+    "artifacts/soft-tissue/solver-runtime/startup-quality.xml": "fcdec63b022e25701b8c3815405bf46307733d17b2528657404b55e0697b0450",
+    "artifacts/soft-tissue/temporal-integration/index.html": "48b399fead32d3c0afe81d6f66fa0718e6bfbe895a58969e9157121ae17db17d",
+    "docs/design/breast-soft-tissue.md": "bd234e239be9b6873bdfadaf900d7e7bd0706d2a102cd948ae184b5a18c4ea41"
+  }
+}

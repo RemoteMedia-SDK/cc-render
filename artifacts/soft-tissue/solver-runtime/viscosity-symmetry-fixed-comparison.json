@@ -1,0 +1,75 @@
+{
+  "before": {
+    "directory": "lab-front-nonlinear-strict-fixed-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 16.19013936
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 5481.301442999999,
+    "playback_capture_seconds": 10.707755146,
+    "playback_wall_over_source": 1.3468874397484276,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      21.074370000000272,
+      33.92277600000015,
+      56.89384259999962,
+      131.72371300000032
+    ],
+    "stage_seconds": {
+      "sampling": 2.0753218959999993,
+      "elasticity": 6.373757913999996,
+      "collision": 0.7522692049999993
+    },
+    "peak_surface_displacement_mm": 37.87859156727791,
+    "minimum_element_volume_ratio": 0.8556109607309785,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "after": {
+    "directory": "lab-front-viscosity-symmetry-fixed-trace-01",
+    "output_fps": 60,
+    "tissue_hz": 240,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 22.674898982
+    },
+    "first_source_ms": 50,
+    "source_span_seconds": 7.95,
+    "first_frame_wall_ms": 6800.362502999999,
+    "playback_capture_seconds": 15.873429019,
+    "playback_wall_over_source": 1.9966577382389936,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      30.64399500000036,
+      57.96604199999856,
+      75.79025624000099,
+      174.60016299999916
+    ],
+    "stage_seconds": {
+      "sampling": 3.0794225320000015,
+      "elasticity": 9.097489014999995,
+      "collision": 1.2864332200000008
+    },
+    "peak_surface_displacement_mm": 37.87859156727791,
+    "minimum_element_volume_ratio": 0.8556109607309785,
+    "maximum_skin_error_mm": 0.001970167946824451,
+    "maximum_active_contact_samples": 0
+  },
+  "physics": {
+    "common_source_timestamps": 478,
+    "identical_traced_physics_and_source": true,
+    "maximum_surface_envelope_difference_mm": 0.0,
+    "maximum_centroid_offset_difference_mm": 0.0
+  },
+  "limitations": "Single fixed-clock trace-only GPU captures on a shared host. The baseline overlapped a single bedding test; this is not a controlled live-deadline result."
+}

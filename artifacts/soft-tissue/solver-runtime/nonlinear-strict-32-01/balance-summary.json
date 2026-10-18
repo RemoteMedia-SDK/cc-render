@@ -1,0 +1,71 @@
+{
+  "accepted_nonlinear_solves": 3829,
+  "met_both_limits": 3829,
+  "force_norm_n_p50_p95_p99_max": [
+    4.0640517388294185e-05,
+    9.09790775155529e-05,
+    9.727589334198403e-05,
+    9.988823732250159e-05
+  ],
+  "remaining_correction_um_p50_p95_p99_max": [
+    0.014122284967247814,
+    0.04544717640517903,
+    0.0671717604824279,
+    0.09363318551511779
+  ],
+  "linear_solves": 19567,
+  "true_relative_residual": {
+    "above_1e_minus_7": 0,
+    "above_1e_minus_9": 0,
+    "count": 19567,
+    "maximum": 2.0003785200712483e-11,
+    "median": 1.7459777544518345e-13,
+    "p95": 1.4098422076577582e-12
+  },
+  "run": {
+    "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+    "metrics": [
+      {
+        "elastic_energy_j": 0.02820909737925368,
+        "kinetic_energy_j": 0.46309474412042845,
+        "mass_kg": 0.7092840233607869,
+        "maximum_speed_m_s": 1.2626042381999165,
+        "maximum_volume_ratio": 1.0314282542167186,
+        "minimum_volume_ratio": 0.9545492960711257
+      },
+      {
+        "elastic_energy_j": 0.028966392376789354,
+        "kinetic_energy_j": 0.4620493647401798,
+        "mass_kg": 0.7034397124915243,
+        "maximum_speed_m_s": 1.2700108505308632,
+        "maximum_volume_ratio": 1.0401062341622576,
+        "minimum_volume_ratio": 0.9761885316932444
+      }
+    ],
+    "rate_hz": 240,
+    "regions": 2,
+    "solve_seconds": 13.113835489,
+    "source_start_ms": 50.0,
+    "steps": 1908,
+    "subdivisions": 13,
+    "wall_seconds": 13.144060867
+  },
+  "comparison": {
+    "nonlinear-balance-8-01": {
+      "node_difference_mm_p50_p95_p99_max": [
+        8.570804993246924e-06,
+        0.03186841223698635,
+        0.10469097340168639,
+        1.7909758766112196
+      ]
+    },
+    "nonlinear-balance-32-01": {
+      "node_difference_mm_p50_p95_p99_max": [
+        4.828488605203358e-08,
+        0.031221831576091628,
+        0.10108125916392538,
+        0.9280305735692356
+      ]
+    }
+  }
+}

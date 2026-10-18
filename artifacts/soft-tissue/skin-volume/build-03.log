@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/tetgen/pytetgen.py", line 608, in tetrahedralize
+    self.node, self.elem = _tetgen.Tetrahedralize(
+                           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "tetgen/cython/tetgen/_tetgen.pyx", line 469, in tetgen._tetgen.Tetrahedralize
+RuntimeError: Unknown exception
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 141, in <module>
+    print(json.dumps(build(args.avatar, args.material_asset, args.output), indent=2))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 116, in build
+    nodes, cells, fixed, shell, report = close_and_mesh(patch)
+                                         ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 89, in close_and_mesh
+    nodes, cells = mesher.tetrahedralize(quality=True, minratio=1.8, nobisect=True, quiet=True)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/tetgen/pytetgen.py", line 699, in tetrahedralize
+    raise RuntimeError(
+RuntimeError: Failed to tetrahedralize.
+May need to repair surface by making it manifold:
+Unknown exception

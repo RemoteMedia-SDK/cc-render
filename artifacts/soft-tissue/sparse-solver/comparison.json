@@ -1,0 +1,14 @@
+{
+  "benchmark": "Both actual fitted cages, 720 steps each, 120Hz, two nonlinear passes, bulk 500000Pa; first three seconds stationary, final three seconds analytic translation and rotation. Numerical fixture, not model motion or rendered acceptance.",
+  "reference_seconds": 9.022172124,
+  "candidate_seconds": 4.159045683,
+  "max_node_difference_m": 2.9702043913007302e-08,
+  "limits": [
+    "Single paired timing run with other compilation activity on host; not a statistical latency guarantee.",
+    "Same 128 CG iteration cap and relative tolerance; this change does not fix linear convergence.",
+    "Full renderer capture has separate timing and visual gates."
+  ],
+  "speedup": 2.1692890176412134,
+  "reference_implicit_sha256": "783de8c6285a23135757f55105204de51ebfb7537277a6a63d95c6258f66e18a",
+  "sparse_implicit_sha256": "b6885f98495ab32404700cd2eb6d637b23e9613d39154309097eb251d00feae4"
+}

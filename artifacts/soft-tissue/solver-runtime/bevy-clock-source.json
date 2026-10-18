@@ -1,0 +1,15 @@
+{
+  "versions": {
+    "bevy_time": "0.15.3",
+    "bevy_render": "0.15.3",
+    "bevy_app": "0.15.3"
+  },
+  "files": {
+    "bevy_time-0.15.3/src/lib.rs": "70f25937d4d4ceee0e4fb8b88daa2e7f23066cff3b0d9a5f3384a8de9b7c250b",
+    "bevy_time-0.15.3/src/real.rs": "6f49fc3a8b7709ef4cda6b91cf677e6500f9901e0c050962a686120b6898b7c9",
+    "bevy_render-0.15.3/src/renderer/mod.rs": "ebd8a6ffc964cc12006847522b81753f1ed44b1de2509da07d5310292e39ab74",
+    "bevy_render-0.15.3/src/pipelined_rendering.rs": "2f779dce0c92c9b8c33fb77492321e90bf110748a7eedcc947f0875105f3768c",
+    "bevy_app-0.15.3/src/schedule_runner.rs": "b409a2434b40c252a1da71615c611b41d1845142554fe6c6f8a7b9ee47af1f5a"
+  },
+  "finding": "TimeUpdateStrategy::Automatic consumes a queued render-thread Instant; renderer sends it after rendering; ScheduleRunner paces main app updates. Main-clock test preserves elapsed wall time instead of delayed completion timestamps."
+}

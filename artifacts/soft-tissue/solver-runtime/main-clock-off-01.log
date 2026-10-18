@@ -1,0 +1,934 @@
+2026-10-18T01:21:37.856176Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Linux 24.04 Ubuntu", kernel: "6.8.0-147-generic", cpu: "AMD Ryzen 9 7950X 16-Core Processor", core_count: "16", memory: "62.5 GiB" }
+2026-10-18T01:21:37.885322Z  WARN wgpu_hal::vulkan::instance: InstanceFlags::VALIDATION requested, but unable to find layer: VK_LAYER_KHRONOS_validation
+2026-10-18T01:21:37.885357Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Searching for implicit layer manifest files
+2026-10-18T01:21:37.885365Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885373Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   In following locations:
+2026-10-18T01:21:37.885375Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885376Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.config/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885378Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885380Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/xdg-ubuntu/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885381Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885383Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885384Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885386Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885388Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885389Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885391Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885393Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/ubuntu/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885395Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885396Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/gnome/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885398Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885400Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885406Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885409Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885410Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885412Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/local/share/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885414Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885415Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885417Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885418Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/snapd/desktop/vulkan/implicit_layer.d
+2026-10-18T01:21:37.885420Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885462Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   Found the following files:
+2026-10-18T01:21:37.885470Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885472Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/implicit_layer.d/nvidia_layers.json
+2026-10-18T01:21:37.885474Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885475Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json
+2026-10-18T01:21:37.885477Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885479Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json
+2026-10-18T01:21:37.885480Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885482Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json
+2026-10-18T01:21:37.885484Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885485Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json
+2026-10-18T01:21:37.885487Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885489Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+2026-10-18T01:21:37.885490Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885502Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /etc/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+2026-10-18T01:21:37.885504Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885519Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json (file version 1.0.0)
+2026-10-18T01:21:37.885521Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885531Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json (file version 1.0.0)
+2026-10-18T01:21:37.885533Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885544Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json (file version 1.0.0)
+2026-10-18T01:21:37.885546Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885557Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /home/acidhax/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json (file version 1.0.0)
+2026-10-18T01:21:37.885559Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885570Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json (file version 1.0.0)
+2026-10-18T01:21:37.885572Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885579Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Searching for explicit layer manifest files
+2026-10-18T01:21:37.885581Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885584Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   In following locations:
+2026-10-18T01:21:37.885586Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885588Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.config/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885589Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885591Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/xdg-ubuntu/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885592Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885594Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885596Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885597Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885599Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885600Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885602Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885604Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/ubuntu/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885605Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885607Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/gnome/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885608Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885610Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885612Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885613Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885615Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885616Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/local/share/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885618Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885620Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885621Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885623Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/snapd/desktop/vulkan/explicit_layer.d
+2026-10-18T01:21:37.885624Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885654Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   Found the following files:
+2026-10-18T01:21:37.885655Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885657Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/explicit_layer.d/VkLayer_INTEL_nullhw.json
+2026-10-18T01:21:37.885659Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885660Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_overlay.json
+2026-10-18T01:21:37.885664Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885673Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_INTEL_nullhw.json (file version 1.0.0)
+2026-10-18T01:21:37.885674Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885684Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_overlay.json (file version 1.0.0)
+2026-10-18T01:21:37.885686Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885691Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Searching for driver manifest files
+2026-10-18T01:21:37.885693Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885694Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   In following locations:
+2026-10-18T01:21:37.885696Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885697Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.config/vulkan/icd.d
+2026-10-18T01:21:37.885699Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885701Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/xdg-ubuntu/vulkan/icd.d
+2026-10-18T01:21:37.885702Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885704Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/xdg/vulkan/icd.d
+2026-10-18T01:21:37.885705Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885707Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/icd.d
+2026-10-18T01:21:37.885708Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885710Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/vulkan/icd.d
+2026-10-18T01:21:37.885712Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885713Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/ubuntu/vulkan/icd.d
+2026-10-18T01:21:37.885715Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885716Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/gnome/vulkan/icd.d
+2026-10-18T01:21:37.885718Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885719Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /home/acidhax/.local/share/flatpak/exports/share/vulkan/icd.d
+2026-10-18T01:21:37.885721Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885723Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/flatpak/exports/share/vulkan/icd.d
+2026-10-18T01:21:37.885724Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885726Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/local/share/vulkan/icd.d
+2026-10-18T01:21:37.885727Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885729Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d
+2026-10-18T01:21:37.885730Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885734Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /var/lib/snapd/desktop/vulkan/icd.d
+2026-10-18T01:21:37.885735Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885773Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   Found the following files:
+2026-10-18T01:21:37.885775Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885776Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /etc/vulkan/icd.d/nvidia_icd.json
+2026-10-18T01:21:37.885778Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885779Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/nouveau_icd.json
+2026-10-18T01:21:37.885781Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885783Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/lvp_icd.json
+2026-10-18T01:21:37.885784Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885786Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/virtio_icd.json
+2026-10-18T01:21:37.885787Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885789Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/intel_icd.json
+2026-10-18T01:21:37.885790Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885792Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/gfxstream_vk_icd.json
+2026-10-18T01:21:37.885794Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885795Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/radeon_icd.json
+2026-10-18T01:21:37.885797Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885798Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/intel_hasvk_icd.json
+2026-10-18T01:21:37.885800Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885801Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	      /usr/share/vulkan/icd.d/asahi_icd.json
+2026-10-18T01:21:37.885803Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885811Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /etc/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+2026-10-18T01:21:37.885813Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885825Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/nouveau_icd.json, version 1.0.1
+2026-10-18T01:21:37.885827Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885836Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/lvp_icd.json, version 1.0.1
+2026-10-18T01:21:37.885838Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885848Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/virtio_icd.json, version 1.0.1
+2026-10-18T01:21:37.885850Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885859Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/intel_icd.json, version 1.0.1
+2026-10-18T01:21:37.885863Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885872Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/gfxstream_vk_icd.json, version 1.0.1
+2026-10-18T01:21:37.885874Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885883Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/radeon_icd.json, version 1.0.1
+2026-10-18T01:21:37.885885Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885895Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/intel_hasvk_icd.json, version 1.0.1
+2026-10-18T01:21:37.885896Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.885906Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Found ICD manifest file /usr/share/vulkan/icd.d/asahi_icd.json, version 1.0.1
+2026-10-18T01:21:37.885908Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886312Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Insert instance layer "VK_LAYER_MESA_device_select" (libVkLayer_MESA_device_select.so)
+2026-10-18T01:21:37.886316Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886320Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	vkCreateInstance layer callstack setup to:
+2026-10-18T01:21:37.886322Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886323Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Application>
+2026-10-18T01:21:37.886325Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886326Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-18T01:21:37.886328Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886329Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Loader>
+2026-10-18T01:21:37.886331Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886332Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-18T01:21:37.886334Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886335Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   VK_LAYER_MESA_device_select
+2026-10-18T01:21:37.886337Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886339Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           Type: Implicit
+2026-10-18T01:21:37.886340Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886342Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	               Disable Env Var:  NODEVICE_SELECT
+2026-10-18T01:21:37.886344Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886345Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           Manifest: /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+2026-10-18T01:21:37.886347Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886349Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           Library:  libVkLayer_MESA_device_select.so
+2026-10-18T01:21:37.886350Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886354Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-18T01:21:37.886356Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.886358Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Drivers>
+2026-10-18T01:21:37.886359Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.932217Z  INFO wgpu_hal::vulkan::instance: Enabling debug utils
+2026-10-18T01:21:37.940299Z  INFO wgpu_hal::gles::egl: Using X11 platform
+2026-10-18T01:21:37.951138Z  WARN wgpu_hal::gles::egl: No config found!
+2026-10-18T01:21:37.951156Z  WARN wgpu_hal::gles::egl: EGL says it can present to the window but not natively
+2026-10-18T01:21:37.973447Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-18T01:21:37.973466Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973469Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-18T01:21:37.973471Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973484Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-18T01:21:37.973486Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973515Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.973517Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973539Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.973540Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973544Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-18T01:21:37.973546Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973548Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.973549Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973551Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.973553Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973554Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-18T01:21:37.973556Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973565Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-18T01:21:37.973567Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973569Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-18T01:21:37.973570Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973576Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-18T01:21:37.973578Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973582Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.973584Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973593Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.973595Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973597Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-18T01:21:37.973598Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973600Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.973602Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973603Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.973605Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.973607Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-18T01:21:37.973608Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974128Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-18T01:21:37.974132Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974134Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-18T01:21:37.974135Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974144Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-18T01:21:37.974145Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974151Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.974152Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974156Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.974158Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974160Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-18T01:21:37.974161Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974163Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.974165Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974166Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.974168Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974170Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-18T01:21:37.974171Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974175Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	linux_read_sorted_physical_devices:
+2026-10-18T01:21:37.974176Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974178Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Original order:
+2026-10-18T01:21:37.974180Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974184Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] llvmpipe (LLVM 20.1.2, 256 bits)
+2026-10-18T01:21:37.974189Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974193Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.974194Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974198Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] NVIDIA GeForce RTX 4090
+2026-10-18T01:21:37.974200Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974202Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     Sorted order:
+2026-10-18T01:21:37.974203Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974205Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [0] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.974207Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974208Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [1] NVIDIA GeForce RTX 4090  
+2026-10-18T01:21:37.974210Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:37.974212Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	           [2] llvmpipe (LLVM 20.1.2, 256 bits)  
+2026-10-18T01:21:37.974213Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017639Z  WARN wgpu_hal::gles::adapter: Max vertex attribute stride unknown. Assuming it is 2048
+2026-10-18T01:21:38.017674Z  INFO wgpu_core::instance: Adapter AdapterInfo { name: "NVIDIA GeForce RTX 4090", vendor: 4318, device: 9860, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "595.71.05", backend: Vulkan }
+2026-10-18T01:21:38.017710Z  INFO bevy_render::renderer: AdapterInfo { name: "NVIDIA GeForce RTX 4090", vendor: 4318, device: 9860, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "595.71.05", backend: Vulkan }
+2026-10-18T01:21:38.017866Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+2026-10-18T01:21:38.017869Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017871Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	vkCreateDevice layer callstack setup to:
+2026-10-18T01:21:38.017873Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017874Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Application>
+2026-10-18T01:21:38.017876Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017877Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-18T01:21:38.017879Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017880Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Loader>
+2026-10-18T01:21:38.017882Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017883Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	     ||
+2026-10-18T01:21:38.017885Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017886Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	   <Device>
+2026-10-18T01:21:38.017888Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.017990Z  INFO wgpu_hal::vulkan::instance: GENERAL [Loader Message (0x0)]
+	       Using "NVIDIA GeForce RTX 4090" with driver: "libGLX_nvidia.so.0"
+2026-10-18T01:21:38.017996Z  INFO wgpu_hal::vulkan::instance: 	objects: (type: INSTANCE, hndl: 0x7998b80ad7f0, name: ?)
+2026-10-18T01:21:38.160281Z  INFO gilrs_core::platform::platform::gamepad: Gamepad /dev/input/event10 (       MonsGeek Keyboard System Control) connected.
+2026-10-18T01:21:38.160380Z  WARN gilrs::gamepad: No mapping found for UUID 03000000-5131-0000-2950-000011010000
+	Default mapping will be used.
+2026-10-18T01:21:38.213446Z  INFO cc_render: physics: loaded sidecar "artifacts/soft-tissue/lab-front-main-clock-off-01/physics.json"
+2026-10-18T01:21:38.214745Z ERROR bevy_asset::server: Path not found: /home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/env/pisa_diffuse_rgb9e5_zstd.ktx2
+2026-10-18T01:21:38.214758Z ERROR bevy_asset::server: Path not found: /home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/env/pisa_specular_rgb9e5_zstd.ktx2
+2026-10-18T01:21:38.214942Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":0.0,"real_elapsed_ms":0.0,"selected_instant_age_ms":0.00798,"wall_elapsed_ms":360.045131}
+2026-10-18T01:21:38.215569Z  INFO bevy_input::gamepad: Gamepad 2v1#4294967298 connected.
+2026-10-18T01:21:38.215982Z  INFO cc_render: apply_arkit_pose tick #1: morph=0 morph_only=0 mesh_no_morph=1 all_mesh=1 named=5 proto_layout=0 avatar_parts=[<none>] scene_roots=[Scene[beautiful_assistant.smpl_aligned.glb#Scene0] in_assets=false state=Some("Loading")]
+2026-10-18T01:21:38.216002Z  INFO cc_render: arkit_map: 52 keys: [browDownLeft,browDownRight,browInnerUp,browOuterUpLeft,browOuterUpRight,cheekPuff,cheekSquintLeft,cheekSquintRight,eyeBlinkLeft,eyeBlinkRight,eyeLookDownLeft,eyeLookDownRight,eyeLookInLeft,eyeLookInRight,eyeLookOutLeft,eyeLookOutRight,eyeLookUpLeft,eyeLookUpRight,eyeSquintLeft,eyeSquintRight]
+2026-10-18T01:21:38.216010Z  INFO cc_render:   arkit_map['jawOpen'] -> [CC_Base_Body|CC_Base_TearLine|CC_Base_EyeOcclusion::Jaw_Open*1.00]
+2026-10-18T01:21:38.216014Z  INFO cc_render:   arkit_map['JawOpen'] -> NOT FOUND
+2026-10-18T01:21:38.216018Z  INFO cc_render:   arkit_map['mouthClose'] -> [CC_Base_Body::Mouth_Lips_Together_DL*1.00, CC_Base_Body::Mouth_Lips_Together_DR*1.00, CC_Base_Body::Mouth_Lips_Together_UL*1.00, CC_Base_Body::Mouth_Lips_Together_UR*1.00]
+2026-10-18T01:21:38.216022Z  INFO cc_render:   arkit_map['eyeBlinkLeft'] -> [CC_Base_Body|CC_Base_TearLine|CC_Base_EyeOcclusion::Eye_Blink_L*1.00]
+2026-10-18T01:21:38.246525Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":31.576665,"real_elapsed_ms":31.576665,"selected_instant_age_ms":0.01008,"wall_elapsed_ms":391.623896}
+2026-10-18T01:21:38.292541Z  INFO naga::back::spv::writer: Skip function Some("sample_input_3x3_tent")
+2026-10-18T01:21:38.305291Z  INFO cc_render: [render-app] tick #1: capturing 720×900 (first frame)
+2026-10-18T01:21:38.312034Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":65.508252,"real_elapsed_ms":97.084917,"selected_instant_age_ms":0.01257,"wall_elapsed_ms":457.134638}
+2026-10-18T01:21:38.345428Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.396856,"real_elapsed_ms":130.481773,"selected_instant_age_ms":0.00963,"wall_elapsed_ms":490.528554}
+2026-10-18T01:21:38.378838Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389786,"real_elapsed_ms":163.871559,"selected_instant_age_ms":0.0237,"wall_elapsed_ms":523.93241}
+2026-10-18T01:21:38.412189Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.374525000000006,"real_elapsed_ms":197.246084,"selected_instant_age_ms":0.00684,"wall_elapsed_ms":557.290075}
+2026-10-18T01:21:38.445583Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387736000000004,"real_elapsed_ms":230.63382,"selected_instant_age_ms":0.01138,"wall_elapsed_ms":590.682351}
+2026-10-18T01:21:38.478981Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.393376,"real_elapsed_ms":264.027196,"selected_instant_age_ms":0.01487,"wall_elapsed_ms":624.079217}
+2026-10-18T01:21:38.512352Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.370976,"real_elapsed_ms":297.398172,"selected_instant_age_ms":0.01235,"wall_elapsed_ms":657.447673}
+2026-10-18T01:21:38.545746Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384766000000006,"real_elapsed_ms":330.782938,"selected_instant_age_ms":0.02293,"wall_elapsed_ms":690.843019}
+2026-10-18T01:21:38.579122Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385376,"real_elapsed_ms":364.168314,"selected_instant_age_ms":0.018510000000000002,"wall_elapsed_ms":724.223975}
+2026-10-18T01:21:38.612480Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.371856,"real_elapsed_ms":397.54017000000005,"selected_instant_age_ms":0.0053,"wall_elapsed_ms":757.5826209999999}
+2026-10-18T01:21:38.645877Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.393226,"real_elapsed_ms":430.933396,"selected_instant_age_ms":0.00851,"wall_elapsed_ms":790.979057}
+2026-10-18T01:21:38.679260Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385736,"real_elapsed_ms":464.319132,"selected_instant_age_ms":0.0039700000000000004,"wall_elapsed_ms":824.3602530000001}
+2026-10-18T01:21:38.712636Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.377416,"real_elapsed_ms":497.696548,"selected_instant_age_ms":0.00505,"wall_elapsed_ms":857.738749}
+2026-10-18T01:21:38.746025Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.382896,"real_elapsed_ms":531.079444,"selected_instant_age_ms":0.01078,"wall_elapsed_ms":891.127375}
+2026-10-18T01:21:38.779409Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.383666,"real_elapsed_ms":564.46311,"selected_instant_age_ms":0.01141,"wall_elapsed_ms":924.511671}
+2026-10-18T01:21:38.812789Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.383956,"real_elapsed_ms":597.847066,"selected_instant_age_ms":0.006039999999999999,"wall_elapsed_ms":957.890257}
+2026-10-18T01:21:38.846177Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.383825,"real_elapsed_ms":631.2308909999999,"selected_instant_age_ms":0.01136,"wall_elapsed_ms":991.279402}
+2026-10-18T01:21:38.879557Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.379346,"real_elapsed_ms":664.610237,"selected_instant_age_ms":0.01209,"wall_elapsed_ms":1024.659478}
+2026-10-18T01:21:38.912929Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.378276,"real_elapsed_ms":697.988513,"selected_instant_age_ms":0.0055,"wall_elapsed_ms":1058.031164}
+2026-10-18T01:21:38.946319Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386086,"real_elapsed_ms":731.374599,"selected_instant_age_ms":0.010180000000000002,"wall_elapsed_ms":1091.4219300000002}
+2026-10-18T01:21:38.979699Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.383436,"real_elapsed_ms":764.758035,"selected_instant_age_ms":0.005339999999999999,"wall_elapsed_ms":1124.800526}
+2026-10-18T01:21:39.013095Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384395999999995,"real_elapsed_ms":798.142431,"selected_instant_age_ms":0.01201,"wall_elapsed_ms":1158.1915920000001}
+2026-10-18T01:21:39.046472Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.380136,"real_elapsed_ms":831.5225670000001,"selected_instant_age_ms":0.01409,"wall_elapsed_ms":1191.573808}
+2026-10-18T01:21:39.079854Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384746,"real_elapsed_ms":864.907313,"selected_instant_age_ms":0.01146,"wall_elapsed_ms":1224.955924}
+2026-10-18T01:21:39.098011Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.098037Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.101263Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.101376Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.110248Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.110272Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.113234Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384756,"real_elapsed_ms":898.2920690000001,"selected_instant_age_ms":0.0066,"wall_elapsed_ms":1258.33582}
+2026-10-18T01:21:39.113762Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.113874Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.146612Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.380276,"real_elapsed_ms":931.672345,"selected_instant_age_ms":0.00536,"wall_elapsed_ms":1291.714856}
+2026-10-18T01:21:39.180007Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385716,"real_elapsed_ms":965.0580610000001,"selected_instant_age_ms":0.011590000000000001,"wall_elapsed_ms":1325.106802}
+2026-10-18T01:21:39.213379Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.378896,"real_elapsed_ms":998.436957,"selected_instant_age_ms":0.0074800000000000005,"wall_elapsed_ms":1358.481588}
+2026-10-18T01:21:39.246768Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389335,"real_elapsed_ms":1031.8262920000002,"selected_instant_age_ms":0.006690000000000001,"wall_elapsed_ms":1391.8701330000001}
+2026-10-18T01:21:39.248490Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.248553Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.262337Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.262398Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.280154Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.388375999999994,"real_elapsed_ms":1065.214668,"selected_instant_age_ms":0.0053,"wall_elapsed_ms":1425.257119}
+2026-10-18T01:21:39.313533Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.380506,"real_elapsed_ms":1098.595174,"selected_instant_age_ms":0.00416,"wall_elapsed_ms":1458.636485}
+2026-10-18T01:21:39.318196Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.318331Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.331434Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.331552Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.346924Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384946,"real_elapsed_ms":1131.98012,"selected_instant_age_ms":0.00887,"wall_elapsed_ms":1492.026141}
+2026-10-18T01:21:39.380304Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.382656,"real_elapsed_ms":1165.362776,"selected_instant_age_ms":0.00642,"wall_elapsed_ms":1525.406347}
+2026-10-18T01:21:39.413699Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387406,"real_elapsed_ms":1198.750182,"selected_instant_age_ms":0.01265,"wall_elapsed_ms":1558.799983}
+2026-10-18T01:21:39.447066Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.373836,"real_elapsed_ms":1232.124018,"selected_instant_age_ms":0.00555,"wall_elapsed_ms":1592.166719}
+2026-10-18T01:21:39.473105Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.473182Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.480452Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.388186,"real_elapsed_ms":1265.5122039999999,"selected_instant_age_ms":0.00515,"wall_elapsed_ms":1625.554505}
+2026-10-18T01:21:39.486828Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.486899Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.513841Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389486000000005,"real_elapsed_ms":1298.9016900000001,"selected_instant_age_ms":0.00476,"wall_elapsed_ms":1658.943601}
+2026-10-18T01:21:39.547228Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387206000000006,"real_elapsed_ms":1332.288896,"selected_instant_age_ms":0.00463,"wall_elapsed_ms":1692.330677}
+2026-10-18T01:21:39.560785Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.560826Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.573263Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.573296Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.580627Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.391616,"real_elapsed_ms":1365.680512,"selected_instant_age_ms":0.01134,"wall_elapsed_ms":1725.7290030000001}
+2026-10-18T01:21:39.592695Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.592719Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.604337Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.604360Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.608243Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.608250Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.609686Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.609691Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.611116Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.611122Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.612571Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.612579Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.613996Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.377626,"real_elapsed_ms":1399.058138,"selected_instant_age_ms":0.00382,"wall_elapsed_ms":1759.099109}
+2026-10-18T01:21:39.614230Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.614238Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.615819Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.615828Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.615859Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.615865Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.617329Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.617338Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.617525Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.617587Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.619671Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.619677Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.621082Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.621088Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.622524Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.622529Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.623929Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.623935Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.625351Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.625359Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.626837Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.626845Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.626875Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.626881Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.628311Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.628318Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.628486Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.628544Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.629560Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.629624Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.640337Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.640401Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.641743Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.641767Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.641797Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.641801Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.641824Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.641829Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.641867Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.641876Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.644075Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.644170Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.644339Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.644369Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.644619Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.644669Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.644894Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.644938Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.644993Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.644999Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.645359Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.645452Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.645578Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.645594Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.647406Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.394455,"real_elapsed_ms":1432.452593,"selected_instant_age_ms":0.018340000000000002,"wall_elapsed_ms":1792.508084}
+2026-10-18T01:21:39.652514Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.652538Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.652567Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.652572Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.652594Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.652599Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.652638Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.652647Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.654825Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.654920Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.655094Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.655125Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.655358Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.655409Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.655634Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.655678Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.655735Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.670105Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.670648Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.670772Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.670947Z  WARN bevy_gltf::loader: Unknown vertex attribute JOINTS_1
+2026-10-18T01:21:39.670971Z  WARN bevy_gltf::loader: Unknown vertex attribute WEIGHTS_1
+2026-10-18T01:21:39.680790Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.390906,"real_elapsed_ms":1465.843499,"selected_instant_age_ms":0.01137,"wall_elapsed_ms":1825.89202}
+2026-10-18T01:21:40.148451Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":467.657443,"real_elapsed_ms":1933.500942,"selected_instant_age_ms":0.01492,"wall_elapsed_ms":2293.5530129999997}
+2026-10-18T01:21:40.229121Z  INFO cc_render: face_bones: captured jaw=true l_eye=true r_eye=true upper_jaw=true tongue1=true tongue2=true tongue3=true
+2026-10-18T01:21:40.229124Z  WARN cc_render: skeletal: baked animation disabled (default); set CC_RENDER_DISABLE_BAKED_ANIM=0 to re-enable
+2026-10-18T01:21:40.229164Z  INFO cc_render: skeletal: captured FK rest data for 22 SMPL-mapped bones (pelvis_rest_translation=Vec3(0.0, 1.0113971, 3.461865e-8) pelvis_world=Some(Vec3(0.0, 1.0113971, 3.461865e-8)) eye_axis_world=Some(Vec3(-0.9999708, 0.00030606307, 0.0076329233)))
+2026-10-18T01:21:40.229213Z  INFO cc_render: auto-orient: CC_AVATAR_AUTO_FACE_CAMERA=0, skipping
+2026-10-18T01:21:40.229235Z  INFO cc_render: physics: breast tuning BreastTuning { mass: 2.0, stiffness: 1260.0, damping: 30.0, limit: 0.03 }
+2026-10-18T01:21:40.229242Z  WARN cc_render: physics: zero secondary-motion bones matched on this avatar (150 bind-pose bones scanned). Patterns tried: []. Sample bone names: ["Home HUD", "PhysicsGround", "Home floor", "CC_Base_L_ToeBaseShareBone", "CC_Base_L_PinkyToe1", "CC_Base_L_RingToe1", "CC_Base_L_MidToe1", "CC_Base_L_IndexToe1", "CC_Base_L_BigToe1", "CC_Base_L_CalfTwist02", "CC_Base_L_KneeShareBone", "CC_Base_L_ThighTwist02"]. Override patterns via the physics sidecar's `secondary_motion.auto_detect_patterns` field.
+2026-10-18T01:21:40.229236Z  INFO cc_render: physics: spawned body colliders for SMPL-22 bones
+2026-10-18T01:21:40.229338Z  INFO cc_render: morph_target_names[CC_Base_Tongue] n=1 HAS_DELTA_IMAGE=true has_Jaw_Open=false *Open*=[]
+2026-10-18T01:21:40.229349Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229355Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229360Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229365Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229370Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229374Z  INFO cc_render: morph_target_names[CC_Base_Body] n=64 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229379Z  INFO cc_render: morph_target_names[CC_Base_TearLine] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229383Z  INFO cc_render: morph_target_names[CC_Base_TearLine] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229387Z  INFO cc_render: morph_target_names[CC_Base_EyeOcclusion] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.229391Z  INFO cc_render: morph_target_names[CC_Base_EyeOcclusion] n=47 HAS_DELTA_IMAGE=true has_Jaw_Open=true *Open*=[Jaw_Open]
+2026-10-18T01:21:40.525710Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-18T01:21:40.525765Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-18T01:21:40.553204Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-18T01:21:40.553251Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-18T01:21:40.555307Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-18T01:21:40.555347Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-18T01:21:40.559963Z  INFO naga::back::spv::writer: Skip function Some("prev_weight_atX_naga_oil_mod_XMJSXM6K7OBRHEOR2NVXXE4DIX")
+2026-10-18T01:21:40.560003Z  INFO naga::back::spv::writer: Skip function Some("morph_prev_vertex")
+2026-10-18T01:21:41.135263Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":986.8105109999999,"real_elapsed_ms":2920.3114530000003,"selected_instant_age_ms":0.011739999999999999,"wall_elapsed_ms":3280.360344}
+2026-10-18T01:21:41.626435Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":491.17731399999997,"real_elapsed_ms":3411.488767,"selected_instant_age_ms":0.00784,"wall_elapsed_ms":3771.533758}
+2026-10-18T01:21:41.659847Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.405796,"real_elapsed_ms":3444.8945630000003,"selected_instant_age_ms":0.01251,"wall_elapsed_ms":3804.944224}
+2026-10-18T01:21:41.693230Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385876,"real_elapsed_ms":3478.280439,"selected_instant_age_ms":0.01241,"wall_elapsed_ms":3838.33}
+2026-10-18T01:21:41.726607Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.380906,"real_elapsed_ms":3511.6613450000004,"selected_instant_age_ms":0.009850000000000001,"wall_elapsed_ms":3871.7083460000003}
+2026-10-18T01:21:41.759997Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385046,"real_elapsed_ms":3545.046391,"selected_instant_age_ms":0.01242,"wall_elapsed_ms":3905.095962}
+2026-10-18T01:21:41.793382Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.392386,"real_elapsed_ms":3578.4387770000003,"selected_instant_age_ms":0.00814,"wall_elapsed_ms":3938.484068}
+2026-10-18T01:21:41.826768Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387176,"real_elapsed_ms":3611.825953,"selected_instant_age_ms":0.00753,"wall_elapsed_ms":3971.870634}
+2026-10-18T01:21:41.860159Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.388636,"real_elapsed_ms":3645.214589,"selected_instant_age_ms":0.00918,"wall_elapsed_ms":4005.2609199999997}
+2026-10-18T01:21:41.893536Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.382666,"real_elapsed_ms":3678.597255,"selected_instant_age_ms":0.004549999999999999,"wall_elapsed_ms":4038.638956}
+2026-10-18T01:21:41.926927Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389945,"real_elapsed_ms":3711.9872000000005,"selected_instant_age_ms":0.00479,"wall_elapsed_ms":4072.029141}
+2026-10-18T01:21:41.960330Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.397316000000004,"real_elapsed_ms":3745.384516,"selected_instant_age_ms":0.00967,"wall_elapsed_ms":4105.431337}
+2026-10-18T01:21:41.993714Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.388186,"real_elapsed_ms":3778.7727019999998,"selected_instant_age_ms":0.0056099999999999995,"wall_elapsed_ms":4138.815463}
+2026-10-18T01:21:42.027098Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384586,"real_elapsed_ms":3812.157288,"selected_instant_age_ms":0.00631,"wall_elapsed_ms":4172.200749}
+2026-10-18T01:21:42.060490Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.388965999999996,"real_elapsed_ms":3845.5462540000003,"selected_instant_age_ms":0.00825,"wall_elapsed_ms":4205.591655}
+2026-10-18T01:21:42.060884Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_Tongue]: 45108 bytes, 14858 nonzero bytes, max_byte=255, scanned 11277 floats, 3759 nonzero, max_abs_float=0.036484, dims=(7, 1611, 1), format=R32Float
+2026-10-18T01:21:42.072357Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_Body]: 39214080 bytes, 2418821 nonzero bytes, max_byte=255, scanned 50000 floats, 597 nonzero, max_abs_float=0.004088, dims=(90, 1702, 64), format=R32Float
+2026-10-18T01:21:42.072589Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_TearLine]: 560052 bytes, 31524 nonzero bytes, max_byte=255, scanned 50000 floats, 6946 nonzero, max_abs_float=0.010106, dims=(3, 993, 47), format=R32Float
+2026-10-18T01:21:42.072811Z  INFO cc_render: MORPH_TARGET_IMAGE[CC_Base_EyeOcclusion]: 551592 bytes, 33618 nonzero bytes, max_byte=255, scanned 50000 floats, 6888 nonzero, max_abs_float=0.010430, dims=(2, 1467, 47), format=R32Float
+2026-10-18T01:21:42.093877Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389506,"real_elapsed_ms":3878.93576,"selected_instant_age_ms":0.00667,"wall_elapsed_ms":4238.979581}
+2026-10-18T01:21:42.127261Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384626,"real_elapsed_ms":3912.3203860000003,"selected_instant_age_ms":0.006350000000000001,"wall_elapsed_ms":4272.363887}
+2026-10-18T01:21:42.160654Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.392396,"real_elapsed_ms":3945.712782,"selected_instant_age_ms":0.00658,"wall_elapsed_ms":4305.756513}
+2026-10-18T01:21:42.194039Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384356,"real_elapsed_ms":3979.097138,"selected_instant_age_ms":0.00591,"wall_elapsed_ms":4339.140199}
+2026-10-18T01:21:42.227429Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.388386,"real_elapsed_ms":4012.4855239999997,"selected_instant_age_ms":0.00863,"wall_elapsed_ms":4372.5313049999995}
+2026-10-18T01:21:42.260813Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384796,"real_elapsed_ms":4045.8703199999995,"selected_instant_age_ms":0.00621,"wall_elapsed_ms":4405.913681}
+2026-10-18T01:21:42.294205Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.391196,"real_elapsed_ms":4079.261516,"selected_instant_age_ms":0.007390000000000001,"wall_elapsed_ms":4439.306057}
+2026-10-18T01:21:42.327587Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384814999999996,"real_elapsed_ms":4112.646331,"selected_instant_age_ms":0.00566,"wall_elapsed_ms":4472.689142}
+2026-10-18T01:21:42.360981Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389376,"real_elapsed_ms":4146.035707,"selected_instant_age_ms":0.00974,"wall_elapsed_ms":4506.082598}
+2026-10-18T01:21:42.394364Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386426,"real_elapsed_ms":4179.422133,"selected_instant_age_ms":0.00709,"wall_elapsed_ms":4539.466374}
+2026-10-18T01:21:42.427754Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.390806000000005,"real_elapsed_ms":4212.812939,"selected_instant_age_ms":0.00645,"wall_elapsed_ms":4572.85654}
+2026-10-18T01:21:42.461146Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389536,"real_elapsed_ms":4246.202474999999,"selected_instant_age_ms":0.008780000000000001,"wall_elapsed_ms":4606.248406}
+2026-10-18T01:21:42.494533Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387296,"real_elapsed_ms":4279.589771,"selected_instant_age_ms":0.00904,"wall_elapsed_ms":4639.635962}
+2026-10-18T01:21:42.527922Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387446000000004,"real_elapsed_ms":4312.977217000001,"selected_instant_age_ms":0.008919999999999999,"wall_elapsed_ms":4673.023287999999}
+2026-10-18T01:21:42.561316Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.395606,"real_elapsed_ms":4346.372823000001,"selected_instant_age_ms":0.00718,"wall_elapsed_ms":4706.417154000001}
+2026-10-18T01:21:42.594698Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.382176,"real_elapsed_ms":4379.754999,"selected_instant_age_ms":0.0079,"wall_elapsed_ms":4739.800050000001}
+2026-10-18T01:21:42.628066Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.371516,"real_elapsed_ms":4413.126515,"selected_instant_age_ms":0.00498,"wall_elapsed_ms":4773.168646}
+2026-10-18T01:21:42.661463Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.393746,"real_elapsed_ms":4446.520261,"selected_instant_age_ms":0.00857,"wall_elapsed_ms":4806.565982}
+2026-10-18T01:21:42.694853Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386786,"real_elapsed_ms":4479.907047000001,"selected_instant_age_ms":0.01025,"wall_elapsed_ms":4839.954448}
+2026-10-18T01:21:42.728237Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386226,"real_elapsed_ms":4513.293273,"selected_instant_age_ms":0.00816,"wall_elapsed_ms":4873.338584}
+2026-10-18T01:21:42.761619Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385145,"real_elapsed_ms":4546.6784179999995,"selected_instant_age_ms":0.0054,"wall_elapsed_ms":4906.720969}
+2026-10-18T01:21:42.795019Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.392586,"real_elapsed_ms":4580.071003999999,"selected_instant_age_ms":0.01258,"wall_elapsed_ms":4940.1207349999995}
+2026-10-18T01:21:42.828402Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384105999999996,"real_elapsed_ms":4613.45511,"selected_instant_age_ms":0.01182,"wall_elapsed_ms":4973.504081}
+2026-10-18T01:21:42.861780Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384436,"real_elapsed_ms":4646.839546,"selected_instant_age_ms":0.0058200000000000005,"wall_elapsed_ms":5006.882517}
+2026-10-18T01:21:42.895163Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384066,"real_elapsed_ms":4680.223612,"selected_instant_age_ms":0.00493,"wall_elapsed_ms":5040.265693}
+2026-10-18T01:21:42.928554Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.390476,"real_elapsed_ms":4713.614088,"selected_instant_age_ms":0.0056300000000000005,"wall_elapsed_ms":5073.6568689999995}
+2026-10-18T01:21:42.961945Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386776,"real_elapsed_ms":4747.000864000001,"selected_instant_age_ms":0.009049999999999999,"wall_elapsed_ms":5107.047065}
+2026-10-18T01:21:42.995341Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.393426,"real_elapsed_ms":4780.39429,"selected_instant_age_ms":0.01144,"wall_elapsed_ms":5140.442881}
+2026-10-18T01:21:43.028718Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384886,"real_elapsed_ms":4813.779176,"selected_instant_age_ms":0.0041400000000000005,"wall_elapsed_ms":5173.820467}
+2026-10-18T01:21:43.062109Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389716,"real_elapsed_ms":4847.168892,"selected_instant_age_ms":0.00535,"wall_elapsed_ms":5207.211393}
+2026-10-18T01:21:43.095496Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384866,"real_elapsed_ms":4880.553758,"selected_instant_age_ms":0.0076,"wall_elapsed_ms":5240.5985089999995}
+2026-10-18T01:21:43.128878Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.384296,"real_elapsed_ms":4913.938054,"selected_instant_age_ms":0.00526,"wall_elapsed_ms":5273.980465000001}
+2026-10-18T01:21:43.162266Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387906,"real_elapsed_ms":4947.32596,"selected_instant_age_ms":0.00495,"wall_elapsed_ms":5307.368061}
+2026-10-18T01:21:43.195665Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.392455,"real_elapsed_ms":4980.718415,"selected_instant_age_ms":0.01022,"wall_elapsed_ms":5340.765786000001}
+2026-10-18T01:21:43.229044Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385486,"real_elapsed_ms":5014.103901,"selected_instant_age_ms":0.00522,"wall_elapsed_ms":5374.146272}
+2026-10-18T01:21:43.262433Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386416000000004,"real_elapsed_ms":5047.490317000001,"selected_instant_age_ms":0.00724,"wall_elapsed_ms":5407.534708}
+2026-10-18T01:21:43.295817Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387286,"real_elapsed_ms":5080.877603,"selected_instant_age_ms":0.0046500000000000005,"wall_elapsed_ms":5440.919403999999}
+2026-10-18T01:21:43.329211Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.389086,"real_elapsed_ms":5114.266689,"selected_instant_age_ms":0.00943,"wall_elapsed_ms":5474.31327}
+2026-10-18T01:21:43.362598Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.390496,"real_elapsed_ms":5147.657185,"selected_instant_age_ms":0.00586,"wall_elapsed_ms":5507.700196}
+2026-10-18T01:21:43.395990Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.390596,"real_elapsed_ms":5181.047781,"selected_instant_age_ms":0.00798,"wall_elapsed_ms":5541.092912}
+2026-10-18T01:21:43.429376Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385826,"real_elapsed_ms":5214.433607,"selected_instant_age_ms":0.00797,"wall_elapsed_ms":5574.478728}
+2026-10-18T01:21:43.462765Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386635999999996,"real_elapsed_ms":5247.820242999999,"selected_instant_age_ms":0.00928,"wall_elapsed_ms":5607.866674}
+2026-10-18T01:21:43.496158Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.394106,"real_elapsed_ms":5281.214349,"selected_instant_age_ms":0.00829,"wall_elapsed_ms":5641.25979}
+2026-10-18T01:21:43.529542Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386256,"real_elapsed_ms":5314.600605,"selected_instant_age_ms":0.00628,"wall_elapsed_ms":5674.644036}
+2026-10-18T01:21:43.562927Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.386406,"real_elapsed_ms":5347.987011,"selected_instant_age_ms":0.00516,"wall_elapsed_ms":5708.029321999999}
+2026-10-18T01:21:43.596321Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.391315,"real_elapsed_ms":5381.378326,"selected_instant_age_ms":0.00855,"wall_elapsed_ms":5741.424027}
+2026-10-18T01:21:43.629702Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.383546,"real_elapsed_ms":5414.761872,"selected_instant_age_ms":0.00532,"wall_elapsed_ms":5774.804343}
+2026-10-18T01:21:43.663090Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387606,"real_elapsed_ms":5448.149478,"selected_instant_age_ms":0.00541,"wall_elapsed_ms":5808.192039}
+2026-10-18T01:21:43.696488Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.395495999999994,"real_elapsed_ms":5481.544974,"selected_instant_age_ms":0.008919999999999999,"wall_elapsed_ms":5841.591045}
+2026-10-18T01:21:43.729871Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.385456,"real_elapsed_ms":5514.930429999999,"selected_instant_age_ms":0.0052499999999999995,"wall_elapsed_ms":5874.972831}
+2026-10-18T01:21:43.763258Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387876,"real_elapsed_ms":5548.318305999999,"selected_instant_age_ms":0.00526,"wall_elapsed_ms":5908.360717}
+2026-10-18T01:21:43.796644Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387236,"real_elapsed_ms":5581.705542,"selected_instant_age_ms":0.004549999999999999,"wall_elapsed_ms":5941.747243}
+2026-10-18T01:21:43.796871Z  INFO cc_render: ready: scene fully loaded — meshes=29 materials=29 settle_frames=60 — driver may start recording
+2026-10-18T01:21:43.830047Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.394826,"real_elapsed_ms":5615.100368,"selected_instant_age_ms":0.01149,"wall_elapsed_ms":5975.149009}
+2026-10-18T01:21:43.863431Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.387666,"real_elapsed_ms":5648.488034,"selected_instant_age_ms":0.007940000000000001,"wall_elapsed_ms":6008.533125}
+2026-10-18T01:21:43.896816Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":null,"real_delta_ms":33.383446,"real_elapsed_ms":5681.87148,"selected_instant_age_ms":0.01062,"wall_elapsed_ms":6041.919251}
+2026-10-18T01:21:43.897188Z  INFO cc_render: skeletal: burst-edge #1 (idle=70, active=false, pts_ms=66, root=(0.001,0.927,-0.004), R_Shoulder=(0.295,0.296,0.470,0.777), R_Elbow=(0.002,0.316,0.003,0.949))
+2026-10-18T01:21:43.897203Z  INFO cc_render: skeletal: stream active, paused AnimationPlayer (1 player(s))
+2026-10-18T01:21:43.930201Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":66,"real_delta_ms":33.386816,"real_elapsed_ms":5715.258296,"selected_instant_age_ms":0.007940000000000001,"wall_elapsed_ms":6075.303387}
+2026-10-18T01:21:43.963593Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":100,"real_delta_ms":33.389776000000005,"real_elapsed_ms":5748.648072,"selected_instant_age_ms":0.010360000000000001,"wall_elapsed_ms":6108.695583000001}
+2026-10-18T01:21:43.996976Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":133,"real_delta_ms":33.385126,"real_elapsed_ms":5782.033198,"selected_instant_age_ms":0.00784,"wall_elapsed_ms":6142.078189}
+2026-10-18T01:21:44.030366Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":166,"real_delta_ms":33.390285,"real_elapsed_ms":5815.423483,"selected_instant_age_ms":0.0074,"wall_elapsed_ms":6175.4680339999995}
+2026-10-18T01:21:44.063753Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":200,"real_delta_ms":33.388706,"real_elapsed_ms":5848.812189,"selected_instant_age_ms":0.0055899999999999995,"wall_elapsed_ms":6208.85493}
+2026-10-18T01:21:44.097145Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":233,"real_delta_ms":33.390206,"real_elapsed_ms":5882.202395,"selected_instant_age_ms":0.00742,"wall_elapsed_ms":6242.246966}
+2026-10-18T01:21:44.130523Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":267,"real_delta_ms":33.382386,"real_elapsed_ms":5915.584781,"selected_instant_age_ms":0.00438,"wall_elapsed_ms":6275.626312}
+2026-10-18T01:21:44.163918Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":300,"real_delta_ms":33.392296,"real_elapsed_ms":5948.9770770000005,"selected_instant_age_ms":0.00621,"wall_elapsed_ms":6309.0204380000005}
+2026-10-18T01:21:44.197304Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":333,"real_delta_ms":33.386166,"real_elapsed_ms":5982.363243,"selected_instant_age_ms":0.00548,"wall_elapsed_ms":6342.405874}
+2026-10-18T01:21:44.230684Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":367,"real_delta_ms":33.382396,"real_elapsed_ms":6015.745639000001,"selected_instant_age_ms":0.0042899999999999995,"wall_elapsed_ms":6375.78708}
+2026-10-18T01:21:44.264091Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":400,"real_delta_ms":33.398006,"real_elapsed_ms":6049.143645,"selected_instant_age_ms":0.01132,"wall_elapsed_ms":6409.192116}
+2026-10-18T01:21:44.297437Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":434,"real_delta_ms":33.345186,"real_elapsed_ms":6082.488831,"selected_instant_age_ms":0.01205,"wall_elapsed_ms":6442.5380319999995}
+2026-10-18T01:21:44.330822Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":467,"real_delta_ms":33.387696,"real_elapsed_ms":6115.876527,"selected_instant_age_ms":0.00962,"wall_elapsed_ms":6475.923298}
+2026-10-18T01:21:44.364212Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":500,"real_delta_ms":33.394606,"real_elapsed_ms":6149.271133,"selected_instant_age_ms":0.00603,"wall_elapsed_ms":6509.314314}
+2026-10-18T01:21:44.397603Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":534,"real_delta_ms":33.389836,"real_elapsed_ms":6182.660969,"selected_instant_age_ms":0.00679,"wall_elapsed_ms":6542.70491}
+2026-10-18T01:21:44.430999Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":567,"real_delta_ms":33.390225,"real_elapsed_ms":6216.051194000001,"selected_instant_age_ms":0.01216,"wall_elapsed_ms":6576.100505}
+2026-10-18T01:21:44.464369Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":600,"real_delta_ms":33.376245999999995,"real_elapsed_ms":6249.4274399999995,"selected_instant_age_ms":0.00636,"wall_elapsed_ms":6609.470951}
+2026-10-18T01:21:44.497751Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":634,"real_delta_ms":33.377766,"real_elapsed_ms":6282.805206,"selected_instant_age_ms":0.010169999999999998,"wall_elapsed_ms":6642.852527}
+2026-10-18T01:21:44.531137Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":667,"real_delta_ms":33.383945999999995,"real_elapsed_ms":6316.189152,"selected_instant_age_ms":0.01333,"wall_elapsed_ms":6676.239633}
+2026-10-18T01:21:44.564521Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":701,"real_delta_ms":33.390836,"real_elapsed_ms":6349.579988,"selected_instant_age_ms":0.00577,"wall_elapsed_ms":6709.622909}
+2026-10-18T01:21:44.597902Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":734,"real_delta_ms":33.381555999999996,"real_elapsed_ms":6382.961544,"selected_instant_age_ms":0.00503,"wall_elapsed_ms":6743.0037250000005}
+2026-10-18T01:21:44.631294Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":767,"real_delta_ms":33.390316000000006,"real_elapsed_ms":6416.35186,"selected_instant_age_ms":0.00677,"wall_elapsed_ms":6776.395781}
+2026-10-18T01:21:44.664682Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":801,"real_delta_ms":33.386276,"real_elapsed_ms":6449.738136,"selected_instant_age_ms":0.009089999999999999,"wall_elapsed_ms":6809.784377}
+2026-10-18T01:21:44.698062Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":834,"real_delta_ms":33.383945999999995,"real_elapsed_ms":6483.122082000001,"selected_instant_age_ms":0.005180000000000001,"wall_elapsed_ms":6843.164413}
+2026-10-18T01:21:44.731471Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":868,"real_delta_ms":33.395556,"real_elapsed_ms":6516.517638,"selected_instant_age_ms":0.018070000000000003,"wall_elapsed_ms":6876.572859000001}
+2026-10-18T01:21:44.764849Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":901,"real_delta_ms":33.386596,"real_elapsed_ms":6549.904234,"selected_instant_age_ms":0.009439999999999999,"wall_elapsed_ms":6909.950825}
+2026-10-18T01:21:44.798239Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":934,"real_delta_ms":33.388736,"real_elapsed_ms":6583.29297,"selected_instant_age_ms":0.011899999999999999,"wall_elapsed_ms":6943.342021}
+2026-10-18T01:21:44.831626Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":968,"real_delta_ms":33.392225999999994,"real_elapsed_ms":6616.685195999999,"selected_instant_age_ms":0.00562,"wall_elapsed_ms":6976.727967000001}
+2026-10-18T01:21:44.865014Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1001,"real_delta_ms":33.384745,"real_elapsed_ms":6650.069941,"selected_instant_age_ms":0.00866,"wall_elapsed_ms":7010.115752}
+2026-10-18T01:21:44.898421Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1034,"real_delta_ms":33.387976,"real_elapsed_ms":6683.457917,"selected_instant_age_ms":0.01412,"wall_elapsed_ms":7043.509188}
+2026-10-18T01:21:44.931793Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1068,"real_delta_ms":33.391016,"real_elapsed_ms":6716.848932999999,"selected_instant_age_ms":0.008749999999999999,"wall_elapsed_ms":7076.894834}
+2026-10-18T01:21:44.965175Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1101,"real_delta_ms":33.384786,"real_elapsed_ms":6750.233719,"selected_instant_age_ms":0.00705,"wall_elapsed_ms":7110.2779199999995}
+2026-10-18T01:21:44.998565Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1135,"real_delta_ms":33.388816,"real_elapsed_ms":6783.622535,"selected_instant_age_ms":0.007859999999999999,"wall_elapsed_ms":7143.667546}
+2026-10-18T01:21:45.031947Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1168,"real_delta_ms":33.383726,"real_elapsed_ms":6817.0062609999995,"selected_instant_age_ms":0.00577,"wall_elapsed_ms":7177.049182}
+2026-10-18T01:21:45.065329Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1201,"real_delta_ms":33.384746,"real_elapsed_ms":6850.391007,"selected_instant_age_ms":0.00365,"wall_elapsed_ms":7210.431808}
+2026-10-18T01:21:45.098720Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1235,"real_delta_ms":33.386376000000006,"real_elapsed_ms":6883.777383,"selected_instant_age_ms":0.00756,"wall_elapsed_ms":7243.822094}
+2026-10-18T01:21:45.132098Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1268,"real_delta_ms":33.380726,"real_elapsed_ms":6917.158109,"selected_instant_age_ms":0.00557,"wall_elapsed_ms":7277.20083}
+2026-10-18T01:21:45.165489Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1302,"real_delta_ms":33.390636,"real_elapsed_ms":6950.548745,"selected_instant_age_ms":0.00562,"wall_elapsed_ms":7310.5915159999995}
+2026-10-18T01:21:45.198868Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1335,"real_delta_ms":33.379916,"real_elapsed_ms":6983.928661,"selected_instant_age_ms":0.005090000000000001,"wall_elapsed_ms":7343.970902}
+2026-10-18T01:21:45.232255Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1368,"real_delta_ms":33.388246,"real_elapsed_ms":7017.316906999999,"selected_instant_age_ms":0.00424,"wall_elapsed_ms":7377.358298}
+2026-10-18T01:21:45.265644Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1402,"real_delta_ms":33.386565,"real_elapsed_ms":7050.703472,"selected_instant_age_ms":0.00545,"wall_elapsed_ms":7410.746073}
+2026-10-18T01:21:45.299028Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1435,"real_delta_ms":33.385946,"real_elapsed_ms":7084.089418,"selected_instant_age_ms":0.00405,"wall_elapsed_ms":7444.1306190000005}
+2026-10-18T01:21:45.332417Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1468,"real_delta_ms":33.386496,"real_elapsed_ms":7117.475914,"selected_instant_age_ms":0.00573,"wall_elapsed_ms":7477.518795}
+2026-10-18T01:21:45.365805Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1502,"real_delta_ms":33.388625999999995,"real_elapsed_ms":7150.86454,"selected_instant_age_ms":0.0059,"wall_elapsed_ms":7510.907591}
+2026-10-18T01:21:45.399191Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1535,"real_delta_ms":33.385546000000005,"real_elapsed_ms":7184.250086,"selected_instant_age_ms":0.0058200000000000005,"wall_elapsed_ms":7544.293057}
+2026-10-18T01:21:45.432583Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1569,"real_delta_ms":33.390696,"real_elapsed_ms":7217.640782,"selected_instant_age_ms":0.0072,"wall_elapsed_ms":7577.685133}
+2026-10-18T01:21:45.465975Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1602,"real_delta_ms":33.389786,"real_elapsed_ms":7251.030568,"selected_instant_age_ms":0.00863,"wall_elapsed_ms":7611.076349}
+2026-10-18T01:21:45.499365Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1635,"real_delta_ms":33.392596,"real_elapsed_ms":7284.423164,"selected_instant_age_ms":0.007189999999999999,"wall_elapsed_ms":7644.467505}
+2026-10-18T01:21:45.532744Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1669,"real_delta_ms":33.381896000000005,"real_elapsed_ms":7317.80506,"selected_instant_age_ms":0.0043,"wall_elapsed_ms":7677.846511000001}
+2026-10-18T01:21:45.566147Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1702,"real_delta_ms":33.394465999999994,"real_elapsed_ms":7351.199526,"selected_instant_age_ms":0.0103,"wall_elapsed_ms":7711.246977}
+2026-10-18T01:21:45.599526Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1736,"real_delta_ms":33.386076,"real_elapsed_ms":7384.585601999999,"selected_instant_age_ms":0.0051,"wall_elapsed_ms":7744.627853}
+2026-10-18T01:21:45.632915Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1769,"real_delta_ms":33.389676,"real_elapsed_ms":7417.975278,"selected_instant_age_ms":0.00522,"wall_elapsed_ms":7778.017648999999}
+2026-10-18T01:21:45.666307Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1802,"real_delta_ms":33.388586,"real_elapsed_ms":7451.363864,"selected_instant_age_ms":0.00827,"wall_elapsed_ms":7811.409285}
+2026-10-18T01:21:45.699689Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1836,"real_delta_ms":33.384625,"real_elapsed_ms":7484.7484890000005,"selected_instant_age_ms":0.005370000000000001,"wall_elapsed_ms":7844.79101}
+2026-10-18T01:21:45.733084Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1869,"real_delta_ms":33.394496000000004,"real_elapsed_ms":7518.1429849999995,"selected_instant_age_ms":0.00568,"wall_elapsed_ms":7878.185816}
+2026-10-18T01:21:45.766470Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1903,"real_delta_ms":33.386956000000005,"real_elapsed_ms":7551.529941,"selected_instant_age_ms":0.00574,"wall_elapsed_ms":7911.572832}
+2026-10-18T01:21:45.799857Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1936,"real_delta_ms":33.385956,"real_elapsed_ms":7584.915897,"selected_instant_age_ms":0.00647,"wall_elapsed_ms":7944.959518}
+2026-10-18T01:21:45.833244Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":1969,"real_delta_ms":33.388026,"real_elapsed_ms":7618.303923,"selected_instant_age_ms":0.00547,"wall_elapsed_ms":7978.346544}
+2026-10-18T01:21:45.866633Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2003,"real_delta_ms":33.390096,"real_elapsed_ms":7651.694019,"selected_instant_age_ms":0.00435,"wall_elapsed_ms":8011.73552}
+2026-10-18T01:21:45.900029Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2036,"real_delta_ms":33.391686,"real_elapsed_ms":7685.0857049999995,"selected_instant_age_ms":0.0077800000000000005,"wall_elapsed_ms":8045.130636}
+2026-10-18T01:21:45.933426Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2069,"real_delta_ms":33.395216,"real_elapsed_ms":7718.480921,"selected_instant_age_ms":0.00977,"wall_elapsed_ms":8078.5278419999995}
+2026-10-18T01:21:45.966802Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2103,"real_delta_ms":33.377246,"real_elapsed_ms":7751.858167,"selected_instant_age_ms":0.00936,"wall_elapsed_ms":8111.904678}
+2026-10-18T01:21:46.000191Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2136,"real_delta_ms":33.388396,"real_elapsed_ms":7785.246563000001,"selected_instant_age_ms":0.00932,"wall_elapsed_ms":8145.293034}
+2026-10-18T01:21:46.033578Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2170,"real_delta_ms":33.390406,"real_elapsed_ms":7818.636969,"selected_instant_age_ms":0.00646,"wall_elapsed_ms":8178.68058}
+2026-10-18T01:21:46.066968Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2203,"real_delta_ms":33.389576,"real_elapsed_ms":7852.026545000001,"selected_instant_age_ms":0.0070999999999999995,"wall_elapsed_ms":8212.070796}
+2026-10-18T01:21:46.100351Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2236,"real_delta_ms":33.384235,"real_elapsed_ms":7885.41078,"selected_instant_age_ms":0.00547,"wall_elapsed_ms":8245.453401}
+2026-10-18T01:21:46.133735Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2270,"real_delta_ms":33.383886000000004,"real_elapsed_ms":7918.794666,"selected_instant_age_ms":0.00558,"wall_elapsed_ms":8278.837397}
+2026-10-18T01:21:46.167123Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2303,"real_delta_ms":33.390516000000005,"real_elapsed_ms":7952.185182,"selected_instant_age_ms":0.00345,"wall_elapsed_ms":8312.225783}
+2026-10-18T01:21:46.200517Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2337,"real_delta_ms":33.390906,"real_elapsed_ms":7985.576088,"selected_instant_age_ms":0.00636,"wall_elapsed_ms":8345.619599000001}
+2026-10-18T01:21:46.233903Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2370,"real_delta_ms":33.384876,"real_elapsed_ms":8018.960964,"selected_instant_age_ms":0.00699,"wall_elapsed_ms":8379.005104999998}
+2026-10-18T01:21:46.267295Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2403,"real_delta_ms":33.387056,"real_elapsed_ms":8052.34802,"selected_instant_age_ms":0.0118,"wall_elapsed_ms":8412.396971}
+2026-10-18T01:21:46.300663Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2437,"real_delta_ms":33.376186000000004,"real_elapsed_ms":8085.724206,"selected_instant_age_ms":0.0043100000000000005,"wall_elapsed_ms":8445.765667}
+2026-10-18T01:21:46.334053Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2470,"real_delta_ms":33.388766,"real_elapsed_ms":8119.112972,"selected_instant_age_ms":0.0055,"wall_elapsed_ms":8479.155623}
+2026-10-18T01:21:46.367435Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2504,"real_delta_ms":33.380875999999994,"real_elapsed_ms":8152.493848000001,"selected_instant_age_ms":0.00645,"wall_elapsed_ms":8512.537449}
+2026-10-18T01:21:46.400819Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2537,"real_delta_ms":33.387316,"real_elapsed_ms":8185.881163999999,"selected_instant_age_ms":0.00386,"wall_elapsed_ms":8545.922175}
+2026-10-18T01:21:46.434211Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2570,"real_delta_ms":33.389086,"real_elapsed_ms":8219.27025,"selected_instant_age_ms":0.00552,"wall_elapsed_ms":8579.312920999999}
+2026-10-18T01:21:46.467591Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2604,"real_delta_ms":33.380266,"real_elapsed_ms":8252.650516,"selected_instant_age_ms":0.00526,"wall_elapsed_ms":8612.692927}
+2026-10-18T01:21:46.500987Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2637,"real_delta_ms":33.395205999999995,"real_elapsed_ms":8286.045722,"selected_instant_age_ms":0.00666,"wall_elapsed_ms":8646.089533}
+2026-10-18T01:21:46.534378Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2670,"real_delta_ms":33.387865000000005,"real_elapsed_ms":8319.433587000001,"selected_instant_age_ms":0.00901,"wall_elapsed_ms":8679.479748}
+2026-10-18T01:21:46.567757Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2704,"real_delta_ms":33.382606,"real_elapsed_ms":8352.816193,"selected_instant_age_ms":0.005710000000000001,"wall_elapsed_ms":8712.859054}
+2026-10-18T01:21:46.601150Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2737,"real_delta_ms":33.392356,"real_elapsed_ms":8386.208548999999,"selected_instant_age_ms":0.0071400000000000005,"wall_elapsed_ms":8746.252840000001}
+2026-10-18T01:21:46.634530Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2771,"real_delta_ms":33.380806,"real_elapsed_ms":8419.589355,"selected_instant_age_ms":0.0059900000000000005,"wall_elapsed_ms":8779.632496}
+2026-10-18T01:21:46.667918Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2804,"real_delta_ms":33.387066,"real_elapsed_ms":8452.976421000001,"selected_instant_age_ms":0.00622,"wall_elapsed_ms":8813.019792000001}
+2026-10-18T01:21:46.701302Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2837,"real_delta_ms":33.385236,"real_elapsed_ms":8486.361657,"selected_instant_age_ms":0.0065899999999999995,"wall_elapsed_ms":8846.405398}
+2026-10-18T01:21:46.734679Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2871,"real_delta_ms":33.379996000000006,"real_elapsed_ms":8519.741653000001,"selected_instant_age_ms":0.00335,"wall_elapsed_ms":8879.782154}
+2026-10-18T01:21:46.768073Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2904,"real_delta_ms":33.393395999999996,"real_elapsed_ms":8553.135049,"selected_instant_age_ms":0.0039299999999999995,"wall_elapsed_ms":8913.17613}
+2026-10-18T01:21:46.801426Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2938,"real_delta_ms":33.349346000000004,"real_elapsed_ms":8586.484395,"selected_instant_age_ms":0.00656,"wall_elapsed_ms":8946.528106}
+2026-10-18T01:21:46.834811Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":2971,"real_delta_ms":33.383446,"real_elapsed_ms":8619.867841,"selected_instant_age_ms":0.008440000000000001,"wall_elapsed_ms":8979.913432}
+2026-10-18T01:21:46.868198Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3004,"real_delta_ms":33.387816,"real_elapsed_ms":8653.255657000002,"selected_instant_age_ms":0.00775,"wall_elapsed_ms":9013.300557999999}
+2026-10-18T01:21:46.901589Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3038,"real_delta_ms":33.390476,"real_elapsed_ms":8686.646133,"selected_instant_age_ms":0.00689,"wall_elapsed_ms":9046.690174}
+2026-10-18T01:21:46.934968Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3071,"real_delta_ms":33.381265,"real_elapsed_ms":8720.027397999998,"selected_instant_age_ms":0.00628,"wall_elapsed_ms":9080.070829}
+2026-10-18T01:21:46.968354Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3104,"real_delta_ms":33.386856,"real_elapsed_ms":8753.414254,"selected_instant_age_ms":0.00557,"wall_elapsed_ms":9113.456975000001}
+2026-10-18T01:21:47.001745Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3138,"real_delta_ms":33.388346,"real_elapsed_ms":8786.802599999999,"selected_instant_age_ms":0.0072699999999999996,"wall_elapsed_ms":9146.847021}
+2026-10-18T01:21:47.035129Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3171,"real_delta_ms":33.385536,"real_elapsed_ms":8820.188136,"selected_instant_age_ms":0.00625,"wall_elapsed_ms":9180.231537}
+2026-10-18T01:21:47.068521Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3205,"real_delta_ms":33.391445999999995,"real_elapsed_ms":8853.579582,"selected_instant_age_ms":0.0068000000000000005,"wall_elapsed_ms":9213.623533}
+2026-10-18T01:21:47.101903Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3238,"real_delta_ms":33.383776,"real_elapsed_ms":8886.963357999999,"selected_instant_age_ms":0.0048,"wall_elapsed_ms":9247.005309}
+2026-10-18T01:21:47.135284Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3271,"real_delta_ms":33.380106,"real_elapsed_ms":8920.343464,"selected_instant_age_ms":0.005869999999999999,"wall_elapsed_ms":9280.386484999999}
+2026-10-18T01:21:47.168673Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3305,"real_delta_ms":33.388495999999996,"real_elapsed_ms":8953.731960000001,"selected_instant_age_ms":0.00658,"wall_elapsed_ms":9313.775691}
+2026-10-18T01:21:47.202066Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3338,"real_delta_ms":33.387156000000004,"real_elapsed_ms":8987.119116,"selected_instant_age_ms":0.01076,"wall_elapsed_ms":9347.167027}
+2026-10-18T01:21:47.235424Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3372,"real_delta_ms":33.364186,"real_elapsed_ms":9020.483302,"selected_instant_age_ms":0.00636,"wall_elapsed_ms":9380.526812999999}
+2026-10-18T01:21:47.268809Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3405,"real_delta_ms":33.383976000000004,"real_elapsed_ms":9053.867278,"selected_instant_age_ms":0.0074,"wall_elapsed_ms":9413.911829}
+2026-10-18T01:21:47.302201Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3438,"real_delta_ms":33.391516,"real_elapsed_ms":9087.258794,"selected_instant_age_ms":0.00763,"wall_elapsed_ms":9447.303575}
+2026-10-18T01:21:47.335579Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3472,"real_delta_ms":33.380225,"real_elapsed_ms":9120.639019,"selected_instant_age_ms":0.0055,"wall_elapsed_ms":9480.68167}
+2026-10-18T01:21:47.368972Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3505,"real_delta_ms":33.392166,"real_elapsed_ms":9154.031185,"selected_instant_age_ms":0.00564,"wall_elapsed_ms":9514.073976000001}
+2026-10-18T01:21:47.402368Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3538,"real_delta_ms":33.392496,"real_elapsed_ms":9187.423681,"selected_instant_age_ms":0.00938,"wall_elapsed_ms":9547.470212}
+2026-10-18T01:21:47.435743Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3572,"real_delta_ms":33.379006000000004,"real_elapsed_ms":9220.802687000001,"selected_instant_age_ms":0.0057599999999999995,"wall_elapsed_ms":9580.845598}
+2026-10-18T01:21:47.469130Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3605,"real_delta_ms":33.386916,"real_elapsed_ms":9254.189603,"selected_instant_age_ms":0.0063,"wall_elapsed_ms":9614.233054}
+2026-10-18T01:21:47.502519Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3639,"real_delta_ms":33.387505999999995,"real_elapsed_ms":9287.577109000002,"selected_instant_age_ms":0.00655,"wall_elapsed_ms":9647.620809999999}
+2026-10-18T01:21:47.535901Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3672,"real_delta_ms":33.384876,"real_elapsed_ms":9320.961985,"selected_instant_age_ms":0.00453,"wall_elapsed_ms":9681.003666}
+2026-10-18T01:21:47.569289Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3705,"real_delta_ms":33.385906,"real_elapsed_ms":9354.347891,"selected_instant_age_ms":0.00603,"wall_elapsed_ms":9714.391072}
+2026-10-18T01:21:47.602675Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3739,"real_delta_ms":33.386866,"real_elapsed_ms":9387.734757,"selected_instant_age_ms":0.00531,"wall_elapsed_ms":9747.777218}
+2026-10-18T01:21:47.636064Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3772,"real_delta_ms":33.387726,"real_elapsed_ms":9421.122483,"selected_instant_age_ms":0.00646,"wall_elapsed_ms":9781.166094}
+2026-10-18T01:21:47.669450Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3806,"real_delta_ms":33.386766,"real_elapsed_ms":9454.509249,"selected_instant_age_ms":0.00611,"wall_elapsed_ms":9814.55251}
+2026-10-18T01:21:47.702844Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3839,"real_delta_ms":33.388526,"real_elapsed_ms":9487.897775000001,"selected_instant_age_ms":0.010920000000000001,"wall_elapsed_ms":9847.945846}
+2026-10-18T01:21:47.736221Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3872,"real_delta_ms":33.384626,"real_elapsed_ms":9521.282401,"selected_instant_age_ms":0.004030000000000001,"wall_elapsed_ms":9881.323582}
+2026-10-18T01:21:47.769609Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3906,"real_delta_ms":33.386275,"real_elapsed_ms":9554.668676000001,"selected_instant_age_ms":0.00523,"wall_elapsed_ms":9914.711057}
+2026-10-18T01:21:47.803008Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3939,"real_delta_ms":33.393755999999996,"real_elapsed_ms":9588.062431999999,"selected_instant_age_ms":0.00979,"wall_elapsed_ms":9948.109373}
+2026-10-18T01:21:47.836392Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":3972,"real_delta_ms":33.386506000000004,"real_elapsed_ms":9621.448938,"selected_instant_age_ms":0.00779,"wall_elapsed_ms":9981.493879}
+2026-10-18T01:21:47.869770Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4006,"real_delta_ms":33.380435999999996,"real_elapsed_ms":9654.829374,"selected_instant_age_ms":0.0058000000000000005,"wall_elapsed_ms":10014.872325}
+2026-10-18T01:21:47.903160Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4039,"real_delta_ms":33.389116,"real_elapsed_ms":9688.218490000001,"selected_instant_age_ms":0.0066300000000000005,"wall_elapsed_ms":10048.262271}
+2026-10-18T01:21:47.936558Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4073,"real_delta_ms":33.389306,"real_elapsed_ms":9721.607796,"selected_instant_age_ms":0.01424,"wall_elapsed_ms":10081.659187}
+2026-10-18T01:21:47.969930Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4106,"real_delta_ms":33.380026,"real_elapsed_ms":9754.987822000001,"selected_instant_age_ms":0.00627,"wall_elapsed_ms":10115.031243000001}
+2026-10-18T01:21:48.003323Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4139,"real_delta_ms":33.386466,"real_elapsed_ms":9788.374287999999,"selected_instant_age_ms":0.01061,"wall_elapsed_ms":10148.422049}
+2026-10-18T01:21:48.036697Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4173,"real_delta_ms":33.381946,"real_elapsed_ms":9821.756234,"selected_instant_age_ms":0.00601,"wall_elapsed_ms":10181.799395}
+2026-10-18T01:21:48.070079Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4206,"real_delta_ms":33.381986000000005,"real_elapsed_ms":9855.13822,"selected_instant_age_ms":0.0059900000000000005,"wall_elapsed_ms":10215.181361}
+2026-10-18T01:21:48.103430Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4240,"real_delta_ms":33.350946,"real_elapsed_ms":9888.489166,"selected_instant_age_ms":0.00592,"wall_elapsed_ms":10248.532237}
+2026-10-18T01:21:48.136816Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4273,"real_delta_ms":33.385646,"real_elapsed_ms":9921.874812,"selected_instant_age_ms":0.00617,"wall_elapsed_ms":10281.918133}
+2026-10-18T01:21:48.170206Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4306,"real_delta_ms":33.390765,"real_elapsed_ms":9955.265577,"selected_instant_age_ms":0.005710000000000001,"wall_elapsed_ms":10315.308438}
+2026-10-18T01:21:48.203588Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4340,"real_delta_ms":33.384226000000005,"real_elapsed_ms":9988.649803,"selected_instant_age_ms":0.00433,"wall_elapsed_ms":10348.691283999999}
+2026-10-18T01:21:48.236978Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4373,"real_delta_ms":33.385856,"real_elapsed_ms":10022.035659000001,"selected_instant_age_ms":0.00751,"wall_elapsed_ms":10382.080320000001}
+2026-10-18T01:21:48.270369Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4406,"real_delta_ms":33.390446,"real_elapsed_ms":10055.426105,"selected_instant_age_ms":0.00791,"wall_elapsed_ms":10415.471166}
+2026-10-18T01:21:48.303757Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4440,"real_delta_ms":33.387886,"real_elapsed_ms":10088.813991,"selected_instant_age_ms":0.007390000000000001,"wall_elapsed_ms":10448.858531999998}
+2026-10-18T01:21:48.337146Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4473,"real_delta_ms":33.391746,"real_elapsed_ms":10122.205737,"selected_instant_age_ms":0.00583,"wall_elapsed_ms":10482.248717999999}
+2026-10-18T01:21:48.370535Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4507,"real_delta_ms":33.388926,"real_elapsed_ms":10155.594663,"selected_instant_age_ms":0.00531,"wall_elapsed_ms":10515.637123999999}
+2026-10-18T01:21:48.403928Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4540,"real_delta_ms":33.390516000000005,"real_elapsed_ms":10188.985179,"selected_instant_age_ms":0.00765,"wall_elapsed_ms":10549.02998}
+2026-10-18T01:21:48.437309Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4573,"real_delta_ms":33.381755999999996,"real_elapsed_ms":10222.366935,"selected_instant_age_ms":0.0067599999999999995,"wall_elapsed_ms":10582.410846}
+2026-10-18T01:21:48.470711Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4607,"real_delta_ms":33.397896,"real_elapsed_ms":10255.764831,"selected_instant_age_ms":0.010750000000000001,"wall_elapsed_ms":10615.812732}
+2026-10-18T01:21:48.504090Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4640,"real_delta_ms":33.380266,"real_elapsed_ms":10289.145097,"selected_instant_age_ms":0.00957,"wall_elapsed_ms":10649.191818000001}
+2026-10-18T01:21:48.537470Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4674,"real_delta_ms":33.383636,"real_elapsed_ms":10322.528733000001,"selected_instant_age_ms":0.00601,"wall_elapsed_ms":10682.571894}
+2026-10-18T01:21:48.570858Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4707,"real_delta_ms":33.384246,"real_elapsed_ms":10355.912978999999,"selected_instant_age_ms":0.00921,"wall_elapsed_ms":10715.95934}
+2026-10-18T01:21:48.604236Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4740,"real_delta_ms":33.384074999999996,"real_elapsed_ms":10389.297054,"selected_instant_age_ms":0.00416,"wall_elapsed_ms":10749.338365}
+2026-10-18T01:21:48.637624Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4774,"real_delta_ms":33.383905999999996,"real_elapsed_ms":10422.68096,"selected_instant_age_ms":0.007819999999999999,"wall_elapsed_ms":10782.725930999999}
+2026-10-18T01:21:48.671002Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4807,"real_delta_ms":33.380196,"real_elapsed_ms":10456.061156,"selected_instant_age_ms":0.0063,"wall_elapsed_ms":10816.104607}
+2026-10-18T01:21:48.704390Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4840,"real_delta_ms":33.387266,"real_elapsed_ms":10489.448422000001,"selected_instant_age_ms":0.008039999999999999,"wall_elapsed_ms":10849.493613}
+2026-10-18T01:21:48.737781Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4874,"real_delta_ms":33.392346,"real_elapsed_ms":10522.840768,"selected_instant_age_ms":0.00531,"wall_elapsed_ms":10882.883229000001}
+2026-10-18T01:21:48.771174Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4907,"real_delta_ms":33.391676000000004,"real_elapsed_ms":10556.232444000001,"selected_instant_age_ms":0.0066300000000000005,"wall_elapsed_ms":10916.276225000001}
+2026-10-18T01:21:48.804562Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4941,"real_delta_ms":33.388776,"real_elapsed_ms":10589.621219999999,"selected_instant_age_ms":0.0065699999999999995,"wall_elapsed_ms":10949.664940999999}
+2026-10-18T01:21:48.837947Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":4974,"real_delta_ms":33.385355999999994,"real_elapsed_ms":10623.006576,"selected_instant_age_ms":0.0061,"wall_elapsed_ms":10983.049827}
+2026-10-18T01:21:48.871340Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5007,"real_delta_ms":33.384195999999996,"real_elapsed_ms":10656.390772,"selected_instant_age_ms":0.01316,"wall_elapsed_ms":11016.441083}
+2026-10-18T01:21:48.904713Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5041,"real_delta_ms":33.382585999999996,"real_elapsed_ms":10689.773358,"selected_instant_age_ms":0.00476,"wall_elapsed_ms":11049.815269}
+2026-10-18T01:21:48.938094Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5074,"real_delta_ms":33.381896000000005,"real_elapsed_ms":10723.155254,"selected_instant_age_ms":0.00529,"wall_elapsed_ms":11083.197695}
+2026-10-18T01:21:48.971492Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5108,"real_delta_ms":33.390546,"real_elapsed_ms":10756.5458,"selected_instant_age_ms":0.01,"wall_elapsed_ms":11116.592950999999}
+2026-10-18T01:21:49.004873Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5141,"real_delta_ms":33.38563499999999,"real_elapsed_ms":10789.931435,"selected_instant_age_ms":0.00619,"wall_elapsed_ms":11149.974776000001}
+2026-10-18T01:21:49.038257Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5174,"real_delta_ms":33.383496,"real_elapsed_ms":10823.314931,"selected_instant_age_ms":0.00677,"wall_elapsed_ms":11183.358852}
+2026-10-18T01:21:49.071638Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5208,"real_delta_ms":33.381866,"real_elapsed_ms":10856.696797,"selected_instant_age_ms":0.00583,"wall_elapsed_ms":11216.739778000001}
+2026-10-18T01:21:49.105014Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5241,"real_delta_ms":33.378326,"real_elapsed_ms":10890.075123,"selected_instant_age_ms":0.00476,"wall_elapsed_ms":11250.117034}
+2026-10-18T01:21:49.138407Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5274,"real_delta_ms":33.385416,"real_elapsed_ms":10923.460539,"selected_instant_age_ms":0.01172,"wall_elapsed_ms":11283.50941}
+2026-10-18T01:21:49.171782Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5308,"real_delta_ms":33.380426,"real_elapsed_ms":10956.840965,"selected_instant_age_ms":0.00631,"wall_elapsed_ms":11316.884426}
+2026-10-18T01:21:49.205167Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5341,"real_delta_ms":33.380886,"real_elapsed_ms":10990.221851,"selected_instant_age_ms":0.010329999999999999,"wall_elapsed_ms":11350.269332}
+2026-10-18T01:21:49.238557Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5375,"real_delta_ms":33.392815999999996,"real_elapsed_ms":11023.614667,"selected_instant_age_ms":0.00724,"wall_elapsed_ms":11383.659058}
+2026-10-18T01:21:49.271941Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5408,"real_delta_ms":33.384395999999995,"real_elapsed_ms":11056.999063,"selected_instant_age_ms":0.00751,"wall_elapsed_ms":11417.043724}
+2026-10-18T01:21:49.305328Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5441,"real_delta_ms":33.388456,"real_elapsed_ms":11090.387519,"selected_instant_age_ms":0.00589,"wall_elapsed_ms":11450.430559999999}
+2026-10-18T01:21:49.338719Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5475,"real_delta_ms":33.388236,"real_elapsed_ms":11123.775755,"selected_instant_age_ms":0.008620000000000001,"wall_elapsed_ms":11483.821526}
+2026-10-18T01:21:49.372110Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5508,"real_delta_ms":33.388926,"real_elapsed_ms":11157.164681,"selected_instant_age_ms":0.00986,"wall_elapsed_ms":11517.211692}
+2026-10-18T01:21:49.405490Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5542,"real_delta_ms":33.385386000000004,"real_elapsed_ms":11190.550067,"selected_instant_age_ms":0.00551,"wall_elapsed_ms":11550.592728}
+2026-10-18T01:21:49.438891Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5575,"real_delta_ms":33.395574999999994,"real_elapsed_ms":11223.945642,"selected_instant_age_ms":0.01024,"wall_elapsed_ms":11583.993033}
+2026-10-18T01:21:49.472268Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5608,"real_delta_ms":33.377426,"real_elapsed_ms":11257.323068,"selected_instant_age_ms":0.00974,"wall_elapsed_ms":11617.369959}
+2026-10-18T01:21:49.505650Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5642,"real_delta_ms":33.386646,"real_elapsed_ms":11290.709714,"selected_instant_age_ms":0.00527,"wall_elapsed_ms":11650.752134999999}
+2026-10-18T01:21:49.539046Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5675,"real_delta_ms":33.391276,"real_elapsed_ms":11324.100989999999,"selected_instant_age_ms":0.00975,"wall_elapsed_ms":11684.147891}
+2026-10-18T01:21:49.572431Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5709,"real_delta_ms":33.389846,"real_elapsed_ms":11357.490836,"selected_instant_age_ms":0.005710000000000001,"wall_elapsed_ms":11717.533697}
+2026-10-18T01:21:49.605822Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5742,"real_delta_ms":33.390946,"real_elapsed_ms":11390.881781999999,"selected_instant_age_ms":0.00592,"wall_elapsed_ms":11750.924853}
+2026-10-18T01:21:49.639203Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5775,"real_delta_ms":33.380356,"real_elapsed_ms":11424.262138,"selected_instant_age_ms":0.0057599999999999995,"wall_elapsed_ms":11784.305049}
+2026-10-18T01:21:49.672587Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5809,"real_delta_ms":33.385146,"real_elapsed_ms":11457.647284,"selected_instant_age_ms":0.00511,"wall_elapsed_ms":11817.689545000001}
+2026-10-18T01:21:49.705970Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5842,"real_delta_ms":33.382916,"real_elapsed_ms":11491.030200000001,"selected_instant_age_ms":0.0054199999999999995,"wall_elapsed_ms":11851.072771000001}
+2026-10-18T01:21:49.739360Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5875,"real_delta_ms":33.389586,"real_elapsed_ms":11524.419785999999,"selected_instant_age_ms":0.00593,"wall_elapsed_ms":11884.462867}
+2026-10-18T01:21:49.772749Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5909,"real_delta_ms":33.388166,"real_elapsed_ms":11557.807952,"selected_instant_age_ms":0.00593,"wall_elapsed_ms":11917.851032999999}
+2026-10-18T01:21:49.806129Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5942,"real_delta_ms":33.380646,"real_elapsed_ms":11591.188598,"selected_instant_age_ms":0.00597,"wall_elapsed_ms":11951.231719000001}
+2026-10-18T01:21:49.839524Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":5976,"real_delta_ms":33.392395,"real_elapsed_ms":11624.580993,"selected_instant_age_ms":0.007500000000000001,"wall_elapsed_ms":11984.625644}
+2026-10-18T01:21:49.872908Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6009,"real_delta_ms":33.387026,"real_elapsed_ms":11657.968019,"selected_instant_age_ms":0.0058000000000000005,"wall_elapsed_ms":12018.010970000001}
+2026-10-18T01:21:49.906299Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6042,"real_delta_ms":33.389626,"real_elapsed_ms":11691.357645,"selected_instant_age_ms":0.00666,"wall_elapsed_ms":12051.401456000001}
+2026-10-18T01:21:49.939686Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6076,"real_delta_ms":33.388186,"real_elapsed_ms":11724.745831,"selected_instant_age_ms":0.0057799999999999995,"wall_elapsed_ms":12084.788762}
+2026-10-18T01:21:49.973077Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6109,"real_delta_ms":33.390176000000004,"real_elapsed_ms":11758.136007,"selected_instant_age_ms":0.00622,"wall_elapsed_ms":12118.179378}
+2026-10-18T01:21:50.006427Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6143,"real_delta_ms":33.349526,"real_elapsed_ms":11791.485533,"selected_instant_age_ms":0.00712,"wall_elapsed_ms":12151.529804000002}
+2026-10-18T01:21:50.039807Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6176,"real_delta_ms":33.381066000000004,"real_elapsed_ms":11824.866598999999,"selected_instant_age_ms":0.00543,"wall_elapsed_ms":12184.90918}
+2026-10-18T01:21:50.073193Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6209,"real_delta_ms":33.386376000000006,"real_elapsed_ms":11858.252975,"selected_instant_age_ms":0.00541,"wall_elapsed_ms":12218.295536}
+2026-10-18T01:21:50.073451Z  INFO cc_render: apply_arkit_pose tick #300: morph=15 morph_only=15 mesh_no_morph=18 all_mesh=29 named=174 proto_layout=11 avatar_parts=[CC_Base_Body,CC_Base_Body.0,CC_Base_Body.1,CC_Base_Body.2,CC_Base_Body.3,CC_Base_Body.4,CC_Base_Body.5,CC_Base_BoneRoot... (124 total)] scene_roots=[Scene[beautiful_assistant.smpl_aligned.glb#Scene0] in_assets=true state=Some("Loaded")]
+2026-10-18T01:21:50.106575Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6243,"real_delta_ms":33.384506,"real_elapsed_ms":11891.637481,"selected_instant_age_ms":0.00358,"wall_elapsed_ms":12251.678212}
+2026-10-18T01:21:50.139970Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6276,"real_delta_ms":33.388186,"real_elapsed_ms":11925.025667,"selected_instant_age_ms":0.00897,"wall_elapsed_ms":12285.071788}
+2026-10-18T01:21:50.173356Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6309,"real_delta_ms":33.389066,"real_elapsed_ms":11958.414733,"selected_instant_age_ms":0.00625,"wall_elapsed_ms":12318.458134}
+2026-10-18T01:21:50.206741Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6343,"real_delta_ms":33.383936000000006,"real_elapsed_ms":11991.798669,"selected_instant_age_ms":0.0067800000000000004,"wall_elapsed_ms":12351.8426}
+2026-10-18T01:21:50.240122Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6376,"real_delta_ms":33.382565,"real_elapsed_ms":12025.181234,"selected_instant_age_ms":0.00585,"wall_elapsed_ms":12385.224235000001}
+2026-10-18T01:21:50.273508Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6410,"real_delta_ms":33.386426,"real_elapsed_ms":12058.567659999999,"selected_instant_age_ms":0.00573,"wall_elapsed_ms":12418.610541}
+2026-10-18T01:21:50.306892Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6443,"real_delta_ms":33.385776,"real_elapsed_ms":12091.953436000002,"selected_instant_age_ms":0.0046099999999999995,"wall_elapsed_ms":12451.995197}
+2026-10-18T01:21:50.340284Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6476,"real_delta_ms":33.387526,"real_elapsed_ms":12125.340961999998,"selected_instant_age_ms":0.00784,"wall_elapsed_ms":12485.385952999999}
+2026-10-18T01:21:50.373667Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6510,"real_delta_ms":33.385116,"real_elapsed_ms":12158.726078000002,"selected_instant_age_ms":0.00552,"wall_elapsed_ms":12518.768748999999}
+2026-10-18T01:21:50.407046Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6543,"real_delta_ms":33.378176,"real_elapsed_ms":12192.104254,"selected_instant_age_ms":0.0065,"wall_elapsed_ms":12552.147905}
+2026-10-18T01:21:50.440427Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6577,"real_delta_ms":33.381136,"real_elapsed_ms":12225.48539,"selected_instant_age_ms":0.00617,"wall_elapsed_ms":12585.528711}
+2026-10-18T01:21:50.473822Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6610,"real_delta_ms":33.395495999999994,"real_elapsed_ms":12258.880886,"selected_instant_age_ms":0.00638,"wall_elapsed_ms":12618.924417}
+2026-10-18T01:21:50.507195Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6643,"real_delta_ms":33.373706000000006,"real_elapsed_ms":12292.254592000001,"selected_instant_age_ms":0.00507,"wall_elapsed_ms":12652.296812999999}
+2026-10-18T01:21:50.540579Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6677,"real_delta_ms":33.382456,"real_elapsed_ms":12325.637048,"selected_instant_age_ms":0.006350000000000001,"wall_elapsed_ms":12685.680549}
+2026-10-18T01:21:50.573965Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6710,"real_delta_ms":33.387996,"real_elapsed_ms":12359.025044,"selected_instant_age_ms":0.00569,"wall_elapsed_ms":12719.067884999999}
+2026-10-18T01:21:50.607350Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6743,"real_delta_ms":33.386566,"real_elapsed_ms":12392.41161,"selected_instant_age_ms":0.00466,"wall_elapsed_ms":12752.453421}
+2026-10-18T01:21:50.640741Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6777,"real_delta_ms":33.384806000000005,"real_elapsed_ms":12425.796416000001,"selected_instant_age_ms":0.00865,"wall_elapsed_ms":12785.842217000001}
+2026-10-18T01:21:50.674118Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6810,"real_delta_ms":33.381204999999994,"real_elapsed_ms":12459.177621,"selected_instant_age_ms":0.00547,"wall_elapsed_ms":12819.220242}
+2026-10-18T01:21:50.707505Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6844,"real_delta_ms":33.385805999999995,"real_elapsed_ms":12492.563427000001,"selected_instant_age_ms":0.00681,"wall_elapsed_ms":12852.607387999999}
+2026-10-18T01:21:50.740895Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6877,"real_delta_ms":33.387836,"real_elapsed_ms":12525.951262999999,"selected_instant_age_ms":0.00791,"wall_elapsed_ms":12885.996324}
+2026-10-18T01:21:50.774274Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6910,"real_delta_ms":33.381566,"real_elapsed_ms":12559.332829,"selected_instant_age_ms":0.0063300000000000006,"wall_elapsed_ms":12919.37631}
+2026-10-18T01:21:50.807664Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6944,"real_delta_ms":33.387026,"real_elapsed_ms":12592.719855000001,"selected_instant_age_ms":0.00874,"wall_elapsed_ms":12952.765746000001}
+2026-10-18T01:21:50.841052Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":6977,"real_delta_ms":33.390686,"real_elapsed_ms":12626.110541,"selected_instant_age_ms":0.0069299999999999995,"wall_elapsed_ms":12986.154622}
+2026-10-18T01:21:50.874438Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7011,"real_delta_ms":33.387586,"real_elapsed_ms":12659.498126999999,"selected_instant_age_ms":0.00529,"wall_elapsed_ms":13019.540568}
+2026-10-18T01:21:50.907819Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7044,"real_delta_ms":33.378105999999995,"real_elapsed_ms":12692.876232999999,"selected_instant_age_ms":0.007819999999999999,"wall_elapsed_ms":13052.921204}
+2026-10-18T01:21:50.941213Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7077,"real_delta_ms":33.385036,"real_elapsed_ms":12726.261269,"selected_instant_age_ms":0.01381,"wall_elapsed_ms":13086.312230000001}
+2026-10-18T01:21:50.974588Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7111,"real_delta_ms":33.387586,"real_elapsed_ms":12759.648855,"selected_instant_age_ms":0.0045000000000000005,"wall_elapsed_ms":13119.690505999999}
+2026-10-18T01:21:51.007974Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7144,"real_delta_ms":33.385206000000004,"real_elapsed_ms":12793.034061,"selected_instant_age_ms":0.00533,"wall_elapsed_ms":13153.076542}
+2026-10-18T01:21:51.041360Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7177,"real_delta_ms":33.386185999999995,"real_elapsed_ms":12826.420247,"selected_instant_age_ms":0.0059499999999999996,"wall_elapsed_ms":13186.463348}
+2026-10-18T01:21:51.074744Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7211,"real_delta_ms":33.385475,"real_elapsed_ms":12859.805722000001,"selected_instant_age_ms":0.00454,"wall_elapsed_ms":13219.847413}
+2026-10-18T01:21:51.108130Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7244,"real_delta_ms":33.385536,"real_elapsed_ms":12893.191258,"selected_instant_age_ms":0.0040999999999999995,"wall_elapsed_ms":13253.232509}
+2026-10-18T01:21:51.141527Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7278,"real_delta_ms":33.394566,"real_elapsed_ms":12926.585824,"selected_instant_age_ms":0.005710000000000001,"wall_elapsed_ms":13286.628685}
+2026-10-18T01:21:51.174924Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7311,"real_delta_ms":33.392376,"real_elapsed_ms":12959.9782,"selected_instant_age_ms":0.01027,"wall_elapsed_ms":13320.025620999999}
+2026-10-18T01:21:51.208305Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7344,"real_delta_ms":33.383966,"real_elapsed_ms":12993.362166,"selected_instant_age_ms":0.007730000000000001,"wall_elapsed_ms":13353.407046999999}
+2026-10-18T01:21:51.241694Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7378,"real_delta_ms":33.389766,"real_elapsed_ms":13026.751932,"selected_instant_age_ms":0.0065899999999999995,"wall_elapsed_ms":13386.795673}
+2026-10-18T01:21:51.275081Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7411,"real_delta_ms":33.389196000000005,"real_elapsed_ms":13060.141128,"selected_instant_age_ms":0.005540000000000001,"wall_elapsed_ms":13420.183819}
+2026-10-18T01:21:51.308428Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7445,"real_delta_ms":33.346066,"real_elapsed_ms":13093.487194,"selected_instant_age_ms":0.00636,"wall_elapsed_ms":13453.530705000001}
+2026-10-18T01:21:51.341820Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7478,"real_delta_ms":33.390216,"real_elapsed_ms":13126.877410000001,"selected_instant_age_ms":0.00814,"wall_elapsed_ms":13486.922701}
+2026-10-18T01:21:51.375198Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7511,"real_delta_ms":33.380786,"real_elapsed_ms":13160.258195999999,"selected_instant_age_ms":0.00552,"wall_elapsed_ms":13520.300867}
+2026-10-18T01:21:51.408588Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7545,"real_delta_ms":33.389586,"real_elapsed_ms":13193.647782,"selected_instant_age_ms":0.00498,"wall_elapsed_ms":13553.689913}
+2026-10-18T01:21:51.441975Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7578,"real_delta_ms":33.386996,"real_elapsed_ms":13227.034778,"selected_instant_age_ms":0.00514,"wall_elapsed_ms":13587.077068999999}
+2026-10-18T01:21:51.475364Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7611,"real_delta_ms":33.386714999999995,"real_elapsed_ms":13260.421493000002,"selected_instant_age_ms":0.00715,"wall_elapsed_ms":13620.465794}
+2026-10-18T01:21:51.508756Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7645,"real_delta_ms":33.391405999999996,"real_elapsed_ms":13293.812899,"selected_instant_age_ms":0.008110000000000001,"wall_elapsed_ms":13653.85816}
+2026-10-18T01:21:51.542146Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7678,"real_delta_ms":33.389146000000004,"real_elapsed_ms":13327.202045,"selected_instant_age_ms":0.00785,"wall_elapsed_ms":13687.247046}
+2026-10-18T01:21:51.575537Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7712,"real_delta_ms":33.390976,"real_elapsed_ms":13360.593021,"selected_instant_age_ms":0.00843,"wall_elapsed_ms":13720.638601999999}
+2026-10-18T01:21:51.608916Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7745,"real_delta_ms":33.381726,"real_elapsed_ms":13393.974747,"selected_instant_age_ms":0.00548,"wall_elapsed_ms":13754.017378}
+2026-10-18T01:21:51.642304Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7778,"real_delta_ms":33.384176000000004,"real_elapsed_ms":13427.358923,"selected_instant_age_ms":0.009049999999999999,"wall_elapsed_ms":13787.405123999999}
+2026-10-18T01:21:51.675680Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7812,"real_delta_ms":33.379266,"real_elapsed_ms":13460.738189000002,"selected_instant_age_ms":0.0068000000000000005,"wall_elapsed_ms":13820.782140000001}
+2026-10-18T01:21:51.709063Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7845,"real_delta_ms":33.384426000000005,"real_elapsed_ms":13494.122615,"selected_instant_age_ms":0.00628,"wall_elapsed_ms":13854.166046}
+2026-10-18T01:21:51.742450Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7879,"real_delta_ms":33.386646,"real_elapsed_ms":13527.509261000001,"selected_instant_age_ms":0.00583,"wall_elapsed_ms":13887.552242}
+2026-10-18T01:21:51.775847Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7912,"real_delta_ms":33.391036,"real_elapsed_ms":13560.900297,"selected_instant_age_ms":0.01086,"wall_elapsed_ms":13920.948307999999}
+2026-10-18T01:21:51.809220Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7945,"real_delta_ms":33.380516,"real_elapsed_ms":13594.280813,"selected_instant_age_ms":0.0048,"wall_elapsed_ms":13954.322764}
+2026-10-18T01:21:51.842621Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":7979,"real_delta_ms":33.393726,"real_elapsed_ms":13627.674539000001,"selected_instant_age_ms":0.011250000000000001,"wall_elapsed_ms":13987.72294}
+2026-10-18T01:21:51.875995Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":8000,"real_delta_ms":33.379926,"real_elapsed_ms":13661.054465,"selected_instant_age_ms":0.00593,"wall_elapsed_ms":14021.097546}
+2026-10-18T01:21:51.909398Z  INFO cc_render_plugin::cc_render::bevy_app::capture: headless frame clock clock={"previous_body_pts_ms":8000,"real_delta_ms":33.393544999999996,"real_elapsed_ms":13694.44801,"selected_instant_age_ms":0.00704,"wall_elapsed_ms":14054.492201000001}
+2026-10-18T01:21:52.107346Z  WARN cc_render: cc-render-bevy thread exited

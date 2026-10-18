@@ -1,0 +1,196 @@
+{
+  "scene": "toronto_condo",
+  "origin_lat_lon": [
+    43.6409,
+    -79.3971
+  ],
+  "fictional_condo_floor_msl_m": 167,
+  "massing": {
+    "source": "City of Toronto 3D Massing",
+    "dataset": "https://open.toronto.ca/dataset/3d-massing/",
+    "download": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/387b2e3b-2a76-4199-8b3b-0b7d22e2ec10/resource/667237d6-4d3c-4cf3-8cb7-e91c48d59375/download/3dmassingshapefile_2025_wgs84.zip",
+    "licence": "Open Government Licence - Toronto",
+    "credit": "Contains information licensed under the Open Government Licence - Toronto.",
+    "retrieved": "2026-10-15",
+    "source_crs": "EPSG:3857 (despite WGS84 in the archive name)",
+    "modifications": "Cropped to 2.7km from origin; converted to local azimuthal equidistant metres; simplified extrusions; fictional host footprint excluded. Heights use MAX_HEIGHT/AVG_HEIGHT and SURF_ELEV. Not a survey. Scenic facade finishes use two glass palettes on taller massing and limestone/brick palettes on lower massing, with separate rough roof surfaces. These finishes are original approximations, not surveyed building materials."
+  },
+  "interior": "Original procedural Blender architecture, cabinetry and selected furniture, with the CC0 furnishings listed below.",
+  "textures": "Original procedural images with deterministic seed 731, plus CC0 wood_floor and Travertine009 materials listed below.",
+  "provisional": [
+    "Road widths, elevations and traffic operation",
+    "Exact host tower location and floor elevation",
+    "Scenic land materials and vegetation"
+  ],
+  "blender": "5.3.0 Beta ecaf39c37b28",
+  "renderer": "Bevy 0.15.3",
+  "geography": {
+    "source": "City of Toronto topographic waterbodies and Toronto Centreline v2",
+    "water": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/f352a9e9-4077-4c59-b0a9-f35a56fb24be/resource/41ab6d6b-72ac-4711-a540-7ea4e8589a36/download/water-body-4326.geojson",
+    "roads": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/1d079757-377b-4564-82df-eb5638583bfb/resource/7bc94ccf-7bcf-4a7d-88b1-bdfc8ec5aaf1/download/centreline-version-2-4326.geojson",
+    "retrieved": "2026-10-15",
+    "licence": "Open Government Licence - Toronto",
+    "credit": "Contains information licensed under the Open Government Licence - Toronto.",
+    "modifications": "Cropped and projected to local AEQD; simplified shoreline and triangulated land; buffered roads. Road widths, elevations, foliage and simulated traffic are artistic approximations. Elevated-road lane paint and barriers follow the existing centreline routes with scenic lane widths and heights."
+  },
+  "environment_maps": {
+    "source": "Bevy v0.15.3 example assets, assets/environment_maps/pisa_*_rgb9e5_zstd.ktx2",
+    "repository": "https://github.com/bevyengine/bevy/tree/v0.15.3/assets/environment_maps",
+    "credits": "env/BEVY-CREDITS.md",
+    "distribution_licence": "env/BEVY-LICENSE-MIT",
+    "note": "Lighting proxy, not a Toronto panorama. Asset-specific Pisa attribution remains to be confirmed before final distribution."
+  },
+  "furnishings": [
+    {
+      "id": "modern_arm_chair_01",
+      "name": "Modern Arm Chair 01",
+      "authors": {
+        "Vibrant Nordic": "All"
+      },
+      "source": "https://polyhaven.com/a/modern_arm_chair_01",
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "modifications": "Centre span extended into an inward-facing bench sofa while retaining arm/leg thickness; upholstery recoloured warm cream. Original mesh data retained for the separate reading chair. Authored collision bounds and front approach derive from placed geometry."
+    },
+    {
+      "id": "potted_plant_02",
+      "name": "Potted Plant 02",
+      "authors": {
+        "Rico Cilliers": "All"
+      },
+      "source": "https://polyhaven.com/a/potted_plant_02",
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license"
+    }
+  ],
+  "floor_material": {
+    "id": "wood_floor",
+    "name": "Wood Floor",
+    "authors": {
+      "Dimitrios Savva": "All"
+    },
+    "dimensions_mm": [
+      1699.9996900558472,
+      1699.9996900558472
+    ],
+    "source": "https://polyhaven.com/a/wood_floor",
+    "license": "CC0-1.0",
+    "license_url": "https://polyhaven.com/license",
+    "files": [
+      {
+        "path": "wood_floor_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_floor/wood_floor_diff_2k.jpg",
+        "sha256": "7c3ff1164c8dd0758ef2c048e9a266d28174120de01052ec40e6ca486177345c"
+      },
+      {
+        "path": "wood_floor_nor_gl_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_floor/wood_floor_nor_gl_2k.jpg",
+        "sha256": "eff2e4db46bab930dc05997faf5085157eec4fd652cdfc6cd01fa11edd56ef10"
+      },
+      {
+        "path": "wood_floor_rough_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_floor/wood_floor_rough_2k.jpg",
+        "sha256": "297eda0d75f2020cc541dbf242e1f5fd058053249567f49a4506fc2c5b1a172b"
+      }
+    ],
+    "modifications": "Derived light-oak albedo finish with reduced contrast; uniform satin roughness 0.52. Normal-map XY amplitude baked to 0.05 and renormalized because Bevy 0.15.3 ignores glTF normalTexture.scale. Original source textures retained unchanged."
+  },
+  "parks": {
+    "source": "City of Toronto GIS City Park layer",
+    "layer": "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial27/FeatureServer/3",
+    "query": "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial27/FeatureServer/3/query?where=1%3D1&geometry=-79.445%2C43.60%2C-79.35%2C43.66&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=%2A&outSR=4326&f=geojson",
+    "dataset": "https://open.toronto.ca/dataset/green-spaces/",
+    "license": "Open Government Licence - Toronto",
+    "license_url": "https://open.toronto.ca/open-data-licence/",
+    "license_note": "The dataset web page identifies this licence; the CKAN metadata says notspecified.",
+    "credit": "Contains information licensed under the Open Government Licence - Toronto.",
+    "retrieved": "2026-10-16",
+    "sha256": "622299e7e67c0b5625936c318987cdab9049a23d9d4b5ce3c4fc74fbf2473ed6",
+    "modifications": "Public Park and Open Green Space classes cropped to scene land. Tree placement, height and species are scenic approximations, not a tree inventory. The 45 trees within 600 m use deterministic branched broadleaf geometry with 1600 leaves each; distant canopies use simpler geometry. Tree placement and mapped clearances are unchanged."
+  },
+  "vehicles": {
+    "source": "Original procedural Blender vehicle from scripts/condo/build.py",
+    "base": "vehicle-base.glb",
+    "variants": "Six original paint palettes; scripts/condo/vehicle_variants.py creates glTF scenes sharing unchanged geometry buffers. No surveyed vehicle types or live traffic data.",
+    "lamps": "Original front and rear lenses authored by scripts/condo/vehicle_lamps.py. Night-only cloned emission and one unshadowed headlight spot per car; scenic prototype, not surveyed lighting or braking behaviour."
+  },
+  "street_lights": {
+    "source": "Original procedural Bevy fixtures in src/cc_render/bevy_app/street_lights.rs",
+    "description": "Scenic poles derived from existing traffic routes at 40 m spacing within 1400 m of the condo. Shared original geometry and materials; night-only warm emission and unshadowed road pools with cones constrained below the horizon. Locations, heights and photometry are artistic approximations, not surveyed Toronto infrastructure."
+  },
+  "night_windows": {
+    "source": "Original procedural city_windows.wgsl and Bevy material extension",
+    "description": "Static scenic occupancy from window cells and wall origin; warm/cool pane emission on authored facade batches only. No real occupancy data, point lights, lake reflection or diffuse bounce is claimed."
+  },
+  "coffee_table_stone": {
+    "source": "https://ambientcg.com/a/Travertine009",
+    "credit": "ambientCG / Lennart Demes",
+    "license": "CC0-1.0",
+    "license_url": "https://docs.ambientcg.com/license/",
+    "source_manifest": "models/Travertine009/provenance.json",
+    "authoring": "scripts/condo/stone_material.py",
+    "modifications": "Coffee table only. 1.2 m UV0 repeat, original colour, softened OpenGL normal (0.10 XY amplitude), honed roughness 0.38 + 0.65 times source roughness. Geometry, transforms and existing sky-irradiance UV1 atlas preserved."
+  },
+  "tabletop_details": {
+    "source": "Original Blender geometry from scripts/condo/tabletop_props.py",
+    "description": "Hollow lathed ceramic mug with rounded rim, handle and coffee surface; cloth-bound decorative book with covers, page block, spine and original FIELD NOTES lettering. No real publication represented. Decorative assets only, without new avatar actions.",
+    "placement": "Bases derive from the current coffee-table top; authored horizontal positions retained.",
+    "lighting": "Coffee-table sky irradiance refreshed at 128 samples on the existing UV1 atlas. Other room lightmaps preserved. See floor-bake.json surface_updates."
+  },
+  "upholstery": {
+    "source": "models/terlenka/provenance.json",
+    "authoring": "scripts/condo/upholstery.py",
+    "scope": "Living sofa and reading chair cushion faces only",
+    "finish": "Unmodified beige woven polyester colour and roughness; normal XY amplitude 0.2",
+    "uv": "UV0 smart projection at source dimensions; wood UV and baked UV1 preserved",
+    "geometry": "Unchanged; no avatar or motion edits"
+  },
+  "balcony_furniture": {
+    "source": "Original geometry in scripts/condo/balcony_furniture.py",
+    "wood_maps": "models/wood_floor/provenance.json",
+    "wood_texture_license": "CC0-1.0",
+    "wood_finish": "Unmodified colour sampled within unbroken boards at 1.7 m scale, aligned with timber length; existing softened normal with XY amplitude 0.05; roughness 0.60.",
+    "cushions": "Existing CC0 Poly Haven Terlenka material and source-scale UVs.",
+    "collision": "Three conservative static geometry-derived boxes; no seating/support declarations. Physical overhang retained and its incorrect navigation flag removed.",
+    "lighting": "Balcony-only sky irradiance refreshed; other room lightmaps unchanged.",
+    "checker": "scripts/condo/check_balcony_clearance.py; static XZ probes and conservative continuous central-route bound, not avatar traversal acceptance."
+  },
+  "dining_furniture": {
+    "source": "Original geometry in scripts/condo/dining_furniture.py",
+    "chairs": "Four curved upholstered backs, tapered oak legs, rails and thinner seats; one mesh with two material primitives per chair.",
+    "table": "Rounded 1.6 m diameter honed travertine top and fluted oak pedestal.",
+    "materials": "Existing CC0 wood_floor, Poly Haven Terlenka and ambientCG Travertine009 maps; no new downloaded assets.",
+    "lighting": "Floor-only sky irradiance refreshed at 512 x 512, 128 samples, seed 731; existing UV1 and lightmap bindings preserved.",
+    "limitations": "Visual furniture only; dining colliders and seating affordances are not yet registered. No avatar traversal or seating acceptance."
+  },
+  "kitchen": {
+    "source": "Original geometry in scripts/condo/kitchen_furniture.py",
+    "details": [
+      "Oak veneer drawer and door fronts with metal pulls",
+      "Hollow base cabinet shell, boolean countertop cutout, recessed steel sink and arched faucet",
+      "Induction hob markings, oven, extractor hood and refrigerator",
+      "Travertine island top and waterfall ends"
+    ],
+    "materials": "Existing CC0 light oak and travertine maps; authored metal, ceramic and recess materials.",
+    "collision": "Seven geometry-derived static bounds; base units, fridge and island participate in XZ navigation. Upper units, backsplash, hood and faucet retain separate physical boxes.",
+    "lighting": "Six existing sky-irradiance atlases refreshed from the saved lightmapped scene, preserving its geometry and UVs.",
+    "limitations": "Static visual appliances; no door/drawer actuation, water flow, cooking, sink cavity collision or grasp/seating validation. Grouped box bounds are conservative.",
+    "island_layout": "Centre and 1.15 m width preserved; length reduced from 2.65 m to 2.30 m, leaving a 0.78 m north passage.",
+    "clearance": "scripts/condo/check_kitchen_clearance.py verifies a static corridor with the existing 0.35 m planning reserve; not avatar traversal proof."
+  },
+  "bedroom": {
+    "source": "Original geometry in scripts/condo/bedroom_furniture.py",
+    "details": [
+      "Oak rails and recessed feet",
+      "Upholstered oak headboard and puffed linen pillows",
+      "Static sage duvet with shallow folds and side/foot drape",
+      "Two-drawer bedside unit, stone top and ceramic lamp with hollow linen shade"
+    ],
+    "materials": "Existing CC0 oak, Terlenka fabric roughness/normal and travertine maps. Sage fabric colour is authored; source images are unchanged.",
+    "lighting": "Nine normalized-sky atlases, including bedroom rug, mattress and continuous duvet atlases. Authored bedside point light: 600 lm, 3.5 m range, 0.08 m radius, warm sRGB [1, 0.78, 0.52]; position derived from shade bounds. Shade uses a cloned emissive material and does not cast shadows to approximate linen transmission. Geometry and all 18 lightmap files remain unchanged by the lamp addition.",
+    "collision": "Four conservative geometry-derived groups: bed, headboard, bedside unit and lamp; lamp excluded from XZ navigation. No lying/sitting/contact affordances.",
+    "clearance": "scripts/condo/check_bedroom_clearance.py verifies static west and east access corridors against the 0.35 m planning reserve.",
+    "limitations": "Static bedding only; no avatar cloth dynamics or interaction. Lamp is always on; no time-based switching. Point light and emissive shade approximate a fabric luminaire; no physical shade transmission or indirect lamp bounce.",
+    "duvet_atlas": "Continuous top and underside UV1 rectangles with a separate padded rim strip; 20.48 texel top/underside separation at 512 px with 8 px bake margins. Geometry and fabric UV0 preserved; duvet-only rebake in iteration 106."
+  }
+}

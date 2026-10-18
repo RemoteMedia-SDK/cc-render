@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/solver-runtime/profile.py", line 70, in <module>
+    subprocess.run([str(scratch/'replay'), str(asset), str(trace), str(out/'positions.bin')], stdout=log, stderr=counters, check=True)
+  File "/home/acidhax/miniconda3/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/tmp/tissue-runtime-ar4uzxxz/replay', '/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/assets/tissue/beautiful_assistant.base-viscous-prototype.json', '/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-front-viscous-240hz-01/tissue.ndjson', '/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/solver-runtime/baseline-opt1/positions.bin']' returned non-zero exit status 1.

@@ -1,0 +1,47 @@
+<ctx task="record_tissue_jump.py main" route="routed: name-exact BM25 — query names a symbol (record_tissue_jump.py); anchors: record_tissue_jump.py(syntax) main(artifacts/.../replay.rs+23)" root="." confidence="high" margin_pct="0" at="ea65ebb68+dirty" est_tokens="2848"><!-- ripwire lens for "record_tissue_jump.py main" [relevance floor: kept 24 of 40 - the other 16 scored zero on this query, so the bundle shrank instead of padding] [confidence= derives from the ranked head's largest relative score drop (margin_pct=, whole percent, 0 = none; the same gap the adaptive flag cuts at). low = flat ranking: treat the set as a starting point, not an answer]: reusable building blocks + quality facts for what you're about to touch (cx=complexity ccx=cognitive in=reuse-count churn=recent-commits amp=change-amplification clone=1(duplicated) tested=1) — prefer composing/reusing these; watch the high-churn/high-amp/cloned ones; tail: file-grain tail, WEAKER evidence than the ranked rows (paths only): every positive-score file NOT among the shown sigs rows — the files of trimmed rows first, best-symbol rank order; rows are t p=file; total=such files, shown=printed, capped=1 when they differ. r= on a ranked row is its 1-based rank in this lens ranking, rows in r= order, p= the file (a gap = a budget-trimmed row) --><!-- root= is the crawl root; p= below is RELATIVE to it (single-root only; absent => p= is ingest's own path, unchanged); at=this commit(+dirty). est_tokens= prices this bundle in tokens --><sigs><d l="42" n="main" p="artifacts/soft-tissue/solver-runtime/replay.rs" cx="7" ccx="13" in="0" r="1" next="--expand=artifacts/soft-tissue/solver-runtime/replay.rs:main">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="4" n="main" p="artifacts/soft-tissue/sparse-solver/compare.rs" cx="4" ccx="6" in="0" r="2">fn main()-&gt;anyhow::Result&lt;()&gt;</d><d l="7" n="main" p="artifacts/soft-tissue/sparse-solver/probe.rs" cx="3" ccx="3" in="0" clone="1" r="3">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="72" n="main" p="examples/check_native_root_sweep.rs" cx="1" ccx="0" in="0" churn="2" amp="2" r="4">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="56" n="main" p="examples/condo_capture.rs" cx="1" ccx="0" in="0" churn="1" r="5">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="14" n="main" p="examples/face_clips.rs" cx="4" ccx="4" in="0" churn="1" r="6">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="9" n="main" p="examples/generate_waypoint.rs" cx="5" ccx="6" in="0" churn="1" amp="14" r="7">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="26" n="main" p="examples/home_hud_snapshot.rs" cx="8" ccx="13" in="0" churn="1" amp="9" r="8">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="8" n="main" p="examples/home_snapshot.rs" cx="6" ccx="12" in="0" churn="1" amp="14" r="9">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="30" n="main" p="examples/office_acceptance.rs" cx="84" ccx="218" in="0" churn="7" amp="32" r="10">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="6" n="main" p="examples/pose_snapshot.rs" cx="5" ccx="7" in="0" churn="1" amp="21" r="11">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="94" n="main" p="examples/replay_native_office.rs" cx="17" ccx="26" in="0" churn="3" amp="2" r="12">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="34" n="main" p="examples/tissue_contact_probe.rs" cx="5" ccx="8" in="0" r="13">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="6" n="main" p="examples/tissue_fit.rs" cx="9" ccx="24" in="0" r="14">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="9" n="main" p="examples/tissue_lab.rs" cx="1" ccx="0" in="0" r="15">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="5" n="main" p="examples/tissue_probe.rs" cx="3" ccx="3" in="0" clone="1" r="16">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="5" n="main" p="examples/verify_native_motion_stream.rs" cx="8" ccx="12" in="0" churn="1" r="17">fn main() -&gt; anyhow::Result&lt;()&gt;</d><d l="58" n="main" p="scripts/avatars/build_body_contact_asset.py" cx="1" ccx="0" in="0" r="18">def main():</d><d l="229" n="main" p="scripts/avatars/build_tissue_asset.py" cx="2" ccx="1" in="0" r="19">def main():</d><d l="10" n="main" p="scripts/avatars/record_tissue_jump.py" cx="4" ccx="5" in="0" r="20">def main():</d><d l="82" n="main" p="scripts/avatars/retime_tissue_capture.py" cx="3" ccx="2" in="0" r="21">def main():</d><d l="110" n="main" p="scripts/avatars/review_tissue_lab.py" cx="14" ccx="18" in="0" r="22">def main():</d><d l="291" n="main" p="scripts/condo/build_outfit.py" cx="3" ccx="2" in="0" churn="1" r="23">def main():</d><d l="80" n="main" p="scripts/condo/generate_turn_conversation.py" cx="3" ccx="2" in="0" churn="1" r="24">def main():</d></sigs><tail total="0" shown="0" capped="0"></tail><bodies shown="1" total="1" capped="0"><b t="fn" l="42" p="artifacts/soft-tissue/solver-runtime/replay.rs" n="main"><![CDATA[fn main() -> anyhow::Result<()> {
+    let args: Vec<_> = std::env::args().collect();
+    anyhow::ensure!(args.len() == 4, "asset.json trace.ndjson positions.bin");
+    let asset = TissueAsset::from_json(&std::fs::read(&args[1])?)?;
+    let samples: Vec<Sample> = std::fs::read_to_string(&args[2])?
+        .lines().map(serde_json::from_str).collect::<Result<_, _>>()?;
+    anyhow::ensure!(samples.len() > 1 && samples.windows(2).all(|w| w[1].pts_ms > w[0].pts_ms));
+    anyhow::ensure!(samples.iter().all(|s| s.regions.len() == asset.regions.len()));
+    let frame_at = |region: usize, time: f64| {
+        let hi = samples.partition_point(|s| s.pts_ms < time).min(samples.len() - 1);
+        let lo = hi.saturating_sub(1);
+        if lo == hi { return samples[hi].regions[region].frame(); }
+        let alpha = (time - samples[lo].pts_ms) / (samples[hi].pts_ms - samples[lo].pts_ms);
+        samples[lo].regions[region].frame().interpolate(samples[hi].regions[region].frame(), alpha)
+    };
+    let start = samples[0].pts_ms;
+    let dt = 1.0 / 240.0;
+    let steps = ((samples.last().unwrap().pts_ms - start) / (dt * 1000.0)).round() as usize;
+    let mut solvers = asset.regions.iter().enumerate()
+        .map(|(i, r)| r.solver(frame_at(i, start))).collect::<Result<Vec<_>, _>>()?;
+    for (i, solver) in solvers.iter_mut().enumerate() {
+        solver.initialize_motion(frame_at(i, start + dt * 1000.0), dt)?;
+    }
+    let mut output = std::io::BufWriter::new(std::fs::File::options().write(true).create_new(true).open(&args[3])?);
+    let started = std::time::Instant::now();
+    let mut solve_ns = 0_u128;
+    let mut subdivisions = 0;
+    for tick in 1..=steps {
+        let time = start + tick as f64 * dt * 1000.0;
+        for (i, solver) in solvers.iter_mut().enumerate() {
+            let before = std::time::Instant::now();
+            subdivisions += advance(solver, time-dt*1000.0, time, 0, &|at|frame_at(i, at))?;
+            solve_ns += before.elapsed().as_nanos();
+            for position in solver.positions() {
+                for coordinate in position.to_array() { output.write_all(&coordinate.to_le_bytes())?; }
+            }
+        }
+    }
+    output.flush()?;
+    println!("{}", serde_json::json!({"source_start_ms":start, "steps":steps,
+        "rate_hz":240, "regions":solvers.len(), "subdivisions":subdivisions, "solve_seconds":solve_ns as f64 / 1e9,
+        "wall_seconds":started.elapsed().as_secs_f64(),
+        "metrics":solvers.iter().map(|s|s.metrics()).collect::<Vec<_>>(),
+        "limitations":"Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark."}));
+    soft_tissue::solver::implicit::profile();
+    Ok(())
+}]]><calls total="6"><c n="frame" l="13">fn frame(&amp;self) -&gt; Frame</c><c n="advance" l="26">fn advance(solver: &amp;mut Tissue, start: f64, end: f64, depth: usize, frame_at: &amp;impl Fn(f64) -&gt; Frame) -&gt; Result&lt;usize, TissueError&gt;</c><c n="lines" l="8">fn lines(path: &amp;Path) -&gt; anyhow::Result&lt;Vec&lt;Value&gt;&gt;</c><c n="from_json" l="77">pub fn from_json(bytes: &amp;[u8]) -&gt; anyhow::Result&lt;Self&gt;</c><c n="interpolate" l="106">pub fn interpolate(self, to: Self, alpha: f64) -&gt; Self</c><c n="initialize_motion" l="315">pub fn initialize_motion(&amp;mut self, next_frame: Frame, dt: f64) -&gt; Result&lt;(), TissueError&gt;</c></calls></b></bodies></ctx>

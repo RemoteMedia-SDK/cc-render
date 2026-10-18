@@ -1,0 +1,68 @@
+[
+  {
+    "name": "viscosity-symmetry-live120-01",
+    "clock": "live",
+    "fps": 30,
+    "rate": 120,
+    "save_images": false,
+    "output": "artifacts/soft-tissue/lab-front-viscosity-symmetry-live120-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-viscosity-symmetry-live120-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "e43b3f68103f47ce1a5142d6f6ff2a94bdab04a31dbf757a557ee208912579f9",
+    "log": "viscosity-symmetry-live120-01.log",
+    "started_unix": 1792289106.5314684,
+    "pid": 1558091,
+    "exit_code": 0,
+    "completed_unix": 1792289123.1352563
+  },
+  {
+    "name": "viscosity-symmetry-review-01",
+    "clock": "fixed",
+    "fps": 60,
+    "rate": 240,
+    "save_images": true,
+    "output": "artifacts/soft-tissue/lab-front-viscosity-symmetry-review-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-viscosity-symmetry-review-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "240",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "60",
+      "CC_TISSUE_LAB_CLOCK": "fixed",
+      "CC_TISSUE_LAB_TRACE_ONLY": "0",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "e43b3f68103f47ce1a5142d6f6ff2a94bdab04a31dbf757a557ee208912579f9",
+    "log": "viscosity-symmetry-review-01.log",
+    "started_unix": 1792289123.665284,
+    "pid": 1558404,
+    "exit_code": 0,
+    "completed_unix": 1792289145.1515577
+  }
+]

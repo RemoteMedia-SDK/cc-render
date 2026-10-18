@@ -1,0 +1,316 @@
+{
+  "source_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+  "cpu": {
+    "baseline": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.028208395735819063,
+          "kinetic_energy_j": 0.4630951858036083,
+          "mass_kg": 0.7092840233607869,
+          "maximum_speed_m_s": 1.2626055889207686,
+          "maximum_volume_ratio": 1.0314281456229777,
+          "minimum_volume_ratio": 0.9545480086412635
+        },
+        {
+          "elastic_energy_j": 0.02897407881993781,
+          "kinetic_energy_j": 0.4620712979421133,
+          "mass_kg": 0.7034397124915243,
+          "maximum_speed_m_s": 1.2700569463915898,
+          "maximum_volume_ratio": 1.0401334788527352,
+          "minimum_volume_ratio": 0.9761721485777248
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 17.539447461,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 3,
+      "wall_seconds": 17.561509574
+    },
+    "current": {
+      "limitations": "Recorded attachment interpolation; no body contact, rendering, or fractional display solve. Profiling workload only, not source-motion acceptance or a real-time benchmark.",
+      "metrics": [
+        {
+          "elastic_energy_j": 0.02820839573581177,
+          "kinetic_energy_j": 0.4630951858035724,
+          "mass_kg": 0.7092840233607869,
+          "maximum_speed_m_s": 1.2626055889205394,
+          "maximum_volume_ratio": 1.031428145623053,
+          "minimum_volume_ratio": 0.9545480086413951
+        },
+        {
+          "elastic_energy_j": 0.028974078819956672,
+          "kinetic_energy_j": 0.46207129794209123,
+          "mass_kg": 0.7034397124915243,
+          "maximum_speed_m_s": 1.2700569463914628,
+          "maximum_volume_ratio": 1.0401334788527716,
+          "minimum_volume_ratio": 0.9761721485777182
+        }
+      ],
+      "rate_hz": 240,
+      "regions": 2,
+      "solve_seconds": 11.021579289,
+      "source_start_ms": 50.0,
+      "steps": 1908,
+      "subdivisions": 3,
+      "wall_seconds": 11.053417611
+    },
+    "current_counters": {
+      "cg_steps": 18132,
+      "descent_ns": 2386382538,
+      "direction_ns": 2696318336,
+      "linear_solves": 18132,
+      "linearize_ns": 5795477693,
+      "multiply_ns": 52107243,
+      "true_relative_residual": {
+        "above_1e_minus_7": 0,
+        "above_1e_minus_9": 0,
+        "count": 18132,
+        "maximum": 2.0921851419791624e-11,
+        "median": 1.723915498896227e-13,
+        "p95": 1.2387993503365532e-12
+      }
+    },
+    "maximum_node_difference_mm": 6.265871748793041e-09,
+    "node_frames_compared": 976896,
+    "solve_time_reduction_percent": 37.161194424698195,
+    "scope": "Same sequential CPU workload; interpolated recorded attachment frames, no contact/render/fractional display solve."
+  },
+  "30fps_120hz": {
+    "baseline": {
+      "directory": "lab-front-opt3-30fps-120hz-01",
+      "output_fps": 30,
+      "tissue_hz": 120,
+      "capture": {
+        "frames": 240,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 17.517470513
+      },
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "first_frame_wall_ms": 6682.058917,
+      "playback_capture_seconds": 10.834336886000003,
+      "playback_wall_over_source": 1.3655579639526094,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        43.22146999999859,
+        67.44295399999847,
+        83.49494982000009,
+        105.3606000000018
+      ],
+      "stage_seconds": {
+        "sampling": 0.9852960429999998,
+        "elasticity": 8.629133933999997,
+        "collision": 0.3812163559999998
+      },
+      "peak_surface_displacement_mm": 32.712336629629135,
+      "minimum_element_volume_ratio": 0.8700472838754557,
+      "maximum_skin_error_mm": 0.0012548865837709487,
+      "maximum_active_contact_samples": 0
+    },
+    "current": {
+      "directory": "lab-front-full-factor-30fps-120hz-01",
+      "output_fps": 30,
+      "tissue_hz": 120,
+      "capture": {
+        "frames": 240,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 15.010618358
+      },
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "first_frame_wall_ms": 6864.165613,
+      "playback_capture_seconds": 8.145379354,
+      "playback_wall_over_source": 1.026642217544744,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        33.73129600000175,
+        66.44531900000001,
+        67.48342799999996,
+        72.64819500000158
+      ],
+      "stage_seconds": {
+        "sampling": 1.04709862,
+        "elasticity": 3.956743486,
+        "collision": 0.385243512
+      },
+      "peak_surface_displacement_mm": 32.712336629629135,
+      "minimum_element_volume_ratio": 0.8700472838771078,
+      "maximum_skin_error_mm": 0.0012548865837709487,
+      "maximum_active_contact_samples": 0
+    },
+    "differences": {
+      "common_source_timestamps": 240,
+      "identical_traced_physics_and_source": false,
+      "maximum_surface_envelope_difference_mm": 0.0,
+      "maximum_centroid_offset_difference_mm": 5.746845441556751e-10
+    },
+    "unchanged_source_attachment_frames_and_contact_subdivision_counts": true
+  },
+  "60fps_240hz": {
+    "baseline": {
+      "directory": "lab-front-opt3-startup-60fps-240hz-01",
+      "output_fps": 60,
+      "tissue_hz": 240,
+      "capture": {
+        "frames": 478,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 22.027107253
+      },
+      "first_source_ms": 50,
+      "source_span_seconds": 7.95,
+      "first_frame_wall_ms": 5558.28615,
+      "playback_capture_seconds": 16.467739792,
+      "playback_wall_over_source": 2.0714138103144655,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        33.7180759999992,
+        48.488263000000735,
+        58.159521720000534,
+        83.29987000000256
+      ],
+      "stage_seconds": {
+        "sampling": 1.9090226819999987,
+        "elasticity": 12.522315109999996,
+        "collision": 0.7223701950000003
+      },
+      "peak_surface_displacement_mm": 37.85074129700661,
+      "minimum_element_volume_ratio": 0.8552568517202719,
+      "maximum_skin_error_mm": 0.001970167946824451,
+      "maximum_active_contact_samples": 0
+    },
+    "current": {
+      "directory": "lab-front-full-factor-60fps-240hz-01",
+      "output_fps": 60,
+      "tissue_hz": 240,
+      "capture": {
+        "frames": 478,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 15.799970524
+      },
+      "first_source_ms": 50,
+      "source_span_seconds": 7.95,
+      "first_frame_wall_ms": 5612.472836,
+      "playback_capture_seconds": 10.186416687000001,
+      "playback_wall_over_source": 1.2813102750943397,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        21.0692399999989,
+        28.50239180000026,
+        37.166063600000314,
+        50.57180399999925
+      ],
+      "stage_seconds": {
+        "sampling": 2.0308371459999996,
+        "elasticity": 6.075458597000003,
+        "collision": 0.7324064830000006
+      },
+      "peak_surface_displacement_mm": 37.85074129700661,
+      "minimum_element_volume_ratio": 0.8552568517101171,
+      "maximum_skin_error_mm": 0.001970167946824451,
+      "maximum_active_contact_samples": 0
+    },
+    "differences": {
+      "common_source_timestamps": 478,
+      "identical_traced_physics_and_source": false,
+      "maximum_surface_envelope_difference_mm": 0.0,
+      "maximum_centroid_offset_difference_mm": 1.2242578495365824e-10
+    },
+    "unchanged_source_attachment_frames_and_contact_subdivision_counts": true
+  },
+  "paced_vs_uncapped_30fps_120hz": {
+    "baseline": {
+      "directory": "lab-front-full-factor-paced-30fps-120hz-01",
+      "output_fps": 30,
+      "tissue_hz": 120,
+      "capture": {
+        "frames": 240,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 15.01518022
+      },
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "first_frame_wall_ms": 6879.9932610000005,
+      "playback_capture_seconds": 8.134104617999999,
+      "playback_wall_over_source": 1.0252211517519534,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        33.729966000000786,
+        67.44020399999981,
+        68.14686360000032,
+        89.54357300000083
+      ],
+      "stage_seconds": {
+        "sampling": 1.0198490399999998,
+        "elasticity": 3.9260030029999995,
+        "collision": 0.3757018300000003
+      },
+      "peak_surface_displacement_mm": 32.712336629629135,
+      "minimum_element_volume_ratio": 0.8700472838771078,
+      "maximum_skin_error_mm": 0.0012548865837709487,
+      "maximum_active_contact_samples": 0
+    },
+    "current": {
+      "directory": "lab-front-full-factor-fast-30fps-120hz-02",
+      "output_fps": 30,
+      "tissue_hz": 120,
+      "capture": {
+        "frames": 240,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 10.746194484
+      },
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "first_frame_wall_ms": 4723.964591999999,
+      "playback_capture_seconds": 6.0211430319999995,
+      "playback_wall_over_source": 0.7589038356440634,
+      "consumer_interval_ms_p50_p95_p99_max": [
+        24.258260999999948,
+        37.97343299999975,
+        47.03646202000015,
+        58.99747800000023
+      ],
+      "stage_seconds": {
+        "sampling": 1.0372204259999998,
+        "elasticity": 3.8960518719999984,
+        "collision": 0.37516106199999993
+      },
+      "peak_surface_displacement_mm": 32.712336629629135,
+      "minimum_element_volume_ratio": 0.8700472838771078,
+      "maximum_skin_error_mm": 0.0012548865837709487,
+      "maximum_active_contact_samples": 0
+    },
+    "differences": {
+      "common_source_timestamps": 240,
+      "identical_traced_physics_and_source": true,
+      "maximum_surface_envelope_difference_mm": 0.0,
+      "maximum_centroid_offset_difference_mm": 0.0
+    },
+    "unchanged_source_attachment_frames_and_contact_subdivision_counts": true
+  },
+  "source_manifest": "full-factor-inputs.json",
+  "scheduler_launches": "full-factor-scheduler-launches.json",
+  "decision": "Retain bounded complete factorization; preserve original incomplete pattern for larger/denser cages.",
+  "limitations": [
+    "Single runs on a shared host; these are not end-to-end interactive latency or deadline guarantees.",
+    "The default offline captures retain ScheduleRunnerPlugin FPS pacing; their wall time includes its wait.",
+    "CC_RENDER_FAST=1 removes that wait only for the explicitly uncapped offline capture; fixed source-time sampling is unchanged.",
+    "GPU envelope/centroid differences do not bound every skin vertex; the CPU comparison covers all volumetric node positions.",
+    "Actual-avatar compression and anatomical material calibration remain unvalidated."
+  ]
+}

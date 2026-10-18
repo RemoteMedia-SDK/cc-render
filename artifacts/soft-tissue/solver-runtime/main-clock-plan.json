@@ -1,0 +1,41 @@
+{
+  "scope": "Headless main-clock selection only; unchanged tissue solver, material, source packets, avatar and camera.",
+  "timing_runs": [
+    {
+      "name": "main-clock-on-01",
+      "tissue": true,
+      "clock": "live",
+      "fps": 30,
+      "tissue_hz": 120
+    },
+    {
+      "name": "main-clock-off-01",
+      "tissue": false,
+      "clock": "live",
+      "fps": 30,
+      "tissue_hz": 120
+    },
+    {
+      "name": "main-clock-on-02",
+      "tissue": true,
+      "clock": "live",
+      "fps": 30,
+      "tissue_hz": 120
+    }
+  ],
+  "regression": {
+    "name": "main-clock-fixed-01",
+    "clock": "fixed",
+    "fps": 60,
+    "tissue_hz": 240,
+    "timing_claim": false
+  },
+  "visual": {
+    "name": "main-clock-video-01",
+    "clock": "live",
+    "fps": 30,
+    "tissue_hz": 120,
+    "timing_claim": false
+  },
+  "order": "Fixed regression and separate visual capture overlapped the bedding test. Only our verified test process is temporarily suspended for the three timing captures, then resumed in finally."
+}

@@ -1,0 +1,793 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+warning: value assigned to `own_rest_local` is never read
+   --> src/cc_render/bevy_app/pose.rs:637:9
+    |
+637 |         own_rest_local[1] = lhip_own;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: taking a mutable reference to a `const` item
+   --> src/cc_render/cloth_pair_tests.rs:240:13
+    |
+240 |             &mut DVec3::ZERO,
+    |             ^^^^^^^^^^^^^^^^
+    |
+    = note: each usage of a `const` item creates a new temporary
+    = note: the mutable reference will refer to this temporary, not the original `const` item
+note: `const` item defined here
+   --> /home/acidhax/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glam-0.29.3/src/f64/dvec3.rs:28:5
+    |
+ 28 |     pub const ZERO: Self = Self::splat(0.0);
+    |     ^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(const_item_mutation)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/cc_render/cloth_self_collision.rs:488:13
+    |
+488 |         let mut particles = GripParticles {
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `tissue::TissueRequest` is more private than the item `secondary::auto_detect_chains`
+   --> src/cc_render/bevy_app/physics/secondary.rs:125:1
+    |
+125 | / pub(crate) fn auto_detect_chains(
+126 | |     mut commands: Commands,
+127 | |     bones: Query<
+128 | |         (Entity, &Name, &Transform, Option<&Parent>),
+...   |
+139 | |     tissue: Option<Res<crate::cc_render::bevy_app::tissue::TissueRequest>>,
+140 | | ) {
+    | |_^ function `secondary::auto_detect_chains` is reachable at visibility `pub(in crate::cc_render)`
+    |
+note: but type `tissue::TissueRequest` is only usable at visibility `pub(in crate::cc_render::bevy_app)`
+   --> src/cc_render/bevy_app/tissue.rs:35:1
+    |
+ 35 | pub(super) struct TissueRequest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: associated items `neutral` and `to_json` are never used
+   --> src/arkit.rs:110:12
+    |
+ 99 | impl BlendshapeFrame {
+    | -------------------- associated items in this implementation
+...
+110 |     pub fn neutral(pts_ms: u64) -> Self {
+    |            ^^^^^^^
+...
+115 |     pub fn to_json(&self) -> Value {
+    |            ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `frame_interval_ms` is never read
+   --> src/cc_render/bevy_app/capture.rs:126:9
+    |
+124 | pub(crate) struct MonotonicCaptureClock {
+    |                   --------------------- field in this struct
+125 |     pub frame_count: u64,
+126 |     pub frame_interval_ms: u64,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: struct `LatestPose` is never constructed
+   --> src/cc_render/bevy_app/pose.rs:923:19
+    |
+923 | pub(crate) struct LatestPose {
+    |                   ^^^^^^^^^^
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:36:9
+   |
+22 |     Capsule {
+   |     ------- field in this variant
+...
+36 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:50:9
+   |
+38 |     Box {
+   |     --- field in this variant
+...
+50 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `palm_override` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:23:9
+   |
+20 |     Pursuing {
+   |     -------- field in this variant
+...
+23 |         palm_override: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `ceiling_y` is never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:81:9
+   |
+79 | pub struct PlayVolumeRaw {
+   |            ------------- field in this struct
+80 |     pub half_extents_xz: f32,
+81 |     pub ceiling_y: f32,
+   |         ^^^^^^^^^
+   |
+   = note: `PlayVolumeRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `id` is never read
+   --> src/cc_render/office/controller.rs:165:9
+    |
+164 | pub(crate) struct PushForceIntent {
+    |                   --------------- field in this struct
+165 |     pub id: String,
+    |         ^^
+    |
+    = note: `PushForceIntent` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: function `apply_furniture_push` is never used
+   --> src/cc_render/office/systems.rs:190:4
+    |
+190 | fn apply_furniture_push(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `damp_seated_idle` is never used
+  --> src/cc_render/office/contact.rs:25:15
+   |
+25 | pub(crate) fn damp_seated_idle(
+   |               ^^^^^^^^^^^^^^^^
+
+warning: variant `Occupy` is never constructed
+ --> src/cc_render/office/scene_lifecycle.rs:8:33
+  |
+8 | pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
+  |                 -----           ^^^^^^
+  |                 |
+  |                 variant in this enum
+  |
+  = note: `Phase` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: method `awaiting_revision` is never used
+  --> src/cc_render/office/scene_lifecycle.rs:79:19
+   |
+36 | impl SceneLifecycle {
+   | ------------------- method in this implementation
+...
+79 |     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: `cc-render-plugin` (lib test) generated 18 warnings (run `cargo fix --lib -p cc-render-plugin --tests` to apply 3 suggestions)
+    Finished `test` profile [optimized + debuginfo] target(s) in 25.06s
+     Running unittests src/lib.rs (target/debug/deps/cc_render_plugin-473ee18f2e15b1a2)
+
+running 469 tests
+test cc_render::bevy_app::city_windows::tests::only_authored_facade_primitives_receive_windows ... ok
+test cc_render::bevy_app::cloth::contact::tests::distal_contact_uses_observed_orientation_and_shell_not_proximity ... ok
+test cc_render::bevy_app::cloth::tests::cloth_clock_uses_content_time_not_arrival_time_and_rejects_discontinuity ... ok
+test cc_render::bevy_app::cloth::contact::tests::production_office_schedule_has_no_finger_pose_writer ... ok
+test cc_render::bevy_app::environment::tests::traffic_uses_distance_along_curves_and_wraps ... ok
+test cc_render::bevy_app::environment::tests::water_texture_contains_complete_mip_chain ... ok
+test cc_render::bevy_app::capture::frame_clock_tests::headless_frame_clock_preserves_virtual_pause_while_real_time_advances ... ok
+test cc_render::bevy_app::cloth::contact::tests::unavailable_or_unsynchronized_motion_never_reuses_old_hand_contacts ... ok
+test cc_render::bevy_app::capture::frame_clock_tests::headless_frame_clock_uses_current_wall_time_despite_stale_render_completion ... ok
+test cc_render::bevy_app::cloth::contact::tests::contact_observer_reads_globals_without_posing_fingers_or_moving_cloth ... ok
+test cc_render::bevy_app::capture::frame_clock_tests::headless_frame_clock_preserves_exact_offline_steps ... ok
+test cc_render::bevy_app::mechanisms::tests::replacement_visibility_is_environment_scoped_and_readiness_requires_every_node ... ok
+test cc_render::bevy_app::physics::articulation::tests::hinge_observation_preserves_signed_angle_under_rotated_parent ... ok
+test cc_render::bevy_app::physics::articulation::tests::rail_observation_uses_parent_frame_and_does_not_hide_overtravel ... ok
+test cc_render::bevy_app::physics::body_colliders::tests::capsule_fit_for_known_bone ... ok
+test cc_render::bevy_app::physics::body_colliders::tests::capsule_radius_clamped_to_min ... ok
+test cc_render::bevy_app::physics::body_colliders::tests::fitted_capsule_matches_world_bone_endpoints ... ok
+test cc_render::bevy_app::physics::body_colliders::tests::capsule_radius_clamped_to_max ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::body_soft_physics_picks_body_mesh ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::breast_capsule_radius_none_when_empty_or_absent ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::breast_tuning_absent_when_no_block ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::breast_capsule_radius_reads_left_or_right ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::breast_tuning_partial_block_uses_some_for_set_keys ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::breast_tuning_block_parses ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::chest_radius_falls_back_when_spine_missing ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::chest_radius_picks_largest_spine_capsule ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::chest_radius_returns_none_without_capsules ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::empty_root_returns_empty ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::loads_dual_capsule_hip ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::loads_soft_physics_for_hair ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::missing_file_returns_none ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::resolve_cc5_json_path_strips_ext ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::missing_physics_block_returns_empty ... ok
+test cc_render::bevy_app::physics::contact_grasp::tests::contact_capture_preserves_both_world_joint_frames ... ok
+test cc_render::bevy_app::physics::cc5_json::tests::resolve_cc5_json_path_with_dotted_stem ... ok
+test cc_render::bevy_app::physics::contact_grasp::tests::proximity_without_actual_contact_cannot_capture ... ok
+test cc_render::bevy_app::physics::debug_overlay::tests::category_colors_distinct ... ok
+test cc_render::bevy_app::physics::debug_overlay::tests::classify_priority ... ok
+test cc_render::bevy_app::cloth::tests::layers::one_missing_mesh_stops_all_layers_before_physics ... ok
+test cc_render::bevy_app::physics::debug_overlay::tests::debug_disabled_by_default_when_env_unset ... ok
+test cc_render::bevy_app::cloth::tests::layers::failed_contact_step_keeps_every_live_mesh_and_revision_unchanged ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_grab_propagates_palm_override ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_idle_to_pursuing_on_grab_cmd ... ok
+test cc_render::bevy_app::physics::debug_overlay::tests::scale_for_sphere_picks_max ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_attached_swap_to_new_target ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_ignores_other_hand_cmds ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_pursuing_no_proximity_returns_no_change ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_pursuing_timeout_emits_failed ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_pursuing_to_attached_on_proximity ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_pursuing_to_attached_with_custom_proximity ... ok
+test cc_render::bevy_app::physics::grab::tests::fsm_release_detaches ... ok
+test cc_render::bevy_app::cloth::tests::static_bedding_replacement_is_scoped_to_the_environment ... ok
+test cc_render::bevy_app::physics::props::tests::rotated_compound_bounds_merge_parts_without_filling_empty_corners ... ok
+test cc_render::bevy_app::cloth::tests::layers::divergent_layer_clock_rejects_the_group_without_partial_clock_update ... ok
+test cc_render::bevy_app::physics::props::tests::world_aabb_ball_at_origin_unit_scale ... ok
+test cc_render::bevy_app::cloth::tests::cloth_package_replaces_tall_bed_collision_and_hashes_its_surface ... ok
+test cc_render::bevy_app::physics::props::tests::world_aabb_ball_translated ... ok
+test cc_render::bevy_app::physics::secondary::tests::angle_between_handles_double_cover ... ok
+test cc_render::bevy_app::physics::props::tests::world_aabb_box_rotated_grows_extents ... ok
+test cc_render::bevy_app::cloth::tests::layers::removing_a_layer_requires_reload_instead_of_reusing_the_batch ... ok
+test cc_render::bevy_app::physics::secondary::tests::empty_patterns_match_nothing ... ok
+test cc_render::bevy_app::physics::sidecar::tests::loads_v1_with_all_sections ... ok
+test cc_render::bevy_app::physics::sidecar::tests::malformed_json_errors ... ok
+test cc_render::bevy_app::physics::sidecar::tests::missing_file_returns_none ... ok
+test cc_render::bevy_app::physics::sidecar::tests::missing_sections_use_defaults ... ok
+test cc_render::bevy_app::physics::sidecar::tests::resolve_sidecar_path_appends_suffix ... ok
+test cc_render::bevy_app::physics::sidecar::tests::resolve_sidecar_path_explicit_wins ... ok
+test cc_render::bevy_app::physics::sidecar::tests::unsupported_version_errors ... ok
+test cc_render::bevy_app::mechanisms::tests::exact_fridge_shapes_preserve_cavity_mass_and_rebased_joint_frames ... ok
+test cc_render::bevy_app::physics::substeps::tests::invalid_native_timing_is_rejected_without_an_unbounded_clock_loop ... ok
+test cc_render::bevy_app::physics::secondary::tests::detects_hair_breast_skirt_tongue_glute ... ok
+test cc_render::bevy_app::physics::substeps::tests::removing_a_physics_context_removes_its_observation_clock ... ok
+test cc_render::bevy_app::physics::substeps::tests::paused_native_physics_records_no_fictitious_time_or_motion ... ok
+test cc_render::bevy_app::physics::world::tests::lowest_foot_y_picks_min ... ok
+test cc_render::bevy_app::physics::world::tests::lowest_foot_y_returns_none_when_no_bones ... ok
+test cc_render::bevy_app::pose::calibrated_tests::actual_cc5_scene_fit_geometry_matches_production_calibration ... ok
+test cc_render::bevy_app::cloth::tests::removed_render_mesh_is_reported_as_failure ... ok
+test cc_render::bevy_app::physics::world::tests::lowest_foot_y_skips_missing_bones ... ok
+test cc_render::bevy_app::pose::calibrated_tests::calibrated_neutral_preserves_reference_except_authored_ankle_bind ... ok
+test cc_render::bevy_app::pose::calibrated_tests::calibrated_transfer_preserves_mixed_arm_rotation_and_independent_wrist ... ok
+test cc_render::bevy_app::pose::calibrated_tests::actual_heeled_ankles_keep_bind_reference_and_full_source_rotation ... ok
+test cc_render::bevy_app::pose::fk_tests::axis_match_preserves_pelvis_orientation_with_oblique_waist_offset ... ok
+test cc_render::bevy_app::pose::fk_tests::axis_match_chained_preserves_y_twist_at_pelvis ... ok
+test cc_render::bevy_app::pose::fk_tests::identity_pose_against_real_rest_returns_bind_locals ... ok
+test cc_render::bevy_app::pose::fk_tests::intermediate_bone_rest_collapses_to_bind_pose ... ok
+test cc_render::bevy_app::pose::fk_tests::identity_pose_against_identity_rest_yields_identity ... ok
+test cc_render::bevy_app::pose::fk_tests::root_inclination_clamped_preserves_descendant_worlds ... ok
+test cc_render::bevy_app::pose::fk_tests::root_inclination_disabled_at_zero ... ok
+test cc_render::bevy_app::pose::fk_tests::root_inclination_keeps_heading_with_combined_yaw_and_pitch ... ok
+test cc_render::bevy_app::pose::fk_tests::root_inclination_uses_aligned_world_frame ... ok
+test cc_render::bevy_app::pose::fk_tests::root_inclination_noop_below_bound ... ok
+test cc_render::bevy_app::practical_lights::tests::diffuser_binding_rejects_avatar_foreign_geometry_and_unnamed_meshes ... ok
+test cc_render::bevy_app::skinning::tests::retained_weights_preserve_rigid_translation_away_from_origin ... ok
+test cc_render::bevy_app::skinning::tests::normalization_waits_for_assets_and_only_changes_avatar_skins ... ok
+test cc_render::bevy_app::practical_lights::tests::authored_lights_spawn_once_with_configured_photometry ... ok
+test cc_render::bevy_app::texture_filtering::tests::filters_rectangular_texture_once_and_preserves_top_level ... ok
+test cc_render::bevy_app::tissue::tests::late_second_source_knot_does_not_change_initial_tissue_velocity ... ok
+NATIVE_STEP_FRAME {"frame":0,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.01666666753590107,"render_delta_seconds":0.0,"sequence":4,"substeps":4}
+test cc_render::bevy_app::street_lights::tests::street_fixtures_preserve_daylight_and_bound_night_spill ... ok
+test cc_render::bevy_app::tissue::tests::tissue_bdf2_history_is_render_rate_independent_and_pauses_without_skeleton_writes ... ok
+NATIVE_STEP_FRAME {"frame":1,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.03333333507180214,"render_delta_seconds":0.0010000000474974513,"sequence":8,"substeps":4}
+test cc_render::bevy_app::tissue::tests::tissue_contact_rejects_unsampled_geometry_morphs_but_allows_unrelated_expression ... ok
+test cc_render::bevy_app::tissue::tests::tissue_contact_samples_the_existing_forearm_twist_conversion_without_bone_writes ... ok
+NATIVE_STEP_FRAME {"frame":2,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.05000000260770321,"render_delta_seconds":0.07000000029802322,"sequence":12,"substeps":4}
+NATIVE_STEP_FRAME {"frame":3,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.06666667014360428,"render_delta_seconds":0.004000000189989805,"sequence":16,"substeps":4}
+NATIVE_STEP_FRAME {"frame":4,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":test cc_render::bevy_app::texture_filtering::tests::newly_loaded_scene_texture_is_filtered_before_first_render_extraction ... trueok,
+"physical_seconds":0.08333333767950535,"render_delta_seconds":0.023000000044703484,"sequence":20,"substeps":4}
+test cc_render::bevy_app::tissue::tests::tissue_continuum_viscosity_is_render_rate_independent_and_pauses_without_skeleton_writes ... ok
+test cc_render::bevy_app::tissue::tests::tissue_region_failure_does_not_commit_successful_sibling ... ok
+NATIVE_STEP_FRAME {"frame":5,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.10000000521540642,"render_delta_seconds":0.016666999086737633,"sequence":24,"substeps":4}
+INITIAL_CLOTH_COLLISION {"id":"bed_top_sheet","status":"waiting_for_motion","error":null,"session_id":null,"clock_origin_pts_ms":null,"displayed_pts_ms":null,"simulated_ticks":0,"surface_revision":0,"max_speed_m_s":0.0,"max_edge_stretch_ratio":1.0,"max_particle_penetration_m":0.0,"surface_position_sha256":"38e7f7583fcb2b3a43d00878683e733d497fb07cede9a8e9a643d6882f355111","mesh_position_sha256":"38e7f7583fcb2b3a43d00878683e733d497fb07cede9a8e9a643d6882f355111","bounds_min":[3.02,0.8,-4.3],"bounds_max":[5.3199997,0.8,-2.0],"particles":1221,"hand_contacts":[]}
+test cc_render::bevy_app::tissue::tests::tissue_playback_is_render_rate_independent_and_pauses_without_skeleton_writes ... ok
+test cc_render::bevy_app::cloth::tests::authored_cloth_starts_clear_of_the_complete_fixed_scene ... ok
+test cc_render::bevy_app::tissue::tests::tissue_subdivision_resolves_fast_attachment_motion_and_rolls_back_failure ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_local_swept_tree_matches_exhaustive_queries_after_motion_and_rewinds ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overlap ... ok
+test cc_render::bevy_app::tissue::tests::tissue_starts_at_first_observed_pose_then_preserves_render_rate_independence ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_sweep_separates_parallel_motion_and_rejects_ambiguous_initial_intersection ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_sweep_detects_crossing_with_clear_endpoints_and_is_frame_covariant ... ok
+test cc_render::bevy_app::tissue::tests::tissue_request_excludes_breast_springs_without_changing_other_secondary_bones ... ok
+test cc_render::bevy_app::tissue_morph::tests::morph_history_brackets_substeps_and_retains_the_uncommitted_remainder ... ok
+test cc_render::bevy_app::tissue_morph::tests::malformed_morph_images_and_weights_fail_without_mutating_the_base ... ok
+test cc_render::bevy_app::tissue_morph::tests::official_bevy_target_image_decodes_positions_in_layer_order ... ok
+NATIVE_STEP_FRAME {"frame":6,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":test cc_render::bevy_app::twist::tests::the_hands_roll_is_shared_along_the_forearm ... 0.11666667275130749ok,
+"render_delta_seconds":0.0,"sequence":28,"substeps":4}
+test cc_render::bevy_app::tissue_surface::tests::tissue_surface_matches_world_displacement_and_preserves_zero_deformation ... ok
+test cc_render::bevy_app::vehicle_lights::tests::only_named_vehicle_lenses_emit_distinct_front_and_rear_colours ... ok
+test cc_render::bevy_app::visibility::tests::only_avatar_skins_bypass_static_bounds ... ok
+test cc_render::bevy_app::weather::tests::presets_are_explicit_and_precipitation_stays_outside ... ok
+test cc_render::bevy_app::weather_transition::tests::exterior_film_wets_and_dries_without_resetting_on_weather_requests ... ok
+test cc_render::bevy_app::weather_transition::tests::transitions_reach_endpoints_and_retarget_without_a_value_jump ... ok
+test cc_render::bevy_app::weather_transition::tests::atmosphere_updates_lights_fog_exposure_emission_and_baked_sky_together ... ok
+test cc_render::bevy_app::wet_surfaces::tests::only_paving_in_the_selected_scene_can_receive_the_coating ... ok
+test cc_render::bevy_app::weather_transition::tests::wind_phase_integrates_and_explicit_exposure_survives_transitions ... ok
+test cc_render::cloth_grip::tests::clamp_capture_requeries_actual_shape_and_does_not_move_sheet ... ok
+test cc_render::bevy_app::weather::tests::precipitation_pools_are_bounded_hidden_and_outside_the_condo ... ok
+NATIVE_STEP_FRAME {"frame":test cc_render::bevy_app::physics::grip_lifecycle_tests::removing_or_replacing_a_two_hand_prop_cleans_up_all_grips ... 7ok,
+"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.13333334028720856,"render_delta_seconds":0.0010000000474974513,"sequence":32,"substeps":4}
+test cc_render::cloth_grip::tests::acquired_frame_follows_collider_rotation_and_release_preserves_momentum ... ok
+test cc_render::cloth_grip::tests::foreign_surface_invalid_material_and_failed_steps_are_atomic ... ok
+test cc_render::cloth_grip::tests::overload_breaks_before_excess_force_and_never_reacquires ... ok
+test cc_render::cloth_solver::batch::energy::probe_authored_bedding_substep_energy ... ignored, diagnostic: select authored layers and an energy trace; does not certify full bedding
+test cc_render::cloth_solver::batch::tests::a_failed_layer_leaves_every_surface_and_velocity_unchanged ... ok
+NATIVE_STEP_FRAME {"frame":8,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.15000000782310963,"render_delta_seconds":0.07000000029802322,"sequence":36,"substeps":4}
+test cc_render::cloth_grip::tests::compliant_clamp_balances_known_weight_without_a_rigid_pin ... ok
+NATIVE_STEP_FRAME {"frame":9,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.1666666753590107,"render_delta_seconds":0.004000000189989805,"sequence":40,"substeps":4}
+test cc_render::cloth_solver::batch::tests::independent_layers_keep_mass_and_combined_thickness_during_fast_impact ... ok
+test cc_render::cloth_solver::batch::tests::each_layer_uses_its_own_fixed_supports_and_material_identity ... ok
+NATIVE_STEP_FRAME {"frame":10,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.18333334289491177,"render_delta_seconds":0.023000000044703484,"sequence":44,"substeps":4}
+test cc_render::cloth_grip::tests::two_clamps_release_independently_and_numerical_failure_rolls_back_both ... ok
+test cc_render::cloth_solver::batch::tests::invalid_later_layer_grip_cannot_commit_an_earlier_layer ... ok
+NATIVE_STEP_FRAME {"frame":11,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.20000001043081284,"render_delta_seconds":0.016666999086737633,"sequence":48,"substeps":4}
+test cc_render::bevy_app::cloth::tests::layers::live_layers_collide_and_publish_synchronized_meshes ... ok
+test cc_render::cloth_solver::collision::tests::deforming_face_grazing_rounded_mattress_completes_without_search_stall ... ok
+test cc_render::cloth_solver::collision::tests::fast_face_crossing_is_detected_when_all_vertex_paths_miss_the_obstacle ... ok
+NATIVE_STEP_FRAME {"frame":12,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.2166666779667139,"render_delta_seconds":0.0,"sequence":52,"substeps":4}
+test cc_render::cloth_solver::collision::tests::fast_sheet_cannot_cross_a_thin_fixed_slab_between_clear_endpoints ... ok
+test cc_render::cloth_solver::batch::tests::single_layer_batch_matches_standalone_physics ... ok
+test cc_render::cloth_solver::collision::tests::initially_overlapping_fast_face_recovers_its_side_and_can_leave ... ok
+test cc_render::cloth_solver::collision::tests::large_tangent_motion_does_not_stall_a_tiny_normal_impact ... ok
+test cc_render::cloth_solver::collision::tests::rounded_face_contact_resolves_below_single_precision_without_jitter ... ok
+test cc_render::cloth_solver::collision::tests::swept_edge_contact_does_not_depend_on_triangle_winding ... ok
+NATIVE_STEP_FRAME {"frame":13,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.23333334550261497,"render_delta_seconds":0.0010000000474974513,"sequence":56,"substeps":4}
+test cc_render::cloth_solver::collision::tests::triangle_contact_detects_interior_overlap_with_clear_vertices ... ok
+test cc_render::cloth_solver::collision::tests::swept_faces_respect_rotated_rounded_shapes_and_clear_near_misses ... ok
+test cc_render::cloth_solver::collision::tests::triangle_contact_moves_only_touching_material_and_clears_dense_samples ... ok
+test cc_render::cloth_solver::collision::tests::triangle_contact_respects_rotation_and_rejects_clear_or_remote_faces ... ok
+test cc_render::cloth_solver::collision::tests::witness_roundoff_is_bounded_and_does_not_admit_invalid_material_coordinates ... ok
+test cc_render::cloth_solver::pair::tests::contact_certificate_rejects_submicrometre_overlap ... ok
+test cc_render::cloth_solver::pair::tests::common_translation_has_no_contact_impulse ... ok
+test cc_render::cloth_solver::pair::tests::contact_is_invariant_under_rotation_and_vertex_order ... ok
+NATIVE_STEP_FRAME {"frame":14,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.25000001303851604,"render_delta_seconds":0.07000000029802322,"sequence":60,"substeps":4}
+test cc_render::cloth_solver::pair::tests::fixed_floor_reaction_keeps_supported_face_out_of_the_floor ... ok
+test cc_render::cloth_solver::pair::tests::edge_edge_sweep_catches_interiors_when_endpoint_paths_miss ... ok
+test cc_render::cloth_solver::pair::tests::fixed_support_at_edge_interior_participates_without_vertex_contact ... ok
+test cc_render::cloth_solver::pair::tests::fixed_support_at_face_interior_participates_without_vertex_contact ... ok
+test cc_render::cloth_solver::pair::tests::vertex_face_sweep_catches_crossing_with_clear_endpoints ... ok
+test cc_render::cloth_solver::pair::tests::initial_feature_intersection_is_explicitly_rejected ... ok
+test cc_render::cloth_solver::rigid_impact::rapier_tests::snapshot_response_matches_native_rapier_point_impulses_and_locked_axes ... ok
+test cc_render::cloth_solver::rigid_impact::tests::immovable_closing_contact_and_invalid_mass_fail_explicitly ... okNATIVE_STEP_FRAME 
+{"frame":15,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.2666666805744171,"render_delta_seconds":0.004000000189989805,"sequence":64,"substeps":4}
+test cc_render::cloth_solver::rigid_impact::tests::locked_translation_can_resolve_an_off_center_impact_through_rotation ... ok
+test cc_render::cloth_solver::rigid_impact::tests::observed_kinematic_motion_pushes_cloth_without_rewriting_body_velocity ... ok
+test cc_render::cloth_solver::rigid_impact::tests::normal_impact_conserves_linear_and_angular_momentum_and_dissipates_energy ... ok
+test cc_render::cloth_solver::rigid_impact::tests::rotating_body_contact_transfers_angular_momentum_to_the_sheet ... ok
+test cc_render::cloth_solver::rigid_impact::tests::separating_contact_does_not_pull_the_cloth_back ... ok
+NATIVE_STEP_FRAME {"frame":16,"mode":"Fixed { dt: 0.016666668, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.2833333481103182,"render_delta_seconds":0.023000000044703484,"sequence":68,"substeps":4}
+test cc_render::cloth_solver::rigid_impact::tests::swept_face_witness_drives_mass_weighted_two_way_impact ... ok
+test cc_render::cloth_solver::self_collision::tests::cached_spatial_envelopes_rebuild_before_admitting_a_new_crossing ... ok
+test cc_render::cloth_solver::self_collision::tests::fat_bounds_include_crossings_before_a_cache_refresh_is_needed ... ok
+test cc_render::cloth_solver::self_collision::tests::coupled_supports_do_not_reverse_the_applied_load ... ok
+NATIVE_STEP_FRAME {"frame":17,"mode":"test cc_render::cloth_solver::self_collision::tests::off_center_contact_on_supported_face_can_tilt_without_penetrating ... Fixed { dt: 0.016666668, substeps: 4 }ok"
+,"native_state_event_and_interpolation_match":true,"physical_seconds":0.30000001564621925,"render_delta_seconds":0.016666999086737633,"sequence":72,"substeps":4}
+test cc_render::cloth_solver::self_tests::intersecting_layers_fail_without_publishing_a_partial_step ... ok
+test cc_render::cloth_solver::sweep::diagnostics::fixed_sweep_capture_preserves_rotated_collider_and_query_bits ... ok
+test cc_render::cloth_solver::sweep::diagnostics::replay_captured_fixed_sweep ... ignored, diagnostic: set CC_CLOTH_REPLAY to a captured query file
+test cc_render::cloth_solver::sweep::moving::tests::arbitrary_world_rotation_preserves_contact_time_point_and_normal ... ok
+test cc_render::cloth_solver::sweep::moving::tests::common_translation_preserves_rotating_contact_fraction ... ok
+test cc_render::cloth_solver::sweep::moving::tests::full_turn_cannot_hide_a_rotating_bar_crossing ... ok
+test cc_render::cloth_solver::sweep::moving::tests::moving_bar_certifies_a_clear_rotating_path ... ok
+test cc_render::cloth_solver::sweep::moving::tests::moving_slab_queries_deforming_face_at_its_first_corner_contact ... ok
+test cc_render::cloth_solver::sweep::moving::tests::offset_collider_orbits_its_body_pivot ... ok
+test cc_render::cloth_solver::sweep::moving::tests::surface_contact_velocity_includes_translation_and_rotation_about_offset_pivot ... ok
+test cc_render::cloth_solver::sweep::moving::tests::translating_slab_hits_stationary_face_between_clear_endpoints ... ok
+test cc_render::cloth_solver::tests::collider_support_is_local_and_removal_releases_the_sheet ... ok
+test cc_render::bevy_app::physics::contact_grasp::tests::ecs_grasp_requires_contact_with_requested_prop ... ok
+test cc_render::cloth_solver::tests::damped_spring_dissipates_energy_without_moving_the_centre ... ok
+test cc_render::cloth_solver::tests::disconnected_sheet_layers_cannot_exchange_sides_during_fast_impact ... ok
+test cc_render::cloth_solver::tests::fast_sheet_impact_stays_on_entry_side_then_settles_without_a_velocity_override ... ok
+test cc_render::cloth_solver::tests::free_fall_matches_semi_implicit_gravity_without_pins ... ok
+test cc_render::cloth_solver::tests::internal_springs_conserve_mass_weighted_centre_without_external_force ... ok
+test cc_render::cloth_solver::tests::invalid_steps_and_topology_leave_published_state_unchanged ... ok
+test cc_render::cloth_solver::tests::repeated_spring_projection_preserves_compliance_and_damping ... ok
+test cc_render::cloth_solver::tests::rounded_box_distance_and_normals_are_consistent_under_rotation ... ok
+test cc_render::cloth_solver::tests::simulated_surface_expires_contact_but_preserves_material_coordinates ... ok
+test cc_render::deformable_surface::tests::collider_orientation_is_used_instead_of_a_hand_distance_threshold ... ok
+test cc_render::deformable_surface::tests::contact_revision_expires_but_material_identity_follows_deformation ... ok
+test cc_render::deformable_surface::tests::folded_layers_keep_distinct_material_contacts ... ok
+test cc_render::deformable_surface::tests::invalid_geometry_is_rejected_without_advancing_or_partially_updating ... ok
+CLOTH_CONTACT_REPORT {"clear_contacts":0,"clear_sphere_centre":[4.176855564117432,0.8259996771812439,-3.0722274780273438],"contacts":[{"barycentric":[0.3333355486392975,0.33332863450050354,0.33333584666252136],"hand_position":[4.176855564117432,0.6257496476173401,-3.0722274780273438],"midsurface_position":[4.176855564117432,0.6259997487068176,-3.0722274780273438],"normal":[0.0,1.0,0.0],"revision":0,"separation_m":-0.0007500768988393247,"triangle":1118}],"coordinates":"runtime metres: X east, Y up, Z south","material_barycentric":[0.3333355486392975,0.33332863450050354,0.33333584666252136],"physical_thickness_m":0.001,"resolved_uv":[0.4895833134651184,0.48148155212402344],"scope":"Read-only geometric contacts, not grasp admission or a runtime cloth solver","selected_triangle":1118,"sphere_radius_m":0.012,"surface_revision":0,"touching_sphere_centre":[4.176855564117432,0.6377496719360352,-3.0722274780273438]}
+test cc_render::deformable_surface::tests::observed_condo_sheet_supports_contact_and_material_round_trip ... ok
+test cc_render::deformable_surface::tests::physical_shell_contact_has_material_witness_but_proximity_does_not ... ok
+test cc_render::deformable_surface::tests::unchanged_geometry_is_still_a_new_observation_and_queries_do_not_mutate_it ... ok
+test cc_render::bevy_app::physics::grip_lifecycle_tests::two_hands_swap_and_release_preserve_the_live_hinge ... ok
+NATIVE_SUBSTEP_PARITY Fixed { dt: 0.016666668, substeps: 4 } steps=400 physical_seconds=1.666666753590107 collision_events=494
+NATIVE_STEP_FRAME {"frame":0,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.0,"render_delta_seconds":0.0,"sequence":3,"substeps":3}
+NATIVE_STEP_FRAME {"frame":1,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.0007000000186963007,"render_delta_seconds":0.0010000000474974513,"sequence":6,"substeps":3}
+test cc_render::bevy_app::physics::secondary::tests::breast_discontinuities_stay_bounded_in_world_meters ... ok
+test cc_render::node::navigation_tests::scene_queries_expose_native_session_seed_and_revision_not_retired_plan ... ok
+NATIVE_STEP_FRAME {"frame":2,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.034033334159175865,"render_delta_seconds":0.07000000029802322,"sequence":9,"substeps":3}
+NATIVE_STEP_FRAME {"frame":3,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.03683333423396107,"render_delta_seconds":0.004000000189989805,"sequence":12,"substeps":3}
+NATIVE_STEP_FRAME {"frame":4,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.052933334358385764,"render_delta_seconds":0.023000000044703484,"sequence":15,"substeps":3}
+NATIVE_STEP_FRAME {"frame":5,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.06460023390536662,"render_delta_seconds":0.016666999086737633,"sequence":18,"substeps":3}
+NATIVE_STEP_FRAME {"frame":6,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.06460023390536662,"render_delta_seconds":0.0,"sequence":21,"substeps":3}
+NATIVE_STEP_FRAME {"frame":7,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.06530023392406292,"render_delta_seconds":0.0010000000474974513,"sequence":24,"substeps":3}
+NATIVE_STEP_FRAME {"frame":8,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.09863356806454249,"render_delta_seconds":0.07000000029802322,"sequence":27,"substeps":3}
+NATIVE_STEP_FRAME {"frame":9,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.10143356813932769,"render_delta_seconds":0.004000000189989805,"sequence":30,"substeps":3}
+NATIVE_STEP_FRAME {"frame":10,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.11753356826375239,"render_delta_seconds":0.023000000044703484,"sequence":33,"substeps":3}
+NATIVE_STEP_FRAME {"frame":11,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.12920046781073324,"render_delta_seconds":0.016666999086737633,"sequence":36,"substeps":3}
+NATIVE_STEP_FRAME {"frame":12,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.12920046781073324,"render_delta_seconds":0.0,"sequence":39,"substeps":3}
+NATIVE_STEP_FRAME {"frame":13,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.12990046782942954,"render_delta_seconds":0.0010000000474974513,"sequence":42,"substeps":3}
+NATIVE_STEP_FRAME {"frame":14,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.1632338019699091,"render_delta_seconds":0.07000000029802322,"sequence":45,"substeps":3}
+test cc_render::node::navigation_tests::native_and_python_queries_return_paths_without_enqueuing_motion ... ok
+test cc_render::node::realtime_speech_tests::home_hud_is_display_only_and_closed ... ok
+NATIVE_STEP_FRAME {"frame":15,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.1660338020446943,"render_delta_seconds":0.004000000189989805,"sequence":48,"substeps":3}
+test cc_render::node::realtime_speech_tests::idle_then_speech_keeps_samples_and_uses_shared_presentation_time ... ok
+test cc_render::node::realtime_speech_tests::missed_video_capture_does_not_pause_speech_clock ... ok
+NATIVE_STEP_FRAME {"frame":16,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.182133802169119,"render_delta_seconds":0.023000000044703484,"sequence":51,"substeps":3}
+NATIVE_STEP_FRAME {"frame":17,"mode":"Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.19380070171609987,"render_delta_seconds":0.016666999086737633,"sequence":54,"substeps":3}
+test cc_render::node::realtime_speech_tests::pending_navigation_keeps_native_producer_then_signs_reserved_handoff ... ok
+test cc_render::node::realtime_speech_tests::pending_scene_is_reported_as_requested_owner_not_displayed_completion ... ok
+test cc_render::node::realtime_speech_tests::python_json_channel_delivers_skeletal_frames ... ok
+test cc_render::node::realtime_speech_tests::scene_capability_needs_startup_key_and_is_not_replaceable ... ok
+test cc_render::node::realtime_speech_tests::semantic_input_emits_native_goal_not_legacy_motion ... ok
+test cc_render::node::realtime_speech_tests::semantic_replacement_respects_pending_revision_and_in_flight_ack ... ok
+test cc_render::node::realtime_speech_tests::speech_end_follows_playback_and_precedes_next_utterance ... ok
+test cc_render::node::speech_clock_tests::idle_never_becomes_audio_catchup ... ok
+test cc_render::office::avatar_geometry::tests::exported_native_geometry_matches_python ... ignored, requires independently exported avatar/native-pose geometry fixture
+test cc_render::office::avatar_geometry::tests::file_requires_exact_sampler_content_binding ... ok
+test cc_render::office::avatar_geometry::tests::fixed_fk_lbs_does_not_mutate_native_pose ... ok
+test cc_render::office::avatar_geometry::tests::rejects_identity_hierarchy_and_skin_corruption ... ok
+test cc_render::office::contact::tests::contact_preserves_calibrated_wrist_frame_at_the_target ... ok
+test cc_render::office::contact::tests::idle_damping_is_independent_of_render_rate ... ok
+test cc_render::office::contact::tests::idle_filter_damps_noise_but_new_motion_bypasses_it ... ok
+test cc_render::office::contact::tests::preserves_lengths_and_rejects_unreachable ... ok
+test cc_render::office::contact::tests::reads_current_local_pose_before_global_propagation ... ok
+test cc_render::bevy_app::mechanisms::tests::drawers::bedside_drawers_have_open_cavities_and_cloth_uses_only_fixed_shell ... ok
+test cc_render::bevy_app::tissue::tests::tissue_parallel_regions_match_serial_state_and_report_first_failure ... ok
+test cc_render::bevy_app::physics::grab::tests::physics_grip_preserves_canonical_frame_during_carry ... ok
+test cc_render::office::controller::constrained_navigation_tests::declared_kinematic_attachment_is_rejected_for_a_hinged_part ... ok
+test cc_render::office::controller::constrained_navigation_tests::held_door_rotation_invalidates_preview_without_changing_motion ... ok
+test cc_render::office::controller::constrained_navigation_tests::legacy_coupling_cannot_reposition_or_freeze_a_body_with_a_permanent_joint ... ok
+NATIVE_SUBSTEP_PARITY Variable { max_dt: 0.033333335, time_scale: 0.7, substeps: 3 } steps=300 physical_seconds=1.070437076719827 collision_events=211
+NATIVE_STEP_FRAME {"frame":0,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.0,"render_delta_seconds":0.0,"sequence":0,"substeps":0}
+NATIVE_STEP_FRAME {"frame":1,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.008333333767950535,"render_delta_seconds":0.0010000000474974513,"sequence":4,"substeps":4}
+NATIVE_STEP_FRAME {"frame":2,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.041666668839752674,"render_delta_seconds":0.07000000029802322,"sequence":20,"substeps":16}
+NATIVE_STEP_FRAME {"frame":3,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.041666668839752674,"render_delta_seconds":0.004000000189989805,"sequence":20,"substeps":0}
+NATIVE_STEP_FRAME {"frame":4,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.05000000260770321,"render_delta_seconds":0.023000000044703484,"sequence":24,"substeps":4}
+NATIVE_STEP_FRAME {"frame":5,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.058333336375653744,"render_delta_seconds":0.016666999086737633,"sequence":28,"substeps":4}
+NATIVE_STEP_FRAME {"frame":6,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.058333336375653744,"render_delta_seconds":0.0,"sequence":28,"substeps":0}
+test cc_render::node::navigation_tests::observed_rejection_crosses_node_boundary_once_and_halts_request_driver ... ok
+NATIVE_STEP_FRAME {"frame":7,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.058333336375653744,"render_delta_seconds":0.0010000000474974513,"sequence":28,"substeps":0}
+test cc_render::office::controller::constrained_navigation_tests::waypoint_hash_rejects_old_sessions_and_legacy_previews ... ok
+test cc_render::office::controller::furniture_push::tests::a_long_stroke_guides_both_hands_through_one_continuous_timeline ... ok
+NATIVE_STEP_FRAME {"frame":8,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.10000000521540642,"render_delta_seconds":0.07000000029802322,"sequence":48,"substeps":20}
+NATIVE_STEP_FRAME {"frame":9,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.10000000521540642,"render_delta_seconds":0.004000000189989805,"sequence":48,"substeps":0}
+NATIVE_STEP_FRAME {"frame":10,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.10833333898335695,"render_delta_seconds":0.023000000044703484,"sequence":52,"substeps":4}
+NATIVE_STEP_FRAME {"frame":11,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.11666667275130749,"render_delta_seconds":0.016666999086737633,"sequence":56,"substeps":4}
+NATIVE_STEP_FRAME {"frame":12,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.11666667275130749,"render_delta_seconds":0.0,"sequence":56,"substeps":0}
+NATIVE_STEP_FRAME {"frame":13,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.11666667275130749,"render_delta_seconds":0.0010000000474974513,"sequence":56,"substeps":0}
+test cc_render::office::controller::furniture_push::tests::kitchen_route_avoids_the_desk_and_fits_the_chair_through_the_door ... ok
+test cc_render::office::controller::furniture_push::tests::push_requires_dynamic_furniture_clear_sweep_and_bounded_goal ... ok
+test cc_render::office::controller::furniture_push::tests::rotated_chair_uses_the_same_seat_and_backrest_parts ... ok
+NATIVE_STEP_FRAME {"frame":14,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.15833334159106016,"render_delta_seconds":0.07000000029802322,"sequence":76,"substeps":20}
+NATIVE_STEP_FRAME {"frame":15,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.15833334159106016,"render_delta_seconds":0.004000000189989805,"sequence":76,"substeps":0}
+NATIVE_STEP_FRAME {"frame":16,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.1666666753590107,"render_delta_seconds":0.023000000044703484,"sequence":80,"substeps":4}
+NATIVE_STEP_FRAME {"frame":17,"mode":"Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.17500000912696123,"render_delta_seconds":0.016666999086737633,"sequence":84,"substeps":4}
+test cc_render::office::controller::surface_actions::tests::bent_takeoff_uses_model_generated_standing_destination ... ok
+test cc_render::office::controller::surface_actions::tests::cancellation_finishes_landing_and_unrelated_obstacles_still_block ... ok
+test cc_render::office::controller::surface_actions::tests::elevated_idle_guides_whole_generated_pose_before_history_foot_support ... ok
+FRIDGE_RAPIER_FIXTURE {"maximum_anchor_error_m":9.830249609876773e-7,"maximum_degrees":90.00001525878906,"minimum_degrees":-5.6128947107936256e-6,"published_parts":3,"scope":"Diagnostic external forces; not avatar manipulation"}
+test cc_render::bevy_app::mechanisms::tests::passive_fridge_doors_open_close_and_publish_current_bounds ... ok
+test cc_render::node::navigation_tests::stalled_native_clock_emits_one_terminal_error_from_node_without_new_requests ... ok
+test cc_render::office::controller::surface_actions::tests::flight_prompt_changes_to_upright_pose_at_observed_landing_window ... ok
+test cc_render::office::controller::surface_actions::tests::future_landing_is_sparse_and_not_an_early_renderer_foot_lock ... ok
+test cc_render::office::controller::surface_actions::tests::jump_waits_for_sustained_facing_and_resets_if_avatar_turns_away ... ok
+test cc_render::office::controller::surface_actions::tests::observed_landing_retains_elevation_then_jump_down_releases_it ... ok
+test cc_render::bevy_app::mechanisms::tests::cabinets::entry_cabinet_has_empty_shelf_spaces_and_opposite_passive_hinges ... ok
+test cc_render::office::controller::tests::bend_uses_coherent_pose_targets_after_aligning_to_object ... ok
+test cc_render::office::controller::tests::blocked_destination_and_invalid_input_fail ... ok
+test cc_render::office::controller::tests::carry_keeps_acquired_grip_frame_across_turns_and_revisions ... ok
+test cc_render::office::controller::tests::carry_orientation_blends_once_per_physical_attachment ... ok
+test cc_render::office::controller::tests::carrying_mug_keeps_seated_pelvis_support ... ok
+test cc_render::office::controller::surface_actions::tests::unsafe_jump_alignment_fails_instead_of_hanging ... ok
+test cc_render::office::controller::tests::contact_deadline_survives_concurrent_action_revision ... ok
+test cc_render::office::controller::tests::disabled_future_handoff_uses_displayed_pose_and_clock ... ok
+test cc_render::office::controller::tests::attached_mug_does_not_complete_pickup_until_carry_posture_settles ... ok
+test cc_render::office::controller::tests::future_sit_root_and_contact_key_share_the_same_handoff_clock ... ok
+NATIVE_SUBSTEP_PARITY Interpolated { dt: 0.016666668, time_scale: 0.5, substeps: 4 } steps=460 physical_seconds=0.9583333833143115 collision_events=319
+test cc_render::office::controller::tests::floor_grab_schedules_model_kneel_and_history_supported_reach ... ok
+test cc_render::office::controller::surface_actions::tests::final_approach_faces_landing_instead_of_arriving_sideways ... ok
+NATIVE_STEP_FRAME {"frame":0,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.0,"render_delta_seconds":0.0,"sequence":0,"substeps":0}
+test cc_render::office::controller::tests::live_model_led_kneel_edit_compiles_without_authored_body_pose ... ok
+test cc_render::office::controller::tests::live_root_edit_starts_at_displayed_position_and_invalid_pose_is_atomic ... ok
+test cc_render::office::controller::tests::live_timeline_edits_preserve_world_and_reject_stale_writers ... ok
+NATIVE_STEP_FRAME {"frame":1,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.033333334140479565,"render_delta_seconds":0.0010000000474974513,"sequence":3,"substeps":3}
+NATIVE_STEP_FRAME {"frame":2,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.16666667070239782,"render_delta_seconds":0.07000000029802322,"sequence":15,"substeps":12}
+NATIVE_STEP_FRAME {"frame":3,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.16666667070239782,"render_delta_seconds":0.004000000189989805,"sequence":15,"substeps":0}
+NATIVE_STEP_FRAME {"frame":4,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.2000000048428774,"render_delta_seconds":0.023000000044703484,"sequence":18,"substeps":3}
+NATIVE_STEP_FRAME {"frame":5,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.23333333898335695,"render_delta_seconds":0.016666999086737633,"sequence":21,"substeps":3}
+NATIVE_STEP_FRAME {"frame":6,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.23333333898335695,"render_delta_seconds":0.0,"sequence":21,"substeps":0}
+NATIVE_STEP_FRAME {"frame":7,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.23333333898335695,"render_delta_seconds":0.0010000000474974513,"sequence":21,"substeps":0}
+NATIVE_STEP_FRAME {"frame":8,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.4000000096857548,"render_delta_seconds":0.07000000029802322,"sequence":36,"substeps":15}
+NATIVE_STEP_FRAME {"frame":9,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.4000000096857548,"render_delta_seconds":0.004000000189989805,"sequence":36,"substeps":0}
+NATIVE_STEP_FRAME {"frame":10,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.43333334382623434,"render_delta_seconds":0.023000000044703484,"sequence":39,"substeps":3}
+test cc_render::office::controller::constrained_navigation_tests::observed_drawer_translation_keeps_held_obstacle_and_invalidates_preview ... ok
+NATIVE_STEP_FRAME {"frame":11,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.4666666779667139,"render_delta_seconds":0.016666999086737633,"sequence":42,"substeps":3}
+test cc_render::office::controller::tests::mug_grasp_points_right_hand_forward_with_thumb_up ... ok
+test cc_render::office::controller::tests::native_seat_admission_is_revision_scoped_and_preserves_other_obstacles ... ok
+NATIVE_STEP_FRAME {"frame":12,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.4666666779667139,"render_delta_seconds":0.0,"sequence":42,"substeps":0}
+NATIVE_STEP_FRAME {"frame":13,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.4666666779667139,"render_delta_seconds":0.0010000000474974513,"sequence":42,"substeps":0}
+test cc_render::office::controller::tests::kitchen_plate_grab_uses_live_rim_pose_without_attaching_early ... ok
+test cc_render::office::controller::tests::natural_grab_does_not_shortcut_a_sideways_final_approach ... ok
+test cc_render::office::controller::tests::new_action_starts_from_buffered_future_root_and_clock ... ok
+test cc_render::office::controller::tests::occupied_hand_queues_wave_and_cancel_keeps_prop ... ok
+NATIVE_STEP_FRAME {"frame":14,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.6333333486691117,"render_delta_seconds":0.07000000029802322,"sequence":57,"substeps":15}
+NATIVE_STEP_FRAME {"frame":15,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.6333333486691117,"render_delta_seconds":0.004000000189989805,"sequence":57,"substeps":0}
+NATIVE_STEP_FRAME {"frame":16,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.6666666828095913,"render_delta_seconds":0.023000000044703484,"sequence":60,"substeps":3}
+NATIVE_STEP_FRAME {"frame":17,"mode":"Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 }","native_state_event_and_interpolation_match":true,"physical_seconds":0.7000000169500709,"render_delta_seconds":0.016666999086737633,"sequence":63,"substeps":3}
+test cc_render::office::controller::tests::grab_pursuit_waits_for_displayed_contact_even_when_hand_is_nearby ... ok
+test cc_render::office::controller::tests::natural_grab_blends_final_approach_without_a_pose_or_facing_gate ... ok
+test cc_render::office::controller::tests::push_waits_for_hand_contact_and_observed_furniture_follow_through ... ok
+test cc_render::office::controller::tests::root_validation_rejects_collisions_instead_of_repairing_them ... ok
+test cc_render::office::controller::tests::route_timing_preserves_handoff_and_uses_shortest_initial_turn ... ok
+test cc_render::office::controller::tests::seat_support_is_bounded_and_released_for_standing ... ok
+test cc_render::office::controller::tests::seated_completion_rejects_feet_behind_chair_and_tipped_torso ... ok
+test cc_render::office::controller::tests::seated_idle_contacts_remain_committed_until_handoff ... ok
+test cc_render::office::controller::tests::seated_idle_keeps_its_support_contact_without_exempting_other_furniture ... ok
+test cc_render::office::controller::tests::seated_wave_requires_restored_body_and_settled_return ... ok
+test cc_render::office::controller::tests::sit_aligns_then_settles_and_keeps_timing_across_revisions ... ok
+test cc_render::office::controller::tests::standing_idle_is_generated_with_a_native_target_and_yields_to_actions ... ok
+test cc_render::office::controller::tests::standing_requires_settled_upright_exit_before_releasing_chair ... ok
+test cc_render::office::controller::tests::walk_from_seat_stands_before_navigation ... ok
+test cc_render::office::controller::tests::movement_completes_only_at_observed_destination ... ok
+test cc_render::office::controller::tests::wave_waits_for_observed_arm_return ... ok
+test cc_render::office::controller::tests::wire_envelope_decodes ... ok
+test cc_render::office::coupling::tests::grips_close_on_a_stick_still_run_it_through_both_hands ... ok
+test cc_render::office::coupling::tests::hands_meeting_and_parting_never_snap_the_stick ... ok
+test cc_render::office::coupling::tests::hands_too_close_together_hold_the_object_rigidly_in_the_primary_hand ... ok
+test cc_render::office::coupling::tests::held_contact_is_detected_and_only_deep_penetration_is_an_error_depth ... ok
+test cc_render::office::coupling::tests::one_hand_is_rigid_and_three_hands_fit_least_squares ... ok
+test cc_render::office::coupling::tests::set_down_lands_inside_the_placement_zone_not_where_the_hand_let_go ... ok
+test cc_render::office::coupling::tests::sliding_keeps_height_and_yaw_only ... ok
+test cc_render::office::coupling::tests::two_hand_pose_follows_the_hand_line_and_ignores_a_wrist_flip ... ok
+test cc_render::office::controller::tests::placement_outside_surface_fails_after_release_timeout ... ok
+test cc_render::office::hand::tests::a_power_grip_point_lies_on_the_handle_axis ... ok
+test cc_render::office::hand::tests::a_mug_is_held_by_its_handle_with_the_body_beyond_the_knuckles ... ok
+test cc_render::office::hand::tests::fingers_stay_flat_under_a_plate_on_the_palm ... ok
+test cc_render::office::hand::tests::nothing_to_touch_closes_to_the_limits ... ok
+test cc_render::office::hand::tests::palm_frame_is_read_from_the_rig ... ok
+test cc_render::office::hand::tests::the_broom_is_grabbed_with_both_hands_apart_from_their_own_sides ... ok
+test cc_render::office::hand::tests::the_seat_blends_in_from_the_latch_pose ... ok
+test cc_render::office::hand::tests::fingers_wrap_a_seated_broom_stick_without_penetrating_it ... ok
+test cc_render::office::home::tests::home_seats_reference_a_supporting_slab_below_the_seat_anchor ... ok
+test cc_render::office::home::tests::kitchen_plate_has_reachable_oriented_grasp_anchor ... ok
+test cc_render::office::home::tests::part_materials_are_optional_and_validated ... ok
+test cc_render::office::controller::tests::placement_requires_a_grip_and_observed_stable_support ... ok
+test cc_render::office::home_hud::tests::closed_schema_accepts_display_state_and_null_clear ... ok
+test cc_render::office::home_hud::tests::rejects_unknown_fields_motion_channels_and_out_of_range_values ... ok
+test cc_render::office::interaction::tests::bundled_declarations_validate_and_reach_their_objects ... ok
+test cc_render::office::interaction::tests::invalid_zones_and_interactions_are_rejected ... ok
+test cc_render::office::interaction::tests::zone_geometry_measures_distance_in_the_object_frame ... ok
+test cc_render::office::controller::tests::walking_faces_the_route_and_preserves_that_policy_during_a_gesture ... ok
+test cc_render::office::locomotion::tests::reach_moves_immediately_then_decelerates_without_forcing_a_crouch ... ok
+test cc_render::office::controller::constrained_navigation_tests::balcony_slider_controls_full_condo_passage_without_moving_avatar ... ok
+test cc_render::office::locomotion::tests::side_arrivals_are_rerouted_but_front_arrivals_stay_direct ... ok
+test cc_render::office::motion_intent::tests::fixed_clock_after_full_horizon_does_not_poll_empty_acks ... ok
+test cc_render::office::motion_intent::tests::fixed_clock_empty_acks_are_bounded_and_report_watchdog ... ok
+test cc_render::office::motion_intent::tests::horizon_prefetch_revision_and_stale_acks_respect_clock ... ok
+test cc_render::office::motion_intent::tests::missing_ack_and_true_starvation_both_timeout_without_clock_fabrication ... ok
+test cc_render::office::motion_intent::tests::native_driver_waits_for_matching_ack_and_uses_displayed_clock ... ok
+test cc_render::office::motion_intent::tests::prescriptions_and_legacy_protocol_fail_closed ... ok
+test cc_render::office::motion_intent::tests::scene_prefetch_preserves_handoff_lead_after_generation_latency ... ok
+test cc_render::office::motion_intent::tests::scene_target_change_requires_a_new_revision ... ok
+test cc_render::office::motion_intent::tests::scene_v3_accepts_optional_style_and_pace_only_within_limits ... ok
+test cc_render::office::motion_intent::tests::scene_v3_is_closed_and_separate_from_semantic_v2 ... ok
+test cc_render::office::motion_intent::tests::semantic_goal_round_trips ... ok
+test cc_render::office::motion_timeline::tests::model_led_kneel_is_atomic_and_never_accepts_authored_rotations ... ok
+test cc_render::office::motion_timeline::tests::public_timeline_edits_cannot_submit_internal_legacy_body_presets ... ok
+test cc_render::office::native_seat::tests::rejects_swept_collision_and_never_replaces_authorized_target ... ok
+test cc_render::office::native_seat::tests::seat_scope_cannot_authorize_foreign_or_adjacent_generations ... ok
+test cc_render::office::navigation::tests::malformed_queries_return_correlated_errors ... ok
+test cc_render::office::controller::tests::concurrent_walk_wave_smile_and_conflicting_hand ... ok
+test cc_render::office::navigation::tests::object_and_coordinate_destinations_share_endpoints_but_only_objects_specify_facing ... ok
+test cc_render::office::controller::constrained_navigation_tests::bedroom_door_controls_passage_in_the_complete_condo_without_moving_avatar ... ok
+NATIVE_SUBSTEP_PARITY Interpolated { dt: 0.016666668, time_scale: 2.0, substeps: 3 } steps=345 physical_seconds=3.83333342615515 collision_events=578
+test cc_render::bevy_app::physics::substeps::tests::observed_substeps_preserve_native_bodies_joints_events_and_render_interpolation ... ok
+test cc_render::office::pathfinder::tests::detours_around_obstacle ... ok
+test cc_render::office::pathfinder::tests::straight_line_when_clear ... ok
+test cc_render::office::pathfinder::tests::submillimeter_motion_cannot_cross_or_remain_inside_obstacle ... ok
+test cc_render::office::scene_context::tests::context_exports_surface_not_pelvis_or_foot_targets ... ok
+test cc_render::office::scene_context::tests::declared_interactions_round_trip_with_their_home_pose_only_when_declared ... ok
+test cc_render::office::scene_context::tests::navigation_membership_is_authoritative_not_a_dynamic_heuristic ... ok
+test cc_render::office::scene_delivery::tests::first_frame_must_arrive_before_reserved_prefix_finishes ... ok
+test cc_render::office::scene_delivery::tests::same_native_token_boundary_as_worker_and_insufficient_lead_is_not_ready ... ok
+test cc_render::office::scene_delivery::tests::semantic_anchor_matches_worker_and_keeps_latency_headroom ... ok
+test cc_render::office::scene_lifecycle::tests::broom_pick_up_runs_declared_phases_on_observed_joints_and_attaches_both_hands ... ok
+test cc_render::office::scene_lifecycle::tests::declared_phases_fail_on_timeout_with_per_phase_results ... ok
+test cc_render::office::scene_lifecycle::tests::grasp_requires_exact_physical_hand_and_object_and_detects_loss ... ok
+test cc_render::office::scene_lifecycle::tests::interact_goals_name_a_declared_interaction ... ok
+test cc_render::office::scene_lifecycle::tests::navigation_completes_on_displayed_arrival_while_easing_in ... ok
+test cc_render::office::scene_lifecycle::tests::sitting_requires_displayed_identity_bound_contact_and_retains_carried_grip ... ok
+test cc_render::office::scene_lifecycle::tests::stepping_up_authorizes_support_at_phase_start_and_needs_both_feet_on_top ... ok
+test cc_render::office::scene_lifecycle::tests::the_hands_own_approach_picks_which_grip_each_takes ... ok
+test cc_render::office::scene_signing::grip_contract_tests::requires_matching_actual_physics_settings ... ok
+test cc_render::office::scene_signing::tests::hmac_matches_rfc4231 ... ok
+test cc_render::office::scene_signing::tests::signer_binds_native_identity_and_monotonic_sequence ... ok
+test cc_render::office::scene_signing::tests::startup_key_and_avatar_are_bound_before_signing ... ok
+test cc_render::office::support::tests::seat_staging_and_feet_clear_front_edge_under_scene_transforms ... ok
+test cc_render::office::locomotion::tests::rounded_home_routes_keep_clearance_and_never_insert_a_pivot ... ok
+test cc_render::office::support::tests::unsupported_targets_fail_and_timing_tracks_height ... ok
+test cc_render::office::systems::heading_tests::cc5_gate_checks_all_joints_even_when_reclining ... ok
+test cc_render::office::systems::heading_tests::cc5_gate_rejects_stretched_and_collapsed_bones ... ok
+test cc_render::office::systems::heading_tests::cc5_head_twist_fails_without_waiting_for_torso_position_to_invert ... ok
+test cc_render::office::navigation::tests::snapshot_prop_transforms_and_occupied_hands_control_obstacles ... ok
+test cc_render::office::systems::heading_tests::cc5_torso_check_rejects_upside_down_bodies_not_deep_bends ... ok
+test cc_render::office::systems::heading_tests::facing_survives_pelvis_pitch_singularity ... ok
+test cc_render::office::systems::home_tests::furniture_force_requires_two_hands_and_pelvis_follow_through ... ok
+test cc_render::office::systems::heading_tests::multipart_prop_colliders_keep_the_animated_body_exclusion ... ok
+test cc_render::office::systems::home_tests::home_spawns_furniture_materials_and_floor_for_every_room ... ok
+test cc_render::office::tests::authored_geometry_and_anchors_share_transform ... ok
+test cc_render::office::tests::mug_handle_keypoint_follows_full_prop_rotation ... ok
+test cc_render::office::timeline::live11_tests::scene_fit_research_path_replay ... ignored, requires SCENE_FIT_REPLAY_JSON from a retained research trial
+test cc_render::office::timeline::tests::collision_rejects_whole_pose_and_resumes_from_last_safe_timestamp ... ok
+test cc_render::office::timeline::tests::complete_core40_horizon_survives_prefetch ... ok
+test cc_render::office::timeline::tests::complete_two_block_scene_window_is_not_truncated ... ok
+test cc_render::office::timeline::tests::interpolates_and_rejects_stale ... ok
+test cc_render::office::timeline::tests::mid_frame_edit_freezes_displayed_pose_until_new_revision_arrives ... ok
+test cc_render::office::timeline::tests::native_root_rejection_is_visible_without_advancing_committed_state ... ok
+test cc_render::office::timeline::tests::reserved_scene_handoff_keeps_playing_original_prefix ... ok
+test cc_render::office::timeline::live11_tests::live11_squat_rejects_chair_clearance_without_committing_interpolated_pose ... ok
+test cc_render::office::timeline::tests::scheduled_handoff_plays_committed_prefix_without_rewinding ... ok
+test cc_render::office::timeline::tests::starvation_and_stale_packets_are_not_root_rejections ... ok
+test cc_render::office::timeline::tissue_tests::tissue_window_preserves_pause_and_revision_boundaries_without_extrapolation ... ok
+test cc_render::office::timeline::tissue_tests::tissue_window_retains_source_corners_skipped_by_rendering ... ok
+test cc_render::office::timeline::tissue_tests::tissue_window_rolls_back_rejected_source_knots ... ok
+test cc_render::scene_mechanism::tests::mechanism_schema_rejects_motion_channels_and_invalid_joint_geometry ... ok
+test cc_render::scene_mechanism::tests::articulated_package_replaces_navigation_box_and_preserves_authored_frames ... ok
+test cc_render::scene_mechanism::tests::mechanisms_reject_duplicate_ids_replacements_and_asset_mutation ... ok
+test cc_render::scene_package::tests::missing_geometry_is_an_error ... ok
+test cc_render::scene_mechanism::tests::slider_schema_requires_metre_limits_and_rejects_commands_and_tilted_axes ... ok
+test cc_render::scene_package::tests::package_rejects_body_motion_channels ... ok
+test cc_render::scene_package::tests::point_lights_default_empty_and_reject_invalid_configuration ... ok
+test cc_render::scene_package::tests::missing_lightmap_fails_during_package_load ... ok
+test cc_render::scene_package::tests::rejects_ambiguous_or_invalid_lightmaps ... ok
+test cc_render::scene_package::tests::vehicle_variants_preserve_legacy_default_and_reject_invalid_counts ... ok
+test cc_render::scene_package::tests::rejects_invalid_geometry_and_camera_bounds ... ok
+test cc_render::scene_weather::tests::weather_requests_reject_invalid_durations ... ok
+test cc_render::office::support::tests::sofa_contacts_come_from_parts_and_survive_scene_transforms ... ok
+test cc_render::soft_tissue::asset::tests::fitted_prototype_reproduces_the_authored_loaded_shape ... ok
+test cc_render::soft_tissue::asset::tests::garment_transfer_composes_tets_but_rejects_duplicate_or_amplified_influence ... ok
+test cc_render::soft_tissue::asset::tests::malformed_embedding_and_assets_fail_closed ... ok
+test cc_render::soft_tissue::solver::contact_tests::bdf2_contact_compression_and_release_preserve_attachments ... ok
+test cc_render::soft_tissue::solver::contact_tests::contact_respects_rigid_coordinate_changes_and_embedded_skin_share ... ok
+test cc_render::soft_tissue::asset::tests::real_avatar_asset_is_volumetric_and_bound_to_body_and_outfit ... ok
+test cc_render::soft_tissue::solver::contact_tests::invalid_contacts_leave_state_and_attachment_frame_unchanged ... ok
+test cc_render::soft_tissue::solver::contact_tests::continuum_viscous_contact_compression_and_release_preserve_attachments ... ok
+test cc_render::soft_tissue::solver::contact_tests::separated_contacts_do_not_attract_or_change_unconstrained_dynamics ... ok
+test cc_render::soft_tissue::solver::contact_tests::splitting_contact_quadrature_preserves_response_and_force ... ok
+test cc_render::soft_tissue::solver::implicit::tests::coupled_length_rate_damping_has_the_energy_gradient_and_psd_tangent ... ok
+test cc_render::soft_tissue::solver::implicit::tests::embedded_contact_gradient_and_hessian_match_finite_differences ... ok
+test cc_render::soft_tissue::solver::implicit::tests::linear_solve_rejects_indefinite_system_instead_of_returning_a_capped_direction ... ok
+test cc_render::office::controller::constrained_navigation_tests::bathroom_door_controls_full_condo_passage_without_moving_avatar ... ok
+test cc_render::soft_tissue::solver::implicit::tests::objective_gradient_and_sparse_system_are_consistent ... ok
+test cc_render::soft_tissue::solver::contact_tests::moving_plane_compresses_volume_and_release_recovers_without_moving_attachments ... ok
+test cc_render::soft_tissue::solver::implicit::tests::offline_equilibrium_satisfies_force_balance_without_advancing_motion ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":9.656951558263911,"continuous_amplitude_mm":10.0,"duration_s":0.49999999999999944,"frequency_hz":6,"maximum_state_error_mm":1.4964975870637869,"method":"bdf2","rate_hz":240,"variable_steps":false}
+TISSUE_VISCOUS_REFERENCE {"maximum_state_error_mm":0.02168988012316164,"rate_hz":240}
+TISSUE_TIME_REFERENCE {"amplitude_mm":9.93201113834161,"continuous_amplitude_mm":10.0,"duration_s":0.49999999999999883,"frequency_hz":6,"maximum_state_error_mm":0.386727030365772,"method":"bdf2","rate_hz":480,"variable_steps":false}
+test cc_render::office::home::tests::walls_enclose_home_and_routes_use_doorways ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":0.5938450986670271,"continuous_amplitude_mm":10.0,"duration_s":0.5,"frequency_hz":6,"method":"implicit_euler","phase_error_radians":0.5858080796618523,"rate_hz":120}
+TISSUE_VISCOUS_REFERENCE {"maximum_state_error_mm":0.006077429344945863,"rate_hz":480}
+TISSUE_TIME_REFERENCE {"amplitude_mm":2.3166302594242514,"continuous_amplitude_mm":10.0,"duration_s":0.5,"frequency_hz":6,"method":"implicit_euler","phase_error_radians":0.15277592519375105,"rate_hz":240}
+test cc_render::soft_tissue::solver::implicit::tests::restarted_linear_solve_converges_on_recorded_arm_fold_matrix ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":9.98563486802603,"continuous_amplitude_mm":10.0,"duration_s":0.49999999999999856,"frequency_hz":6,"maximum_state_error_mm":0.0973881898995763,"method":"bdf2","rate_hz":960,"variable_steps":false}
+test cc_render::soft_tissue::solver::integration_tests::isolated_edge_damping_matches_exponential_decay_and_preserves_momentum ... ok
+test cc_render::soft_tissue::solver::integration_tests::rejected_bdf2_steps_preserve_derivative_history_and_growth_restarts_only_the_method ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::block_factor_solves_dense_system_with_nonsymmetric_couplings_and_fixed_node ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::complete_fill_solves_reordered_sparse_blocks_with_a_fixed_node ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::incomplete_factor_is_symmetric_positive_and_rejects_bad_pivots ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":4.780946039523672,"continuous_amplitude_mm":10.0,"duration_s":0.5,"frequency_hz":6,"method":"implicit_euler","phase_error_radians":0.038615028142825025,"rate_hz":480}
+TISSUE_TIME_REFERENCE {"amplitude_mm":9.707540776432284,"continuous_amplitude_mm":10.0,"duration_s":0.5000000000000007,"frequency_hz":6,"maximum_state_error_mm":1.4887257703325119,"method":"bdf2","rate_hz":240,"variable_steps":true}
+TISSUE_VISCOUS_REFERENCE {"maximum_state_error_mm":0.001603114371264414,"rate_hz":960}
+test cc_render::soft_tissue::solver::preconditioner::tests::symbolic_fill_limits_preserve_the_incomplete_pattern ... ok
+test cc_render::soft_tissue::solver::integration_tests::continuum_viscosity_converges_to_an_independent_nonlinear_damped_oscillator ... ok
+test cc_render::soft_tissue::solver::tests::bulk_and_shear_are_independent_material_responses ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":9.944457511197509,"continuous_amplitude_mm":10.0,"duration_s":0.49999999999999944,"frequency_hz":6,"maximum_state_error_mm":0.3848259289722414,"method":"bdf2","rate_hz":480,"variable_steps":true}
+test cc_render::soft_tissue::solver::tests::constant_velocity_does_not_drag_free_or_attached_tissue ... ok
+test cc_render::soft_tissue::solver::tests::coupled_material_preserves_the_unloaded_equilibrium ... ok
+test cc_render::soft_tissue::solver::tests::invalid_topology_and_failed_step_are_rejected_without_mutating_state ... ok
+test cc_render::soft_tissue::solver::tests::mass_is_density_times_volume_and_not_sum_of_inverse_tet_masses ... ok
+test cc_render::soft_tissue::solver::tests::material_gradients_match_finite_differences ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":6.908551645245541,"continuous_amplitude_mm":10.0,"duration_s":0.5,"frequency_hz":6,"method":"implicit_euler","phase_error_radians":0.009680505905883763,"rate_hz":960}
+test cc_render::soft_tissue::solver::integration_tests::implicit_euler_matches_closed_form_but_damps_an_undamped_oscillator ... ok
+test cc_render::soft_tissue::solver::tests::strain_damping_preserves_rigid_velocity_and_dissipates_deformation ... ok
+test cc_render::soft_tissue::solver::tests::strain_stiffening_is_objective_and_retains_small_strain_softness ... ok
+test cc_render::office::home::tests::all_rooms_and_furniture_are_reachable_with_avatar_clearance ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::invalid_or_double_counted_viscosity_is_rejected ... ok
+test cc_render::soft_tissue::solver::tests::velocity_warm_start_retains_implicit_euler_gravity_and_rigid_free_fall ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::material_viscosity_has_objective_energy_exact_forces_and_a_psd_strain_tangent ... ok
+TISSUE_TIME_REFERENCE {"amplitude_mm":9.988668756559205,"continuous_amplitude_mm":10.0,"duration_s":0.49999999999999883,"frequency_hz":6,"maximum_state_error_mm":0.09697953081165403,"method":"bdf2","rate_hz":960,"variable_steps":true}
+test cc_render::soft_tissue::solver::integration_tests::bdf2_oscillator_converges_to_the_continuous_solution_with_variable_steps ... ok
+test cc_render::soft_tissue::solver::tests::rigid_coordinate_changes_leave_dynamics_equivalent ... ok
+test cc_render::soft_tissue::solver::tests::gravitational_sag_preserves_volume_and_settles ... ok
+test cc_render::office::navigation::tests::unreachable_unknown_and_unready_queries_fail_explicitly ... ok
+test cc_render::office::locomotion::tests::home_approaches_preserve_collision_clearance_and_arrival_cone ... ok
+test cc_render::bevy_app::mechanisms::tests::cabinets::passive_entry_doors_obstruct_open_release_close_and_publish_bounds ... ok
+test cc_render::bevy_app::mechanisms::tests::balcony_slider::balcony_slider_resists_side_loads_blocks_opens_releases_and_closes ... ok
+test cc_render::bevy_app::mechanisms::tests::drawers::passive_drawers_resist_side_loads_obstruction_and_overtravel_then_release_and_close ... ok
+test cc_render::office::navigation::tests::query_reaches_every_furniture_approach_without_changing_state ... ok
+test cc_render::bevy_app::mechanisms::tests::vanity::vanity_drawers_resist_side_loads_block_open_release_and_close ... ok
+test cc_render::bevy_app::mechanisms::tests::room_doors::bedroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry ... ok
+test cc_render::bevy_app::physics::secondary::tests::breast_spring_moves_and_settles_at_multiple_frame_rates ... ok
+test cc_render::bevy_app::mechanisms::tests::kitchen_drawers::retained_kitchen_geometry_and_vanity_accessories_keep_source_coordinates ... ok
+BEDDING_TICK 0 wall_seconds=0.001: [{"id":"bed_duvet","status":"paused","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":1000,"simulated_ticks":0,"surface_revision":0,"max_speed_m_s":0.0,"max_edge_stretch_ratio":1.0,"max_particle_penetration_m":0.0,"surface_position_sha256":"1c1ecda4263910e9a1b2161160443fbe04ff113ad5bf1b9b485d544c0e9108d8","mesh_position_sha256":"1c1ecda4263910e9a1b2161160443fbe04ff113ad5bf1b9b485d544c0e9108d8","bounds_min":[3.04,0.94,-3.98],"bounds_max":[5.3,0.94,-2.04],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"paused","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":1000,"simulated_ticks":0,"surface_revision":0,"max_speed_m_s":0.0,"max_edge_stretch_ratio":1.0,"max_particle_penetration_m":0.0,"surface_position_sha256":"ca1b02512f56e22451f784078b74663e829f63714ec5c929c764315e5d7506a8","mesh_position_sha256":"ca1b02512f56e22451f784078b74663e829f63714ec5c929c764315e5d7506a8","bounds_min":[3.2959998,0.40226936,-4.4639997],"bounds_max":[5.104,0.624,-2.3360002],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"paused","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":1000,"simulated_ticks":0,"surface_revision":0,"max_speed_m_s":0.0,"max_edge_stretch_ratio":1.0,"max_particle_penetration_m":0.0,"surface_position_sha256":"38e7f7583fcb2b3a43d00878683e733d497fb07cede9a8e9a643d6882f355111","mesh_position_sha256":"38e7f7583fcb2b3a43d00878683e733d497fb07cede9a8e9a643d6882f355111","bounds_min":[3.02,0.8,-4.3],"bounds_max":[5.3199997,0.8,-2.0],"particles":1221,"hand_contacts":[]}]
+test cc_render::bevy_app::cloth::tests::bedding::additive_bedding_is_valid_but_duplicate_replacements_are_rejected ... ok
+VANITY_LOOSE_CONTENT rest=Vec3(-5.4999905, 0.3837245, -2.8300002) open=Vec3(-4.9636116, 0.38372046, -2.829997) returned=Vec3(-5.499979, 0.3837222, -2.829997)
+test cc_render::bevy_app::mechanisms::tests::vanity::vanity_lower_drawer_contains_and_carries_a_loose_cube ... ok
+test cc_render::bevy_app::mechanisms::tests::room_doors::bathroom_door_obstructs_opens_releases_closes_and_publishes_current_geometry ... ok
+test cc_render::bevy_app::mechanisms::tests::upper_cabinets::upper_cabinet_hinges_obstruct_open_release_and_close ... ok
+test cc_render::bevy_app::mechanisms::tests::desk_drawer::desk_drawer_clears_frame_resists_side_loads_obstructs_and_closes ... ok
+test cc_render::bevy_app::mechanisms::tests::room_doors::condo_entry_door_obstructs_opens_releases_closes_and_publishes_current_geometry ... ok
+KITCHEN_SETTLE_CHECK cycle=0 phase=1
+INDEPENDENT_LAYERS_REPORT min_gap=0.0025003903879005722 final_speed=0.0024803556704837276
+test cc_render::cloth_solver::batch::tests::recording::independent_fabric_layers_settle_without_crossing ... ok
+STACK_LAYER expected_y=0.0005 positions=[DVec3(-1.0000019457396558, 0.0005000000237487261, -1.0000037190627444), DVec3(0.9999934754136179, 0.0005000000237487261, -1.0000164083420209), DVec3(1.1874596251253559e-5, 0.0005000000237487261, 0.999993056268835)] speed=0.0000001953191789460049
+STACK_LAYER expected_y=0.0025 positions=[DVec3(-0.9945086891337364, 0.0025002382610768824, -1.0001435068946851), DVec3(1.004293036980209, 0.0025000891663792143, -0.9309216895607665), DVec3(-0.06432964348509304, 0.0025001869256457638, 1.0332691277615247)] speed=0.00021457991215077877
+STACK_LAYER expected_y=0.0065 positions=[DVec3(-0.9983805577453938, 0.006500666811821671, -0.9967825293489414), DVec3(1.0015916301937888, 0.006500504566546049, -1.0073299195946384), DVec3(0.012152926479570746, 0.006500580041065434, 0.9979159634744544)] speed=0.00006913853014817668
+test cc_render::cloth_solver::batch::tests::three_distinct_layers_stack_at_their_authored_radii ... ok
+KITCHEN_SETTLE_CHECK cycle=0 phase=3
+test cc_render::bevy_app::mechanisms::tests::kitchen_drawers::kitchen_and_island_drawers_obstruct_open_release_and_close ... ok
+KITCHEN_SETTLE_CHECK cycle=1 phase=1
+left_breast: TissueMetrics { mass_kg: 0.7094052259298372, minimum_volume_ratio: 0.9276682129867545, maximum_volume_ratio: 1.1078186766773532, kinetic_energy_j: 1.6965509365611e-8, elastic_energy_j: 0.0300891877702348, maximum_speed_m_s: 0.00045115129648840534 }
+KITCHEN_SETTLE_CHECK cycle=1 phase=3
+KITCHEN_SETTLE_CHECK cycle=2 phase=1
+KITCHEN_SETTLE_CHECK cycle=2 phase=3
+KITCHEN_SETTLE_CHECK cycle=3 phase=1
+FOLDED_SHEET_REPORT gap=0.0010003915629376507 speed=0.00005064174486042208 stretch=1.0022897840957263
+test cc_render::cloth_solver::self_tests::folded_connected_sheet_compresses_and_settles_above_a_fixed_floor ... ok
+KITCHEN_SETTLE_CHECK cycle=3 phase=3
+right_breast: TissueMetrics { mass_kg: 0.7035588341835316, minimum_volume_ratio: 0.9424155079459584, maximum_volume_ratio: 1.045037222976884, kinetic_energy_j: 3.173658679187831e-8, elastic_energy_j: 0.029605204914497963, maximum_speed_m_s: 0.0006291413744397004 }
+test cc_render::soft_tissue::asset::tests::real_cages_settle_under_gravity_without_residual_element_vibration ... ok
+KITCHEN_SETTLE_CHECK cycle=4 phase=1
+KITCHEN_SETTLE_CHECK cycle=4 phase=3
+KITCHEN_SETTLE_CHECK cycle=5 phase=1
+KITCHEN_SETTLE_CHECK cycle=5 phase=3
+KITCHEN_SETTLE_CHECK cycle=6 phase=1
+KITCHEN_SETTLE_CHECK cycle=6 phase=3
+KITCHEN_SETTLE_CHECK cycle=7 phase=1
+KITCHEN_SETTLE_CHECK cycle=7 phase=3
+KITCHEN_SETTLE_CHECK cycle=8 phase=1
+KITCHEN_SETTLE_CHECK cycle=8 phase=3
+KITCHEN_SETTLE_CHECK cycle=9 phase=1
+SHELF_DURABILITY_PASS hinges=3 drawers=16 shelf_contents=12 drawer_contents=48 cycles=10 physics_steps=4920
+test cc_render::bevy_app::mechanisms::tests::upper_cabinets::loaded_shelves_and_drawers_survive_ten_simultaneous_hinge_and_rail_cycles ... ok
+KITCHEN_SETTLE_CHECK cycle=9 phase=3
+DRAWER_DURABILITY_PASS drawers=16 contents=48 load_per_drawer_kg=2 cycles=10 physics_steps=5651 longest_settle_seconds=4.6833334
+test cc_render::bevy_app::mechanisms::tests::kitchen_drawers::loaded_kitchen_island_and_desk_drawers_survive_ten_simultaneous_cycles ... ok
+BEDDING_TICK 16 wall_seconds=27.369: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":1267,"simulated_ticks":16,"surface_revision":16,"max_speed_m_s":5.220846926927842,"max_edge_stretch_ratio":1.0023175646123677,"max_particle_penetration_m":0.0,"surface_position_sha256":"1b22424681336d0022280644ea156acedabb4556b51319e5de4c4552869ff013","mesh_position_sha256":"1b22424681336d0022280644ea156acedabb4556b51319e5de4c4552869ff013","bounds_min":[3.0406878,0.5904814,-3.979609],"bounds_max":[5.299839,0.6986046,-2.0407782],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":1267,"simulated_ticks":16,"surface_revision":16,"max_speed_m_s":0.5409619215618244,"max_edge_stretch_ratio":1.019033309713487,"max_particle_penetration_m":0.0,"surface_position_sha256":"c54562b8ce1263f9ef27db605d1c15622ed11ff584f7e01e5f12e8b0018f5cff","mesh_position_sha256":"c54562b8ce1263f9ef27db605d1c15622ed11ff584f7e01e5f12e8b0018f5cff","bounds_min":[3.2919693,0.39717045,-4.4681816],"bounds_max":[5.1066976,0.62279445,-2.3319154],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":1267,"simulated_ticks":16,"surface_revision":16,"max_speed_m_s":4.729382243781,"max_edge_stretch_ratio":1.007566904840383,"max_particle_penetration_m":0.0,"surface_position_sha256":"9eac8626c7b971aa5d59ca234ee07eeeeb6ab10c3a78725b9f549d6ace486fc7","mesh_position_sha256":"9eac8626c7b971aa5d59ca234ee07eeeeb6ab10c3a78725b9f549d6ace486fc7","bounds_min":[3.022634,0.41032448,-4.292053],"bounds_max":[5.316793,0.68660575,-2.0385165],"particles":1221,"hand_contacts":[]}]
+CLOTH_SOLVER_REPORT {"coordinates":"runtime metres X east, Y up, Z south","frames":1200,"max_edge_stretch_ratio":1.0278813022950668,"max_particle_penetration_m":0.0,"parameters":{"air_drag_per_second":0.2,"bend_compliance":0.05,"spring_damping_ratio":1.0,"stretch_compliance":1e-7,"substeps":24,"thickness_m":0.0010000000474974513,"total_mass_kg":0.8},"scope":"CPU solver prototype with self-contact and a static rounded mattress; no hand, dynamic body or live renderer integration","simulation_seconds":20.0,"tail_max_speed_m_s":0.018609017131282084,"tail_support_fraction":0.5028665028665029,"wall_seconds_including_measurements":50.325573527}
+test cc_render::cloth_solver::tests::condo_sheet_gravity_and_settling_probe ... ok
+test cc_render::bevy_app::cloth::tests::bedding::authored_bedding_layers_drape_together_in_the_live_scene has been running for over 60 seconds
+test cc_render::bevy_app::cloth::tests::cloth_ecs_mesh_follows_solver_and_stalls_with_committed_motion_clock has been running for over 60 seconds
+test cc_render::cloth_grip::tests::condo_sheet_contact_clamp_lifts_releases_and_settles has been running for over 60 seconds
+LIVE_CLOTH_ECS_REPORT {"final":{"bounds_max":[5.31966495513916,0.6442585587501526,-2.18369722366333],"bounds_min":[3.026064395904541,0.24394920468330383,-4.298313140869141],"clock_origin_pts_ms":100000,"displayed_pts_ms":120000,"error":null,"hand_contacts":[],"id":"bed_top_sheet","max_edge_stretch_ratio":1.0084323184097823,"max_particle_penetration_m":0.0,"max_speed_m_s":0.0057286297933319425,"mesh_position_sha256":"e9e536f763d5a84110df34916415ce51acda3a52b4e4262b3fbdb8046baaab74","particles":1221,"session_id":"cloth-clock-test","simulated_ticks":1200,"status":"running","surface_position_sha256":"e9e536f763d5a84110df34916415ce51acda3a52b4e4262b3fbdb8046baaab74","surface_revision":1200},"scope":"Headless ECS system test, no avatar interaction","tail_max_speed_m_s":0.007328568709733266}
+test cc_render::bevy_app::cloth::tests::cloth_ecs_mesh_follows_solver_and_stalls_with_committed_motion_clock ... ok
+CLOTH_GRIP_REPORT {"clamp_material":{"capacity_n":25.0,"compliance_m_n":0.0002,"damping_ratio":1.0},"coordinates":"runtime metres X east, Y up, Z south","held_until_release":true,"lift_m":0.3997540771961212,"max_applied_force_n":2.1515278056602094,"max_edge_stretch_ratio":1.0163060671642026,"max_held_compliance_error_m":0.0007324372034633031,"max_particle_penetration_m":0.0,"max_required_force_n":2.1515278056602094,"pre_settle_seconds":20.0,"released_after_command":true,"released_drop_m":0.4017709195613861,"scope":"CPU solver with a diagnostic kinematic contact clamp, self-contact and swept fixed-body collision; no avatar, runtime hand admission or dynamic body collision","simulation_seconds":13.0,"tail_max_speed_m_s":0.018852514399684633,"triangle":32}
+test cc_render::cloth_grip::tests::condo_sheet_contact_clamp_lifts_releases_and_settles ... ok
+BEDDING_TICK 60 wall_seconds=658.752: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":2000,"simulated_ticks":60,"surface_revision":60,"max_speed_m_s":1.7086297040792902,"max_edge_stretch_ratio":1.0018279851518384,"max_particle_penetration_m":0.0,"surface_position_sha256":"2d4de5d84eb39cc38de6577263b9f5e0862eac6db84740d859576a645d073c9e","mesh_position_sha256":"2d4de5d84eb39cc38de6577263b9f5e0862eac6db84740d859576a645d073c9e","bounds_min":[2.827208,0.006,-3.3992856],"bounds_max":[5.0983925,0.7018167,-1.792643],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":2000,"simulated_ticks":60,"surface_revision":60,"max_speed_m_s":0.11295915142362781,"max_edge_stretch_ratio":1.022621670534744,"max_particle_penetration_m":0.0,"surface_position_sha256":"a25800170e6282a9b55a2493ad4ab4c4587019de7a93cd97c500cac132fc2e25","mesh_position_sha256":"a25800170e6282a9b55a2493ad4ab4c4587019de7a93cd97c500cac132fc2e25","bounds_min":[3.2952657,0.39722443,-4.4651856],"bounds_max":[5.1045856,0.6220579,-2.3351784],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":2000,"simulated_ticks":60,"surface_revision":60,"max_speed_m_s":1.5876704647731608,"max_edge_stretch_ratio":1.0039400463089894,"max_particle_penetration_m":0.0,"surface_position_sha256":"386ff1a0e95ddb87bb717b1d5aa33285954dc9af0118aafa706ea8cdb1bb9fb2","mesh_position_sha256":"386ff1a0e95ddb87bb717b1d5aa33285954dc9af0118aafa706ea8cdb1bb9fb2","bounds_min":[2.8885562,0.0005,-3.957714],"bounds_max":[5.1498375,0.64924145,-1.8159789],"particles":1221,"hand_contacts":[]}]
+BEDDING_TICK 120 wall_seconds=1186.963: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":3000,"simulated_ticks":120,"surface_revision":120,"max_speed_m_s":1.646966279174343,"max_edge_stretch_ratio":1.0015061283928903,"max_particle_penetration_m":0.0,"surface_position_sha256":"1675f4bb11cef799a511f09b0bce28e8caa544009a43b652292556c3f9900fec","mesh_position_sha256":"1675f4bb11cef799a511f09b0bce28e8caa544009a43b652292556c3f9900fec","bounds_min":[2.7722113,0.006,-2.7529578],"bounds_max":[5.0557203,0.69199663,-1.1134435],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":3000,"simulated_ticks":120,"surface_revision":120,"max_speed_m_s":0.30392353367422875,"max_edge_stretch_ratio":1.0262253311149105,"max_particle_penetration_m":0.0,"surface_position_sha256":"40ca3ec440f06f3b5049c9f67900dee5b511349c3306488168dc3388f22524e6","mesh_position_sha256":"40ca3ec440f06f3b5049c9f67900dee5b511349c3306488168dc3388f22524e6","bounds_min":[3.2944565,0.39697888,-4.4668097],"bounds_max":[5.106174,0.62204283,-2.3333623],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":3000,"simulated_ticks":120,"surface_revision":120,"max_speed_m_s":1.9918113725406839,"max_edge_stretch_ratio":1.0055499446626475,"max_particle_penetration_m":0.0,"surface_position_sha256":"57cf431e57212ba56fa2a845b93534b9c45637b3bc25db4636589329bea8f631","mesh_position_sha256":"57cf431e57212ba56fa2a845b93534b9c45637b3bc25db4636589329bea8f631","bounds_min":[2.8205996,0.0005,-3.564928],"bounds_max":[5.127366,0.74139184,-1.5762074],"particles":1221,"hand_contacts":[]}]
+BEDDING_TICK 180 wall_seconds=1659.362: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":4000,"simulated_ticks":180,"surface_revision":180,"max_speed_m_s":0.5882808681209433,"max_edge_stretch_ratio":1.0009976565081984,"max_particle_penetration_m":0.0,"surface_position_sha256":"0f4066b1c8d1d28d37e29f059fba534123bf6fa70ebf05d848dc78fc075f0252","mesh_position_sha256":"0f4066b1c8d1d28d37e29f059fba534123bf6fa70ebf05d848dc78fc075f0252","bounds_min":[2.7712693,0.006,-2.6954875],"bounds_max":[5.039013,0.6787435,-1.1104373],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":4000,"simulated_ticks":180,"surface_revision":180,"max_speed_m_s":0.10515398275794773,"max_edge_stretch_ratio":1.0242407831870837,"max_particle_penetration_m":0.0,"surface_position_sha256":"314ba25148db430b31a3c8975ea4cc4180ad34aca1cbfd3564c22dd707508926","mesh_position_sha256":"314ba25148db430b31a3c8975ea4cc4180ad34aca1cbfd3564c22dd707508926","bounds_min":[3.294234,0.39694566,-4.466565],"bounds_max":[5.1059318,0.6220592,-2.3342745],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":4000,"simulated_ticks":180,"surface_revision":180,"max_speed_m_s":0.6480830573344827,"max_edge_stretch_ratio":1.004984295010747,"max_particle_penetration_m":0.0,"surface_position_sha256":"f01f514850a3e4a72f6f3a1c448aa0c548bee6835d00686831d857c81cd3d8be","mesh_position_sha256":"f01f514850a3e4a72f6f3a1c448aa0c548bee6835d00686831d857c81cd3d8be","bounds_min":[2.7758205,0.0005,-3.5265827],"bounds_max":[5.062738,0.7209582,-1.5599802],"particles":1221,"hand_contacts":[]}]
+BEDDING_TICK 240 wall_seconds=2048.645: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":5000,"simulated_ticks":240,"surface_revision":240,"max_speed_m_s":0.36446814910405206,"max_edge_stretch_ratio":1.0009930175705808,"max_particle_penetration_m":0.0,"surface_position_sha256":"e8d05750b85167ee78e5b0de940076bee143e6641099c294d92e97f0c4f257e2","mesh_position_sha256":"e8d05750b85167ee78e5b0de940076bee143e6641099c294d92e97f0c4f257e2","bounds_min":[2.7712073,0.006,-2.6921923],"bounds_max":[5.038719,0.6792034,-1.10908],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":5000,"simulated_ticks":240,"surface_revision":240,"max_speed_m_s":0.19789128397832284,"max_edge_stretch_ratio":1.0319044755374323,"max_particle_penetration_m":0.0,"surface_position_sha256":"44f57f9108a2f17e4840370ac24baf5ee0ff64f82d83c70c53730cfca9d4459b","mesh_position_sha256":"44f57f9108a2f17e4840370ac24baf5ee0ff64f82d83c70c53730cfca9d4459b","bounds_min":[3.2944527,0.39698574,-4.465576],"bounds_max":[5.105382,0.6220544,-2.3354785],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":5000,"simulated_ticks":240,"surface_revision":240,"max_speed_m_s":0.5435135891512795,"max_edge_stretch_ratio":1.005093485960307,"max_particle_penetration_m":0.0,"surface_position_sha256":"c7786afdba9063e04de47bbde978b5b6aa43536936bf0d241cbd4160f6ed490c","mesh_position_sha256":"c7786afdba9063e04de47bbde978b5b6aa43536936bf0d241cbd4160f6ed490c","bounds_min":[2.7731016,0.0005,-3.5266626],"bounds_max":[5.059808,0.7240867,-1.5584512],"particles":1221,"hand_contacts":[]}]
+BEDDING_TICK 300 wall_seconds=2416.041: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":6000,"simulated_ticks":300,"surface_revision":300,"max_speed_m_s":0.2944397959259768,"max_edge_stretch_ratio":1.0009103822822354,"max_particle_penetration_m":0.0,"surface_position_sha256":"c142fc3d9fecc604fb19dfc4e9984bb94693433fde21d3442c39b587ed1ca1d1","mesh_position_sha256":"c142fc3d9fecc604fb19dfc4e9984bb94693433fde21d3442c39b587ed1ca1d1","bounds_min":[2.7712128,0.006,-2.687082],"bounds_max":[5.038407,0.67880464,-1.1090018],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":6000,"simulated_ticks":300,"surface_revision":300,"max_speed_m_s":0.11318646492345372,"max_edge_stretch_ratio":1.0241300063032794,"max_particle_penetration_m":0.0,"surface_position_sha256":"8d574bb6ae4764f8a717a83a5258ade7f822e03940c0c6dda8a17538daaa78b9","mesh_position_sha256":"8d574bb6ae4764f8a717a83a5258ade7f822e03940c0c6dda8a17538daaa78b9","bounds_min":[3.294465,0.39697087,-4.465687],"bounds_max":[5.105216,0.6220545,-2.3347616],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":6000,"simulated_ticks":300,"surface_revision":300,"max_speed_m_s":0.5180047026445553,"max_edge_stretch_ratio":1.005110486909836,"max_particle_penetration_m":0.0,"surface_position_sha256":"64d0d835b4969518388996448bde9965d7d933f4d4de102c38ce93025248d166","mesh_position_sha256":"64d0d835b4969518388996448bde9965d7d933f4d4de102c38ce93025248d166","bounds_min":[2.7731075,0.0005,-3.5253131],"bounds_max":[5.0598,0.71885276,-1.5584369],"particles":1221,"hand_contacts":[]}]
+BEDDING_TICK 360 wall_seconds=2772.568: [{"id":"bed_duvet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":7000,"simulated_ticks":360,"surface_revision":360,"max_speed_m_s":0.3092231608779632,"max_edge_stretch_ratio":1.0009920354049033,"max_particle_penetration_m":0.0,"surface_position_sha256":"079955bd4bb702646eaeff3b2b72fe18572771e89e5527da3b75fa09ecfd9748","mesh_position_sha256":"079955bd4bb702646eaeff3b2b72fe18572771e89e5527da3b75fa09ecfd9748","bounds_min":[2.77121,0.006,-2.6882727],"bounds_max":[5.0384445,0.67852306,-1.1091216],"particles":575,"hand_contacts":[]},{"id":"bed_fitted_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":7000,"simulated_ticks":360,"surface_revision":360,"max_speed_m_s":0.12389571011001967,"max_edge_stretch_ratio":1.0244038685603831,"max_particle_penetration_m":0.0,"surface_position_sha256":"dae144c5bf62fca52c477008e443b28ebca2249b7ea6c415ceef631ed5824778","mesh_position_sha256":"dae144c5bf62fca52c477008e443b28ebca2249b7ea6c415ceef631ed5824778","bounds_min":[3.2943716,0.39696968,-4.4658246],"bounds_max":[5.1054664,0.6220545,-2.3342252],"particles":1453,"hand_contacts":[]},{"id":"bed_top_sheet","status":"running","error":null,"session_id":"cloth-clock-test","clock_origin_pts_ms":1000,"displayed_pts_ms":7000,"simulated_ticks":360,"surface_revision":360,"max_speed_m_s":0.2625548946110445,"max_edge_stretch_ratio":1.005002082045635,"max_particle_penetration_m":0.0,"surface_position_sha256":"cff669faf33a59b353ee584800f290e244466e9d7d726e0214cab867ee20a3a0","mesh_position_sha256":"cff669faf33a59b353ee584800f290e244466e9d7d726e0214cab867ee20a3a0","bounds_min":[2.7731369,0.0005,-3.524934],"bounds_max":[5.0597982,0.71880424,-1.5584369],"particles":1221,"hand_contacts":[]}]

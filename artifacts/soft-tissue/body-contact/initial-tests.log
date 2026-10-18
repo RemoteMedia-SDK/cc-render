@@ -1,0 +1,82 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+error[E0277]: `tissue_collision::Witness` doesn't implement `std::fmt::Debug`
+    --> src/cc_render/bevy_app/tissue_collision_tests.rs:44:10
+     |
+  44 |         .unwrap_err()
+     |          ^^^^^^^^^^ the trait `std::fmt::Debug` is not implemented for `tissue_collision::Witness`
+     |
+     = note: add `#[derive(Debug)]` to `tissue_collision::Witness` or manually `impl std::fmt::Debug for tissue_collision::Witness`
+help: the trait `std::fmt::Debug` is implemented for `std::option::Option<T>`
+    --> /home/acidhax/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:594:16
+     |
+ 594 | #[derive(Copy, Debug, Hash)]
+     |                ^^^^^
+     = note: required for `std::option::Option<tissue_collision::Witness>` to implement `std::fmt::Debug`
+note: required by a bound in `std::result::Result::<T, E>::unwrap_err`
+    --> /home/acidhax/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:1326:12
+     |
+1324 |     pub fn unwrap_err(self) -> E
+     |            ---------- required by a bound in this associated function
+1325 |     where
+1326 |         T: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap_err`
+help: consider annotating `tissue_collision::Witness` with `#[derive(Debug)]`
+    -->  src/cc_render/bevy_app/tissue_collision.rs:230:1
+     |
+ 230 + #[derive(Debug)]
+ 231 | struct Witness {
+     |
+
+warning: value assigned to `own_rest_local` is never read
+   --> src/cc_render/bevy_app/pose.rs:637:9
+    |
+637 |         own_rest_local[1] = lhip_own;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: taking a mutable reference to a `const` item
+   --> src/cc_render/cloth_pair_tests.rs:240:13
+    |
+240 |             &mut DVec3::ZERO,
+    |             ^^^^^^^^^^^^^^^^
+    |
+    = note: each usage of a `const` item creates a new temporary
+    = note: the mutable reference will refer to this temporary, not the original `const` item
+note: `const` item defined here
+   --> /home/acidhax/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glam-0.29.3/src/f64/dvec3.rs:28:5
+    |
+ 28 |     pub const ZERO: Self = Self::splat(0.0);
+    |     ^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(const_item_mutation)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/cc_render/cloth_self_collision.rs:488:13
+    |
+488 |         let mut particles = GripParticles {
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0277`.
+warning: `cc-render-plugin` (lib test) generated 5 warnings
+error: could not compile `cc-render-plugin` (lib test) due to 1 previous error; 5 warnings emitted

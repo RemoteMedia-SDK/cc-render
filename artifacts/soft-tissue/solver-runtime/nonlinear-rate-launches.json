@@ -1,0 +1,64 @@
+[
+  {
+    "name": "nonlinear-strict-live120-01",
+    "rate": 120,
+    "output": "artifacts/soft-tissue/lab-front-nonlinear-strict-live120-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-nonlinear-strict-live120-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "46c3c25364d6db865ba9feeb051ee7e0936bfb40b758899ebefeef0935530cfa",
+    "log": "nonlinear-strict-live120-01.log",
+    "started_unix": 1792288462.4900088,
+    "overlapping_library_test": false,
+    "pid": 1541438,
+    "exit_code": 0,
+    "completed_unix": 1792288479.7304893
+  },
+  {
+    "name": "nonlinear-strict-live240-01",
+    "rate": 240,
+    "output": "artifacts/soft-tissue/lab-front-nonlinear-strict-live240-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-nonlinear-strict-live240-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "240",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "46c3c25364d6db865ba9feeb051ee7e0936bfb40b758899ebefeef0935530cfa",
+    "log": "nonlinear-strict-live240-01.log",
+    "started_unix": 1792288480.359517,
+    "overlapping_library_test": false,
+    "pid": 1542041,
+    "exit_code": 0,
+    "completed_unix": 1792288502.6404529
+  }
+]

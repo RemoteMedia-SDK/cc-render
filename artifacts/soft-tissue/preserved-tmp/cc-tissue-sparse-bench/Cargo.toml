@@ -1,0 +1,11 @@
+[package]
+name = "cc-tissue-sparse-bench"
+version = "0.1.0"
+edition = "2021"
+[lib]
+path = "lib.rs"
+[dependencies]
+nalgebra = { version = "=0.33.3", features = ["sparse"] }
+[profile.dev]
+opt-level = 3
+debug = 1

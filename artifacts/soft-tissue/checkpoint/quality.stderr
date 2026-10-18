@@ -1,0 +1,3 @@
+ripwire: --max-tokens is not read by --quality-delta — it shapes the default map, --recall, --connect, --pr-context, --from-trace and --for --detail=N. --quality-delta emitted its full result (nothing was dropped)
+ripwire: no ./.ripwire_quality_baseline — auto-comparing the working tree vs git HEAD (commit the baseline with --quality-baseline to pin it)
+ripwire: --quality-delta gating: 12 preexisting-worse major finding(s); first: duplication src/cc_render/bevy_app/joint_debug.rs::JointDebugConfig::default | parameters at src/cc_render/bevy_app/joint_debug.rs:36 (was=0 now=25)

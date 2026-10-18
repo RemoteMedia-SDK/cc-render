@@ -1,0 +1,19 @@
+Setting up text encoder (mode=local); first run may take a while...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 15816.45it/s]
+[transformers] [1mLlamaBiModel LOAD REPORT[0m from: meta-llama/Meta-Llama-3-8B-Instruct
+Key            | Status     |  | 
+---------------+------------+--+-
+lm_head.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Loading weights:   0%|          | 0/448 [00:00<?, ?it/s]Loading weights: 100%|██████████| 448/448 [00:00<00:00, 15175.89it/s]
+/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/lib/python3.12/site-packages/peft/tuners/tuners_utils.py:331: UserWarning: Already found a `peft_config` attribute in the model. This will lead to having multiple adapters in the model. Make sure to know what you are doing!
+  warnings.warn(
+sparsify_token_seq: False
+/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/ardy/ardy/model/llm2vec/llm2vec_wrapper.py:122: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  encoded_text = torch.tensor(encoded_text).to(self._device)
+{"generated_until_ms": 2000}
+{"generated_until_ms": 4000}
+{"generated_until_ms": 6000}
+{"generated_until_ms": 8000}

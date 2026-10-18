@@ -1,0 +1,64 @@
+{
+  "change": "Correct PCG residual replacement to b - A*x; preserve iteration limit and tolerance",
+  "test_result": {
+    "focused_rust_passed": 59,
+    "python_passed": 8,
+    "python_existing_failures": 1,
+    "quality_gate_major_findings": 8
+  },
+  "exact_matrix": {
+    "free_dofs": 576,
+    "old_relative_residual": 8.289180242822553e-05,
+    "corrected_relative_residual": 6.62783064256387e-10,
+    "corrected_iterations": 83,
+    "fixture": "src/cc_render/soft_tissue/fixtures/arm_fold_linear_system.json"
+  },
+  "arm_fold_capture": {
+    "capture": {
+      "frames": 478,
+      "images_saved": 478,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 22.14476667
+    },
+    "frames": 478,
+    "encoded_timestamps_match_source": true,
+    "maximum_active_contact_samples": 0,
+    "peak_surface_displacement_mm": 7.3719145730137825,
+    "minimum_volume_ratio": 0.9349147746004911,
+    "video_sha256": "089437a74075c2341db9a2ab908bdfa829f2c2753dc9bb51667ddd3375e6c3f4",
+    "limitations": "No active contact: this tests numerical continuation, not actual-avatar compression."
+  },
+  "jump_regression": {
+    "frames": 478,
+    "identical_traced_physics": true,
+    "maximum_surface_envelope_difference_mm": 0.0,
+    "source_times_equal": true,
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 25.685070017
+    },
+    "limitations": "Trace fields do not bound every node or surface vertex. Trace-only GPU run; previous jump videos remain the rendered evidence."
+  },
+  "source_archive": "restart-source.tar.gz",
+  "source_hashes": "restart-inputs.json",
+  "failed_attempts_preserved": [
+    "../lab-arm-fold-front-240hz-01",
+    "../lab-arm-fold-diagnostic-240hz-01",
+    "../lab-arm-fold-diagnostic-240hz-02"
+  ],
+  "body_or_camera_edits": false,
+  "complete_realism_claim": false,
+  "remaining": [
+    "Actual-avatar active contact",
+    "Material calibration",
+    "Interactive runtime performance",
+    "Paused facial/body-clock policy",
+    "Final ownership and code audit"
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "source_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+  "runs": {
+    "live-on-01": {
+      "directory": "lab-front-live-on-01",
+      "capture": {
+        "frames": 219,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 13.848769063
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 77,
+      "source_span_seconds": 7.923,
+      "playback_wall_seconds": 7.938023755000001,
+      "presentations_per_source_second": 27.514830241070303,
+      "source_gap_ms_p50_p95_p99_max": [
+        33.0,
+        63.0,
+        69.0,
+        81.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        33.738030999999864,
+        79.13400899999995,
+        87.44560092999885,
+        102.13330899999983
+      ],
+      "source_gaps_above_50ms": 42,
+      "relative_clock_drift_ms_min_max_end": [
+        -28.701249000000644,
+        76.72890999999981,
+        15.023755000000165
+      ],
+      "maximum_skin_error_mm": 0.0009991559156322606,
+      "peak_surface_displacement_mm": 33.30892324447632,
+      "minimum_element_volume_ratio": 0.8072369619898712,
+      "maximum_active_contacts": 0
+    },
+    "live-off-01": {
+      "directory": "lab-front-live-off-01",
+      "capture": {
+        "frames": 239,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 13.144772318
+      },
+      "fps_target": 30,
+      "tissue": false,
+      "first_source_ms": 66,
+      "source_span_seconds": 7.934,
+      "playback_wall_seconds": 7.945103937999999,
+      "presentations_per_source_second": 29.997479203428284,
+      "source_gap_ms_p50_p95_p99_max": [
+        33.0,
+        34.0,
+        34.629999999999995,
+        56.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        33.72849599999972,
+        33.771245999999884,
+        33.81825259999977,
+        55.89941700000054
+      ],
+      "source_gaps_above_50ms": 2,
+      "relative_clock_drift_ms_min_max_end": [
+        -22.727578999999423,
+        21.190623999999843,
+        11.103937999999289
+      ],
+      "maximum_skin_error_mm": null,
+      "peak_surface_displacement_mm": null,
+      "minimum_element_volume_ratio": null,
+      "maximum_active_contacts": null
+    },
+    "live-on-02": {
+      "directory": "lab-front-live-on-02",
+      "capture": {
+        "frames": 217,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 14.777033066
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 88,
+      "source_span_seconds": 7.912,
+      "playback_wall_seconds": 7.962955677000001,
+      "presentations_per_source_second": 27.30030333670374,
+      "source_gap_ms_p50_p95_p99_max": [
+        37.5,
+        66.0,
+        77.79999999999995,
+        98.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        35.31157699999994,
+        84.30590749999965,
+        90.69959349999844,
+        117.0204160000012
+      ],
+      "source_gaps_above_50ms": 48,
+      "relative_clock_drift_ms_min_max_end": [
+        -0.5047949999998309,
+        100.61833100000058,
+        50.95567700000083
+      ],
+      "maximum_skin_error_mm": 0.001289445617960926,
+      "peak_surface_displacement_mm": 33.097412437200546,
+      "minimum_element_volume_ratio": 0.77159394517809,
+      "maximum_active_contacts": 0
+    }
+  },
+  "visual_capture": {
+    "directory": "lab-front-live-video-01",
+    "capture": {
+      "frames": 217,
+      "images_saved": 217,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 14.731468075
+    },
+    "fps_target": 30,
+    "tissue": true,
+    "first_source_ms": 88,
+    "source_span_seconds": 7.912,
+    "playback_wall_seconds": 7.9581359350000005,
+    "presentations_per_source_second": 27.30030333670374,
+    "source_gap_ms_p50_p95_p99_max": [
+      38.5,
+      65.0,
+      69.85,
+      73.0
+    ],
+    "consumer_gap_ms_p50_p95_p99_max": [
+      34.691101500000514,
+      63.99942524999915,
+      69.92548319999932,
+      73.28367500000058
+    ],
+    "source_gaps_above_50ms": 49,
+    "relative_clock_drift_ms_min_max_end": [
+      -2.1783639999994193,
+      87.07586700000138,
+      46.135935000000245
+    ],
+    "maximum_skin_error_mm": 0.0010238518349112203,
+    "peak_surface_displacement_mm": 35.50782799720764,
+    "minimum_element_volume_ratio": 0.8767680199314676,
+    "maximum_active_contacts": 0
+  },
+  "source_packets_unchanged_and_semantic_only": true,
+  "body_and_tissue_stamps_correlated_in_gpu_readback": true,
+  "limitations": [
+    "Local renderer with prerecorded native motion and 500 ms bounded prefetch, not live model/network/client latency.",
+    "Consumer timestamps measure delivery to this capture process, not browser presentation or absolute input-to-image latency.",
+    "Clock drift is relative to each run's first captured frame; startup latency is separate.",
+    "Variable first observations and sample times prevent byte-identical mechanical comparisons across live runs.",
+    "Source frame gaps are reported, not hidden by resampling or pose repair.",
+    "The image-saving run has separate timings and is not pooled into the trace-only performance measurements.",
+    "All runs have zero active contact; this is not anatomical or compression acceptance."
+  ]
+}

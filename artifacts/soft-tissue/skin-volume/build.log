@@ -1,0 +1,43 @@
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 138, in <module>
+    print(json.dumps(build(args.avatar, args.material_asset, args.output), indent=2))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 113, in build
+    nodes, cells, fixed, shell, report = close_and_mesh(patch)
+                                         ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 82, in close_and_mesh
+    shell.fix_normals()
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/trimesh/base.py", line 1851, in fix_normals
+    repair.fix_normals(self, multibody=multibody)
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/trimesh/repair.py", line 165, in fix_normals
+    fix_winding(mesh)
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/trimesh/repair.py", line 47, in fix_winding
+    graph_all = nx.from_edgelist(mesh.face_adjacency)
+                ^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/trimesh/exceptions.py", line 30, in __getattribute__
+    raise super().__getattribute__("exception")
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/trimesh/repair.py", line 16, in <module>
+    import networkx as nx
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/networkx/__init__.py", line 23, in <module>
+    config = utils.backends._set_configs_from_environment()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/networkx/utils/backends.py", line 574, in _set_configs_from_environment
+    backends=Config(
+             ^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/networkx/utils/configs.py", line 84, in __new__
+    cls = dataclass(
+          ^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/dataclasses.py", line 1222, in wrap
+    return _process_class(cls, init, repr, eq, order, unsafe_hash,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/dataclasses.py", line 1027, in _process_class
+    _init_fn(all_init_fields,
+  File "/home/acidhax/miniconda3/lib/python3.11/dataclasses.py", line 580, in _init_fn
+    return _create_fn('__init__',
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/dataclasses.py", line 433, in _create_fn
+    exec(txt, globals, ns)
+  File "<string>", line 1
+    def __create_fn__(_type_nx-loopback, MISSING, _HAS_DEFAULT_FACTORY, __dataclass_builtins_object__, _return_type):
+                              ^
+SyntaxError: invalid syntax

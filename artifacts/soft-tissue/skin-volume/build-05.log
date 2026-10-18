@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 150, in <module>
+    print(json.dumps(build(args.avatar, args.material_asset, args.output), indent=2))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 125, in build
+    nodes, cells, fixed, shell, report = close_and_mesh(
+                                         ^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 95, in close_and_mesh
+    raise ValueError('Invalid closed tissue shell')
+ValueError: Invalid closed tissue shell

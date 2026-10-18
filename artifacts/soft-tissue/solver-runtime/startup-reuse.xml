@@ -1,0 +1,26 @@
+<ctx task="initialize_session" route="routed: name-exact BM25 — query names a symbol (initialize_session); anchors: initialize_session(src/.../tissue.rs)" root="src/cc_render/bevy_app" confidence="high" margin_pct="0" max_tokens="1600" at="ea65ebb68+dirty" est_tokens="1133"><!-- ripwire lens for "initialize_session" [relevance floor: kept 1 of 40 - the other 39 scored zero on this query, so the bundle shrank instead of padding] [confidence= derives from the ranked head's largest relative score drop (margin_pct=, whole percent, 0 = none; the same gap the adaptive flag cuts at). low = flat ranking: treat the set as a starting point, not an answer] [budget_tokens=/max_tokens=: the token ceiling this bundle was shaped against]: reusable building blocks + quality facts for what you're about to touch (cx=complexity ccx=cognitive in=reuse-count churn=recent-commits amp=change-amplification clone=1(duplicated) tested=1) — prefer composing/reusing these; watch the high-churn/high-amp/cloned ones; tail: file-grain tail, WEAKER evidence than the ranked rows (paths only): every positive-score file NOT among the shown sigs rows — the files of trimmed rows first, best-symbol rank order; rows are t p=file; total=such files, shown=printed, capped=1 when they differ. r= on a ranked row is its 1-based rank in this lens ranking, rows in r= order, p= the file (a gap = a budget-trimmed row) --><!-- root= is the crawl root; p= below is RELATIVE to it (single-root only; absent => p= is ingest's own path, unchanged); at=this commit(+dirty). est_tokens= prices this bundle in tokens --><sigs><d l="329" n="initialize_session" id="tissue.rs::Active::initialize_session" p="tissue.rs" cx="1" ccx="0" in="1" amp="1" tested="1" r="1" next="--expand=tissue.rs:initialize_session">fn initialize_session( &amp;mut self, request: &amp;TissueRequest, window: &amp;crate::cc_render::office::timeline::MotionWindow, ) -&gt; anyhow::Result&lt;()&gt;</d></sigs><tail total="0" shown="0" capped="0"></tail><bodies shown="1" total="1" capped="0"><b t="method" l="329" p="tissue.rs" n="initialize_session"><![CDATA[fn initialize_session(
+        &mut self,
+        request: &TissueRequest,
+        window: &crate::cc_render::office::timeline::MotionWindow,
+    ) -> anyhow::Result<()> {
+        let start = window
+            .knots
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("empty tissue motion window"))?
+            .pts_ms as f64;
+        let frames = self.frames_at(&window.knots, start)?;
+        self.solvers = request
+            .asset
+            .regions
+            .iter()
+            .zip(frames)
+            .map(|(r, f)| r.solver(f))
+            .collect::<Result<_, _>>()?;
+        self.session = Some(window.session.clone());
+        self.origin_ms = start;
+        self.tick = 0;
+        self.report_ms = 0;
+        self.motion_initialized = false;
+        self.morph_history = Default::default();
+        Ok(())
+    }]]><calls total="3"><c n="solver" l="4">fn solver() -&gt; ClothSolver</c><c n="default" l="36">fn default() -&gt; Self</c><c n="frames_at" l="316">fn frames_at( &amp;self, knots: &amp;[crate::cc_render::renderer::SkeletalPose], at: f64, ) -&gt; anyhow::Result&lt;Vec&lt;Frame&gt;&gt;</c></calls></b></bodies></ctx>

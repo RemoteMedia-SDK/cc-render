@@ -1,0 +1,47 @@
+{
+  "status": "prototype remains opt-in; goal incomplete",
+  "capture_binary_sha256": "95d5bfed2e46946f7b09d37c1147101fe8a863c627e686e5ff763c72ecf99398",
+  "captures": [
+    "lab-front-morph-jawleft-01",
+    "lab-front-morph-240hz-01",
+    "lab-front-morph-480hz-01"
+  ],
+  "capture_note": "Captured binary precedes exact-endpoint MorphHistory interpolation guard. All captured position morph weights are constant, so that guard does not change their sampled values. Final source passes focused tests.",
+  "rust_tissue_tests": {
+    "passed": 40,
+    "failed": 0,
+    "log": "tests-final.log"
+  },
+  "python_suite": {
+    "passed": 8,
+    "failed": 1,
+    "failure": "existing root acceptance source-slice gate",
+    "log": "python-tests-final.log"
+  },
+  "quality_gate": {
+    "major_findings": 12,
+    "log": "quality-delta-final.xml"
+  },
+  "timestep_results": [
+    "timestep-comparison.json",
+    "timestep-240-480-comparison.json"
+  ],
+  "next_work": [
+    "Isolate temporal integration and split edge damping against an independent response fixture; 120/240/480 Hz response is not converged.",
+    "Resolve pending owner clarification of tissue settling while body timeline is paused before changing that policy.",
+    "Validate varying facial contact and actual active contact on unchanged avatar motion.",
+    "Address collision coverage and runtime cost before default activation."
+  ],
+  "review_framing": {
+    "crop": [
+      600,
+      900,
+      60,
+      0
+    ],
+    "label_pad_height": 940,
+    "prior_cropped_reviews_preserved": true,
+    "encoded_source_pts_reverified": true,
+    "worst_frame_inspected_ms": 7800
+  }
+}

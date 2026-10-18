@@ -1,0 +1,28 @@
+vertices 137 faces 270 volume 0.0006185375445340945 watertight True bounds [[ 4.00000005e-07 -1.42211199e-01  1.21526933e+00]
+ [ 1.21906698e-01 -4.05220985e-02  1.37829614e+00]]
+RuntimeError Failed to tetrahedralize.
+May need to repair surface by making it manifold:
+Unknown exception
+Delaunizing vertices...
+Delaunay seconds:  0.000208
+Creating surface mesh ...
+Surface mesh seconds:  0.000172
+Recovering boundaries...
+Warning:  A segment and a facet intersect.
+  segment: [51,16] tag(-1).
+  facet triangle: [18,24,136] tag(-1)
+Warning:  A segment and a facet intersect.
+  segment: [18,136] tag(-1).
+  facet triangle: [51,16,1] tag(-1)
+Warning:  A segment and a facet intersect.
+  segment: [136,30] tag(-1).
+  facet triangle: [26,25,35] tag(-1)
+Boundary recovery seconds:  0.000196
+
+!!! 3 input triangles are skipped due to self-intersections.
+Writing tetgen-tmpfile_skipped.node.
+Writing tetgen-tmpfile_skipped.face
+Writing nodes.
+Writing elements.
+Writing faces.
+Writing edges.

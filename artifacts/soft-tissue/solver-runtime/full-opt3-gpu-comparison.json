@@ -1,0 +1,53 @@
+{
+  "baseline": {
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 25.685070017
+    },
+    "first_frame_wall_ms": 5619.64246,
+    "playback_capture_seconds": 20.064345066999998,
+    "source_span_seconds": 7.95,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      41.108078999999634,
+      59.018684200000095,
+      73.25680887999954,
+      102.1907489999976
+    ],
+    "stage_seconds": {
+      "sampling": 2.373933996999998,
+      "elasticity": 14.598972813999994,
+      "collision": 1.575735882000001
+    }
+  },
+  "optimized": {
+    "capture": {
+      "frames": 478,
+      "images_saved": 0,
+      "last_pts_ms": 8000,
+      "realtime_performance_claim": false,
+      "sent_packets": 160,
+      "wall_seconds": 21.997555969
+    },
+    "first_frame_wall_ms": 5436.539012,
+    "playback_capture_seconds": 16.559942807,
+    "source_span_seconds": 7.95,
+    "consumer_interval_ms_p50_p95_p99_max": [
+      33.72759700000097,
+      48.50683300000001,
+      57.393468039998496,
+      69.57415300000139
+    ],
+    "stage_seconds": {
+      "sampling": 1.9418342450000008,
+      "elasticity": 12.528938540999992,
+      "collision": 0.7277820239999998
+    }
+  },
+  "identical_traced_physics_and_source": true,
+  "maximum_surface_envelope_difference_mm": 0.0,
+  "scope": "Same 60 FPS offline GPU capture and 240 Hz tissue, PNG disabled. Shared host. Trace values do not bound every vertex; timing does not establish real-time deadlines."
+}

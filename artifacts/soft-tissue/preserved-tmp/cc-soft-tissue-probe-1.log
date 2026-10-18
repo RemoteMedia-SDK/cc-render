@@ -1,0 +1,409 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+warning: unused import: `Footprint`
+  --> src/cc_render/office/pathfinder.rs:23:23
+   |
+23 | use super::metadata::{Footprint, SceneMetadata, SceneObject};
+   |                       ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated items `neutral` and `to_json` are never used
+   --> src/arkit.rs:110:12
+    |
+ 99 | impl BlendshapeFrame {
+    | -------------------- associated items in this implementation
+...
+110 |     pub fn neutral(pts_ms: u64) -> Self {
+    |            ^^^^^^^
+...
+115 |     pub fn to_json(&self) -> Value {
+    |            ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `frame_interval_ms` is never read
+  --> src/cc_render/bevy_app/capture.rs:70:9
+   |
+68 | pub(crate) struct MonotonicCaptureClock {
+   |                   --------------------- field in this struct
+69 |     pub frame_count: u64,
+70 |     pub frame_interval_ms: u64,
+   |         ^^^^^^^^^^^^^^^^^
+
+warning: function `fk_retarget_smpl_to_cc5` is never used
+  --> src/cc_render/bevy_app/pose.rs:42:15
+   |
+42 | pub(crate) fn fk_retarget_smpl_to_cc5(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `LatestPose` is never constructed
+   --> src/cc_render/bevy_app/pose.rs:923:19
+    |
+923 | pub(crate) struct LatestPose {
+    |                   ^^^^^^^^^^
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:36:9
+   |
+22 |     Capsule {
+   |     ------- field in this variant
+...
+36 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:50:9
+   |
+38 |     Box {
+   |     --- field in this variant
+...
+50 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `drag` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:71:9
+   |
+68 | pub struct Cc5SoftPhysics {
+   |            -------------- field in this struct
+...
+71 |     pub drag: f32,
+   |         ^^^^
+   |
+   = note: `Cc5SoftPhysics` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `palm_override` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:23:9
+   |
+20 |     Pursuing {
+   |     -------- field in this variant
+...
+23 |         palm_override: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `prop_entity` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:27:9
+   |
+25 |     Attached {
+   |     -------- field in this variant
+26 |         target: PropId,
+27 |         prop_entity: Entity,
+   |         ^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `detect_chains` is never used
+  --> src/cc_render/bevy_app/physics/secondary.rs:53:15
+   |
+53 | pub(crate) fn detect_chains<'a>(
+   |               ^^^^^^^^^^^^^
+
+warning: fields `palm_offset_local` and `play_volume` are never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:19:9
+   |
+15 | pub struct SidecarRaw {
+   |            ---------- fields in this struct
+...
+19 |     pub palm_offset_local: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^^^^^
+...
+25 |     pub play_volume: Option<PlayVolumeRaw>,
+   |         ^^^^^^^^^^^
+   |
+   = note: `SidecarRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `half_extents_xz` and `ceiling_y` are never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:80:9
+   |
+79 | pub struct PlayVolumeRaw {
+   |            ------------- fields in this struct
+80 |     pub half_extents_xz: f32,
+   |         ^^^^^^^^^^^^^^^
+81 |     pub ceiling_y: f32,
+   |         ^^^^^^^^^
+   |
+   = note: `PlayVolumeRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `handle`, `pose`, `linear_velocity`, `angular_velocity`, and `ccd_enabled` are never read
+  --> src/cc_render/bevy_app/physics/substeps.rs:11:9
+   |
+10 | pub(crate) struct BodyBoundary {
+   |                   ------------ fields in this struct
+11 |     pub handle: RigidBodyHandle,
+   |         ^^^^^^
+12 |     pub pose: Isometry<f32>,
+   |         ^^^^
+13 |     pub linear_velocity: Vector3<f32>,
+   |         ^^^^^^^^^^^^^^^
+14 |     pub angular_velocity: Vector3<f32>,
+   |         ^^^^^^^^^^^^^^^^
+15 |     pub ccd_enabled: bool,
+   |         ^^^^^^^^^^^
+   |
+   = note: `BodyBoundary` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `sequence`, `start_seconds`, `end_seconds`, `before`, and `after` are never read
+  --> src/cc_render/bevy_app/physics/substeps.rs:34:9
+   |
+33 | pub(crate) struct PhysicsInterval {
+   |                   --------------- fields in this struct
+34 |     pub sequence: u64,
+   |         ^^^^^^^^
+35 |     pub start_seconds: f64,
+   |         ^^^^^^^^^^^^^
+36 |     pub end_seconds: f64,
+   |         ^^^^^^^^^^^
+37 |     pub before: Vec<BodyBoundary>,
+   |         ^^^^^^
+38 |     pub after: Vec<BodyBoundary>,
+   |         ^^^^^
+   |
+   = note: `PhysicsInterval` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `material_vertices` is never used
+   --> src/cc_render/deformable_surface.rs:244:19
+    |
+103 | impl DeformedSurface {
+    | -------------------- method in this implementation
+...
+244 |     pub(super) fn material_vertices(&self, point: &MaterialPoint) -> Option<[usize; 3]> {
+    |                   ^^^^^^^^^^^^^^^^^
+
+warning: struct `RigidClothSweep` is never constructed
+ --> src/cc_render/cloth_moving_sweep.rs:9:19
+  |
+9 | pub(crate) struct RigidClothSweep<'a> {
+  |                   ^^^^^^^^^^^^^^^
+
+warning: struct `RigidSweepHit` is never constructed
+  --> src/cc_render/cloth_moving_sweep.rs:17:19
+   |
+17 | pub(crate) struct RigidSweepHit {
+   |                   ^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/cc_render/cloth_moving_sweep.rs:26:19
+    |
+ 25 | impl<'a> RigidClothSweep<'a> {
+    | ---------------------------- associated items in this implementation
+ 26 |     pub(crate) fn new(
+    |                   ^^^
+...
+ 43 |     fn turn(&self, fraction: f64) -> DQuat {
+    |        ^^^^
+...
+ 49 |     fn unmove(&self, point: DVec3, fraction: f64) -> DVec3 {
+    |        ^^^^^^
+...
+ 54 |     fn hit(&self, fraction: f64, witness: Witness, weights: [f64; 3]) -> RigidSweepHit {
+    |        ^^^
+...
+ 70 |     pub(crate) fn triangle(
+    |                   ^^^^^^^^
+...
+121 |     fn motion_bounds(&self, old: [DVec3; 3], end: [DVec3; 3]) -> Result<(f64, f64), ClothError> {
+    |        ^^^^^^^^^^^^^
+...
+147 |     pub(crate) fn contact_velocity(
+    |                   ^^^^^^^^^^^^^^^^
+...
+164 |     fn witness(
+    |        ^^^^^^^
+
+warning: struct `RigidContactBody` is never constructed
+ --> src/cc_render/cloth_rigid_impact.rs:7:19
+  |
+7 | pub(crate) struct RigidContactBody {
+  |                   ^^^^^^^^^^^^^^^^
+
+warning: associated items `from_rapier`, `validate`, and `inertia_response` are never used
+  --> src/cc_render/cloth_rigid_impact.rs:22:19
+   |
+19 | impl RigidContactBody {
+   | --------------------- associated items in this implementation
+...
+22 |     pub(crate) fn from_rapier(
+   |                   ^^^^^^^^^^^
+...
+60 |     fn validate(&self) -> Result<(), ClothError> {
+   |        ^^^^^^^^
+...
+73 |     fn inertia_response(&self, torque: DVec3) -> DVec3 {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: struct `NormalImpact` is never constructed
+  --> src/cc_render/cloth_rigid_impact.rs:79:19
+   |
+79 | pub(crate) struct NormalImpact {
+   |                   ^^^^^^^^^^^^
+
+warning: methods `normal_impact` and `validate_impact_inputs` are never used
+   --> src/cc_render/cloth_rigid_impact.rs:93:19
+    |
+ 88 | impl RigidSweepHit {
+    | ------------------ methods in this implementation
+...
+ 93 |     pub(crate) fn normal_impact(
+    |                   ^^^^^^^^^^^^^
+...
+149 |     fn validate_impact_inputs(
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `validate` is never used
+  --> src/cc_render/cloth_grip.rs:25:8
+   |
+24 | impl ClampMaterial {
+   | ------------------ method in this implementation
+25 |     fn validate(self) -> Result<(), ClothError> {
+   |        ^^^^^^^^
+
+warning: variant `Released` is never constructed
+  --> src/cc_render/cloth_grip.rs:43:5
+   |
+41 | pub(crate) enum ClampState {
+   |                 ---------- variant in this enum
+42 |     Held,
+43 |     Released,
+   |     ^^^^^^^^
+   |
+   = note: `ClampState` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: associated function `from_pose` is never used
+  --> src/cc_render/cloth_grip.rs:54:8
+   |
+53 | impl ColliderFrame {
+   | ------------------ associated function in this implementation
+54 |     fn from_pose(pose: &Isometry<f32>) -> Result<Self, ClothError> {
+   |        ^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/cc_render/cloth_grip.rs:99:19
+    |
+ 95 | impl ClothGrip {
+    | -------------- associated items in this implementation
+...
+ 99 |     pub(crate) fn capture(
+    |                   ^^^^^^^
+...
+141 |     pub(crate) fn observe_pose(&mut self, pose: &Isometry<f32>) -> Result<(), ClothError> {
+    |                   ^^^^^^^^^^^^
+...
+146 |     pub(crate) fn release(&mut self) {
+    |                   ^^^^^^^
+...
+152 |     pub(crate) fn state(&self) -> ClampState {
+    |                   ^^^^^
+...
+155 |     pub(crate) fn material_point(&self) -> &MaterialPoint {
+    |                   ^^^^^^^^^^^^^^
+...
+158 |     pub(crate) fn peak_required_force_n(&self) -> f64 {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+161 |     pub(crate) fn peak_applied_force_n(&self) -> f64 {
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `PushForceIntent` is never constructed
+   --> src/cc_render/office/controller.rs:164:19
+    |
+164 | pub(crate) struct PushForceIntent {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: method `push_force_intent` is never used
+    --> src/cc_render/office/controller.rs:1262:19
+     |
+ 557 | impl OfficeController {
+     | --------------------- method in this implementation
+...
+1262 |     pub(crate) fn push_force_intent(&self) -> Option<PushForceIntent> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `room_route` is never used
+  --> src/cc_render/office/furniture_push.rs:19:15
+   |
+19 | pub(super) fn room_route(
+   |               ^^^^^^^^^^
+
+warning: function `grid_furniture_route` is never used
+  --> src/cc_render/office/furniture_push.rs:55:4
+   |
+55 | fn grid_furniture_route(
+   |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: variant `Occupy` is never constructed
+ --> src/cc_render/office/scene_lifecycle.rs:8:33
+  |
+8 | pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
+  |                 -----           ^^^^^^
+  |                 |
+  |                 variant in this enum
+  |
+  = note: `Phase` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: method `awaiting_revision` is never used
+  --> src/cc_render/office/scene_lifecycle.rs:79:19
+   |
+36 | impl SceneLifecycle {
+   | ------------------- method in this implementation
+...
+79 |     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: associated function `anchor` is never used
+  --> src/cc_render/office/scene_delivery.rs:13:19
+   |
+12 | impl SceneDelivery {
+   | ------------------ associated function in this implementation
+13 |     pub(crate) fn anchor(office: &OfficeSnapshot, generated_until: u64) -> Option<u64> {
+   |                   ^^^^^^
+
+warning: `cc-render-plugin` (lib) generated 36 warnings (run `cargo fix --lib -p cc-render-plugin` to apply 3 suggestions)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 22.91s
+     Running `target/debug/examples/tissue_probe assets/tissue/beautiful_assistant.unfitted.json`
+{"damping":20.0,"metrics":{"elastic_energy_j":0.037671632847451356,"kinetic_energy_j":0.0006927992992145131,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.325182996028451,"maximum_volume_ratio":1.202364303593226,"minimum_volume_ratio":0.8602703568284156},"region":"left_breast","seconds":1}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.030995610155239755,"kinetic_energy_j":0.00007351254397017516,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.24463220298992916,"maximum_volume_ratio":1.192964407278748,"minimum_volume_ratio":0.8862397700333495},"region":"left_breast","seconds":2}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.03012012042711697,"kinetic_energy_j":0.000041050543458729585,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.2385911079303751,"maximum_volume_ratio":1.1887120744926847,"minimum_volume_ratio":0.8793359950442995},"region":"left_breast","seconds":3}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.030629813348871764,"kinetic_energy_j":0.0000395920155210532,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.2475209371624615,"maximum_volume_ratio":1.1892132815448766,"minimum_volume_ratio":0.881081965530206},"region":"left_breast","seconds":4}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.030506549298896242,"kinetic_energy_j":0.00004616340415915696,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.24895818852591708,"maximum_volume_ratio":1.187888279901391,"minimum_volume_ratio":0.8799123504621744},"region":"left_breast","seconds":5}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.03049046963096382,"kinetic_energy_j":0.000036997128667398355,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.2458365310906471,"maximum_volume_ratio":1.1855540235771675,"minimum_volume_ratio":0.8811055272198458},"region":"left_breast","seconds":6}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.03652200196843942,"kinetic_energy_j":0.0005039148952655368,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.27295560730580287,"maximum_volume_ratio":1.1953786862250175,"minimum_volume_ratio":0.86493990127922},"region":"left_breast","seconds":1}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.030814245874251123,"kinetic_energy_j":0.00005984888855915558,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.24125474512212705,"maximum_volume_ratio":1.1896619409774285,"minimum_volume_ratio":0.8866582100546034},"region":"left_breast","seconds":2}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.030285166130029614,"kinetic_energy_j":0.000038089906045291664,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.22878242440868227,"maximum_volume_ratio":1.1871197906849993,"minimum_volume_ratio":0.8732702222649278},"region":"left_breast","seconds":3}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.030619995812274425,"kinetic_energy_j":0.000037669427605593595,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.2365796185283643,"maximum_volume_ratio":1.1840316054991942,"minimum_volume_ratio":0.8826524112231453},"region":"left_breast","seconds":4}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.030603078765089126,"kinetic_energy_j":0.00004962374514138235,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.291399359784581,"maximum_volume_ratio":1.1895183491582948,"minimum_volume_ratio":0.8716232116863111},"region":"left_breast","seconds":5}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.030515513368729524,"kinetic_energy_j":0.000046972203186160866,"mass_kg":0.7094052259298372,"maximum_speed_m_s":0.23749687299663533,"maximum_volume_ratio":1.1861756394340013,"minimum_volume_ratio":0.8834829398961525},"region":"left_breast","seconds":6}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.03825146672983945,"kinetic_energy_j":0.0005582641734175912,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.3148801241303643,"maximum_volume_ratio":1.103418346952973,"minimum_volume_ratio":0.9475506143134363},"region":"right_breast","seconds":1}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.029762439839227106,"kinetic_energy_j":0.000162554272062142,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.3590313245702195,"maximum_volume_ratio":1.102048551919931,"minimum_volume_ratio":0.952322306498132},"region":"right_breast","seconds":2}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.029745140777800494,"kinetic_energy_j":0.00012155139825119876,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.31932201950123523,"maximum_volume_ratio":1.1006916707730854,"minimum_volume_ratio":0.9531296001025438},"region":"right_breast","seconds":3}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.02994951997705382,"kinetic_energy_j":0.000129368819974777,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.36421450803795796,"maximum_volume_ratio":1.0983384999546135,"minimum_volume_ratio":0.9534298329242957},"region":"right_breast","seconds":4}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.029944124303898315,"kinetic_energy_j":0.00012701539632031596,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.32045444277938245,"maximum_volume_ratio":1.1019216966878687,"minimum_volume_ratio":0.9529744189069757},"region":"right_breast","seconds":5}
+{"damping":20.0,"metrics":{"elastic_energy_j":0.029863288522973677,"kinetic_energy_j":0.00011761534620585046,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.3150318318670517,"maximum_volume_ratio":1.0994115051073725,"minimum_volume_ratio":0.9536358604365004},"region":"right_breast","seconds":6}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.036620908762846564,"kinetic_energy_j":0.0004277177185761851,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.3051743980245078,"maximum_volume_ratio":1.0955952906404958,"minimum_volume_ratio":0.9491837777592897},"region":"right_breast","seconds":1}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.029857549943600188,"kinetic_energy_j":0.0001387368505773542,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.3089520787644646,"maximum_volume_ratio":1.0985606042433675,"minimum_volume_ratio":0.953566490930608},"region":"right_breast","seconds":2}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.029960496162789757,"kinetic_energy_j":0.00013576404337341377,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.37931235062446417,"maximum_volume_ratio":1.09921309130385,"minimum_volume_ratio":0.9530817202816245},"region":"right_breast","seconds":3}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.03006764000336796,"kinetic_energy_j":0.00011870192164305722,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.30800912133514585,"maximum_volume_ratio":1.1003298145506668,"minimum_volume_ratio":0.9530123381000768},"region":"right_breast","seconds":4}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.029999080736204792,"kinetic_energy_j":0.00013416341046546372,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.3603220002507489,"maximum_volume_ratio":1.103771801552579,"minimum_volume_ratio":0.9448639800466619},"region":"right_breast","seconds":5}
+{"damping":60.0,"metrics":{"elastic_energy_j":0.029923150270143792,"kinetic_energy_j":0.00013488560862019315,"mass_kg":0.7035588341835316,"maximum_speed_m_s":0.303658680835508,"maximum_volume_ratio":1.1016914777095772,"minimum_volume_ratio":0.9533513579696017},"region":"right_breast","seconds":6}

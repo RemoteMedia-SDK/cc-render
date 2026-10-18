@@ -1,0 +1,103 @@
+{
+  "runs": {
+    "nonlinear-strict-live120-01": {
+      "directory": "lab-front-nonlinear-strict-live120-01",
+      "capture": {
+        "frames": 140,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 16.448175793
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 71,
+      "source_span_seconds": 7.929,
+      "playback_wall_seconds": 9.140472458,
+      "presentations_per_source_second": 17.53058393240005,
+      "source_gap_ms_p50_p95_p99_max": [
+        34.0,
+        209.59999999999997,
+        250.0,
+        250.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        34.0607459999992,
+        219.73935120000166,
+        438.1218089600005,
+        528.9226520000011
+      ],
+      "source_gaps_above_50ms": 38,
+      "relative_clock_drift_ms_min_max_end": [
+        -35.292013999999654,
+        1405.7141880000017,
+        1211.4724580000002
+      ],
+      "maximum_skin_error_mm": 0.0008845819282326596,
+      "peak_surface_displacement_mm": 36.621976643800735,
+      "minimum_element_volume_ratio": 0.8612668473202614,
+      "maximum_active_contacts": 0,
+      "tissue_hz": 120,
+      "subdivisions": 16,
+      "elasticity_ms_p50_p95_max": [
+        18.358048,
+        159.4995735499989,
+        446.26366
+      ],
+      "elasticity_seconds": 6.094499196
+    },
+    "nonlinear-strict-live240-01": {
+      "directory": "lab-front-nonlinear-strict-live240-01",
+      "capture": {
+        "frames": 47,
+        "images_saved": 0,
+        "last_pts_ms": 8000,
+        "realtime_performance_claim": false,
+        "sent_packets": 160,
+        "wall_seconds": 21.466498786
+      },
+      "fps_target": 30,
+      "tissue": true,
+      "first_source_ms": 72,
+      "source_span_seconds": 7.928,
+      "playback_wall_seconds": 12.517810739,
+      "presentations_per_source_second": 5.802219979818365,
+      "source_gap_ms_p50_p95_p99_max": [
+        215.5,
+        250.0,
+        250.0,
+        250.0
+      ],
+      "consumer_gap_ms_p50_p95_p99_max": [
+        253.11073000000033,
+        612.4121172500018,
+        678.0114268500007,
+        703.1526060000015
+      ],
+      "source_gaps_above_50ms": 45,
+      "relative_clock_drift_ms_min_max_end": [
+        0.0,
+        4806.746712,
+        4589.8107390000005
+      ],
+      "maximum_skin_error_mm": 0.0004842304232499576,
+      "peak_surface_displacement_mm": 33.80318731069565,
+      "minimum_element_volume_ratio": 0.9084163520035621,
+      "maximum_active_contacts": 0,
+      "tissue_hz": 240,
+      "subdivisions": 7,
+      "elasticity_ms_p50_p95_max": [
+        153.91058999999998,
+        462.2673761999997,
+        565.0436270000001
+      ],
+      "elasticity_seconds": 8.683917381000002
+    }
+  },
+  "limitations": [
+    "Single paired local replay with trace-only GPU readback; not browser or live-generation latency.",
+    "The paused library process disappeared before resume; its session reports exit 143. Both GPU child processes completed successfully.",
+    "No body or source motion changes; live sample times may differ."
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "geometry_at_source_ms": 7633,
+  "candidates": [
+    {
+      "capture": "lab-surface-old-front-01",
+      "frames": 478,
+      "last_pts_ms": 8000,
+      "packets_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "maximum_displacement_mm": 42.745430022478104,
+      "minimum_volume_ratio": 0.887513930106546,
+      "maximum_active_contacts": 0,
+      "maximum_skinning_error_mm": 0.001970167946824451,
+      "attachment_frames_exactly_unchanged": true,
+      "physical_regions_trace_exactly_unchanged": true,
+      "geometry": {
+        "source_pts_ms": 7633,
+        "same_undeformed_world_surface": true,
+        "reference_faces": 3100,
+        "reference_area_cm2": 509.99210798595607,
+        "area_weighted_displacement_mm": 8.182922734983375,
+        "area_fraction_moving_over_5mm": 0.4224135171411788,
+        "area_fraction_moving_over_10mm": 0.2725657777674524,
+        "maximum_displacement_mm": 42.74534252631933,
+        "area_ratio_percentiles_0_1_5_50_95_99_100": [
+          0.5841068359198691,
+          0.6441098230797382,
+          0.7000858376348663,
+          0.9514178626917735,
+          1.6249870715920505,
+          1.861128502729554,
+          1.9726104863472498
+        ],
+        "minimum_normal_alignment": 0.20332558565717646,
+        "faces_rotated_over_90_degrees": 0,
+        "area_fraction_rotated_over_90_degrees": 0.0
+      }
+    },
+    {
+      "capture": "lab-surface-geometric-front-01",
+      "frames": 478,
+      "last_pts_ms": 8000,
+      "packets_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "maximum_displacement_mm": 43.80422458052635,
+      "minimum_volume_ratio": 0.887513930106546,
+      "maximum_active_contacts": 0,
+      "maximum_skinning_error_mm": 0.001970167946824451,
+      "attachment_frames_exactly_unchanged": true,
+      "physical_regions_trace_exactly_unchanged": true,
+      "geometry": {
+        "source_pts_ms": 7633,
+        "same_undeformed_world_surface": true,
+        "reference_faces": 3100,
+        "reference_area_cm2": 509.99210798595607,
+        "area_weighted_displacement_mm": 21.097489621569423,
+        "area_fraction_moving_over_5mm": 0.7637424801229062,
+        "area_fraction_moving_over_10mm": 0.7061598967565501,
+        "maximum_displacement_mm": 43.80436410877574,
+        "area_ratio_percentiles_0_1_5_50_95_99_100": [
+          0.42004550532387686,
+          0.6441834017704047,
+          0.7963637881720868,
+          0.9274605439136361,
+          1.297999623972749,
+          2.053923493187452,
+          2.6375500463416413
+        ],
+        "minimum_normal_alignment": -0.25282218534360695,
+        "faces_rotated_over_90_degrees": 19,
+        "area_fraction_rotated_over_90_degrees": 0.011433048836657833
+      }
+    },
+    {
+      "capture": "lab-surface-rim-front-01",
+      "frames": 478,
+      "last_pts_ms": 8000,
+      "packets_sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "maximum_displacement_mm": 2.1583870984613895,
+      "minimum_volume_ratio": 0.9786218933733196,
+      "maximum_active_contacts": 0,
+      "maximum_skinning_error_mm": 0.001970167946824451,
+      "attachment_frames_exactly_unchanged": false,
+      "physical_regions_trace_exactly_unchanged": false,
+      "geometry": {
+        "source_pts_ms": 7633,
+        "same_undeformed_world_surface": true,
+        "reference_faces": 3100,
+        "reference_area_cm2": 509.99210798595607,
+        "area_weighted_displacement_mm": 0.06328305646048511,
+        "area_fraction_moving_over_5mm": 0.0,
+        "area_fraction_moving_over_10mm": 0.0,
+        "maximum_displacement_mm": 0.2768785691698683,
+        "area_ratio_percentiles_0_1_5_50_95_99_100": [
+          0.9931640261391049,
+          0.9950815099796283,
+          0.996616896314693,
+          1.000145285555661,
+          1.003623836583004,
+          1.006584633960765,
+          1.0144833284119925
+        ],
+        "minimum_normal_alignment": 0.9999007204330244,
+        "faces_rotated_over_90_degrees": 0,
+        "area_fraction_rotated_over_90_degrees": 0.0
+      }
+    }
+  ],
+  "limitations": [
+    "Geometry distribution is measured at one impact frame, not across the full sequence.",
+    "Normal rotation relative to the undeformed triangle is a distortion warning, not a self-intersection proof.",
+    "Boundary selection and tissue coefficients remain prototypes without anatomical calibration.",
+    "These fixed-clock captures do not establish interactive performance or active contact response."
+  ]
+}

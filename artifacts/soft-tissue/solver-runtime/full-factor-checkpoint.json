@@ -1,0 +1,51 @@
+{
+  "status": "progress; goal remains active; isolated opt-in prototype",
+  "change": "Bounded complete block LDLT with deterministic minimum-degree ordering for small sparse cages; original IC0 pattern retained above 512 nodes or 4096 filled blocks.",
+  "preserved": [
+    "Material parameters and constitutive law",
+    "1e-9 true linear residual tolerance and 256-iteration cap",
+    "ARDY source packets and attachment transforms",
+    "Arm pose and camera",
+    "Other worktrees and production defaults"
+  ],
+  "source_manifest": "full-factor-inputs.json",
+  "source_archive": "full-factor-source.tar.gz",
+  "matching_source_binary_asset_packet_hashes": 165,
+  "tests": {
+    "focused_rust_pass": 62,
+    "focused_rust_fail": 0,
+    "python_pass": 8,
+    "python_existing_fail": 1,
+    "python_failure": "test_root_acceptance_does_not_rewrite_the_candidate source slice includes unrelated remember_homes loop",
+    "ownership_tests_unchanged": true
+  },
+  "quality": {
+    "clean": false,
+    "major_gating": 8,
+    "at": "ea65ebb68+dirty",
+    "file": "full-factor-quality-final.xml"
+  },
+  "performance_and_accuracy": "full-factor-comparison.json",
+  "cpu_solve_time_reduction_percent": 37.161194424698195,
+  "cpu_maximum_node_difference_mm": 6.265871748793041e-09,
+  "uncapped_30fps_120hz_playback_seconds": 6.0211430319999995,
+  "uncapped_source_span_seconds": 7.934,
+  "scheduler_provenance": "full-factor-scheduler-launches.json",
+  "audit_note": "The initial audit incorrectly expected the fast-mode log, which executes before LogPlugin initialization. Explicit child launch records replace that invalid logging assumption; no source/physics acceptance check was weakened.",
+  "viewable_evidence": "../temporal-integration/index.html; existing videos use the preceding numerical solver with the same material/motion and unchanged sampled displacement envelope.",
+  "remaining": [
+    "Material calibration and visual acceptance",
+    "Actual-avatar active compression/contact",
+    "Interactive frame deadlines and latency",
+    "Paused facial/body-clock policy",
+    "Final integration/code audit and default replacement"
+  ],
+  "artifacts": {
+    "artifacts/soft-tissue/solver-runtime/full-factor-comparison.json": "563f6b464cd32dba317f9416a2bcb2f2b85097358b1c644e5ff8ffc028cfbbd7",
+    "artifacts/soft-tissue/solver-runtime/full_factor_audit.py": "565e4d5d036a876e80f6ad0d4019b7198ddacb6906cb087d4628846ba1b55a0d",
+    "artifacts/soft-tissue/solver-runtime/full-factor-scheduler-launches.json": "9ee5b9dcb049df51bf7df694e6b60852acb72b10538ad433a665f7e07b52d1c7",
+    "artifacts/soft-tissue/solver-runtime/full-factor-quality-final.xml": "0f82a7a7caad7d9b9709dda2f19dbe61cee5f42fc8eb81bf38b9078c236f5785",
+    "docs/design/breast-soft-tissue.md": "e6532f78d5c63d15ba95ca14ea82a8a6ed116fff4c5436bc06f9ceb158d305cd",
+    "artifacts/soft-tissue/temporal-integration/index.html": "68c2bdef86249d6ef4a88aaecbac1c17935bb4bc9fb57a810f61dd394234765f"
+  }
+}

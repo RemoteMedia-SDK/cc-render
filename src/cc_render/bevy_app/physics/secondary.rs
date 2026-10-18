@@ -48,6 +48,16 @@ pub(crate) enum JiggleMode {
 #[derive(Resource, Default)]
 pub(crate) struct JiggleSpawned(pub bool);
 
+type BoneEntry = (Entity, String, Transform, Option<Entity>);
+
+fn secondary_candidate(entry: &BoneEntry, patterns: &[Regex], volumetric_tissue: bool)
+    -> Option<(Entity, String, Transform, Entity)> {
+    let (entity, name, transform, parent) = entry;
+    if volumetric_tissue && matches!(name.as_str(), "CC_Base_L_Breast" | "CC_Base_R_Breast") { return None; }
+    let parent = (*parent)?;
+    patterns.iter().any(|p| p.is_match(name)).then_some((*entity, name.clone(), *transform, parent))
+}
+
 /// Walk a list of (entity, bone_name) and return entities whose name
 /// matches at least one of the patterns. Pure fn — testable.
 pub(crate) fn detect_chains<'a>(
@@ -126,6 +136,7 @@ pub(crate) fn auto_detect_chains(
     cc5_physics: Option<Res<super::body_colliders::LoadedCc5Physics>>,
     mut spawned: ResMut<JiggleSpawned>,
     bind: Res<crate::cc_render::bevy_app::pose::CC5BindRotations>,
+    tissue: Option<Res<crate::cc_render::bevy_app::tissue::TissueRequest>>,
 ) {
     if spawned.0 || !bind.captured {
         return;
@@ -157,20 +168,14 @@ pub(crate) fn auto_detect_chains(
 
     // Collect (entity, name, full bind transform, parent_entity).
     // The anchor follows the parent, not the driven bone.
-    let entries: Vec<(Entity, String, Transform, Option<Entity>)> = bones
+    let entries: Vec<BoneEntry> = bones
         .iter()
         .map(|(e, n, t, p)| (e, n.to_string(), *t, p.map(|x| x.get())))
         .collect();
     let bone_total = entries.len();
     let detected: Vec<(Entity, String, Transform, Entity)> = entries
         .iter()
-        .filter_map(|(e, n, t, parent)| {
-            let parent = (*parent)?;
-            patterns_compiled
-                .iter()
-                .any(|p| p.is_match(n))
-                .then_some((*e, n.clone(), *t, parent))
-        })
+        .filter_map(|entry| secondary_candidate(entry, &patterns_compiled, tissue.is_some()))
         .collect();
 
     // CC5 lookups, computed once per call:

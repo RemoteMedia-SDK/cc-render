@@ -1,0 +1,19 @@
+test_incomplete_or_discontinuous_timing_is_rejected (test_tissue_capture_timing.TissueCaptureTimingTests.test_incomplete_or_discontinuous_timing_is_rejected) ... ok
+test_irregular_source_times_and_frame_pixels_survive_encoding (test_tissue_capture_timing.TissueCaptureTimingTests.test_irregular_source_times_and_frame_pixels_survive_encoding) ... Unrecognized option 'crf'.
+Error splitting the argument list: Option not found
+ERROR
+
+======================================================================
+ERROR: test_irregular_source_times_and_frame_pixels_survive_encoding (test_tissue_capture_timing.TissueCaptureTimingTests.test_irregular_source_times_and_frame_pixels_survive_encoding)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/tests/test_tissue_capture_timing.py", line 33, in test_irregular_source_times_and_frame_pixels_survive_encoding
+    subprocess.run([
+  File "/home/acidhax/miniconda3/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['ffmpeg', '-v', 'error', '-f', 'rawvideo', '-pixel_format', 'rgb24', '-video_size', '16x16', '-framerate', '30', '-i', '-', '-an', '-c:v', 'libx264', '-crf', '0', '-pix_fmt', 'yuv444p', '/tmp/tissue-timing-test-zk4nz6a8/view.mp4']' returned non-zero exit status 1.
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.062s
+
+FAILED (errors=1)

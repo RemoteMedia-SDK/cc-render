@@ -1,0 +1,72 @@
+[
+  {
+    "name": "nonlinear-strict-fixed-01",
+    "clock": "fixed",
+    "fps": 60,
+    "tissue_hz": 240,
+    "save_images": false,
+    "output": "artifacts/soft-tissue/lab-front-nonlinear-strict-fixed-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-nonlinear-strict-fixed-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "240",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "60",
+      "CC_TISSUE_LAB_CLOCK": "fixed",
+      "CC_TISSUE_LAB_TRACE_ONLY": "1",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "46c3c25364d6db865ba9feeb051ee7e0936bfb40b758899ebefeef0935530cfa",
+    "log": "nonlinear-strict-fixed-01.log",
+    "started_unix": 1792288212.4840157,
+    "overlapping_library_test": true,
+    "performance_claim": false,
+    "pid": 1536531,
+    "exit_code": 0,
+    "completed_unix": 1792288229.3733244
+  },
+  {
+    "name": "nonlinear-strict-video-01",
+    "clock": "live",
+    "fps": 30,
+    "tissue_hz": 120,
+    "save_images": true,
+    "output": "artifacts/soft-tissue/lab-front-nonlinear-strict-video-01",
+    "argv": [
+      "target/debug/examples/tissue_lab",
+      "../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+      "../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+      "artifacts/soft-tissue/lab-jump-01/packets.ndjson",
+      "assets/tissue/beautiful_assistant.base-viscous-prototype.json",
+      "front",
+      "artifacts/soft-tissue/lab-front-nonlinear-strict-video-01"
+    ],
+    "environment": {
+      "CC_RENDER_FAST": "0",
+      "CC_RENDER_CLOCK_TRACE": "0",
+      "CC_AVATAR_TISSUE_HZ": "120",
+      "CC_AVATAR_TISSUE_ITERATIONS": "32",
+      "CC_TISSUE_LAB_FPS": "30",
+      "CC_TISSUE_LAB_CLOCK": "live",
+      "CC_TISSUE_LAB_TRACE_ONLY": "0",
+      "RUST_LOG": "info"
+    },
+    "binary_sha256": "46c3c25364d6db865ba9feeb051ee7e0936bfb40b758899ebefeef0935530cfa",
+    "log": "nonlinear-strict-video-01.log",
+    "started_unix": 1792288229.8488748,
+    "overlapping_library_test": true,
+    "performance_claim": false,
+    "pid": 1536790,
+    "exit_code": 0,
+    "completed_unix": 1792288245.3901322
+  }
+]

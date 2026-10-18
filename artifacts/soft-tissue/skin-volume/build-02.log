@@ -1,0 +1,30 @@
+Traceback (most recent call last):
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/pyvista/core/filters/poly_data.py", line 1712, in compute_normals
+    mesh['Normals']
+    ~~~~^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/pyvista/core/dataset.py", line 1998, in __getitem__
+    return self.get_array(name, preference=preference)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/pyvista/core/dataset.py", line 1928, in get_array
+    arr = get_array(self, name, preference=preference, err=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/pyvista/core/utilities/arrays.py", line 310, in get_array
+    raise KeyError(f'Data array ({name}) not present in this dataset.')
+KeyError: 'Data array (Normals) not present in this dataset.'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 141, in <module>
+    print(json.dumps(build(args.avatar, args.material_asset, args.output), indent=2))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 116, in build
+    nodes, cells, fixed, shell, report = close_and_mesh(patch)
+                                         ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/build_skin_tissue_volume.py", line 83, in close_and_mesh
+    closed = closed.compute_normals(point_normals=False, cell_normals=False,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/acidhax/miniconda3/lib/python3.11/site-packages/pyvista/core/filters/poly_data.py", line 1720, in compute_normals
+    raise RuntimeError(
+RuntimeError: Normals could not be computed for unknown reasons.
+Please report the issue at https://github.com/pyvista/pyvista/issues.

@@ -95,6 +95,12 @@ pub struct RenderedFrame {
     /// rendered against. The Bevy app stores the most-recent applied
     /// pts and stamps each frame with it.
     pub pts_ms: u64,
+    /// Native body time extracted with the rendered mesh, including tissue-off captures.
+    pub body_pts_ms: Option<u64>,
+    /// Source time of the successfully deformed tissue surface in these pixels.
+    /// Independent of facial `pts_ms`; None before native tissue playback or
+    /// when the volumetric adapter is disabled. Travels with GPU readback.
+    pub tissue_pts_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -107,6 +113,9 @@ pub struct RendererConfig {
     /// `ScheduleRunnerPlugin` — the proto runs at 60Hz but we'd
     /// typically want 30Hz here to match the WebRTC video stream.
     pub fps: u32,
+    /// Offline diagnostic clock only. One fixed simulation interval per rendered
+    /// frame, independent of GPU wall time. Does not alter source pose samples.
+    pub offline_frame_step: Option<std::time::Duration>,
     /// Optional environment scene GLB loaded alongside the avatar.
     /// When set, the Bevy app spawns a second `SceneRoot` for it via
     /// the `scene://` asset source so the scene file can live in any
@@ -137,6 +146,7 @@ impl Default for RendererConfig {
             width: 1280,
             height: 1280,
             fps: 30,
+            offline_frame_step: None,
             scene_glb_path: None,
             scene_package_path: None,
 
