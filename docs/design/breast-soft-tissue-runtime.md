@@ -350,3 +350,11 @@ source-slice failure. Full actual-avatar contact and smooth playback are still
 open. Do not default-enable the replacement on this evidence. See
 `artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md`,
 `result.json`, preserved failed captures, and the unchanged-jump comparison.
+
+The subsequent coordinate-centering experiment improved an isolated oblique
+probe but still failed this actual-avatar replay. It was removed from production;
+runtime source and the lab binary were restored to `c098357`, with a successful
+rebuild. Its patch, results and failed capture are preserved under
+`artifacts/soft-tissue/avatar-contact/origin-precision-01/`. See the
+[2026-10-18 handoff](breast-soft-tissue-handoff.md) for the current checkpoint
+and the next bounded investigation.

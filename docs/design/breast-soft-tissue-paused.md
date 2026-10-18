@@ -1,5 +1,8 @@
 # Paused tissue prototype checkpoint
 
+Historical 2026-10-17 checkpoint. For the current state, reviewed bounce video
+and remaining contact failure, see the [2026-10-18 handoff](breast-soft-tissue-handoff.md).
+
 Paused on 2026-10-17 at the user's request. Branch: `feat/breast-soft-tissue` in
 the isolated `cc-render-soft-tissue` worktree, based on `ea65ebb68`.
 This is a preservation commit, not a completed physics implementation or merge

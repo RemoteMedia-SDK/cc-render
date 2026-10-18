@@ -1,0 +1,135 @@
+# Soft-tissue handoff — 2026-10-18
+
+Checkpointed at the user's request to conserve the remaining weekly quota.
+The volumetric replacement remains **opt-in and unfinished**. Broad bounce is
+visible in the reviewed video; full avatar contact and smooth live playback
+are still open.
+
+Worktree: `/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue`.
+Branch: `feat/breast-soft-tissue`. Runtime baseline: **`c098357`**. This handoff
+and the rejected precision experiment are saved in a subsequent documentation
+commit. Runtime source and the `tissue_lab` binary were restored to `c098357`;
+the final rebuild passed. Other worktrees were not modified.
+
+## View the result
+
+- [Boundary-pressure comparison](../../artifacts/soft-tissue/volume-audit/tracked-off-on-boundary.mp4):
+  the exact clip the user reviewed as “Looks much much better.”
+- [Latest localized-volume comparison](../../artifacts/soft-tissue/quality-pressure/reviewed-vs-local-volume.mp4):
+  broad movement with reduced local volume extremes; this newer clip has not
+  received the same explicit user acceptance.
+- [Review page](../../artifacts/soft-tissue/volume-audit/index.html).
+
+The lab uses the base `beautiful_assistant.smpl_aligned.glb`, a focused camera
+and native ARDY motion, without clothing or condo geometry. Selected asset:
+`assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
+See [the design record](breast-soft-tissue.md) for input paths, hashes and solver
+parameters. ARDY retains sole ownership of body/root/joint motion; preserve
+unchanged packets and the [motion ownership contract](model-owned-motion.md).
+
+## Saved implementation and regression evidence
+
+- `26c57bd`: selected local-volume stabilization and broad deformation.
+- `58ba162`: one preconditioner refresh after initial Newton updates, reducing
+  measured CPU solve time by 6–7% with deformation retained to roundoff.
+- `c098357`: bounded contact-penalty retries, retryable line-search failure,
+  full diagnostic error chains, native revision handoffs in the lab, and
+  preserved contact failures.
+
+The latest no-contact jump completes all **478 frames through 8000 ms**, with
+exactly unchanged nodes, attachments, rotations and surface displacement versus
+the preceding saved baseline. Peak skin displacement is **32.56 mm**. This
+trace-only regression did not produce a new video and has zero active contacts.
+Evidence: [jump comparison](../../artifacts/soft-tissue/avatar-contact/chest-continuation-01/jump-comparison.json).
+
+## Contact remains the main blocker
+
+Use the existing **seed-739 native continuation**, which starts clear and reaches
+contact. Standing is followed by a semantic chest-rub request using the service's
+own history. All 160 packets remain unchanged. Initial arm clearance is 18.184 mm,
+with zero tissue-edge/arm-face crossings. Seeds 736–738 remain preserved with
+their initial-intersection or no-contact outcomes.
+
+The bounded penalty update fixes the first contact step: residual overlap falls
+from about 130 µm to **95.777 µm**, below the unchanged 100 µm limit. Its 153.24 N
+reaction is a numerical observation, not anatomical force calibration. A later
+step exhausts bounded subdivision at **7666.666667–7666.731771 ms**, depth 6.
+The right region has force residual **1.112e-6 N** against an approximately
+**1.332e-7 N** timestep-scaled budget, despite a **9.767e-14 m** Newton correction.
+The underlying error correctly names region 1; the outer region-0 label remains
+a diagnostic limitation. No tolerance was relaxed.
+
+Coordinate-centering improved one synthetic oblique contact case but **still
+failed the actual replay** near 7666.8 ms. It was removed from production. Its
+patch, frozen sources, probe results, tests, failed capture and baseline rebuild
+log remain in the [precision experiment](../../artifacts/soft-tissue/avatar-contact/origin-precision-01/README.md).
+These partial captures are not a successful contact video. See the
+[native contact checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md)
+for detailed findings and test logs.
+
+## Verification and remaining limits
+
+- **87 focused tissue tests pass** on the saved baseline; the native recording
+  example's five tests also pass.
+- Python: **15 pass, one existing failure** in
+  `test_root_acceptance_does_not_rewrite_the_candidate`. Its source slice includes
+  an unrelated `for` beyond `resolve_root`. Protected assertions were unchanged.
+- The final baseline `cargo build --offline --example tissue_lab` passes with
+  38 existing warnings. The discarded precision experiment's 60 core tests
+  passed, but its actual-avatar replay failed.
+- Structural review findings remain recorded; the quality gate is not clean.
+- Latest live evidence is roughly 24–25 delivered frames/s with a 73 ms p95
+  delivery gap. Smooth 30 FPS and browser presentation latency are unproven.
+- Anatomical calibration, reduced local distortion, complete contact playback,
+  friction, edge/edge, mutual-breast and environmental contact remain open.
+  Do not default-enable the replacement on the present evidence.
+
+## Resume with one bounded investigation
+
+1. Reproduce seed 739 and capture the exact failed nonlinear state, objective,
+   gradient components and effective BDF2 timestep. Measure residual-evaluation
+   precision and conditioning before changing convergence acceptance. A tiny
+   Newton step alone does not establish residual convergence.
+2. Investigate that state without changing source poses, timing, material,
+   attachments or contact limits. Coordinate-centering is a rejected diagnostic,
+   not an established fix. Further seed searches are unnecessary for this failure.
+3. After a justified solver change, complete the same contact replay and render
+   its compression/release. Repeat the unchanged-jump regression, focused tests
+   and live performance check. Keep numerical checks separate from visual proof.
+
+Run from this worktree:
+
+```sh
+cargo build --offline --example tissue_lab
+cargo test --offline --lib tissue
+python -m unittest discover -s tests -v
+python artifacts/soft-tissue/quality-pressure/run_bevy.py \
+  --fixed-only --trace-only --label next-contact-check \
+  --output artifacts/soft-tissue/avatar-contact/next-contact-check \
+  --packets artifacts/soft-tissue/lab-chest-continuation-739-01/packets.ndjson \
+  --snapshot-pts-ms 7666 \
+  --log-filter info,cc_render_plugin::cc_render::bevy_app::tissue_collision=debug
+```
+
+GPU access is required for Bevy. Use a fresh label and output path for each
+attempt; the driver refuses to overwrite evidence. Omit `--trace-only` when
+rendered frames are needed. External avatar inputs remain in the sibling
+`remotemedia-sdk-office-main/avatars/` directory.
+
+## Preservation and stopping reason
+
+Necessary earlier temporary sources are preserved under
+`artifacts/soft-tissue/preserved-tmp/` with a manifest. Current sources, scripts,
+reports, source archives, selected videos and failed-run logs are in the
+worktree. Ignored NDJSON inputs/traces are committed inside the contact
+checkpoint's `source-and-capture-traces.tar.gz` and the precision experiment's
+`traces.tar.gz`; member SHA-256 manifests accompany both. Extract from the
+worktree root when reproducing from a fresh checkout. Raw PNG captures remain
+locally under `artifacts/soft-tissue/`, ignored by Git. Rebuildable executables
+are not required archival inputs. No necessary new work resides only in `/tmp`.
+
+The earlier unexpected stop at **2026-10-18 21:20:45 UTC / 5:20:45 p.m. Toronto**
+was a service interruption: `Selected model is at capacity. Please try a
+different model.` (`server_overloaded`). It was not a physics-completion signal.
+The goal tracker remains blocked from that interruption. This later checkpoint
+is the requested quota wrap-up, not a claim that contact or performance is done.

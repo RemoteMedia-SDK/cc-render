@@ -1,0 +1,37 @@
+diff --git a/src/cc_render/soft_tissue/implicit.rs b/src/cc_render/soft_tissue/implicit.rs
+index 5d1adfa..9b73d1d 100644
+--- a/src/cc_render/soft_tissue/implicit.rs
++++ b/src/cc_render/soft_tissue/implicit.rs
+@@ -405,7 +405,32 @@ impl Tissue {
+         inertial + elastic + attachments
+     }
+ 
++    // A fixed translation of this Newton solve improves position resolution
++    // without changing motion, material, contact gaps or stopping tolerances.
++    // Strain-based dissipation depends only on differences, so it is unchanged.
+     pub(super) fn solve_implicit(
++        &self, x: &mut Vec<DVec3>, predicted: &[DVec3], frame: Frame,
++        dt: f64, contacts: &[PlaneContact], damping: &Dissipation,
++    ) -> Result<(), TissueError> {
++        let origin = frame.translation;
++        let mut local: Vec<_> = x.iter().map(|p| *p - origin).collect();
++        let target: Vec<_> = predicted.iter().map(|p| *p - origin).collect();
++        let planes: Vec<_> = contacts.iter().map(|c| {
++            let mut shifted = *c;
++            let weight: f64 = c.point.barycentric.iter().map(|w| w*c.point.influence).sum();
++            shifted.point.offset += origin * (weight - 1.0);
++            shifted.surface_point -= origin;
++            shifted
++        }).collect();
++        let local_frame = Frame { translation: DVec3::ZERO, ..frame };
++        self.solve_implicit_local(&mut local, &target, local_frame, dt, &planes, damping)?;
++        for (i, point) in local.into_iter().enumerate() {
++            if self.inverse_mass[i] > 0.0 { x[i] = point + origin; }
++        }
++        Ok(())
++    }
++
++    fn solve_implicit_local(
+         &self,
+         x: &mut Vec<DVec3>,
+         predicted: &[DVec3],

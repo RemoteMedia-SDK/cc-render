@@ -5,6 +5,9 @@ This branch implements an isolated volumetric replacement for the base
 `feat/breast-soft-tissue`: the reviewed deformation is promising, but live
 playback and actual-avatar contact are not ready for default use.
 
+The [2026-10-18 handoff](breast-soft-tissue-handoff.md) records the saved runtime
+baseline, current contact failure, rejected precision experiment and next steps.
+
 The user reviewed the [boundary-pressure comparison video](../../artifacts/soft-tissue/volume-audit/tracked-off-on-boundary.mp4)
 and said “Looks much much better.” That exact video remains the visual reference.
 The [review page](../../artifacts/soft-tissue/volume-audit/index.html) shows physics
@@ -92,7 +95,7 @@ volume ratios reach 0.310–2.732. The new candidate reduces the captured range 
 0.562–1.533, with 32.56 mm peak movement and 40.77% of the patch moving over
 10 mm at the comparison frame. Local distortion is reduced, not eliminated.
 
-All 84 focused tissue tests pass, covering forces, viscosity, time convergence,
+All 87 focused tissue tests pass, covering forces, viscosity, time convergence,
 rollback, attachment fidelity, parallel region solves and compression/release.
 The Python suite has 15 passes and one existing ownership source-slice failure;
 no protected assertions were weakened. These checks do not establish anatomical

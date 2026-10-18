@@ -1,0 +1,49 @@
+{
+  "status": "experiment_not_integrated",
+  "baseline_commit": "c098357",
+  "ordinary_probe": {
+    "cases": 27,
+    "baseline_failures": 0,
+    "centered_failures": 0
+  },
+  "oblique_probe": {
+    "baseline_failures": [
+      {
+        "case": {
+          "origin_y": 10.0,
+          "dt": 0.0010416666666666667,
+          "compression": 0.001
+        },
+        "before": "tissue nonlinear solve did not converge (force 0.00033718472302982956 N, correction 0.0000000010537756885938067 m); state was not committed",
+        "after": null,
+        "after_contact": {
+          "active_contacts": 1,
+          "elastic_energy_j": 0.24881270056276472,
+          "maximum_penetration_m": 0.0008999408536558984,
+          "normal_force_n": 552.9534514451565
+        }
+      }
+    ],
+    "maximum_node_change_successful_cases_m": 1.2731876292498042e-13
+  },
+  "core_tests_passed": 60,
+  "actual_replay_error": "2026-10-18T22:22:17.064050Z ERROR cc_render_plugin::cc_render::bevy_app::tissue: volumetric tissue failed; stopping renderer without pose repair or legacy fallback region 0, interval 7666.796875..7666.861979166667 ms, depth 6: tissue contact solve region 1: tissue nonlinear solve did not converge (force 0.000001724391200993627 N, correction 0.00000000000009531247823055511 m); state was not committed; prior TissueMetrics { mass_kg: 1.0632727037632512, minimum_volume_ratio: 0.9104764180220137, maximum_volume_ratio: 1.1077894742943002, kinetic_energy_j: 0.001278027021176907, elastic_energy_j: 0.006507411876698878, maximum_speed_m_s: 0.10985483080183259 }; from Frame { translation: DVec3(0.01818034052848816, 1.1890701055526733, 0.03991495817899704), rotation: DQuat(0.08257594081599362, 0.09514212748936947, 0.00761439755635534, 0.9920036343305421) } to Frame { translation: DVec3(0.018181338906288147, 1.1890698671340942, 0.03991609066724777), rotation: DQuat(0.0825774706409088, 0.09513127482250218, 0.00761308042696859, 0.9920045579026379) }",
+  "decision": "Keep the committed baseline. Rebasing resolves an isolated precision case but does not validate the actual avatar contact replay. No force tolerance was relaxed.",
+  "research_note": "Small Newton steps alone do not establish residual convergence.",
+  "research_source": "https://sundials.readthedocs.io/en/v7.8.0/kinsol/Mathematics_link.html#nonlinear-iteration-stopping-criteria",
+  "restored_runtime": {
+    "commit": "c098357b35aed942905059dee6f3fae6c48a9e72",
+    "source_matches_baseline": true,
+    "build_command": [
+      "cargo",
+      "build",
+      "--offline",
+      "--example",
+      "tissue_lab"
+    ],
+    "build_exit_code": 0,
+    "build_log": "restore-build.log",
+    "binary": "target/debug/examples/tissue_lab",
+    "binary_sha256": "1ebd87a5ed47bf0764009916d68415bc2af969aa771ab69d1c0f07ab9fe0bcd4"
+  }
+}
