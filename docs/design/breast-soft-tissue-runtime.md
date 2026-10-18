@@ -124,3 +124,44 @@ in the adjacent `assembly-before-01`, `assembly-after-01` and `assembly-after-02
 folders; position binaries remain locally outside Git. The reviewed video stays
 unchanged. The next candidate is repeated body/skin sampling at shared physical
 step boundaries, which currently repeats read-only work within the same frame.
+
+## Pose-cache follow-up
+
+After `2a496fc`, each presentation creates a fresh eight-entry `ContactPoseCache`.
+The key is the exact f64 timestamp bits; there is no rounding, resampling,
+smoothing or motion modification. The cache sees one frozen motion/morph window
+and is discarded before the next presentation, including paused timestamps and
+session changes. Immutable `Arc<ContactPose>` values share the sampled skin and
+attachments without copying large vertex arrays. Failed samples are not cached.
+
+The fixed-clock run issued 5,158 sample requests: 3,415 were computed and 1,743
+reused (33.79%). Sampling time fell from 4.42 to 2.47 seconds. Total fixed-clock
+capture time fell from 19.36 to 13.46 seconds, but other stage timings also varied;
+do not attribute that entire change to caching on this shared host. All 478
+frames' node coordinates are identical to the preceding assembly-optimized run.
+Attachments and surface-displacement envelopes remain identical to the reviewed
+video, with only the previously measured solver roundoff relative to that video.
+
+The live 120 Hz run reused 1,037 of 2,685 requests (38.62%) and produced 111
+readbacks in 8.97 wall seconds for 7.934 source seconds. End drift is still 1.03
+seconds; p95 delivery gaps are 315 ms. This remains below the interactive target.
+The jump again contains no active contacts. The accepted video remains unchanged;
+these are trace captures, not replacement image recordings.
+
+75 tissue tests pass. New checks cover distinct adjacent floating-point times,
+bounded eviction, retained geometry, new-window invalidation, failed/nonfinite
+samples and cached-versus-uncached subdivision/state equality. Existing assertions
+are retained; direct fixture callbacks now return shared immutable poses. Python
+still has 15 passes and the existing ownership source-slice failure.
+
+The structural report flags recent churn in three adapted test functions and a
+short accessor-shape match between unrelated collision and cache counters. It
+also notes four extra lines in the existing long `simulate` method. These are
+recorded review findings, not suppressed or resolved by combining unrelated APIs.
+The Rust compiler and tests validate the callback return-type change; the
+name-based contract checker alone does not establish type compatibility.
+
+Sources, launch details, cache counts, comparison report and archived traces are
+in `boundary-runtime/bevy-pose-cache/`. The next performance investigation should
+measure trial-state copying and the slowest physics steps; elapsed live time is
+still unacceptable despite the preserved visual result.

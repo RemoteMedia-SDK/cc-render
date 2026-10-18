@@ -44,13 +44,13 @@ fn tissue_region_failure_does_not_commit_successful_sibling() {
     asset.regions.push(asset.regions[0].clone());
     let mut solvers: Vec<_> = asset.regions.iter().map(|r| r.solver(Frame::IDENTITY).unwrap()).collect();
     let before: Vec<_> = solvers.iter().map(|s| (s.positions().to_vec(), s.velocities().to_vec())).collect();
-    let pose_at = |time: f64| Ok(ContactPose {
+    let pose_at = |time: f64| Ok(Arc::new(ContactPose {
         frames: vec![Frame::IDENTITY, Frame {
             translation: if time > 0.0 { DVec3::splat(f64::NAN) } else { DVec3::ZERO },
             ..Frame::IDENTITY
         }],
         skin: vec![],
-    });
+    }));
     let error = integrate_interval(&mut solvers, 0.0, 1000.0 / 240.0, 0, &pose_at, &BodyContacts::new(&[]).unwrap(), &asset)
         .err().expect("the invalid second region must reject the whole interval");
     assert!(error.to_string().starts_with("region 1,"));
@@ -354,13 +354,13 @@ fn tissue_subdivision_resolves_fast_attachment_motion_and_rolls_back_failure() {
         1000.0 / 60.0,
         0,
         &|at| {
-            Ok(ContactPose {
+            Ok(Arc::new(ContactPose {
                 skin: vec![],
                 frames: vec![Frame {
                     translation: DVec3::Z * (at * 0.006),
                     ..Frame::IDENTITY
                 }],
-            })
+            }))
         },
         &BodyContacts::new(&[]).unwrap(),
         &asset,
@@ -375,13 +375,13 @@ fn tissue_subdivision_resolves_fast_attachment_motion_and_rolls_back_failure() {
         0.0,
         10.0,
         0,
-        &|_| Ok(ContactPose {
+        &|_| Ok(Arc::new(ContactPose {
             skin: vec![],
             frames: vec![Frame {
                 translation: DVec3::splat(f64::NAN),
                 ..Frame::IDENTITY
             }]
-        }),
+        })),
         &BodyContacts::new(&[]).unwrap(),
         &asset
     )
@@ -411,12 +411,22 @@ fn tissue_subdivision_recovers_from_nonlinear_nonconvergence() {
     assert!(matches!(trial.step(duration / 1000., frame(duration), DVec3::NEG_Y * 9.81),
         Err(TissueError::NonlinearSolveFailed { .. })));
     let mut solvers = vec![initial];
-    let report = integrate_interval(&mut solvers, 0., duration, 0, &|at| Ok(ContactPose {
+    let mut cached = solvers.clone();
+    let pose_at = |at| Ok(ContactPose {
         skin: vec![], frames: vec![frame(at)],
-    }), &BodyContacts::new(&[]).unwrap(), &asset).unwrap();
+    });
+    let report = integrate_interval(&mut solvers, 0., duration, 0,
+        &|at| pose_at(at).map(Arc::new), &BodyContacts::new(&[]).unwrap(), &asset).unwrap();
     assert!(report.subdivisions > 0);
     assert_eq!(solvers[0].frame().translation, frame(duration).translation);
     assert!(solvers[0].metrics().minimum_volume_ratio > 0.);
+    let cache = tissue_motion::ContactPoseCache::default();
+    let cached_report = integrate_interval(&mut cached, 0., duration, 0,
+        &|at| cache.sample(at, || pose_at(at)), &BodyContacts::new(&[]).unwrap(), &asset).unwrap();
+    assert_eq!(cached_report.subdivisions, report.subdivisions);
+    assert_eq!(cached[0].positions(), solvers[0].positions());
+    assert_eq!(cached[0].velocities(), solvers[0].velocities());
+    assert!(cache.counts().1 > 0);
 }
 
 #[test]

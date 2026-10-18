@@ -1,9 +1,47 @@
 //! Read-only retarget/FK sampling for secondary tissue. No skeleton writes.
 use super::pose::{fk_retarget_smpl_to_cc5_with_align, CC5BindRotations};
 use super::twist::{hand_roll, twist_locals, ForearmRig};
+use super::tissue_collision::ContactPose;
 use crate::cc_render::{renderer::SkeletalPose, soft_tissue::Frame};
 use bevy::{math::DQuat, prelude::*};
-use std::collections::HashMap;
+use std::{cell::{Cell, RefCell}, collections::{HashMap, VecDeque}, sync::Arc};
+
+/// Bounded memoization for one immutable motion/morph window. Create a fresh
+/// cache for every rendered frame, including paused time and session changes.
+#[derive(Default)]
+pub(super) struct ContactPoseCache {
+    entries: RefCell<VecDeque<(u64, Arc<ContactPose>)>>,
+    requests: Cell<usize>,
+    misses: Cell<usize>,
+}
+
+impl ContactPoseCache {
+    pub fn sample(
+        &self,
+        at_ms: f64,
+        sample: impl FnOnce() -> anyhow::Result<ContactPose>,
+    ) -> anyhow::Result<Arc<ContactPose>> {
+        anyhow::ensure!(at_ms.is_finite(), "nonfinite contact sample time");
+        self.requests.set(self.requests.get() + 1);
+        let key = at_ms.to_bits();
+        let mut entries = self.entries.borrow_mut();
+        if let Some(index) = entries.iter().position(|(time, _)| *time == key) {
+            let entry = entries.remove(index).unwrap();
+            let result = Arc::clone(&entry.1);
+            entries.push_back(entry);
+            return Ok(result);
+        }
+        self.misses.set(self.misses.get() + 1);
+        let result = Arc::new(sample()?);
+        if entries.len() == 8 { entries.pop_front(); }
+        entries.push_back((key, Arc::clone(&result)));
+        Ok(result)
+    }
+
+    pub fn counts(&self) -> (usize, usize) {
+        (self.misses.get(), self.requests.get() - self.misses.get())
+    }
+}
 
 struct Node {
     entity: Entity,
@@ -172,4 +210,55 @@ pub(super) fn sample_pose(knots: &[SkeletalPose], at_ms: f64) -> anyhow::Result<
             .to_array();
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+
+    fn geometry(value: f64) -> ContactPose {
+        ContactPose { frames: vec![Frame::IDENTITY], skin: vec![bevy::math::DVec3::X * value] }
+    }
+
+    #[test]
+    fn tissue_pose_cache_uses_exact_times_and_does_not_outlive_its_window() {
+        let cache = ContactPoseCache::default();
+        let at = 4.25_f64;
+        let first = cache.sample(at, || Ok(geometry(1.))).unwrap();
+        let repeated = cache.sample(at, || panic!("same timestamp sampled twice")).unwrap();
+        assert!(Arc::ptr_eq(&first, &repeated));
+        let adjacent = f64::from_bits(at.to_bits() + 1);
+        let distinct = cache.sample(adjacent, || Ok(geometry(2.))).unwrap();
+        assert_eq!(distinct.skin[0].x, 2.);
+        assert!(!Arc::ptr_eq(&first, &distinct));
+        for tick in 20..29 {
+            cache.sample(tick as f64, || Ok(geometry(tick as f64))).unwrap();
+            assert!(cache.entries.borrow().len() <= 8);
+        }
+        let evicted = cache.sample(at, || Ok(geometry(3.))).unwrap();
+        assert_eq!(evicted.skin[0].x, 3.);
+        assert_eq!(first.skin[0].x, 1.);
+        assert_eq!(cache.counts(), (12, 1));
+        // A new presentation can observe different morphs at the same time.
+        let next_window = ContactPoseCache::default();
+        let updated = next_window.sample(at, || Ok(geometry(4.))).unwrap();
+        assert_eq!(updated.skin[0].x, 4.);
+        assert_eq!(next_window.counts(), (1, 0));
+    }
+
+    #[test]
+    fn tissue_pose_cache_does_not_hide_failed_or_nonfinite_samples() {
+        let cache = ContactPoseCache::default();
+        for _ in 0..2 {
+            assert!(cache.sample(1., || anyhow::bail!("source unavailable")).is_err());
+        }
+        assert!(cache.entries.borrow().is_empty());
+        assert_eq!(cache.counts(), (2, 0));
+        let recovered = cache.sample(1., || Ok(geometry(5.))).unwrap();
+        assert_eq!(recovered.skin[0].x, 5.);
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(cache.sample(invalid, || panic!("nonfinite time reached sampler")).is_err());
+        }
+        assert_eq!(cache.counts(), (3, 0));
+    }
 }

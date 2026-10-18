@@ -22,7 +22,7 @@ use bevy::{
     },
     transform::TransformSystem,
 };
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 #[cfg(test)]
 #[path = "tissue_tests.rs"]
@@ -403,8 +403,11 @@ impl Active {
             elapsed >= -1e-6 && elapsed <= 1000.0,
             "tissue playback clock discontinuity or excessive backlog"
         );
-        let sampled = self.pose_at(&window.knots, end)?;
-        let frames = sampled.frames;
+        // Inputs stay frozen during this invocation. Never retain sampled skin
+        // across a new presentation, morph observation, or motion revision.
+        let pose_cache = tissue_motion::ContactPoseCache::default();
+        let sampled = pose_cache.sample(end, || self.pose_at(&window.knots, end))?;
+        let frames = &sampled.frames;
         let mut observed_skin = Vec::new();
         for (surface, weights) in self.surfaces.iter().zip(morph_weights) {
             observed_skin.extend(surface.kinematic_morphed_positions(globals, weights)?);
@@ -419,7 +422,7 @@ impl Active {
             skin_error < 0.0002,
             "tissue contact FK differs from displayed skin by {skin_error} m"
         );
-        for (entity, expected) in self.anchors.iter().zip(&frames) {
+        for (entity, expected) in self.anchors.iter().zip(frames) {
             let observed = tissue_motion::frame(globals[entity])?;
             anyhow::ensure!(
                 observed.translation.distance(expected.translation) < 0.0002
@@ -437,7 +440,7 @@ impl Active {
                 start,
                 start + dt_ms,
                 0,
-                &|at| self.pose_at(&window.knots, at),
+                &|at| pose_cache.sample(at, || self.pose_at(&window.knots, at)),
                 &self.contacts,
                 &request.asset,
             )?);
@@ -454,11 +457,12 @@ impl Active {
                 end - remainder,
                 end,
                 0,
-                &|at| self.pose_at(&window.knots, at),
+                &|at| pose_cache.sample(at, || self.pose_at(&window.knots, at)),
                 &self.contacts,
                 &request.asset,
             )?);
         }
+        (integration.pose_samples, integration.pose_cache_hits) = pose_cache.counts();
         let nodes: Vec<_> = output.iter().map(|s| s.positions().to_vec()).collect();
         let mut maximum = 0.0_f64;
         let mut surface_metrics = Vec::with_capacity(self.surfaces.len());
@@ -469,7 +473,7 @@ impl Active {
             let mesh = meshes
                 .get_mut(&surface.mesh)
                 .ok_or_else(|| anyhow::anyhow!("tissue render mesh disappeared"))?;
-            let metrics = surface.deform(mesh, &request.asset, &nodes, &frames, globals)?;
+            let metrics = surface.deform(mesh, &request.asset, &nodes, frames, globals)?;
             maximum = maximum.max(metrics.maximum_displacement_m);
             surface_metrics.push(metrics);
         }
@@ -507,6 +511,9 @@ impl Active {
 
 #[derive(Default, serde::Serialize)]
 struct IntegrationReport {
+    // Counts cover the full presentation, including its initial FK check.
+    pose_samples: usize,
+    pose_cache_hits: usize,
     subdivisions: usize,
     active_contact_samples: usize,
     maximum_penetration_m: f64,
@@ -518,6 +525,8 @@ struct IntegrationReport {
 
 impl IntegrationReport {
     fn merge(&mut self, other: Self) {
+        self.pose_samples += other.pose_samples;
+        self.pose_cache_hits += other.pose_cache_hits;
         self.subdivisions += other.subdivisions;
         self.active_contact_samples += other.active_contact_samples;
         self.maximum_penetration_m = self.maximum_penetration_m.max(other.maximum_penetration_m);
@@ -560,7 +569,7 @@ fn integrate_interval(
     start_ms: f64,
     end_ms: f64,
     depth: usize,
-    pose_at: &impl Fn(f64) -> anyhow::Result<ContactPose>,
+    pose_at: &impl Fn(f64) -> anyhow::Result<Arc<ContactPose>>,
     contacts: &BodyContacts,
     asset: &TissueAsset,
 ) -> anyhow::Result<IntegrationReport> {
