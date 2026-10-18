@@ -109,6 +109,17 @@ triangles. Iterations 141–142 provide close and full-room motion review. Fine
 side creases and the back hem seam still need polish; these recordings do not
 certify arbitrary motions, cloth collision or floor contact.
 
+### Standalone garment GLBs
+
+`split_outfit.py OUTFIT scenes/toronto_condo/garments` splits the two appended
+garments into `scenes/toronto_condo/garments/<id>/<id>.glb`, each with a
+`garment.json` sidecar. The split copies attribute, index, inverse bind matrix
+and image bytes exactly, and binds to CC5 bones by name.
+`check_garments.py AVATAR OUTFIT GARMENTS` verifies byte identity, joint names
+and inverse bind matrices, bind-pose positions, and full accounting of what the
+outfit added. See `scenes/toronto_condo/garments/README.md`. The renderer still
+loads the combined outfit GLB.
+
 ## Shared sky and lake reflection
 
 Gallery 116 is the pre-change balcony baseline; 117–118 preserve the first day
