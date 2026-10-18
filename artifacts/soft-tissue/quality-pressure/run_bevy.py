@@ -20,6 +20,7 @@ parser.add_argument('--packets', type=Path)
 parser.add_argument('--view', choices=['front', 'side'], default='front')
 parser.add_argument('--snapshot-pts-ms', type=int, default=7633)
 parser.add_argument('--log-filter', default='info')
+parser.add_argument('--asset', type=Path, default=Path('assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json'))
 parser.add_argument('--trace-only', action='store_true', help='Omit fixed-clock PNGs; retain all node traces.')
 args = parser.parse_args()
 assert args.label.replace('-', '').isalnum()
@@ -29,7 +30,7 @@ assert OUT.is_relative_to(HERE.parent)
 OUT.mkdir(exist_ok=False)
 os.chdir(ROOT)
 baseline = json.loads((HERE.parent/'volume-audit/launch-boundary-01.json').read_text())
-asset = Path('assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json')
+asset = args.asset
 sources = sorted(set(baseline['sources']) | {'Cargo.toml', str(Path(__file__).relative_to(ROOT))}
                  | {str(p) for p in Path('src/cc_render/soft_tissue').glob('*.rs')}
                  | {str(p) for p in Path('src/cc_render/bevy_app').glob('tissue*.rs')})
