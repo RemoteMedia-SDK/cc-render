@@ -12,6 +12,7 @@ use super::body_colliders::BodyBoneCollider;
 use super::contact_grasp::{capture_articulated_joint, capture_joint, ARTICULATED_GRIP_MAX_SPEED_M_S,
     ARTICULATED_GRIP_SLIP_M};
 use super::props::{Prop, PropRegistry};
+use super::rail_drive::RailDrive;
 use crate::cc_render::renderer::{GrabFailure, GrabOrRelease, Hand, PropId};
 
 #[derive(Debug, Clone, Default)]
@@ -37,7 +38,7 @@ pub(crate) struct ContactGrip;
 /// A force-limited grip on a jointed part, held at `point` in the part's frame.
 #[derive(Component)]
 pub(crate) struct ArticulatedGrip {
-    point: Vec3,
+    pub(crate) point: Vec3,
 }
 
 #[derive(Resource, Default)]
@@ -129,6 +130,9 @@ pub(crate) fn handle_grab_cmds(
     props: Query<(&Prop, &GlobalTransform, Option<&super::props::HandleExtent>)>,
     jointed: Query<(), (With<Prop>, With<ImpulseJoint>)>,
     articulated_grips: Query<&ArticulatedGrip>,
+    rails: Query<(&ImpulseJoint, &Transform), (With<Prop>, Without<Parent>)>,
+    globals: Query<&GlobalTransform>,
+    mut drives: Query<&mut RailDrive>,
     physics: Query<&RapierContext>,
     stored_cfg: Res<super::StoredPhysicsConfig>,
     mut awake: Local<Vec<Entity>>,
@@ -171,7 +175,7 @@ pub(crate) fn handle_grab_cmds(
         let cmd = cmds.iter().rfind(|c| match c {
             GrabOrRelease::Grab(g) => g.hand == hand,
             GrabOrRelease::Release(h) => *h == hand,
-            GrabOrRelease::Office(_) => false,
+            GrabOrRelease::Office(_) | GrabOrRelease::Drive { .. } => false,
             GrabOrRelease::CancelPursuit(h) => *h == hand,
         });
         let wrist = wrist_pos.get(&hand).copied().unwrap_or(Vec3::ZERO);
@@ -244,8 +248,9 @@ pub(crate) fn handle_grab_cmds(
             } => {
                 // If we're swapping out a previously-attached prop, release
                 // its joint first to avoid leaking the FixedJoint.
-                if let GrabState::Attached { grip_entity, .. } = state {
+                if let GrabState::Attached { grip_entity, prop_entity, .. } = state {
                     commands.entity(*grip_entity).try_despawn_recursive();
+                    let_go_of_rail(&mut commands, &drives, *prop_entity);
                     tracing::info!(
                         target: "cc_render",
                         "physics: grab swap — hand={:?} released previous prop for new target={}",
@@ -295,6 +300,26 @@ pub(crate) fn handle_grab_cmds(
                     _ => super::contact_grasp::has_object_contact(context, wrist_e, prop_e),
                 });
                 let articulated = jointed.contains(prop_e);
+                // A part on a rail is held on it kinematically (driven travel), not by a spring.
+                let rail = rails.get(prop_e).ok().and_then(|(joint, part)| globals.get(joint.parent).ok()
+                    .and_then(|parent| RailDrive::hold(joint, parent, part, time.elapsed_secs())));
+                if let Some(hold) = rail {
+                    let point = props.get(prop_e).ok().and_then(|(_, object_world, _)|
+                        capture_articulated_joint(&wrist_world, object_world, active_contact)).map(|(_, point)| point);
+                    let Some(point) = point else {
+                        *state = GrabState::Idle;
+                        prop_registry.pending_failures.push(GrabFailure {
+                            hand, target, reason: "physical_contact_lost".into(),
+                        });
+                        continue;
+                    };
+                    commands.entity(prop_e).try_insert((hold, RigidBody::KinematicPositionBased, Velocity::zero()));
+                    let grip_entity = commands.spawn((ContactGrip, ArticulatedGrip { point })).set_parent(prop_e).id();
+                    tracing::info!(target: "cc_render", "physics: rail part held for driven travel — hand={:?} target={}",
+                                   hand, target);
+                    *state = GrabState::Attached { target, prop_entity: prop_e, grip_entity };
+                    continue;
+                }
                 let joint = props.get(prop_e).ok().and_then(|(_, object_world, _)| if articulated {
                     capture_articulated_joint(&wrist_world, object_world, active_contact)
                         .map(|(joint, point)| (TypedJoint::GenericJoint(joint), Some(ArticulatedGrip { point })))
@@ -326,8 +351,9 @@ pub(crate) fn handle_grab_cmds(
                 };
             }
             FsmTransition::DetachIdle => {
-                if let GrabState::Attached { grip_entity, .. } = *state {
+                if let GrabState::Attached { grip_entity, prop_entity, .. } = *state {
                     commands.entity(grip_entity).try_despawn_recursive();
+                    let_go_of_rail(&mut commands, &drives, prop_entity);
                     tracing::info!(
                         target: "cc_render",
                         "physics: grab released — hand={:?}", hand,
@@ -336,8 +362,9 @@ pub(crate) fn handle_grab_cmds(
                 *state = GrabState::Idle;
             }
             FsmTransition::Failed { reason, target } => {
-                if let GrabState::Attached { grip_entity, .. } = *state {
+                if let GrabState::Attached { grip_entity, prop_entity, .. } = *state {
                     commands.entity(grip_entity).try_despawn_recursive();
+                    let_go_of_rail(&mut commands, &drives, prop_entity);
                 }
                 tracing::warn!(
                     target: "cc_render",
@@ -351,6 +378,21 @@ pub(crate) fn handle_grab_cmds(
                 });
                 *state = GrabState::Idle;
             }
+        }
+    }
+    // A driven travel moves the rail part the hand holds.
+    for command in &cmds {
+        let GrabOrRelease::Drive { hand, to_m, over_s } = command else { continue };
+        let state = if *hand == Hand::Left { &fsms.left } else { &fsms.right };
+        match state {
+            GrabState::Attached { prop_entity, target, .. } => match drives.get_mut(*prop_entity) {
+                Ok(mut drive) => {
+                    drive.drive(time.elapsed_secs(), *to_m, *over_s);
+                    tracing::info!(target: "cc_render", ?hand, %target, to_m, over_s, "physics: rail part driven");
+                }
+                Err(_) => tracing::warn!(target: "cc_render", ?hand, %target, "physics: drive for a part not held on a rail"),
+            },
+            _ => tracing::warn!(target: "cc_render", ?hand, "physics: drive without a grip"),
         }
     }
     // A gripped jointed part stays awake: a drawer come to rest at its stop would otherwise
@@ -367,6 +409,15 @@ pub(crate) fn handle_grab_cmds(
         if let Some(mut part) = commands.get_entity(*entity) { part.try_insert(Sleeping::default()); }
     }
     *awake = held;
+}
+
+/// A rail part let go is handed back to its passive rail where it is, at rest.
+fn let_go_of_rail(commands: &mut Commands, drives: &Query<&mut RailDrive>, part: Entity) {
+    if drives.contains(part) {
+        if let Some(mut part) = commands.get_entity(part) {
+            part.remove::<RailDrive>().try_insert((RigidBody::Dynamic, Velocity::zero()));
+        }
+    }
 }
 
 /// Historical canonical-frame fixture, not the production contact-grip policy.

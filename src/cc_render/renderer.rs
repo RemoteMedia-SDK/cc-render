@@ -185,6 +185,8 @@ pub trait Renderer: Send + Sync {
     fn despawn_prop(&self, _id: PropId) {}
     fn grab(&self, _cmd: GrabCmd) {}
     fn release(&self, _hand: Hand) {}
+    /// Drive the jointed part the given hand grips along its rail (a declared driven travel).
+    fn drive(&self, _hand: Hand, _to_m: f32, _over_s: f32) {}
     fn cancel_grab_pursuit(&self, _hand: Hand) {}
     fn grab_config(&self) -> Option<GrabConfig> { None }
     fn scene_state(&self) -> SceneState {
@@ -265,6 +267,9 @@ impl Renderer for CcRenderer {
     }
     fn release(&self, hand: Hand) {
         let _ = self.grab_cmd_tx.send(GrabOrRelease::Release(hand));
+    }
+    fn drive(&self, hand: Hand, to_m: f32, over_s: f32) {
+        let _ = self.grab_cmd_tx.send(GrabOrRelease::Drive { hand, to_m, over_s });
     }
     fn cancel_grab_pursuit(&self, hand: Hand) {
         let _ = self.grab_cmd_tx.send(GrabOrRelease::CancelPursuit(hand));
@@ -666,6 +671,8 @@ mod physics_types {
         Grab(GrabCmd),
         Release(Hand),
         CancelPursuit(Hand),
+        /// Drive the jointed part this hand grips along its rail to `to_m` over `over_s`.
+        Drive { hand: Hand, to_m: f32, over_s: f32 },
     }
 }
 

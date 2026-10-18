@@ -124,8 +124,10 @@ pub enum Transition {
     Grip { anchor: Anchor },
 }
 
-/// Observed joint travel a phase must reach while its object stays gripped: the part moves
-/// only because the gripped hand drags it along its passive rail. Either bound may be open.
+/// Observed joint travel a phase must reach while its object stays gripped. Either bound may be
+/// open. With `to_m` and `over_s` (owner approval 2026-10-17) the gripped part is driven along
+/// its rail to `to_m` over `over_s` as the phase starts, and the gripping hand follows its
+/// handle; without them it moves only as the hand drags it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Travel {
@@ -133,12 +135,19 @@ pub struct Travel {
     pub min_m: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_m: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_m: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub over_s: Option<f32>,
 }
 
 impl Travel {
     pub fn contains(&self, travel_m: f32) -> bool {
         self.min_m.is_none_or(|m| travel_m >= m) && self.max_m.is_none_or(|m| travel_m <= m)
     }
+
+    /// Where and over how long the gripped part is driven, when it is.
+    pub fn drive(&self) -> Option<(f32, f32)> { self.to_m.zip(self.over_s) }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -338,6 +347,8 @@ pub enum CouplingCommand {
     SupportOff { object: String },
     /// A physical contact grip request (the renderer's grab, never a declared coupling).
     Grip { object: String, hand: crate::cc_render::Hand },
+    /// Drive the part `hand` grips along its rail to `to_m` over `over_s` (the renderer's grab).
+    Drive { object: String, hand: crate::cc_render::Hand, to_m: f32, over_s: f32 },
 }
 
 impl Relation {
@@ -420,9 +431,13 @@ pub fn validate(object_id: &str, zones: &[Zone], interactions: &[Interaction],
             if !ok { return bad("has an invalid transition"); }
             if let Some(travel) = &phase.travel {
                 let bound = |m: Option<f32>| m.is_none_or(|m| m.is_finite() && (0. ..=2.).contains(&m));
+                // A drive ends inside the range it passes on.
+                let drive = travel.to_m.is_some() == travel.over_s.is_some() && bound(travel.to_m)
+                    && travel.over_s.is_none_or(|s| s.is_finite() && (0.2..=10.).contains(&s))
+                    && travel.to_m.is_none_or(|to| travel.contains(to));
                 if !gripping || (travel.min_m.is_none() && travel.max_m.is_none()) || !bound(travel.min_m)
                     || !bound(travel.max_m) || travel.min_m.zip(travel.max_m).is_some_and(|(lo, hi)| lo > hi)
-                    || matches!(phase.transition, Some(Transition::Grip { .. })) {
+                    || !drive || matches!(phase.transition, Some(Transition::Grip { .. })) {
                     return bad("needs a travel range while its object is gripped");
                 }
             }

@@ -141,6 +141,7 @@ impl DeclaredState {
         let pts = observation.displayed_pts_ms;
         if self.last_pts.is_some_and(|old| pts <= old) { return Step::Running; }
         self.last_pts = Some(pts);
+        let entered = self.started.is_none();
         let start = *self.started.get_or_insert(pts);
         let elapsed = pts.saturating_sub(start) as f32 / 1000.;
         let declared = self.current().clone();
@@ -187,6 +188,10 @@ impl DeclaredState {
             self.hands_swapped = Some(false);
         }
         let phase = if self.hands_swapped == Some(true) { mirrored } else { declared };
+        // A driven travel phase moves the gripped part from its first displayed frame.
+        if let (true, Some(hand), Some((to_m, over_s))) = (entered, self.grip, phase.travel.as_ref().and_then(|t| t.drive())) {
+            self.couplings.push(CouplingCommand::Drive { object: self.object.clone(), hand, to_m, over_s });
+        }
         let done = if let Some(range) = &phase.travel {
             // Sustained observed travel: the part moved only through the gripped hand.
             self.travel_run = if self.travel_m.is_some_and(|t| range.contains(t)) { self.travel_run + 1 } else { 0 };

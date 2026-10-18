@@ -2243,7 +2243,8 @@ impl OfficeController {
             },
             C::SupportOn { object } => self.support_object = Some(object),
             // A physical grip goes to the renderer's grab, never through declared couplings.
-            C::Grip { object, .. } => self.motion_error = Some(format!("grip on {object} is a physical command")),
+            C::Grip { object, .. } | C::Drive { object, .. } =>
+                self.motion_error = Some(format!("grip on {object} is a physical command")),
             C::SupportOff { object } => {
                 if self.support_object.as_deref() == Some(object.as_str()) {
                     self.support_object = None;

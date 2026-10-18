@@ -522,7 +522,7 @@ mod tests {
                 {"id": "pull", "prompt": "A person pulls the drawer open.",
                  "relations": [{"kind": "touch", "joints": ["RightHand"], "zone": "@home/pull_open", "window_s": [0, 6],
                                 "min_frames": 3, "tolerance_m": 0.05}],
-                 "travel": {"min_m": 0.3}, "timeout_s": 8},
+                 "travel": {"min_m": 0.3, "to_m": 0.35, "over_s": 1.0}, "timeout_s": 8},
                 {"id": "release", "prompt": "A person lets go of the drawer and stands.",
                  "transition": {"kind": "release"}, "timeout_s": 4}]}]
         })).unwrap();
@@ -556,12 +556,15 @@ mod tests {
         assert_eq!(task.observe(&scene), Update::PhaseChanged);
         task.bind_generation(interact(2, "drawer", "open")).unwrap();
         assert_eq!(task.phase_name(), "pull");
-        // Pulling: it passes only on sustained observed travel, whatever the hand relation did.
+        // Pulling: the gripped drawer is driven from the phase's first displayed frame, and the
+        // phase passes only on sustained observed travel, whatever the hand relation did.
         scene.articulation.insert("drawer".into(), 0.12);
         for pts in [2900, 2950] {
             displayed(&mut scene, 2, pts);
             assert_eq!(task.observe(&scene), Update::None);
         }
+        assert_eq!(task.take_couplings(), vec![CouplingCommand::Drive { object: "drawer".into(), hand: Hand::Right,
+                                                                        to_m: 0.35, over_s: 1.0 }]);
         scene.articulation.insert("drawer".into(), 0.31);
         let mut update = Update::None;
         for pts in [3000, 3050, 3100, 3150, 3200] {
@@ -633,9 +636,16 @@ mod tests {
         let mut ungripped = base.clone();
         ungripped.interactions[0].phases.remove(0);
         assert!(crate::cc_render::office::validate_objects(&[ungripped]).unwrap_err().contains("travel"));
+        use crate::cc_render::office::interaction::Travel;
         let mut open_ended = base.clone();
-        open_ended.interactions[0].phases[1].travel = Some(crate::cc_render::office::interaction::Travel { min_m: None, max_m: None });
+        open_ended.interactions[0].phases[1].travel = Some(Travel { min_m: None, max_m: None, to_m: None, over_s: None });
         assert!(crate::cc_render::office::validate_objects(&[open_ended]).is_err());
+        // A drive needs both its target and its time, and must end inside the range it passes on.
+        for (to_m, over_s) in [(Some(0.35), None), (None, Some(1.)), (Some(0.2), Some(1.)), (Some(0.35), Some(0.))] {
+            let mut bad = base.clone();
+            bad.interactions[0].phases[1].travel = Some(Travel { min_m: Some(0.3), max_m: None, to_m, over_s });
+            assert!(crate::cc_render::office::validate_objects(&[bad]).unwrap_err().contains("travel"), "{to_m:?} {over_s:?}");
+        }
         let mut no_hint = base;
         no_hint.zones[0].grip = None;
         assert!(crate::cc_render::office::validate_objects(&[no_hint]).unwrap_err().contains("transition"));

@@ -384,6 +384,11 @@ impl CcRenderNode {
                     palm_offset_override: None });
                 continue;
             }
+            // A driven travel moves the part the grip holds.
+            if let super::office::interaction::CouplingCommand::Drive { hand, to_m, over_s, .. } = &command {
+                self.renderer.drive(*hand, *to_m, *over_s);
+                continue;
+            }
             // A physically gripped object is released by the grip itself; it settles under physics.
             if let super::office::interaction::CouplingCommand::Release { object, onto } = &command {
                 if let Some((hand, _)) = office.occupied_hands.iter().find(|(_, id)| id == object) {

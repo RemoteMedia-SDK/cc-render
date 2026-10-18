@@ -168,7 +168,9 @@ fn drawers() -> (App, UnboundedSender<GrabOrRelease>, Entity, Entity, Entity) {
         std::time::Duration::from_secs_f32(1. / 60.)));
     app.insert_resource(StoredPhysicsConfig(PhysicsConfig::default()));
     app.init_resource::<GrabFsms>();
-    app.add_systems(PostUpdate, grab::handle_grab_cmds.after(PhysicsSet::Writeback));
+    app.add_systems(PostUpdate, (grab::handle_grab_cmds.after(PhysicsSet::Writeback),
+        super::rail_drive::drive_rails.after(PhysicsSet::Writeback)
+            .before(bevy::transform::TransformSystem::TransformPropagate)));
     let (grab, rx) = mpsc::unbounded_channel();
     app.insert_resource(GrabCmdRx(std::sync::Mutex::new(rx)));
     let shell = app.world_mut().spawn((Transform::default(), RigidBody::Fixed)).id();
@@ -200,55 +202,64 @@ fn drawers() -> (App, UnboundedSender<GrabOrRelease>, Entity, Entity, Entity) {
 }
 
 #[test]
-fn a_gripped_drawer_follows_the_hand_on_its_rail_and_the_hand_slips_off_pulling_past_the_stop() {
-    let (mut app, _grab, wrist, upper, lower) = drawers();
+fn a_gripped_drawer_is_held_on_its_rail_driven_open_and_shut_and_let_go_at_rest() {
+    // Owner approval 2026-10-17: a gripped rail part is driven along its rail, not dragged.
+    let (mut app, grab, wrist, upper, lower) = drawers();
     let travel = |app: &App, drawer: Entity| app.world().get::<Transform>(drawer).unwrap().translation.x;
-    // Pull out along the rail, the wrist turning, bobbing and sliding 8 cm along the bar as a hand does.
-    for frame in 1..=60 {
-        let mut pose = app.world_mut().get_mut::<Transform>(wrist).unwrap();
-        pose.translation = Vec3::new(0.219 + 0.005 * frame as f32, 0.8 + 0.01 * (frame as f32 * 0.3).sin(),
-                                     0.08 * frame as f32 / 60.);
-        pose.rotation = Quat::from_rotation_y(0.3 * (frame as f32 * 0.2).sin());
+    let held = |app: &App| matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. });
+    assert!(matches!(app.world().get::<RigidBody>(upper), Some(RigidBody::KinematicPositionBased)));
+    // Held, it stays put while the hand sways about the bar.
+    for frame in 1..=30 {
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation =
+            Vec3::new(0.219 + 0.02 * (frame as f32 * 0.4).sin(), 0.8 + 0.01 * (frame as f32 * 0.3).sin(), 0.03);
         app.update();
     }
-    for _ in 0..10 { app.update(); }
-    let pulled = travel(&app, upper);
-    assert!((pulled - 0.3).abs() < 0.02, "drawer at {pulled} m after a 0.30 m pull");
+    assert!(travel(&app, upper).abs() < 1e-4, "held drawer moved to {}", travel(&app, upper));
+    // Driven out past its stop over 1 s, the hand on the handle: eased, and kept at the stop.
+    let follow = |app: &mut App| {
+        let x = travel(app, upper);
+        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation = Vec3::new(0.219 + x, 0.8, 0.);
+    };
+    grab.send(GrabOrRelease::Drive { hand: Hand::Right, to_m: 0.6, over_s: 1. }).unwrap();
+    let mut path = Vec::new();
+    for _ in 0..75 { follow(&mut app); app.update(); path.push(travel(&app, upper)); }
+    assert!(path.windows(2).all(|w| w[1] >= w[0] - 1e-5), "drive went back: {path:?}");
+    assert!((path[29] - 0.2).abs() < 0.05, "half way through the drive at {}", path[29]);
+    assert!((travel(&app, upper) - 0.4).abs() < 1e-3, "driven to {} m, its stop is 0.40", travel(&app, upper));
     let pose = app.world().get::<Transform>(upper).unwrap();
-    assert!(pose.rotation.angle_between(Quat::IDENTITY) < 0.01 && (pose.translation.y - 0.8).abs() < 0.005);
-    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
-    // Pushing it closed and on 15 cm into it: pressing at its stop, the hand keeps hold.
-    for frame in 1..=100 {
-        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.519 - 0.0045 * frame as f32;
-        app.update();
-    }
-    // Resting at its stop (long enough to fall asleep), it still comes out with the hand.
-    for _ in 0..180 { app.update(); }
-    assert!(travel(&app, upper).abs() < 0.01, "drawer not closed: {}", travel(&app, upper));
-    assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Attached { .. }));
-    // Out again to 0.30 m.
-    for frame in 1..=100 {
-        app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.069 + 0.0045 * frame as f32;
-        app.update();
-    }
-    for _ in 0..10 { app.update(); }
-    assert!((travel(&app, upper) - 0.3).abs() < 0.02, "drawer at {} m", travel(&app, upper));
-    // Pull on past the 0.40 m stop: the drawer stays at it and the hand lets go out of reach of the bar.
-    for frame in 61..=120 {
+    assert!(pose.rotation.angle_between(Quat::IDENTITY) < 1e-4 && (pose.translation.y - 0.8).abs() < 1e-4);
+    assert!(held(&app));
+    // And shut again.
+    grab.send(GrabOrRelease::Drive { hand: Hand::Right, to_m: 0., over_s: 1. }).unwrap();
+    for _ in 0..75 { follow(&mut app); app.update(); }
+    assert!(travel(&app, upper).abs() < 1e-3, "drawer not shut: {}", travel(&app, upper));
+    assert!(travel(&app, lower).abs() < 0.005, "lower drawer moved to {}", travel(&app, lower));
+    // Out to 0.30 m and let go: back on its passive rail, at rest where it was let go.
+    grab.send(GrabOrRelease::Drive { hand: Hand::Right, to_m: 0.3, over_s: 0.5 }).unwrap();
+    for _ in 0..40 { follow(&mut app); app.update(); }
+    grab.send(GrabOrRelease::Release(Hand::Right)).unwrap();
+    for _ in 0..90 { app.update(); }
+    assert!((travel(&app, upper) - 0.3).abs() < 0.005, "let go at 0.30 m, now at {}", travel(&app, upper));
+    assert!(matches!(app.world().get::<RigidBody>(upper), Some(RigidBody::Dynamic)));
+    assert!(app.world().get::<super::rail_drive::RailDrive>(upper).is_none());
+    let world = app.world_mut();
+    assert_eq!(world.query_filtered::<Entity, With<ContactGrip>>().iter(world).count(), 0);
+}
+
+#[test]
+fn a_hand_drifting_off_a_held_drawer_slips_off_and_leaves_it_at_rest() {
+    let (mut app, _grab, wrist, upper, _) = drawers();
+    let travel = |app: &App| app.world().get::<Transform>(upper).unwrap().translation.x;
+    for frame in 1..=60 {
         app.world_mut().get_mut::<Transform>(wrist).unwrap().translation.x = 0.219 + 0.005 * frame as f32;
         app.update();
-        assert!(travel(&app, upper) < 0.41, "drawer pulled past its stop: {}", travel(&app, upper));
     }
-    assert!(travel(&app, upper) > 0.39, "drawer short of its stop: {}", travel(&app, upper));
     assert!(matches!(app.world().resource::<GrabFsms>().right, GrabState::Idle));
     let failures = &app.world().resource::<PropRegistry>().pending_failures;
     assert!(failures.iter().any(|f| f.reason == "grip_slipped" && f.target == "upper"), "{failures:?}");
-    let world = app.world_mut();
-    assert_eq!(world.query_filtered::<Entity, With<ContactGrip>>().iter(world).count(), 0);
-    assert!(travel(&app, lower).abs() < 0.005, "lower drawer moved to {}", travel(&app, lower));
-    // Let go, it may sleep again.
-    app.update();
-    assert_eq!(app.world().get::<Sleeping>(upper).map(|s| s.normalized_linear_threshold), Some(Sleeping::default().normalized_linear_threshold));
+    for _ in 0..30 { app.update(); }
+    assert!(travel(&app).abs() < 0.005, "slipped-off drawer moved to {}", travel(&app));
+    assert!(matches!(app.world().get::<RigidBody>(upper), Some(RigidBody::Dynamic)));
 }
 
 #[test]
