@@ -268,4 +268,12 @@ fn standing_at_the_edge_of_an_open_vanity_drawers_reserve_she_may_sway() {
     controller.observed.pelvis = near.to_array();
     assert!(controller.permits_native_root(Vec3::new(-4.667926, 0.9727172, -2.8314695)));
     assert!(!controller.permits_native_root(near - Vec3::X * 0.06), "within 10 cm of it");
+    // Live: let go of the lower drawer at full travel 20.3 cm from it, just outside its full
+    // reserve; standing up moved her 3.2 mm closer.
+    controller.objects.iter_mut().find(|o| o.id == "vanity_upper_drawer").unwrap().position[0] -= 0.4;
+    controller.objects.iter_mut().find(|o| o.id == "vanity_lower_drawer").unwrap().position[0] += 0.4;
+    let edge = Vec3::new(-4.612988, 0.9456605, -2.7784178);
+    controller.observed.pelvis = edge.to_array();
+    assert!(controller.permits_native_root(Vec3::new(-4.616138, 0.9509126, -2.7807331)));
+    assert!(!controller.permits_native_root(edge - Vec3::X * 0.12), "within 10 cm of it");
 }

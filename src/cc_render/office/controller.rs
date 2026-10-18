@@ -23,8 +23,9 @@ const NATIVE_ROOT_RESERVE_M: f32 = 0.20;
 /// the reserve.
 const LEAVING_SWAY_M: f32 = 0.003;
 const LEAVING_CLEAR_M: f32 = 0.05;
-/// Within a jointed part's reserve her pelvis may move freely while this far from the part
-/// (about her body's front): she handled it at arm's length, and it moves on its own.
+/// A jointed part's native reserve: her pelvis may move freely while this far from the part
+/// (about her body's front), coming into its full reserve or not: she handled it at arm's
+/// length, and it moves on its own.
 const JOINTED_CLEAR_M: f32 = 0.10;
 const KNEEL_TRANSITION_MS: u64 = 2000;
 const KNEEL_SUPPORT_MS: u64 = 2400;
@@ -2304,25 +2305,25 @@ impl OfficeController {
                 // A part she grips (a drawer she pulls) moves with her hand, not into her.
                 && !(reserve == NATIVE_ROOT_RESERVE_M && self.held.iter().any(|(_, id)| id == &o.id)))
             .collect();
-        // Generated motion standing up from the seat it was measured on (a bed it sat
-        // on, say) may move away from that seat but never deeper into it; so may motion
-        // standing within the reserve of a jointed part, which moves on its own (a drawer
-        // let go of slides on to its stop). Any other object, and planning, keep the strict
-        // visibility rule.
-        let leaving = |o: &&super::metadata::SceneObject| reserve == NATIVE_ROOT_RESERVE_M
-            && o.footprint.distance(start) < reserve + LEAVING_SWAY_M
+        // Generated motion keeps a jointed part's own reserve (a drawer let go of slides on
+        // to its stop, towards her). Standing up from the seat it was measured on (a bed it
+        // sat on, say), or within a jointed part's reserve, it may move away but never
+        // deeper in. Any other object, and planning, keep the strict visibility rule.
+        let native = reserve == NATIVE_ROOT_RESERVE_M;
+        let reserve_of = |o: &super::metadata::SceneObject| {
+            if native && self.constrained_objects.contains(&o.id) { JOINTED_CLEAR_M } else { reserve }
+        };
+        let leaving = |o: &&super::metadata::SceneObject| native
+            && o.footprint.distance(start) < reserve_of(o) + LEAVING_SWAY_M
             && (self.leaving_seat.as_deref() == Some(o.id.as_str())
                 || self.constrained_objects.contains(&o.id) && o.footprint.distance(start) > 0.);
         let polygons: Vec<_> = checked
             .iter()
             .filter(|o| !leaving(o))
-            .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve)))
+            .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve_of(o))))
             .collect();
-        checked.iter().filter(|o| leaving(o)).all(|o| {
-            let from = o.footprint.distance(start);
-            let floor = if self.constrained_objects.contains(&o.id) { from.min(JOINTED_CLEAR_M) } else { from };
-            o.footprint.distance(end) >= floor - LEAVING_SWAY_M
-        })
+        checked.iter().filter(|o| leaving(o))
+            .all(|o| o.footprint.distance(end) >= o.footprint.distance(start) - LEAVING_SWAY_M)
             && super::pathfinder::visible(start, end, &polygons)
     }
     pub fn navigation_scene(&self) -> super::metadata::SceneMetadata {
