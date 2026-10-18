@@ -1,0 +1,195 @@
+warning: unused imports: `RegionAsset`, `SurfaceBinding`, and `VertexBinding`
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/mod.rs:13:17
+   |
+13 | pub use asset::{RegionAsset, SurfaceBinding, TissueAsset, VertexBinding};
+   |                 ^^^^^^^^^^^  ^^^^^^^^^^^^^^               ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `EmbeddedPoint`
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/mod.rs:14:35
+   |
+14 | pub use contact::{ContactMetrics, EmbeddedPoint, PlaneContact};
+   |                                   ^^^^^^^^^^^^^
+
+warning: unused imports: `TimeIntegration`, `TissueMetrics`, and `Viscosity`
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/mod.rs:16:68
+   |
+16 | pub use solver::{Attachment, Frame, Material, Tissue, TissueError, TissueMetrics, TimeIntegration, Viscosity};
+   |                                                                    ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^
+
+warning: methods `validate` and `energy` are never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/contact.rs:43:19
+   |
+42 | impl PlaneContact {
+   | ----------------- methods in this implementation
+43 |     pub(super) fn validate(&self, tetrahedra: usize) -> Result<(), TissueError> {
+   |                   ^^^^^^^^
+...
+73 |     pub(super) fn energy(&self, positions: &[DVec3], tets: &[Tet]) -> f64 {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ContactMetrics` is never constructed
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/contact.rs:81:12
+   |
+81 | pub struct ContactMetrics {
+   |            ^^^^^^^^^^^^^^
+
+warning: function `metrics` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/contact.rs:88:15
+   |
+88 | pub(super) fn metrics(
+   |               ^^^^^^^
+
+warning: method `volume_constraint` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/material.rs:81:8
+   |
+57 | impl Tet {
+   | -------- method in this implementation
+...
+81 |     fn volume_constraint(&self, positions: &[DVec3]) -> (f64, [DVec3; 4]) {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: method `interpolate` is never used
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/solver.rs:127:12
+    |
+119 | impl Frame {
+    | ---------- method in this implementation
+...
+127 |     pub fn interpolate(self, to: Self, alpha: f64) -> Self {
+    |            ^^^^^^^^^^^
+
+warning: variant `NonlinearSolveFailed` is never constructed
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/solver.rs:155:5
+    |
+145 | pub enum TissueError {
+    |          ----------- variant in this enum
+...
+155 |     NonlinearSolveFailed { force_norm_n: f64, correction_m: f64 },
+    |     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `TissueError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `rest`, `damping_edges`, and `damping_degree` are never read
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/solver.rs:170:5
+    |
+169 | pub struct Tissue {
+    |            ------ fields in this struct
+170 |     rest: Vec<DVec3>,
+    |     ^^^^
+...
+176 |     damping_edges: Vec<[usize; 2]>,
+    |     ^^^^^^^^^^^^^
+...
+180 |     damping_degree: f64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `Tissue` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: multiple methods are never used
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/solver.rs:346:12
+    |
+241 | impl Tissue {
+    | ----------- methods in this implementation
+...
+346 |     pub fn velocities(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^
+...
+349 |     pub fn rest_positions(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^^^^^
+...
+352 |     pub fn frame(&self) -> Frame {
+    |            ^^^^^
+...
+358 |     pub fn initialize_motion(&mut self, next_frame: Frame, dt: f64) -> Result<(), TissueError> {
+    |            ^^^^^^^^^^^^^^^^^
+...
+418 |     fn place_fixed_attachments(&self, positions: &mut [DVec3], frame: Frame) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+426 |     fn damp_strain(&self, positions: &[DVec3], velocities: &mut [DVec3], dt: f64) {
+    |        ^^^^^^^^^^^
+...
+444 |     pub fn step(&mut self, dt: f64, frame: Frame, gravity: DVec3) -> Result<(), TissueError> {
+    |            ^^^^
+...
+451 |     pub fn step_with_contacts(
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: function `nonlinear_limits` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/implicit.rs:24:4
+   |
+24 | fn nonlinear_limits(dt: f64, integration: TimeIntegration) -> (f64, f64) {
+   |    ^^^^^^^^^^^^^^^^
+
+warning: method `solve_implicit` is never used
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/implicit.rs:405:19
+    |
+205 | impl Tissue {
+    | ----------- method in this implementation
+...
+405 |     pub(super) fn solve_implicit(
+    |                   ^^^^^^^^^^^^^^
+
+warning: fields `positions`, `velocities`, and `dt` are never read
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/timestep.rs:16:9
+   |
+15 | pub(super) struct History {
+   |                   ------- fields in this struct
+16 |     pub positions: Vec<DVec3>,
+   |         ^^^^^^^^^
+17 |     pub velocities: Vec<DVec3>,
+   |         ^^^^^^^^^^
+18 |     pub dt: f64,
+   |         ^^
+   |
+   = note: `History` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: method `energy` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/timestep.rs:28:12
+   |
+27 | impl EdgeDamping {
+   | ---------------- method in this implementation
+28 |     pub fn energy(&self, x: &[DVec3]) -> f64 {
+   |            ^^^^^^
+
+warning: struct `IntegrationStep` is never constructed
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/timestep.rs:34:19
+   |
+34 | pub(super) struct IntegrationStep {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: method `energy` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/timestep.rs:49:12
+   |
+48 | impl Dissipation {
+   | ---------------- method in this implementation
+49 |     pub fn energy(&self, x: &[DVec3], tets: &[Tet], patches: &[pressure::Patch]) -> f64 {
+   |            ^^^^^^
+
+warning: associated function `new` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/timestep.rs:62:12
+   |
+61 | impl IntegrationStep {
+   | -------------------- associated function in this implementation
+62 |     pub fn new(tissue: &Tissue, interval: f64, gravity: DVec3) -> Self {
+   |            ^^^
+
+warning: function `isochoric_green` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/viscosity.rs:26:15
+   |
+26 | pub(super) fn isochoric_green(f: DMat3) -> DMat3 {
+   |               ^^^^^^^^^^^^^^^
+
+warning: method `energy` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-pressure-d7vl7ksf/soft_tissue/viscosity.rs:47:12
+   |
+46 | impl Element {
+   | ------------ method in this implementation
+47 |     pub fn energy(&self, tet: &Tet, x: &[DVec3]) -> f64 {
+   |            ^^^^^^
+
+warning: 20 warnings emitted
+

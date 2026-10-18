@@ -106,6 +106,10 @@ rejected candidates and shared-host timing limitations.
 
 Remaining work is smooth live playback, reduced local distortion and rendered
 active-contact validation before enabling the replacement by default.
+The [uniform pressure-share experiment](../../artifacts/soft-tissue/pressure-stabilization/README.md)
+was rejected: it reduced expansion but left excessive compression in thin
+right-side elements, then suppressed movement before meeting the distortion
+limits. Its optional parameter was removed; the reviewed material is unchanged.
 
 ## Implementation and history
 
