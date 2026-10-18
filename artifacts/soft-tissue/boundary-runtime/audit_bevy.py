@@ -1,23 +1,32 @@
 """Compare all captured nodes against the reviewed video and report live timing."""
 from pathlib import Path
+import argparse
 import json
 import sys
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-label = sys.argv[1] if len(sys.argv) == 2 else 'cache'
-assert len(sys.argv) <= 2 and label.replace('-', '').isalnum()
-OUT = HERE if label == 'cache' else HERE / ('bevy-' + label)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('label', nargs='?', default='cache')
+parser.add_argument('--baseline', default='lab-boundary-nodal-front-01')
+parser.add_argument('--current')
+parser.add_argument('--live-before', default='lab-boundary-live120-01')
+parser.add_argument('--live-current')
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+label = args.label
+assert label.replace('-', '').isalnum()
+OUT = args.output if args.output else (HERE if label == 'cache' else HERE / ('bevy-' + label))
 ARTIFACTS = HERE.parent
 sys.path.insert(0, str(ARTIFACTS/'solver-runtime'))
 from startup_cadence_audit import inspect as fixed
 from live_clock_audit import inspect as live
 
 packets = (ARTIFACTS/'lab-jump-01/packets.ndjson').read_bytes()
-baseline, old = fixed('lab-boundary-nodal-front-01', packets)
-current, new = fixed('lab-boundary-'+label+'240-01', packets)
-before_live = live('lab-boundary-live120-01', packets)[0]
-after_live = live('lab-boundary-'+label+'-live120-01', packets)[0]
+baseline, old = fixed(args.baseline, packets)
+current, new = fixed(args.current or 'lab-boundary-'+label+'240-01', packets)
+before_live = live(args.live_before, packets)[0]
+after_live = live(args.live_current or 'lab-boundary-'+label+'-live120-01', packets)[0]
 assert old.keys() == new.keys()
 nodes, anchors, rotations, surface = [], [], [], []
 for time in old:

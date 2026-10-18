@@ -117,6 +117,13 @@ The new material candidate delivers 158 readbacks in its tracing-disabled live
 run, with a 132 ms p95 gap and 228 ms end drift. It is a volume-behavior
 improvement, not a demonstrated throughput improvement.
 
+The subsequent preconditioner refresh retains that candidate's deformation to
+roundoff across all 478 frames. Refreshing once after two nonlinear updates
+reduces measured CPU solve time by 6–7%. Live playback improves from 165 to
+195 / 196 readbacks, with p95 gaps of 73 ms versus 125 ms and end drift of
+51–56 ms versus 137 ms. This remains uneven playback on a shared host; see the
+latest section of the runtime record for conditions and full evidence.
+
 Remaining work is smooth live playback, reduced local distortion and rendered
 active-contact validation before enabling the replacement by default.
 The [uniform pressure-share experiment](../../artifacts/soft-tissue/pressure-stabilization/README.md)

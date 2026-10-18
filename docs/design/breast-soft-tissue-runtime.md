@@ -276,3 +276,55 @@ safety, which is checked through the build, tests and full-frame comparison.
 `codegen-one-comparison.json`, the build/test logs, and `bevy-codegen-one*/`
 preserve the evidence. The concise design entrypoint now records current
 settings; its earlier contents remain in `breast-soft-tissue-viscosity-checkpoint.md`.
+
+## One refresh after the initial nonlinear updates
+
+After `26c57bd`, profiling the quality-stabilized candidate at 120 Hz measured
+7.406 seconds of serial CPU solve time. Linear-system directions accounted for
+2.675 seconds, including 104,588 CG iterations across 10,373 linearizations.
+The initial preconditioner remains valid but becomes less effective as the
+first nonlinear updates change the tangent.
+
+The solver now refreshes that preconditioner once, after two accepted nonlinear
+updates. It still assembles the current physical matrix every iteration and
+checks the true linear residual. The existing fresh-factor fallback remains.
+No material, tolerance, timestep, iteration cap or body motion changes.
+
+Bounded experiments refreshed after one, two or three updates. All retained the
+same 220 subdivisions and 10,373 linearizations. Two updates gave the fewest CG
+iterations, 46,988, and measured 6.885 seconds versus 7.406 before. The repeat
+measured 6.952 versus 7.423 seconds: a 6–7% CPU reduction on this shared host.
+Maximum node difference is 1.02e-13 m. The integrated production replay produces
+byte-identical positions to the selected experiment. CPU replay omits body
+contact and fractional display solves; it is not a playback benchmark.
+
+The rebuilt Bevy lab completed all 478 fixed-clock frames. Attachments and the
+surface displacement envelope are identical to the quality-stabilized capture;
+maximum node difference is 6.80e-15 m. The 7.633-second rendered geometry snapshot
+has identical before/after skin positions. No new image video was generated;
+the localized-volume comparison remains the visual artifact.
+
+| Live 120 Hz measurement | Before | After | After repeat |
+| --- | ---: | ---: | ---: |
+| Readbacks over 7.934 source seconds | 165 | 195 | 196 |
+| Wall seconds after first frame | 8.071 | 7.990 | 7.985 |
+| p95 delivery gap, ms | 124.74 | 72.82 | 73.26 |
+| End clock drift, ms | 136.91 | 56.11 | 50.97 |
+
+The first after-run overlapped the CPU replay/compiler. The repeat did not
+overlap those task workloads; other host load is uncontrolled. The two after
+runs are consistent, but neither proves smooth 30 FPS or browser presentation.
+The jump still contains zero active contacts.
+
+All 84 tissue tests pass. Python remains at 15 passes and the same existing
+ownership source-slice failure; protected assertions are unchanged. The contract
+check finds no solver signature change. Structural review flags script-variable
+churn, ambient solver churn and six lines added to the existing solve method.
+Those findings remain recorded, not suppressed or described as a clean gate.
+
+`artifacts/soft-tissue/factor-refresh/` preserves the plan, comparisons, launch
+inputs, builds, tests and archived Bevy traces. The adjacent
+`boundary-runtime/quality-profile120-before-*`, `quality-refresh[123]-*` and
+`quality-refresh-production-01` directories preserve every CPU candidate's
+instrumented source, counters, hashes and positions. Necessary work remains in
+the isolated worktree rather than `/tmp`.

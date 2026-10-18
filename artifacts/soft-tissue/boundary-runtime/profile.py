@@ -13,24 +13,34 @@ ROOT = HERE.parents[2]
 label = sys.argv[1]
 assert label.replace('-', '').isalnum()
 flags = sys.argv[2:]
+assets = [flag for flag in flags if flag.startswith('--asset=')]
+assert len(assets) <= 1
+asset = ROOT / (assets[0].split('=', 1)[1] if assets else
+                'assets/tissue/beautiful_assistant.base-boundary-nodal-volume-prototype.json')
+assert asset.is_file() and asset.resolve().is_relative_to(ROOT)
+flags = [flag for flag in flags if not flag.startswith('--asset=')]
 rates = [flag for flag in flags if flag.startswith('--rate=')]
 assert len(rates) <= 1
 rate = int(rates[0].split('=', 1)[1]) if rates else 240
 assert rate in (120, 240, 480)
 flags = [flag for flag in flags if not flag.startswith('--rate=')]
+refreshes = [flag for flag in flags if flag.startswith('--refresh-factor=')]
+assert len(refreshes) <= 1
+refresh = int(refreshes[0].split('=', 1)[1]) if refreshes else None
+assert refresh is None or refresh in (1, 2, 3)
+flags = [flag for flag in flags if not flag.startswith('--refresh-factor=')]
 assert len(flags) == len(set(flags)) and set(flags) <= {'--reuse-factor', '--transport-start', '--energy-start'}
 assert not {'--transport-start', '--energy-start'} <= set(flags)
 out = HERE / label
 out.mkdir(exist_ok=False)
 source = ROOT / 'src/cc_render/soft_tissue'
-asset = ROOT / 'assets/tissue/beautiful_assistant.base-boundary-nodal-volume-prototype.json'
 trace = ROOT / 'artifacts/soft-tissue/lab-boundary-nodal-front-01/tissue.ndjson'
 replay = HERE.parent / 'solver-runtime/replay.rs'
 inputs = [asset, trace, replay, Path(__file__).resolve(), *sorted(source.glob('*.rs'))]
 (out/'inputs.json').write_text(json.dumps({
     'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
     'rate_hz': rate,
-    'experiments': flags,
+    'experiments': flags + refreshes,
     'files': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs},
 }, indent=2)+'\n')
 
@@ -68,6 +78,12 @@ pub fn profile() {
 ''')
     cached_kernel = 'fn direction_preconditioned(' in code
     assert not (cached_kernel and '--reuse-factor' in flags), 'The production kernel already reuses factors'
+    if refresh is not None:
+        assert cached_kernel
+        assert 'if iteration == 2 {' not in code, 'Refresh experiments require the archived pre-refresh kernel'
+        code = replace(code, '        for iteration in 0..=self.material.iterations {',
+            '        for iteration in 0..=self.material.iterations {\n'
+            f'            if iteration == {refresh} {{ factor = None; }}')
     direction_entry = ('cache: &mut Option<super::preconditioner::Factor<\'a>>,\n'
                        '    ) -> Result<Vec<DVec3>, TissueError> {'
                        if cached_kernel else

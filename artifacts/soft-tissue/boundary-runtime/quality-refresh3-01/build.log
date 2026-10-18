@@ -1,0 +1,76 @@
+warning: unused imports: `RegionAsset`, `SurfaceBinding`, and `VertexBinding`
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/mod.rs:13:17
+   |
+13 | pub use asset::{RegionAsset, SurfaceBinding, TissueAsset, VertexBinding};
+   |                 ^^^^^^^^^^^  ^^^^^^^^^^^^^^               ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `EmbeddedPoint`
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/mod.rs:14:35
+   |
+14 | pub use contact::{ContactMetrics, EmbeddedPoint, PlaneContact};
+   |                                   ^^^^^^^^^^^^^
+
+warning: unused imports: `TimeIntegration`, `TissueMetrics`, and `Viscosity`
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/mod.rs:16:68
+   |
+16 | pub use solver::{Attachment, Frame, Material, Tissue, TissueError, TissueMetrics, TimeIntegration, Viscosity};
+   |                                                                    ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^
+
+warning: method `volume_constraint` is never used
+  --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/material.rs:81:8
+   |
+57 | impl Tet {
+   | -------- method in this implementation
+...
+81 |     fn volume_constraint(&self, positions: &[DVec3]) -> (f64, [DVec3; 4]) {
+   |        ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `rest` is never read
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/solver.rs:182:5
+    |
+181 | pub struct Tissue {
+    |            ------ field in this struct
+182 |     rest: Vec<DVec3>,
+    |     ^^^^
+    |
+    = note: `Tissue` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: methods `velocities`, `rest_positions`, and `frame` are never used
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/solver.rs:353:12
+    |
+253 | impl Tissue {
+    | ----------- methods in this implementation
+...
+353 |     pub fn velocities(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^
+...
+356 |     pub fn rest_positions(&self) -> &[DVec3] {
+    |            ^^^^^^^^^^^^^^
+...
+359 |     pub fn frame(&self) -> Frame {
+    |            ^^^^^
+
+warning: method `direction` is never used
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/implicit.rs:112:8
+    |
+ 69 | impl<'a> System<'a> {
+    | ------------------- method in this implementation
+...
+112 |     fn direction(&self) -> Result<Vec<DVec3>, TissueError> {
+    |        ^^^^^^^^^
+
+warning: method `equilibrate` is never used
+   --> /home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/tissue-profile-jim9r5mj/soft_tissue/implicit.rs:234:12
+    |
+231 | impl Tissue {
+    | ----------- method in this implementation
+...
+234 |     pub fn equilibrate(
+    |            ^^^^^^^^^^^
+
+warning: 8 warnings emitted
+

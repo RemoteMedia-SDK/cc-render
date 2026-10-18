@@ -1,0 +1,20 @@
+{
+  "base_commit": "26c57bd14",
+  "evidence": "../boundary-runtime/quality-profile120-before-01/counters.json",
+  "hypothesis": "One refresh after the initial nonlinear descent may pay for itself by reducing later PCG iterations.",
+  "candidates": [
+    1,
+    2,
+    3
+  ],
+  "baseline": "cached factor retained throughout the physical step",
+  "workload": "unchanged quality-stabilized asset and recorded chest-frame jump, 120 Hz; no contact or fractional display in CPU replay",
+  "screens": {
+    "maximum_node_difference_m": 1e-06,
+    "unchanged_subdivision_count": true,
+    "all_solver_tests_pass": true,
+    "repeat_cpu_improvement": true,
+    "fixed_bevy_full_frame_comparison_required": true
+  },
+  "limits": "No material, motion, tolerance, timestep, or iteration-cap change. CPU replay does not prove smooth playback."
+}

@@ -12,8 +12,13 @@ ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--timing-only', action='store_true')
+parser.add_argument('--label', default='quality')
+parser.add_argument('--output', type=Path)
+parser.add_argument('--trace-only', action='store_true', help='Omit fixed-clock PNGs; retain all node traces.')
 args = parser.parse_args()
-OUT = HERE/('bevy-timing-01' if args.timing_only else 'bevy-01')
+assert args.label.replace('-', '').isalnum()
+OUT = args.output.resolve() if args.output else HERE/('bevy-timing-01' if args.timing_only else 'bevy-01')
+assert OUT.is_relative_to(HERE.parent)
 OUT.mkdir(exist_ok=False)
 os.chdir(ROOT)
 baseline = json.loads((HERE.parent/'volume-audit/launch-boundary-01.json').read_text())
@@ -26,8 +31,8 @@ with tarfile.open(OUT/'source.tar.gz', 'x:gz') as archive:
     for path in sources:
         archive.add(path, arcname=path)
 runs = []
-cases = [('quality-live120-timing', 120, 30, 'live')] if args.timing_only else [
-    ('quality-front', 240, 60, 'fixed'), ('quality-live120', 120, 30, 'live')]
+cases = [(args.label+'-live120-timing', 120, 30, 'live')] if args.timing_only else [
+    (args.label+'-front', 240, 60, 'fixed'), (args.label+'-live120', 120, 30, 'live')]
 for name, rate, fps, clock in cases:
     command = baseline['argv'].copy()
     command[4] = str(asset)
@@ -37,8 +42,9 @@ for name, rate, fps, clock in cases:
     for key in ['CC_AVATAR_TISSUE_SNAPSHOT', 'CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS']:
         environment.pop(key, None)
     environment.update(CC_AVATAR_TISSUE_HZ=str(rate), CC_TISSUE_LAB_FPS=str(fps),
-                       CC_TISSUE_LAB_CLOCK=clock, CC_TISSUE_LAB_TRACE_ONLY='0' if clock=='fixed' else '1',
-                       CC_AVATAR_TISSUE_TRACE_NODES='0' if args.timing_only else '1')
+                       CC_TISSUE_LAB_CLOCK=clock,
+                       CC_TISSUE_LAB_TRACE_ONLY='0' if clock=='fixed' and not args.trace_only else '1',
+                       CC_AVATAR_TISSUE_TRACE_NODES='0' if args.timing_only or (args.trace_only and clock=='live') else '1')
     if clock == 'fixed':
         environment.update(CC_AVATAR_TISSUE_SNAPSHOT=str(OUT/'geometry.json'),
                            CC_AVATAR_TISSUE_SNAPSHOT_PTS_MS='7633')

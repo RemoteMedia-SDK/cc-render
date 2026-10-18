@@ -430,6 +430,12 @@ impl Tissue {
         // its true residual; neither the force law nor tolerances change.
         let mut factor = None;
         for iteration in 0..=self.material.iterations {
+            // The first two descents can substantially change the tangent.
+            // Refresh once there, then reuse the closer factor for convergence.
+            // Only preconditioning changes; every solve checks its true residual.
+            if iteration == 2 {
+                factor = None;
+            }
             let system = self.linearize(x, predicted, frame, dt, contacts, damping);
             let force_squared = dot(&system.gradient, &system.gradient);
             if force_squared == 0.0 {
