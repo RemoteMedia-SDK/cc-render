@@ -178,6 +178,11 @@ pub(super) struct ContactStamps<'a> {
     /// Elements whose vertices are all stamped below this are clean.
     pub threshold: u64,
     pub clock: &'a mut u64,
+    /// Layer-local supporting planes (outward normal, collider friction) a
+    /// swept face or particle response clamped each vertex to in this
+    /// substep. They act as supports for the rest of the substep's contact
+    /// solve (`SweptSupports`).
+    pub planes: &'a mut [Option<(DVec3, f64)>],
 }
 
 impl ContactStamps<'_> {
@@ -245,6 +250,7 @@ pub(super) fn collide_surface(
     radius: f64,
 ) -> Result<(), ClothError> {
     let mut stamps = vec![0; particles.positions.len()];
+    let mut planes = vec![None; particles.positions.len()];
     let mut clock = 0;
     collide_surface_tracked(
         particles,
@@ -255,6 +261,7 @@ pub(super) fn collide_surface(
             stamps: &mut stamps,
             threshold: 0,
             clock: &mut clock,
+            planes: &mut planes,
         },
     )
 }

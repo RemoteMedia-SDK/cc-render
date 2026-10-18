@@ -27,6 +27,7 @@ fn fixed_contacts(
     stamps: &mut [u64],
     clock: &mut u64,
     threshold: u64,
+    planes: &mut [Option<(DVec3, f64)>],
 ) -> Result<(), ClothError> {
     for layer in layers {
         let r = layer.range.clone();
@@ -42,9 +43,10 @@ fn fixed_contacts(
             layer.fixed,
             layer.radius,
             &mut collision::ContactStamps {
-                stamps: &mut stamps[r],
+                stamps: &mut stamps[r.clone()],
                 threshold,
                 clock,
+                planes: &mut planes[r],
             },
         )?;
     }
@@ -69,6 +71,9 @@ pub(super) struct SelfCollisionTopology {
     pair_resolved: Vec<u64>,
     /// Clock at the start of the latest fixed-contact pass.
     fixed_pass_start: u64,
+    /// Supporting planes swept fixed contacts clamped vertices to in this
+    /// substep (outward normal, collider friction); see `swept_support`.
+    swept_planes: Vec<Option<(DVec3, f64)>>,
     /// Fixed-support rows per global face, with the pass-start clock of the
     /// snapshot they were computed from. Rows depend only on the face's
     /// snapshot vertices, so they stay exact while none of those changed.
@@ -107,6 +112,7 @@ impl SelfCollisionTopology {
             pair_clean: Vec::new(),
             pair_resolved: Vec::new(),
             fixed_pass_start: 0,
+            swept_planes: Vec::new(),
             face_rows: vec![None; triangles.len()],
             anchors: Vec::new(),
             slack: Vec::new(),
@@ -279,6 +285,7 @@ impl SelfCollisionTopology {
             &mut self.stamps,
             &mut self.clock,
             threshold,
+            &mut self.swept_planes,
         )?;
         for i in 0..particles.positions.len() {
             if self.stamps[i] >= start {
@@ -302,6 +309,8 @@ impl SelfCollisionTopology {
         self.stamps = vec![self.clock; particles.positions.len()];
         self.pair_clean.fill(0);
         self.pair_resolved.fill(0);
+        self.swept_planes.clear();
+        self.swept_planes.resize(particles.positions.len(), None);
         // The first pass of a substep processes everything.
         self.fixed_pass_start = 0;
         profiled!(
@@ -393,6 +402,7 @@ impl SelfCollisionTopology {
             anchors,
             slack,
             reach,
+            swept_planes,
             ..
         } = self;
         for (k, (pair, axis)) in pairs.iter().zip(axes.iter_mut()).enumerate() {
@@ -409,19 +419,35 @@ impl SelfCollisionTopology {
                 .friction
                 .between(layer_for(layers, ids[pair.split()]).friction);
             pair_resolved[k] = 0;
-            let moved =
+            let mut project = |particles: &mut GripParticles<'_>, swept: bool| {
                 pair.project_with_support(particles, gap + reserve, axis, friction, |ids, p, d| {
                     let d = std::array::from_fn(|k| {
                         let layer = layer_for(layers, ids[k]);
-                        pair::fixed_support_direction(
+                        let d = pair::fixed_support_direction(
                             near.colliders(layers, ids[k], p[k]),
                             layer.radius,
                             p[k],
                             d[k],
-                        )
+                        );
+                        if swept {
+                            swept_support(swept_planes[ids[k]], d)
+                        } else {
+                            d
+                        }
                     });
                     supports.project(ids, inverse_mass, d)
-                })?;
+                })
+            };
+            // A swept clamp plane is a conservative stand-in for the curved
+            // surface, not the surface. Where honouring it leaves the pair no
+            // movable response (both sides held against clamp planes, e.g. a
+            // fitted sheet folded on itself at the rounded corner), the pair
+            // uses the true-surface supports alone, as before. The projection
+            // reports that case before it moves anything.
+            let moved = match project(particles, true) {
+                Err(ClothError::SelfContactUnresolved) => project(particles, false)?,
+                result => result?,
+            };
             if moved {
                 for i in ids {
                     reach[i] = reach[i].max(anchors[i].distance(particles.positions[i]));
@@ -470,6 +496,29 @@ impl SelfCollisionTopology {
             self.pair_resolved[k] = self.clock + 1;
         }
         Ok(true)
+    }
+}
+
+/// A vertex a swept fixed contact clamped to a supporting plane this substep
+/// is supported by that plane for the rest of the substep's contact solve,
+/// exactly like a resting fixed contact: a cloth pair may not push it back
+/// through the plane, only off it, and its Coulomb cone limits the slide.
+///
+/// Without this the pair treats the vertex as free. On the mattress's rounded
+/// corner a fast fitted-sheet face is clamped to the witness's tangent plane,
+/// which lies up to 30 mm off the curved surface across the face, so a vertex
+/// 1.2 mm clear of the mattress sat on that plane. Each self-contact pass
+/// pushed it 6 um back under the plane (the top sheet above was pressed onto
+/// it), each swept pass restored it, and the coupled solve cycled for 512
+/// passes until it reported `SelfContactUnresolved`. Treated as supported,
+/// the pair moves the layer above instead and the stack converges.
+fn swept_support(plane: Option<(DVec3, f64)>, direction: DVec3) -> DVec3 {
+    match plane {
+        Some((normal, friction)) if direction != DVec3::ZERO => {
+            let supported = direction - normal * direction.dot(normal).min(0.);
+            pair::friction_cone(direction, supported, friction)
+        }
+        _ => direction,
     }
 }
 
@@ -755,6 +804,21 @@ fn bounds(ids: &[usize], particles: &GripParticles<'_>, radius: f64) -> Aabb {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_swept_clamp_plane_supports_a_vertex_like_a_resting_contact() {
+        let plane = Some((DVec3::Y, 0.5));
+        // Pushed back through the plane: the normal part is removed and the
+        // Coulomb cone limits what is left (0.5 x 2 of reaction = 1 of slide).
+        let into = swept_support(plane, DVec3::new(3., -2., 0.));
+        assert!(into.y.abs() < 1e-12, "{into:?}");
+        assert!((into.x - 2.).abs() < 1e-12, "{into:?}");
+        // Off the plane, and for an unclamped vertex, the response is free.
+        assert_eq!(swept_support(plane, DVec3::new(1., 2., 0.)), DVec3::new(1., 2., 0.));
+        assert_eq!(swept_support(None, DVec3::new(1., -2., 0.)), DVec3::new(1., -2., 0.));
+        // Within the cone a clamped vertex does not slide at all.
+        assert_eq!(swept_support(plane, DVec3::new(0.5, -2., 0.)), DVec3::ZERO);
+    }
 
     #[test]
     fn coupled_supports_do_not_reverse_the_applied_load() {
