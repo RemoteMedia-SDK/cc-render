@@ -1,0 +1,10 @@
+{
+  "purpose": "Choose a lower-energy valid initial guess without bypassing the current invalid-predictor retry rule.",
+  "criteria": [
+    "Retain all current test assertions and numerical acceptance limits.",
+    "Maximum same-time node change below 0.1 mm at 120 Hz and in the 240 Hz rendered capture.",
+    "No changed material, source motion, integrator, or retry guard.",
+    "Record any change in subdivisions, trajectory error against the 480 Hz reference, and end-to-end timing."
+  ],
+  "baseline_commit": "e193d91"
+}

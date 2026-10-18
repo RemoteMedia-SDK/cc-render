@@ -1,0 +1,268 @@
+   Compiling cc-render-plugin v0.1.0 (/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue)
+warning: value assigned to `own_rest_local` is never read
+   --> src/cc_render/bevy_app/pose.rs:637:9
+    |
+637 |         own_rest_local[1] = lhip_own;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/cc_render/bevy_app/pose.rs:2429:9
+     |
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+     |         ----^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: taking a mutable reference to a `const` item
+   --> src/cc_render/cloth_pair_tests.rs:240:13
+    |
+240 |             &mut DVec3::ZERO,
+    |             ^^^^^^^^^^^^^^^^
+    |
+    = note: each usage of a `const` item creates a new temporary
+    = note: the mutable reference will refer to this temporary, not the original `const` item
+note: `const` item defined here
+   --> /home/acidhax/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glam-0.29.3/src/f64/dvec3.rs:28:5
+    |
+ 28 |     pub const ZERO: Self = Self::splat(0.0);
+    |     ^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(const_item_mutation)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/cc_render/cloth_self_collision.rs:488:13
+    |
+488 |         let mut particles = GripParticles {
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `o`
+    --> src/cc_render/office/controller.rs:1478:33
+     |
+1478 | ...                   let o = object.unwrap();
+     |                           ^ help: if this is intentional, prefix it with an underscore: `_o`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `tissue::TissueRequest` is more private than the item `secondary::auto_detect_chains`
+   --> src/cc_render/bevy_app/physics/secondary.rs:125:1
+    |
+125 | / pub(crate) fn auto_detect_chains(
+126 | |     mut commands: Commands,
+127 | |     bones: Query<
+128 | |         (Entity, &Name, &Transform, Option<&Parent>),
+...   |
+139 | |     tissue: Option<Res<crate::cc_render::bevy_app::tissue::TissueRequest>>,
+140 | | ) {
+    | |_^ function `secondary::auto_detect_chains` is reachable at visibility `pub(in crate::cc_render)`
+    |
+note: but type `tissue::TissueRequest` is only usable at visibility `pub(in crate::cc_render::bevy_app)`
+   --> src/cc_render/bevy_app/tissue.rs:35:1
+    |
+ 35 | pub(super) struct TissueRequest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: associated items `neutral` and `to_json` are never used
+   --> src/arkit.rs:110:12
+    |
+ 99 | impl BlendshapeFrame {
+    | -------------------- associated items in this implementation
+...
+110 |     pub fn neutral(pts_ms: u64) -> Self {
+    |            ^^^^^^^
+...
+115 |     pub fn to_json(&self) -> Value {
+    |            ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `frame_interval_ms` is never read
+   --> src/cc_render/bevy_app/capture.rs:126:9
+    |
+124 | pub(crate) struct MonotonicCaptureClock {
+    |                   --------------------- field in this struct
+125 |     pub frame_count: u64,
+126 |     pub frame_interval_ms: u64,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: struct `LatestPose` is never constructed
+   --> src/cc_render/bevy_app/pose.rs:923:19
+    |
+923 | pub(crate) struct LatestPose {
+    |                   ^^^^^^^^^^
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:36:9
+   |
+22 |     Capsule {
+   |     ------- field in this variant
+...
+36 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `elasticity` is never read
+  --> src/cc_render/bevy_app/physics/cc5_json.rs:50:9
+   |
+38 |     Box {
+   |     --- field in this variant
+...
+50 |         elasticity: f32,
+   |         ^^^^^^^^^^
+   |
+   = note: `Cc5Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `palm_override` is never read
+  --> src/cc_render/bevy_app/physics/grab.rs:23:9
+   |
+20 |     Pursuing {
+   |     -------- field in this variant
+...
+23 |         palm_override: Option<[f32; 3]>,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `GrabState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `ceiling_y` is never read
+  --> src/cc_render/bevy_app/physics/sidecar.rs:81:9
+   |
+79 | pub struct PlayVolumeRaw {
+   |            ------------- field in this struct
+80 |     pub half_extents_xz: f32,
+81 |     pub ceiling_y: f32,
+   |         ^^^^^^^^^
+   |
+   = note: `PlayVolumeRaw` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `id` is never read
+   --> src/cc_render/office/controller.rs:165:9
+    |
+164 | pub(crate) struct PushForceIntent {
+    |                   --------------- field in this struct
+165 |     pub id: String,
+    |         ^^
+    |
+    = note: `PushForceIntent` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: function `apply_furniture_push` is never used
+   --> src/cc_render/office/systems.rs:190:4
+    |
+190 | fn apply_furniture_push(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `damp_seated_idle` is never used
+  --> src/cc_render/office/contact.rs:25:15
+   |
+25 | pub(crate) fn damp_seated_idle(
+   |               ^^^^^^^^^^^^^^^^
+
+warning: variant `Occupy` is never constructed
+ --> src/cc_render/office/scene_lifecycle.rs:8:33
+  |
+8 | pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
+  |                 -----           ^^^^^^
+  |                 |
+  |                 variant in this enum
+  |
+  = note: `Phase` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: method `awaiting_revision` is never used
+  --> src/cc_render/office/scene_lifecycle.rs:79:19
+   |
+36 | impl SceneLifecycle {
+   | ------------------- method in this implementation
+...
+79 |     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: `cc-render-plugin` (lib test) generated 18 warnings (run `cargo fix --lib -p cc-render-plugin --tests` to apply 3 suggestions)
+    Finished `test` profile [optimized + debuginfo] target(s) in 2m 09s
+     Running unittests src/lib.rs (target/debug/deps/cc_render_plugin-8e2826f95e286ce8)
+
+running 76 tests
+test cc_render::bevy_app::tissue::tests::tissue_contact_rejects_unsampled_geometry_morphs_but_allows_unrelated_expression ... ok
+test cc_render::bevy_app::tissue::tests::tissue_contact_samples_the_existing_forearm_twist_conversion_without_bone_writes ... ok
+test cc_render::bevy_app::tissue::tests::tissue_region_failure_does_not_commit_successful_sibling ... ok
+test cc_render::bevy_app::tissue::tests::tissue_subdivision_resolves_fast_attachment_motion_and_rolls_back_failure ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_sweep_detects_crossing_with_clear_endpoints_and_is_frame_covariant ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_moving_skinned_triangle_compresses_embedded_tissue_with_bounded_overlap ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_sweep_separates_parallel_motion_and_rejects_ambiguous_initial_intersection ... ok
+test cc_render::bevy_app::tissue::tests::late_second_source_knot_does_not_change_initial_tissue_velocity ... ok
+test cc_render::bevy_app::tissue_morph::tests::malformed_morph_images_and_weights_fail_without_mutating_the_base ... ok
+test cc_render::bevy_app::tissue_morph::tests::morph_history_brackets_substeps_and_retains_the_uncommitted_remainder ... ok
+test cc_render::bevy_app::tissue_morph::tests::official_bevy_target_image_decodes_positions_in_layer_order ... ok
+test cc_render::bevy_app::tissue_collision::tests::tissue_local_swept_tree_matches_exhaustive_queries_after_motion_and_rewinds ... ok
+test cc_render::bevy_app::tissue_motion::cache_tests::tissue_pose_cache_does_not_hide_failed_or_nonfinite_samples ... ok
+test cc_render::bevy_app::tissue::tests::tissue_starts_at_first_observed_pose_then_preserves_render_rate_independence ... ok
+test cc_render::bevy_app::tissue_motion::cache_tests::tissue_pose_cache_uses_exact_times_and_does_not_outlive_its_window ... ok
+test cc_render::bevy_app::tissue::tests::tissue_subdivision_recovers_from_nonlinear_nonconvergence ... ok
+test cc_render::bevy_app::tissue_surface::tests::tissue_surface_matches_world_displacement_and_preserves_zero_deformation ... ok
+test cc_render::office::timeline::tissue_tests::tissue_window_preserves_pause_and_revision_boundaries_without_extrapolation ... ok
+test cc_render::office::timeline::tissue_tests::tissue_window_retains_source_corners_skipped_by_rendering ... ok
+test cc_render::office::timeline::tissue_tests::tissue_window_rolls_back_rejected_source_knots ... ok
+test cc_render::soft_tissue::isochoric::tests::deviatoric_energy_ignores_uniform_dilation_but_resists_distorted_collapse ... ok
+test cc_render::bevy_app::tissue::tests::tissue_playback_is_render_rate_independent_and_pauses_without_skeleton_writes ... ok
+test cc_render::bevy_app::tissue::tests::tissue_bdf2_history_is_render_rate_independent_and_pauses_without_skeleton_writes ... ok
+test cc_render::soft_tissue::solver::contact_tests::invalid_contacts_leave_state_and_attachment_frame_unchanged ... ok
+test cc_render::soft_tissue::solver::implicit::pressure_tests::fixed_edge_pressure_partition_preserves_homogeneous_material_energy ... ok
+test cc_render::bevy_app::tissue::tests::tissue_continuum_viscosity_is_render_rate_independent_and_pauses_without_skeleton_writes ... ok
+test cc_render::soft_tissue::solver::implicit::pressure_tests::nodal_pressure_couplings_match_independent_directional_derivatives ... ok
+test cc_render::soft_tissue::solver::implicit::pressure_tests::nodal_pressure_preserves_affine_energy_and_relaxes_nonuniform_volume ... ok
+test cc_render::soft_tissue::solver::implicit::tests::coupled_length_rate_damping_has_the_energy_gradient_and_psd_tangent ... ok
+test cc_render::soft_tissue::solver::implicit::tests::embedded_contact_gradient_and_hessian_match_finite_differences ... ok
+test cc_render::soft_tissue::solver::implicit::pressure_tests::nodal_pressure_full_objective_gradient_includes_viscosity_and_fixed_elimination ... ok
+test cc_render::soft_tissue::solver::implicit::tests::linear_solve_rejects_indefinite_system_instead_of_returning_a_capped_direction ... ok
+test cc_render::soft_tissue::solver::implicit::tests::objective_gradient_and_sparse_system_are_consistent ... ok
+test cc_render::soft_tissue::solver::contact_tests::contact_respects_rigid_coordinate_changes_and_embedded_skin_share ... ok
+test cc_render::soft_tissue::solver::integration_tests::exhausted_nonlinear_budget_rejects_without_committing_state_or_history ... ok
+test cc_render::soft_tissue::solver::contact_tests::splitting_contact_quadrature_preserves_response_and_force ... ok
+test cc_render::soft_tissue::solver::integration_tests::isolated_edge_damping_matches_exponential_decay_and_preserves_momentum ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::complete_fill_solves_reordered_sparse_blocks_with_a_fixed_node ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::incomplete_factor_is_symmetric_positive_and_rejects_bad_pivots ... ok
+test cc_render::soft_tissue::solver::tests::bulk_and_shear_are_independent_material_responses ... ok
+test cc_render::soft_tissue::solver::implicit::tests::offline_equilibrium_satisfies_force_balance_without_advancing_motion ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::block_factor_solves_dense_system_with_nonsymmetric_couplings_and_fixed_node ... ok
+test cc_render::soft_tissue::solver::integration_tests::rejected_bdf2_steps_preserve_derivative_history_and_growth_restarts_only_the_method ... ok
+test cc_render::soft_tissue::solver::implicit::tests::tissue_descent_returns_energy_of_accepted_backtrack_without_rechecking_current_state ... ok
+test cc_render::soft_tissue::solver::tests::invalid_topology_and_failed_step_are_rejected_without_mutating_state ... ok
+test cc_render::soft_tissue::solver::tests::mass_is_density_times_volume_and_not_sum_of_inverse_tet_masses ... ok
+test cc_render::soft_tissue::solver::tests::material_gradients_match_finite_differences ... ok
+test cc_render::soft_tissue::solver::tests::strain_damping_preserves_rigid_velocity_and_dissipates_deformation ... ok
+test cc_render::soft_tissue::solver::tests::strain_stiffening_is_objective_and_retains_small_strain_softness ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::finite_strain_viscosity_separates_dilation_from_distortion ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::bulk_viscosity_does_not_resist_volume_preserving_shear ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::invalid_or_double_counted_viscosity_is_rejected ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::material_viscosity_has_objective_energy_exact_forces_and_a_psd_strain_tangent ... ok
+test cc_render::soft_tissue::solver::viscosity::tests::volume_rate_history_uses_bdf2_strain_samples_and_restarts_on_large_step_growth ... ok
+test cc_render::soft_tissue::solver::preconditioner::tests::symbolic_fill_limits_preserve_the_incomplete_pattern ... ok
+test cc_render::soft_tissue::solver::contact_tests::separated_contacts_do_not_attract_or_change_unconstrained_dynamics ... ok
+test cc_render::soft_tissue::solver::tests::velocity_warm_start_retains_implicit_euler_gravity_and_rigid_free_fall ... ok
+test cc_render::bevy_app::tissue::tests::tissue_request_excludes_breast_springs_without_changing_other_secondary_bones ... ok
+test cc_render::soft_tissue::solver::tests::coupled_material_preserves_the_unloaded_equilibrium ... ok
+test cc_render::soft_tissue::solver::contact_tests::moving_plane_compresses_volume_and_release_recovers_without_moving_attachments ... ok
+test cc_render::soft_tissue::solver::tests::constant_velocity_does_not_drag_free_or_attached_tissue ... ok
+test cc_render::soft_tissue::solver::contact_tests::bdf2_contact_compression_and_release_preserve_attachments ... ok
+test cc_render::soft_tissue::solver::integration_tests::implicit_euler_matches_closed_form_but_damps_an_undamped_oscillator ... ok
+test cc_render::soft_tissue::solver::contact_tests::continuum_viscous_contact_compression_and_release_preserve_attachments ... ok
+test cc_render::soft_tissue::solver::tests::rigid_coordinate_changes_leave_dynamics_equivalent ... ok
+test cc_render::soft_tissue::solver::implicit::tests::restarted_linear_solve_converges_on_recorded_arm_fold_matrix ... ok
+test cc_render::soft_tissue::solver::contact_tests::boundary_pressure_viscous_compression_and_release_preserve_attachments ... ok
+test cc_render::soft_tissue::solver::tests::gravitational_sag_preserves_volume_and_settles ... ok
+test cc_render::soft_tissue::asset::tests::malformed_embedding_and_assets_fail_closed ... ok
+test cc_render::soft_tissue::asset::tests::real_avatar_asset_is_volumetric_and_bound_to_body_and_outfit ... ok
+test cc_render::soft_tissue::solver::integration_tests::bdf2_oscillator_converges_to_the_continuous_solution_with_variable_steps ... ok
+test cc_render::soft_tissue::asset::tests::garment_transfer_composes_tets_but_rejects_duplicate_or_amplified_influence ... ok
+test cc_render::soft_tissue::solver::integration_tests::continuum_viscosity_converges_to_an_independent_nonlinear_damped_oscillator ... ok
+test cc_render::soft_tissue::asset::tests::fitted_prototype_reproduces_the_authored_loaded_shape ... ok
+test cc_render::bevy_app::tissue::tests::tissue_parallel_regions_match_serial_state_and_report_first_failure ... ok
+test cc_render::soft_tissue::asset::tests::real_cages_settle_under_gravity_without_residual_element_vibration ... ok
+
+test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured; 407 filtered out; finished in 5.18s
+

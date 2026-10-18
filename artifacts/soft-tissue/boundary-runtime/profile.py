@@ -18,7 +18,8 @@ assert len(rates) <= 1
 rate = int(rates[0].split('=', 1)[1]) if rates else 240
 assert rate in (120, 240, 480)
 flags = [flag for flag in flags if not flag.startswith('--rate=')]
-assert flags in ([], ['--reuse-factor'])
+assert len(flags) == len(set(flags)) and set(flags) <= {'--reuse-factor', '--transport-start', '--energy-start'}
+assert not {'--transport-start', '--energy-start'} <= set(flags)
 out = HERE / label
 out.mkdir(exist_ok=False)
 source = ROOT / 'src/cc_render/soft_tissue'
@@ -46,7 +47,8 @@ with tempfile.TemporaryDirectory(prefix='tissue-profile-', dir=ROOT/'target') as
     code = p.read_text()
     code = replace(code, 'use bevy::math::DMat3;', '''use bevy::math::DMat3;
 use std::sync::atomic::{AtomicU64, Ordering};
-static COUNTERS: [AtomicU64; 14] = [const {AtomicU64::new(0)}; 14];
+static COUNTERS: [AtomicU64; 21] = [const {AtomicU64::new(0)}; 21];
+pub fn rejection(which: usize) { COUNTERS[which].fetch_add(1, Ordering::Relaxed); }
 struct Timer(usize, std::time::Instant);
 impl Timer { fn new(i: usize) -> Self { Self(i, std::time::Instant::now()) } }
 impl Drop for Timer { fn drop(&mut self) {
@@ -56,20 +58,26 @@ pub fn profile() {
     let names = ["direction_ns", "linearize_ns", "descent_ns", "linear_solves",
         "cg_steps", "multiply_ns", "elastic_assembly_ns", "viscous_assembly_ns",
         "pressure_assembly_ns", "factor_ns", "precondition_ns", "linearizations",
-        "objective_ns", "objective_calls"];
+        "objective_ns", "objective_calls", "nonlinear_failures",
+        "initial_inversions", "final_inversions", "descent_failures",
+        "invalid_unconstrained_predictions", "transport_starts", "energy_starts"];
     let values: std::collections::BTreeMap<_, _> = names.iter().enumerate()
         .map(|(i, n)| (*n, COUNTERS[i].load(Ordering::Relaxed))).collect();
     eprintln!("{}", serde_json::to_string(&values).unwrap());
 }
 ''')
     cached_kernel = 'fn direction_preconditioned(' in code
-    assert not (cached_kernel and flags), 'The production kernel already reuses factors'
+    assert not (cached_kernel and '--reuse-factor' in flags), 'The production kernel already reuses factors'
     direction_entry = ('cache: &mut Option<super::preconditioner::Factor<\'a>>,\n'
                        '    ) -> Result<Vec<DVec3>, TissueError> {'
                        if cached_kernel else
                        'fn direction(&self) -> Result<Vec<DVec3>, TissueError> {')
     factor_call = 'super::preconditioner::Factor::new(self.pattern, &self.diagonal, |i| self.couplings[i].block)'
     for old, new in [
+        ('return Err(TissueError::NonlinearSolveFailed {',
+         'rejection(14); return Err(TissueError::NonlinearSolveFailed {'),
+        ('Err(TissueError::InvalidInput("implicit material descent"))',
+         '{ rejection(17); Err(TissueError::InvalidInput("implicit material descent")) }'),
         (direction_entry, direction_entry+'\nlet _timer=Timer::new(0); COUNTERS[3].fetch_add(1, Ordering::Relaxed);'),
         (") -> System<'_> {", ") -> System<'_> {\nlet _timer=Timer::new(1); COUNTERS[11].fetch_add(1, Ordering::Relaxed);"),
         ('        let mut scale = 1.0;',
@@ -110,6 +118,42 @@ pub fn profile() {
             '        let mut factor = None;\n        for iteration in 0..=self.material.iterations {')
         code = replace(code, 'let delta = system.direction().map_err(|error| {',
             'let delta = system.direction_cached(&mut factor).map_err(|error| {')
+    if '--energy-start' in flags:
+        code = replace(code, '        let mut energy = objective(x);', '''        let mut energy = objective(x);
+        let inverse = self.frame.rotation.conjugate();
+        let mut transported: Vec<_> = self.positions.iter()
+            .map(|p| frame.point(inverse * (*p - self.frame.translation))).collect();
+        self.place_fixed_attachments(&mut transported, frame);
+        if self.validate_positions(&transported).is_ok() {
+            let alternate_energy = objective(&transported);
+            if alternate_energy < energy {
+                rejection(20);
+                *x = transported;
+                energy = alternate_energy;
+            }
+        }
+''')
+    p.write_text(code)
+    p = scratch/'soft_tissue/solver.rs'
+    code = p.read_text()
+    marker = '        self.place_fixed_attachments(&mut next, frame);'
+    preparation = '''        let unconstrained_valid = self.validate_positions(&next).is_ok();
+        if !unconstrained_valid { implicit::rejection(18); }
+'''
+    recovery = '''
+        if unconstrained_valid && matches!(self.validate_positions(&next), Err(TissueError::InvertedTet(_))) {
+            implicit::rejection(19);
+            let inverse = self.frame.rotation.conjugate();
+            next = self.positions.iter().map(|p| frame.point(inverse * (*p - self.frame.translation))).collect();
+            self.place_fixed_attachments(&mut next, frame);
+        }
+''' if '--transport-start' in flags else ''
+    code = replace(code, marker, preparation + marker + recovery)
+    old = 'self.validate_positions(&next)?;'
+    assert code.count(old) == 2
+    for counter in [15, 16]:
+        code = code.replace(old,
+            f'self.validate_positions(&next).map_err(|error| {{ implicit::rejection({counter}); error }})?;', 1)
     p.write_text(code)
     for name, old, new in [('solver.rs', 'mod implicit;', 'pub mod implicit;'),
                           ('mod.rs', 'mod solver;', 'pub mod solver;')]:

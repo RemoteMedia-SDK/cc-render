@@ -210,3 +210,69 @@ the name-based contract checker alone does not verify them.
 `bevy-energy-cache/` preserve the measurements, input hashes, sources and traces.
 The remaining live delays are dominated by elastic solving during catch-up;
 local element distortion and rendered active-contact validation also remain open.
+
+## Predictor investigation and dev compiler profile
+
+After `e193d91`, the instrumented 120 Hz replay attributed all 213 subdivisions
+to invalid predicted tetrahedra before the nonlinear solve. No nonlinear-limit,
+descent or final-position failures occurred. Reducing the nonlinear iteration
+cap would not address those retries. The profiler now records those causes in
+copied, archived kernels; it does not modify production source.
+
+Two starting-guess experiments were rejected:
+
+- Rigidly transport the preceding valid tissue state when new fixed attachments
+  invalidate an otherwise valid velocity prediction. This cut subdivisions from
+  213 to 20 and measured solve time from 7.47 to 6.78 seconds. However, maximum
+  same-time error against a 480 Hz reference increased from 5.208 to 5.840 mm,
+  and RMS error from 0.313 to 0.365 mm. It failed the declared accuracy screen.
+- Select the lower-energy valid starting guess while retaining the original
+  inversion guard. This reduced CG iterations from 109,948 to 89,283, but added
+  objective evaluations. Measured solve time was 7.40 seconds, with unchanged
+  213 subdivisions: no convincing net improvement. Maximum node change was
+  7.05 um. The extra unconstrained validation in this instrumented version also
+  prevents treating the small timing difference as a controlled speedup.
+
+The 480 Hz result is a finer discrete reference, not an exact solution. These
+CPU replays interpolate recorded attachments and exclude rendering, contact and
+fractional display solves. Plans, counters, source snapshots and comparisons
+are in `boundary-runtime/predictor*`, `retry-causes120-01/` and
+`energy-start-plan.json`. Both experiments remain confined to profiler flags.
+
+The retained change sets `codegen-units = 1` only in the
+`[profile.dev.package.cc-render-plugin]` override, alongside its existing
+`opt-level = 3`. Cargo supports package profile overrides; fewer codegen units
+can trade compilation parallelism for optimization opportunities. See the
+[Cargo profile documentation](https://doc.rust-lang.org/cargo/reference/profiles.html#codegen-units).
+No material, force, integrator, acceptance or body-motion code changed.
+
+| Measurement | Prior BDF2-policy build | One unit, run 1 | One unit, repeat |
+| --- | ---: | ---: | ---: |
+| Fixed 240 Hz capture, seconds after first frame | 12.856 | 10.822 | 10.672 |
+| Sampling / elasticity, seconds | 2.433 / 7.445 | 1.344 / 6.819 | 1.306 / 6.760 |
+| Live 120 Hz readbacks | 141 | 170 | 174 |
+| Live wall seconds for 7.934 source seconds | 8.259 | 8.062 | 8.048 |
+| Live p95 delivery gap, ms | 183.45 | 114.42 | 111.73 |
+| Live end clock drift, ms | 325.33 | 127.56 | 113.68 |
+
+All 478 fixed-clock frames have identical decoded mechanical values across
+these three captures, including every node, attachment, surface envelope and
+region metric. Their difference from the reviewed video remains below 0.752 um,
+passing the original 1 um gate. The video itself remains unchanged. Live sample
+times differ and are not used to claim mechanical parity.
+
+The first build used a command-line profile override and took 109.5 seconds.
+The verbose log confirms `-C codegen-units=1` on this package. After adding the
+same setting to Cargo.toml, the normal build reused the identical binary. The
+repeat capture archives that manifest. This applies when this manifest controls
+the dev profile; it does not establish production release performance. Two runs
+on a shared host support retaining the optimization, but are not an isolated
+benchmark. Playback still has visible timing gaps and zero active contacts.
+
+All 76 tissue tests pass. Python remains at 15 passes and the existing ownership
+source-slice failure, with protected assertions unchanged. The structural delta
+reports no regressions; its call graph does not establish compiler-profile
+safety, which is checked through the build, tests and full-frame comparison.
+`codegen-one-comparison.json`, the build/test logs, and `bevy-codegen-one*/`
+preserve the evidence. The concise design entrypoint now records current
+settings; its earlier contents remain in `breast-soft-tissue-viscosity-checkpoint.md`.

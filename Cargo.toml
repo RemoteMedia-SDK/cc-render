@@ -31,6 +31,9 @@ opt-level = 3
 # and solves optimized in the interactive lab while retaining dev debug info.
 [profile.dev.package.cc-render-plugin]
 opt-level = 3
+# Keep the hot tissue and skin-sampling paths visible to one LLVM unit.
+# This trades slower crate rebuilds for measured interactive-lab throughput.
+codegen-units = 1
 
 [lib]
 name = "cc_render_plugin"

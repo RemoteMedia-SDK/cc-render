@@ -1,0 +1,10 @@
+{
+  "purpose": "Recover only attachment-induced invalid starting guesses; never commit without the full physical solve.",
+  "criteria": [
+    "Retain all existing physics/ownership/rollback assertions.",
+    "At 120 Hz, maximum and RMS node error against the 480 Hz reference must not exceed the original 120 Hz errors.",
+    "At 240 Hz, maximum same-time node change from the reviewed capture must remain below 0.1 mm.",
+    "No changes to material, source motion, time integration or acceptance limits."
+  ],
+  "baseline_commit": "e193d91"
+}

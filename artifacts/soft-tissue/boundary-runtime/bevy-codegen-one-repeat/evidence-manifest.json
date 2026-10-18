@@ -1,0 +1,648 @@
+{
+  "base_commit": "e193d9132ebc6cd6895af1fbfe55369caa2f6c8a",
+  "verified_archive_members": 12,
+  "notes": [
+    "Source snapshots retain both rejected predictor experiments.",
+    "Position binaries are retained locally in this worktree outside Git; instrumented source and inputs are committed for reproduction.",
+    "Initial compiler capture used the CLI override recorded in codegen-one-build.json; repeat archives the matching Cargo.toml."
+  ],
+  "files": [
+    {
+      "path": "Cargo.toml",
+      "bytes": 3280,
+      "sha256": "f8bde4f7449a26f371616119bd53cc9d54040c713fcffaf61cd651fa5709993f",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/audit.log",
+      "bytes": 4799,
+      "sha256": "0dc06a07c8c7189c762dbe75ae0b2b7d8d54c424ea914ccc5951c51a31a1445d",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/bevy-comparison.json",
+      "bytes": 4799,
+      "sha256": "0dc06a07c8c7189c762dbe75ae0b2b7d8d54c424ea914ccc5951c51a31a1445d",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/bevy-launches.json",
+      "bytes": 8761,
+      "sha256": "641644c69de7793cfa1766a9f74e00d4f51b8856e6c0634f5dac72177efb3b4d",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/bevy-source.tar.gz",
+      "bytes": 69629,
+      "sha256": "5931e322e7fb5ac6f185deb164b1a2fa6b6c732c76d183e784a49a42a6ec7563",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/boundary-codegen-one-live120.log",
+      "bytes": 62842,
+      "sha256": "12de25562ce4adda6b9613e638f0b122715cbd8efaab3903068a6606d54f6341",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/boundary-codegen-one240.log",
+      "bytes": 64778,
+      "sha256": "1d7684622b0de2f5b04f7a357a85233986de02462a9bc49269d32638c183d86b",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one/traces.tar.gz",
+      "bytes": 7587844,
+      "sha256": "db7f2df5e50a82169ba9ac3aa4ba0bf4ed655d64f0060b7fa0f2712d0a889729",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/audit.log",
+      "bytes": 5242,
+      "sha256": "a96396df464dfd7c5c163c24e2bb41efd69f263163e0a1633d3fbc3c479aed82",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/bevy-comparison.json",
+      "bytes": 4836,
+      "sha256": "f8f57c23a4a34000a3f663a0dc9e2e158547803e184330c218399339624b5461",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/bevy-launches.json",
+      "bytes": 8789,
+      "sha256": "61e765c98abb82f22f69533d6dca3a6dee01ea92e1067296bbbb182715f4ae00",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/bevy-source.tar.gz",
+      "bytes": 69716,
+      "sha256": "f9be2cb20c8f3abaf4ee7f9d4438da9f14b81a77d0e6e374140291a14ecbbbb9",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/boundary-codegen-one-repeat-live120.log",
+      "bytes": 62813,
+      "sha256": "313fe320d1703e1ebd0180accb21d391519c62b8b69c3091cf18d9cd973c89f2",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/boundary-codegen-one-repeat240.log",
+      "bytes": 64847,
+      "sha256": "f31cbb444750340dc3dacf46810708ea52c2a755d99635afec304526aedf20a3",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/bevy-codegen-one-repeat/traces.tar.gz",
+      "bytes": 7589073,
+      "sha256": "8cc2ae695b1fdef93250969b12fc3c9ac12cf2bd6a9a7245cde802c14d99362e",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-build.json",
+      "bytes": 646,
+      "sha256": "f3841d4eb40a3f498bd9e72939ba9cf5d2966bb5e3696e05481097cfa4f71f9c",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-build.log",
+      "bytes": 34629,
+      "sha256": "df013a357e373b53966981640fa427203c57e37c3215412c90c69ff1e2f9bd93",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-comparison.json",
+      "bytes": 1894,
+      "sha256": "2c69bf271023ebece6a6dec8275070a04adf9171cf94dc641e4757d586f0afd1",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-manifest-build.json",
+      "bytes": 280,
+      "sha256": "689c52f398ee268e8af299cd280eece3cc04a7d9ba8ba49adbc5f3761d7b1dac",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-manifest-build.log",
+      "bytes": 14304,
+      "sha256": "dc45aba96e998153d044cad0f26ef9f9f030c85a4666fd8f142ccb75df9b104d",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-python-tests.log",
+      "bytes": 8378,
+      "sha256": "ce77eef2e6d4cc52f241e5c4e2aa4373e70c0bd265c8d930b446c4dfe91189f5",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-quality.stderr",
+      "bytes": 144,
+      "sha256": "ec3ec44fb84c2bca71fd0175235f6b7ba78d227ee86ff75d2f01a8e27bd5e184",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-quality.xml",
+      "bytes": 2371,
+      "sha256": "5df4209b513cfdeb39fbb1f80f9359df5a161ca336ede55b87fff4d26a10bbcc",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-review.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-review.xml",
+      "bytes": 8859,
+      "sha256": "78c95ce72ff33fb7a34b811625d8cfb1384b1322b13ac6ec1b5c57e575ba9507",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/codegen-one-tests.log",
+      "bytes": 16552,
+      "sha256": "2011be4b6435924e2c9b6821393163b0b603197139924216a7456f5374814a35",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/energy-start-plan.json",
+      "bytes": 527,
+      "sha256": "c6aaebf89f57d113f6f9d7fe6ffac197b854d1dcc5c7e3d923ddf91a09be4392",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/live-accuracy-frame-costs.json",
+      "bytes": 56735,
+      "sha256": "69fb36ad4ccdbc417cbc5741a4cc40415c03de6df19266f79b48015919b92fbb",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor-plan.json",
+      "bytes": 544,
+      "sha256": "562cc9ece93b3927d9fc53db81272d978a95ab2a04ef8101286650e763367c6f",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-comparison.json",
+      "bytes": 430,
+      "sha256": "12662543f406b0e7a79e6d9c8408a3baf2e1de2eb354b9ef6e51720a13b5bfe1",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-01/build.log",
+      "bytes": 3239,
+      "sha256": "45254b889b4672db98b60683313c01acb648258d678335dcf7a1b3eb6adb4a49",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-01/counters.json",
+      "bytes": 531,
+      "sha256": "57da9f1dbbbe36dfcdb1c35c18bfc11198c432880c37d0723ee22411e9941830",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-01/inputs.json",
+      "bytes": 2500,
+      "sha256": "9f7124acc4386220896902955d6fcbcbdafa49c23386ea1784dcba5a4e5fa81e",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-01/instrumented-source.tar.gz",
+      "bytes": 141700,
+      "sha256": "adc8d3717fba48bce2a4d6fa28d6b391c2d7535cc500be037e2623ab2003310b",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-01/positions.bin",
+      "bytes": 10852704,
+      "sha256": "2148fac280eb1bee4fd1020c9432582e16f6cebf2357ff0793b3db87b6dca622",
+      "archived_trace": false,
+      "local_only_binary": true
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-01/run.json",
+      "bytes": 800,
+      "sha256": "434d5d17b90c5a3f53856f93cdabb78f136b32fc98b8724718c178b3dafe7c1f",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-energy-comparison.json",
+      "bytes": 457,
+      "sha256": "f1b36a651a28b589737faf1387b74fbfc11fd381ff6fd3924bd86b6a2bd9ff46",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-experiment-01/build.log",
+      "bytes": 3239,
+      "sha256": "b205f55cd0f7f234fb062252c0b40049c490206ce395558b552faffeecc18933",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-experiment-01/counters.json",
+      "bytes": 511,
+      "sha256": "c9c4679b305654afa973861011927ec37b6b29484962d4e05f8d4b0d7ea558c5",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-experiment-01/inputs.json",
+      "bytes": 2503,
+      "sha256": "b0538243c0ea3fb37236b3dd04ed31ee0390db0a094ea85ab3669a84d182fc32",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-experiment-01/instrumented-source.tar.gz",
+      "bytes": 141615,
+      "sha256": "50b54dfa0bd8854c7563fe90793c368e87e36d863c13ef40240a73cefc7bfd75",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-experiment-01/positions.bin",
+      "bytes": 10852704,
+      "sha256": "e13d6513b8046b8bcb94dbb2f27017389ef74c0d0bc9dd889e7c7ec338871d91",
+      "archived_trace": false,
+      "local_only_binary": true
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor120-experiment-01/run.json",
+      "bytes": 808,
+      "sha256": "29d45300f9ed761abab55a7e4fc35eac39d207ed1581dcf8c1c10d37eee13f4c",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor480-reference-01/build.log",
+      "bytes": 3239,
+      "sha256": "ad7ea0c44db13aa56e7c7ad8396b61668acc0805483ef8ca19a2ca2314594a95",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor480-reference-01/counters.json",
+      "bytes": 456,
+      "sha256": "1bce07e7064777f426d5a2f8db496f2566e320ed366cf01ecfa8411f2c6aa0c1",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor480-reference-01/inputs.json",
+      "bytes": 2476,
+      "sha256": "c87dc7f200b6fcbb961964941b9168a5998a13b1f184b1183eb6facf7e1fc763",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor480-reference-01/instrumented-source.tar.gz",
+      "bytes": 141525,
+      "sha256": "b13863823978dbe2b1ca0668bf22f965c8bdb449f3b9e0372c4a5f245e966d74",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor480-reference-01/positions.bin",
+      "bytes": 43410816,
+      "sha256": "62ffa9d3c361e59b573c220dbe67d7d670a7b868fb69d0c04e12a96925eda200",
+      "archived_trace": false,
+      "local_only_binary": true
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/predictor480-reference-01/run.json",
+      "bytes": 801,
+      "sha256": "afc3370eed2efba78a810be8689c87312d896bf13d4215764953315e0d1824c0",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/profile.py",
+      "bytes": 10300,
+      "sha256": "fbb226b3290351d60a20fff740b617cc708c1102f074fddf82e941c1d93d628b",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/retry-causes120-01/build.log",
+      "bytes": 3239,
+      "sha256": "0a8f0f009a35ddc319e59267e51c96c98fd68c3689b752e4e0a489ca55cf702f",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/retry-causes120-01/counters.json",
+      "bytes": 454,
+      "sha256": "dad98c48f6d32d9d460e9ed8093575897e3ac09b769852a5de77a0fdd4312dae",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/retry-causes120-01/inputs.json",
+      "bytes": 2476,
+      "sha256": "e817cb2b7c9d1f74d734268fb53802db1bc92ed271e88d853ebb5e0b4318562a",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/retry-causes120-01/instrumented-source.tar.gz",
+      "bytes": 141487,
+      "sha256": "a916e5068bbd7a8933eb9275482ed83c72d98c2abcae2bcf80caaa84bd750e66",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/retry-causes120-01/positions.bin",
+      "bytes": 10852704,
+      "sha256": "c92d4be86f2e99288043d9380db757a910b0acc2813df7a1f2c0b2d12a6f9b95",
+      "archived_trace": false,
+      "local_only_binary": true
+    },
+    {
+      "path": "artifacts/soft-tissue/boundary-runtime/retry-causes120-01/run.json",
+      "bytes": 797,
+      "sha256": "8ce01e6337a0e1dac26b805ee55ea1e85733e031c60dda8eb3b2656c5badd8f3",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/capture.json",
+      "bytes": 157,
+      "sha256": "bb157bad424c0161e7af6a44c4a7585ebb5aaebc38f47eb6926612f594197c76",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/config.json",
+      "bytes": 1038,
+      "sha256": "3666924661879e7f05a84ec872619e99d76b2a79bcab14448996e33a6203ec81",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/empty-scene.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/frames.ndjson",
+      "bytes": 12297,
+      "sha256": "1240a98d5002bf68e09587397ad07da40623b00f1e66c27161cd6326201129f7",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/packets.ndjson",
+      "bytes": 1484756,
+      "sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/physics.json",
+      "bytes": 81,
+      "sha256": "7b283e0e8bbddf84b09c56bccce4226cf792de3700674647c63c91bcba353d00",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/tissue-asset.json",
+      "bytes": 323066,
+      "sha256": "f540787631f462bb51ac967e2efe88a5bd8abfe6bfb30a1b44f0ceb22391c296",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-live120-01/tissue.ndjson",
+      "bytes": 261819,
+      "sha256": "32098fc5209cec43977c8a08ffdba69857a76c4db9a68a8ae3d4c1ff4b40b723",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/capture.json",
+      "bytes": 157,
+      "sha256": "0f5df8faa40a1d1da6d1daf03de85e9eca103717609e8403fbc0476bebe881b5",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/config.json",
+      "bytes": 1038,
+      "sha256": "3666924661879e7f05a84ec872619e99d76b2a79bcab14448996e33a6203ec81",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/empty-scene.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/frames.ndjson",
+      "bytes": 12539,
+      "sha256": "39956d313d4b7f3e5b71c908b12c6c583b49ba6ee3f979f0c82ac547109c21ec",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/packets.ndjson",
+      "bytes": 1484756,
+      "sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/physics.json",
+      "bytes": 81,
+      "sha256": "7b283e0e8bbddf84b09c56bccce4226cf792de3700674647c63c91bcba353d00",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/tissue-asset.json",
+      "bytes": 323066,
+      "sha256": "f540787631f462bb51ac967e2efe88a5bd8abfe6bfb30a1b44f0ceb22391c296",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat-live120-01/tissue.ndjson",
+      "bytes": 267600,
+      "sha256": "694ae6468d11e90196a4eeee82a71f7d2723c0001d62e90fde157335289cd32b",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/capture.json",
+      "bytes": 157,
+      "sha256": "a70f10e10270ca2aea1954cfd098024344056fea3c0265903fe626a003d32b76",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/config.json",
+      "bytes": 1046,
+      "sha256": "34cd5ed5896a73fac819653d5dc365e549f39138530aec998e5c2cdb0ee6f619",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/empty-scene.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/frames.ndjson",
+      "bytes": 34814,
+      "sha256": "cc0c4577fcbeb45f11e50b98e79a4ee9e4c5dc7795bf759b3e969b34fae4acbe",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/packets.ndjson",
+      "bytes": 1484756,
+      "sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/physics.json",
+      "bytes": 81,
+      "sha256": "7b283e0e8bbddf84b09c56bccce4226cf792de3700674647c63c91bcba353d00",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/tissue-asset.json",
+      "bytes": 323066,
+      "sha256": "f540787631f462bb51ac967e2efe88a5bd8abfe6bfb30a1b44f0ceb22391c296",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one-repeat240-01/tissue.ndjson",
+      "bytes": 14642887,
+      "sha256": "728f1dd2a1f4c3db0b5abc927847a11d91c64cd090d23a24837ec6232e96b5d2",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/capture.json",
+      "bytes": 157,
+      "sha256": "567d58653a002b6b3af5c250b72a601f0e2e8299026c8edf8ae962e63d5b0cfd",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/config.json",
+      "bytes": 1046,
+      "sha256": "34cd5ed5896a73fac819653d5dc365e549f39138530aec998e5c2cdb0ee6f619",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/empty-scene.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/frames.ndjson",
+      "bytes": 34702,
+      "sha256": "6d811274dac6db4c58dd11131d1a87c6d14e414f81c1e510957aaf71cf0b555c",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/packets.ndjson",
+      "bytes": 1484756,
+      "sha256": "f97bec2cd03f8edea068ff503b26a42e761394092d29c9a35c589e020fa13feb",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/physics.json",
+      "bytes": 81,
+      "sha256": "7b283e0e8bbddf84b09c56bccce4226cf792de3700674647c63c91bcba353d00",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/tissue-asset.json",
+      "bytes": 323066,
+      "sha256": "f540787631f462bb51ac967e2efe88a5bd8abfe6bfb30a1b44f0ceb22391c296",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "artifacts/soft-tissue/lab-boundary-codegen-one240-01/tissue.ndjson",
+      "bytes": 14643059,
+      "sha256": "621135edacebeac3cb0c1d0eabf7b1204e818a33e9fa29edf2562ae0c18fa0ba",
+      "archived_trace": true,
+      "local_only_binary": false
+    },
+    {
+      "path": "docs/design/breast-soft-tissue-runtime.md",
+      "bytes": 17222,
+      "sha256": "6465798ed7e21bd705b44341c9d0adcee01950afc74156d8ddb2949a85947812",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "docs/design/breast-soft-tissue-viscosity-checkpoint.md",
+      "bytes": 37430,
+      "sha256": "8a16598e3c4cf5151a9ab9696bd1dd0aba51e4425f04b4db76051bd47c41e3f0",
+      "archived_trace": false,
+      "local_only_binary": false
+    },
+    {
+      "path": "docs/design/breast-soft-tissue.md",
+      "bytes": 6728,
+      "sha256": "4e52410b50224502220cfebd5a6caddea07c9d8a07afcd275291b654bbce8794",
+      "archived_trace": false,
+      "local_only_binary": false
+    }
+  ]
+}
