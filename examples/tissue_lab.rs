@@ -10,12 +10,15 @@ struct CaptureSettings {
     live_clock: bool,
     tissue: bool,
     save_images: bool,
+    /// Scripted rig packets (synthetic-rig.json beside them) are not office
+    /// motion: they play without the office runtime and its acceptance guards.
+    synthetic: bool,
 }
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<_> = std::env::args().collect();
     anyhow::ensure!(args.len() == 7,
-        "avatar.glb arkit-map.json packets.ndjson tissue.json|off front|side output-directory");
+        "avatar.glb arkit-map.json packets.ndjson tissue.json|off front|side|chest-front|chest-side output-directory");
     let out = Path::new(&args[6]);
     anyhow::ensure!(!out.exists(), "use a new output directory to preserve evidence");
     let poses = native_recording::load(Path::new(&args[3]))?;
@@ -37,6 +40,7 @@ fn main() -> anyhow::Result<()> {
         live_clock,
         tissue: args[4] != "off",
         save_images: std::env::var("CC_TISSUE_LAB_TRACE_ONLY").as_deref() != Ok("1"),
+        synthetic: Path::new(&args[3]).with_file_name("synthetic-rig.json").exists(),
     };
     configure(&args, out, settings)?;
     let renderer = CcRenderer::spawn(RendererConfig {
@@ -53,12 +57,16 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn configure(args: &[String], out: &Path, settings: CaptureSettings) -> anyhow::Result<()> {
-    let CaptureSettings { fps, live_clock, tissue, save_images } = settings;
-    let camera = match args[5].as_str() {
-        "front" => "0,1.55,2.6",
-        "side" => "2.6,1.55,0",
-        _ => anyhow::bail!("camera must be front or side"),
+    let CaptureSettings { fps, live_clock, tissue, save_images, synthetic } = settings;
+    // Chest views frame the breasts at the pivot the orientation rig turns about.
+    let (camera, target) = match args[5].as_str() {
+        "front" => ("0,1.55,2.6", [0., 1.5, 0.]),
+        "side" => ("2.6,1.55,0", [0., 1.5, 0.]),
+        "chest-front" => ("0,1.2,1.3", [0., 1.2, 0.]),
+        "chest-side" => ("1.3,1.2,0.05", [0., 1.2, 0.05]),
+        _ => anyhow::bail!("camera must be front, side, chest-front or chest-side"),
     };
+    let look_at = target.map(|v: f64| v.to_string()).join(",");
     // An empty office provides existing native-stream observation/validation,
     // without loading the bundled home or any condo geometry.
     std::fs::write(out.join("empty-scene.json"), "[]")?;
@@ -67,11 +75,17 @@ fn configure(args: &[String], out: &Path, settings: CaptureSettings) -> anyhow::
     for (key, value) in [("CC_OFFICE", "1"), ("CC_AVATAR_FOLLOW", "0"),
         ("CC_AVATAR_AUTO_FACE_CAMERA", "0"), ("CC_AVATAR_FIT_FRAME", "0"),
         ("CC_AVATAR_RETARGET_MODE", "calibrated"), ("CC_AVATAR_CAMERA_POS", camera),
-        ("CC_AVATAR_CAMERA_LOOK_AT", "0,1.5,0"), ("CC_AVATAR_CAMERA_FOV_DEG", "38"),
+        ("CC_AVATAR_CAMERA_LOOK_AT", look_at.as_str()), ("CC_AVATAR_CAMERA_FOV_DEG", "38"),
         ("CC_AVATAR_CLEAR_COLOR", "0.12,0.14,0.17")] {
         std::env::set_var(key, value);
     }
-    std::env::set_var("CC_OFFICE_SCENE", out.join("empty-scene.json"));
+    if synthetic {
+        // Same studio light as the office preview, without office motion validation.
+        std::env::remove_var("CC_OFFICE");
+        std::env::set_var("CC_AVATAR_AMBIENT", "500");
+    } else {
+        std::env::set_var("CC_OFFICE_SCENE", out.join("empty-scene.json"));
+    }
     if tissue {
         std::env::set_var("CC_AVATAR_TISSUE_ASSET", &args[4]);
         std::env::set_var("CC_AVATAR_TISSUE_TRACE", out.join("tissue.ndjson"));
@@ -89,27 +103,34 @@ fn configure(args: &[String], out: &Path, settings: CaptureSettings) -> anyhow::
     std::fs::copy(&args[3], out.join("packets.ndjson"))?;
     // Preserve the source responses required to authenticate revision handoffs
     // when replaying the saved capture later.
-    for name in ["requests.ndjson", "responses.ndjson", "attempt-plan.json", "source-audit.json"] {
+    for name in ["requests.ndjson", "responses.ndjson", "attempt-plan.json", "source-audit.json", "synthetic-rig.json"] {
         let source = Path::new(&args[3]).with_file_name(name);
         if source.exists() {
             std::fs::copy(source, out.join(name))?;
         }
     }
+    // The orientation rig (scripts/avatars/tissue_orientation_lab.py) marks its
+    // scripted rigid-body packets; they are a physics test, never ARDY motion.
+    let motion = if synthetic {
+        "synthetic rigid-body test rig (not ARDY)"
+    } else {
+        "unchanged native recording"
+    };
     std::fs::write(out.join("config.json"), serde_json::to_vec_pretty(&serde_json::json!({
         "inputs":inputs,"tissue":tissue,"camera":args[5],"camera_position":camera,
-        "camera_target":[0.,1.5,0.],"camera_fov_deg":38,"fps":fps,
+        "camera_target":target,"camera_fov_deg":38,"fps":fps,
         "resolution":[720,900],"offline":!live_clock,"legacy_secondary_bones":false,"save_images":save_images,
         "clock":if live_clock {"Bevy realtime"} else {"fixed source-time step"},
         "uncapped_scheduler":std::env::var("CC_RENDER_FAST").as_deref() == Ok("1"),
         "tissue_hz":std::env::var("CC_AVATAR_TISSUE_HZ").unwrap_or_else(|_| "120".into()),
         "tissue_iterations":std::env::var("CC_AVATAR_TISSUE_ITERATIONS").unwrap_or_else(|_| "32".into()),
-        "scene":"empty studio","motion":"unchanged native recording"}))?)?;
+        "scene":if synthetic {"empty studio, office runtime off"} else {"empty studio"},"motion":motion}))?)?;
     Ok(())
 }
 
 fn capture(renderer: &CcRenderer, poses: &[cc_render_plugin::cc_render::renderer::SkeletalPose],
     out: &Path, settings: CaptureSettings) -> anyhow::Result<()> {
-    let CaptureSettings { fps, live_clock, tissue, save_images } = settings;
+    let CaptureSettings { fps, live_clock, tissue, save_images, synthetic } = settings;
     let maximum_source_gap_ms = 1000_u64.div_ceil(u64::from(fps));
     let started = Instant::now();
     let mut frames = Vec::new();
@@ -127,8 +148,21 @@ fn capture(renderer: &CcRenderer, poses: &[cc_render_plugin::cc_render::renderer
     while last != Some(end) {
         anyhow::ensure!(renderer.is_ready(), "renderer withdrew readiness; preserve log");
         anyhow::ensure!(started.elapsed() < Duration::from_secs(600), "capture timeout");
-        // Bound transport by displayed source time, never wall time.
-        replay.feed(renderer, poses, u64::MAX);
+        // Bound transport by displayed source time, never wall time. Without
+        // the office there is no observed clock, so use the captured one.
+        if synthetic {
+            // One scripted revision: no handoffs, so pace it directly.
+            let deadline = last.unwrap_or(poses[0].pts_ms) + 500;
+            while replay.sent < poses.len() && poses[replay.sent].pts_ms <= deadline {
+                renderer.push_skeletal_pose(Some(poses[replay.sent].clone()));
+                replay.sent += 1;
+            }
+        } else {
+            replay.feed(renderer, poses, u64::MAX);
+        }
+        if let Some(error) = renderer.scene_state().office.and_then(|office| office.motion_error) {
+            anyhow::bail!("office stopped the motion: {error}");
+        }
         renderer.drain_frames(&mut frames);
         for frame in frames.drain(..) {
             let Some(pts) = frame.body_pts_ms else { continue };

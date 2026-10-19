@@ -113,6 +113,17 @@ Coordinate-centering remains a rejected experiment
   cross (outside the exception). See the
   [matrix checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-matrix-01/README.md).
 
+## Gravity and inertia baseline (orientation lab)
+
+`scripts/avatars/tissue_orientation_lab.py` turns one frozen standing frame as
+a rigid body (face-down/up, upside-down, side-lying, turns, tumble, shakes) in
+the tissue lab, with the office runtime off for these marked synthetic packets.
+Evidence: `artifacts/soft-tissue/orientation-lab/` (`orientation-01`). All
+captures complete and return to rest, with correct directions but millimetre
+responses (4–10 mm held, 7 mm peak for a 3 cm, 3 Hz bounce, settled within
+~0.3 s): the material is far stiffer and more damped than tissue. This is the
+calibration baseline.
+
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the
