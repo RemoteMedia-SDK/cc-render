@@ -1,6 +1,7 @@
 //! Diagnostic: can one hand turn the condo bed's covers down far enough to get in?
 //!
-//! The settled bedding (fitted sheet, top sheet, duvet) steps as one layered batch. A 1.5 cm
+//! The settled bedding (top sheet and duvet, over a fitted sheet if the scene has one) steps as
+//! one layered batch. A 1.5 cm
 //! ball standing in for the hand grips the duvet and the top sheet together near the bedside
 //! (east) corner of their head edge, lifts, sweeps diagonally towards the foot and the middle,
 //! lays them down and lets go. Reported: how much of the entry area (her half of the mattress
@@ -11,7 +12,9 @@
 //! moving bedding costs about a second per tick even in release): run with `--release -- --ignored`.
 //! Options: TURNDOWN_STILL=1 (control: grip and hold still), TURNDOWN_HOLD_S=<s> (hold the laid
 //! corner still that long before letting go), TURNDOWN_PARAMS (counterfactual materials, below),
-//! CC_TURNDOWN_TRACE=<dir> (per-10-frame grip trace and final layer positions).
+//! CC_TURNDOWN_TRACE=<dir> (per-10-frame grip trace and final layer positions),
+//! TURNDOWN_SCENE (default scene-bedding-settled.json; scene-bedding-two-covers-settled.json is
+//! the two-cover bed), TURNDOWN_GPU=1 (the live GPU solver).
 use bevy::math::{DVec3, Vec3};
 use bevy_rapier3d::rapier::parry::{math::Isometry, shape::Ball};
 
@@ -127,7 +130,10 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
         }
     }
     let layer = |id: &str| package.cloths.iter().position(|c| c.id == id).unwrap();
-    let (fitted, top, duvet) = (layer("bed_fitted_sheet"), layer("bed_top_sheet"), layer("bed_duvet"));
+    let fitted = package.cloths.iter().position(|c| c.id == "bed_fitted_sheet");
+    let (top, duvet) = (layer("bed_top_sheet"), layer("bed_duvet"));
+    // Every layer, bottom up.
+    let stack: Vec<usize> = [fitted, Some(top), Some(duvet)].into_iter().flatten().collect();
     let mut solvers: Vec<ClothSolver> = package.cloths.iter().map(|c| c.solver().unwrap()).collect();
     let colliders: Vec<_> = package.cloths.iter().map(|c| c.colliders(&package).unwrap()).collect();
     let triangles: Vec<Vec<[u32; 3]>> = package.cloths.iter()
@@ -251,9 +257,9 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
         if frame + 10 >= release_frame && frame <= release_frame + 90 {
             let gravity = -DVec3::Y * 9.81;
             let point = solvers[duvet].surface().resolve(grips[duvet][0].material_point()).unwrap().position;
-            let energies = [fitted, top, duvet].map(|i| solvers[i].energy_terms(gravity));
-            let speeds = [fitted, top, duvet].map(|i| solvers[i].max_speed());
-            let published_fastest = [fitted, top, duvet].map(|i| fastest[i]);
+            let energies: Vec<_> = stack.iter().map(|&i| solvers[i].energy_terms(gravity)).collect();
+            let speeds: Vec<_> = stack.iter().map(|&i| solvers[i].max_speed()).collect();
+            let published_fastest: Vec<_> = stack.iter().map(|&i| fastest[i]).collect();
             println!("TURNDOWN_ENERGY {}", serde_json::json!({
                 "frame": frame, "since_release_s": (frame as f64 - release_frame as f64) / 60.,
                 "layers": energies, "speeds": speeds, "duvet_point": point.to_array(),
@@ -265,7 +271,7 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
         if let Some(file) = frames_out.as_mut().filter(|_| frame % 2 == 0) {
             use std::io::Write;
             let hand = duvet_start + if still { Vec3::ZERO } else { hand_offset(duvet_start, t) };
-            let layers: Vec<Vec<[f32; 3]>> = [fitted, top, duvet].iter().map(|&i| solvers[i].surface().positions()
+            let layers: Vec<Vec<[f32; 3]>> = stack.iter().map(|&i| solvers[i].surface().positions()
                 .iter().map(|p| p.to_array().map(|x| (x * 1000.).round() / 1000.)).collect()).collect();
             writeln!(file, "{}", serde_json::json!({"frame": frame, "held": frame < release_frame,
                 "hand": hand.to_array(), "layers": layers})).unwrap();
@@ -329,7 +335,7 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
     if let Ok(dir) = std::env::var("CC_TURNDOWN_TRACE") {
         let dir = std::path::Path::new(&dir);
         std::fs::create_dir_all(dir).unwrap();
-        let layers: Vec<_> = [fitted, top, duvet].iter().map(|&i| serde_json::json!({
+        let layers: Vec<_> = stack.iter().map(|&i| serde_json::json!({
             "id": package.cloths[i].id, "triangles": triangles[i],
             "positions": solvers[i].surface().positions().iter().map(|p| p.to_array()).collect::<Vec<_>>(),
             "initial": package.cloths[i].loaded.as_ref().unwrap().initial_positions,

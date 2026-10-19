@@ -617,7 +617,11 @@ fn apply_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
 // point difference is sum g_k x_k), along `normal`, short of the gap by `depth`. Supported
 // particles cannot be pushed into their collider (the CPU reference's fixed supports), so the
 // free side takes the correction; Coulomb friction (static `stick`, kinetic `slide`) reduces
-// the relative slip of the two points since the substep start.
+// the relative slip of the two points since the substep start. A supported particle pressed
+// towards its support is held tangentially too (its collider friction carries the load, see
+// `load`): the free side takes the friction, as it takes the push. Shared by inverse mass, a
+// duvet point (~3 g) on a sheet point (~0.7 g) kept a fifth of the friction and crept over the
+// held sheet toward the foot.
 //
 // Supports propagate up a resting stack: a particle pressed against particles that are
 // themselves supported (by a collider, or through the layers beneath) is held by that
@@ -628,8 +632,10 @@ fn apply_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
 fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick: f32, slide: f32) {
     var dirs: array<vec3<f32>, 4>;
     var pressed = vec4<f32>(0.0);
+    var mobile = vec4<f32>(1.0);
     var w = 0.0;
     var wf = 0.0;
+    var wm = 0.0;
     var rel = vec3<f32>(0.0);
     for (var k = 0u; k < 4u; k++) {
         let im = pos[ids[k]].w;
@@ -638,6 +644,7 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
         if (sup.w > 0.0) {
             let into = min(dot(dk, sup.xyz), 0.0);
             dk -= sup.xyz * into;
+            if (into < 0.0) { mobile[k] = 0.0; }
             // Only a collider (w = 1) takes the load; a propagated support passes it on as a
             // position correction of the layer beneath.
             if (sup.w == 1.0) { pressed[k] = -into; }
@@ -645,6 +652,7 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
         dirs[k] = dk;
         w += dot(dk, normal) * g[k];
         wf += im * g[k] * g[k];
+        wm += im * g[k] * g[k] * mobile[k];
         rel += (pos[ids[k]].xyz - prev[ids[k]].xyz) * g[k];
     }
     if (w <= 1e-12 || wf <= 0.0) { return; }
@@ -656,7 +664,7 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
         if (slip <= stick * depth) { cancel = slip; } else { cancel = min(slide * depth, slip); }
     }
     var back = vec3<f32>(0.0);
-    if (slip > 0.0) { back = tangent / slip * (cancel / wf); }
+    if (slip > 0.0 && wm > 0.0) { back = tangent / slip * (cancel / wm); }
     // Which side rests on a supported side: every particle with real weight on that side is
     // supported with its normal facing the other side.
     var a_held = true;
@@ -671,7 +679,7 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
         }
     }
     for (var k = 0u; k < 4u; k++) {
-        add_acc(ids[k], dirs[k] * l - back * (pos[ids[k]].w * g[k]));
+        add_acc(ids[k], dirs[k] * l - back * (pos[ids[k]].w * g[k] * mobile[k]));
         if (pressed[k] > 0.0) { atomicAdd(&load[ids[k]], i32(round(pressed[k] * l * FIXED))); }
         if (params.propagate_supports != 0u && abs(g[k]) >= 0.05 && ((g[k] > 0.0 && b_held) || (g[k] < 0.0 && a_held))) {
             let n = normal * sign(g[k]);

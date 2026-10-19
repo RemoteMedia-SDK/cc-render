@@ -705,6 +705,13 @@ fn baked_bedding_rests_when_simulated() {
     baked_drape_rests_when_simulated("scene-bedding-settled.json");
 }
 
+/// The two-cover bed baked on the GPU (CC_CLOTH_BAKE_GPU=1 to check it there).
+#[test]
+#[ignore = "release: the moving bedding costs about a second per tick on the CPU"]
+fn baked_two_covers_rest_when_simulated() {
+    baked_drape_rests_when_simulated("scene-bedding-two-covers-settled.json");
+}
+
 #[test]
 fn baked_vanity_sheet_rests_when_simulated() {
     baked_drape_rests_when_simulated("scene-vanity-drawers.json");
