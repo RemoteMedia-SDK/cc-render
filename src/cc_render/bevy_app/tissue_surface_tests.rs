@@ -136,3 +136,11 @@ fn tissue_surface_matches_world_displacement_and_preserves_zero_deformation() {
         );
     }
 }
+
+#[test]
+fn adjacency_welds_uv_seam_duplicates() {
+    // Two triangles sharing edge (1,2); the right one uses a seam copy of 2.
+    let base = vec![Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::new(1., 1., 0.), Vec3::Y];
+    assert_eq!(super::adjacent_triangles(&base, &[[0, 1, 2], [1, 3, 4]]), vec![[0, 1]]);
+    assert!(super::adjacent_triangles(&base, &[[0, 1, 2]]).is_empty());
+}

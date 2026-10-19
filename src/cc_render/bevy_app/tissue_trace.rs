@@ -21,7 +21,7 @@ impl Trace {
     }
 
     pub fn record(&self, pts: u64, asset: &TissueAsset, solvers: &[Tissue],
-        integration: &IntegrationReport, surface_max_m: f64, skin_error_m: f64) -> anyhow::Result<()> {
+        integration: &IntegrationReport, surface_max_m: f64, crease_deg: f64, skin_error_m: f64) -> anyhow::Result<()> {
         let mut output = self.output.lock().map_err(|_| anyhow::anyhow!("tissue trace lock poisoned"))?;
         if output.1 == Some(pts) { return Ok(()); }
         let regions: Vec<_> = asset.regions.iter().zip(solvers).map(|(region, solver)| {
@@ -42,7 +42,8 @@ impl Trace {
             row
         }).collect();
         writeln!(output.0, "{}", serde_json::json!({"pts_ms":pts,"regions":regions,
-            "integration":integration,"maximum_surface_displacement_m":surface_max_m,"skin_error_m":skin_error_m}))?;
+            "integration":integration,"maximum_surface_displacement_m":surface_max_m,
+            "maximum_crease_deg":crease_deg,"skin_error_m":skin_error_m}))?;
         output.0.flush()?;
         output.1 = Some(pts);
         Ok(())

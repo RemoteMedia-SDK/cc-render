@@ -15,6 +15,11 @@ pub(super) struct SurfaceMetrics {
     pub maximum_displacement_m: f64,
     pub minimum_face_alignment: f32,
     pub worst_triangle: Option<[usize; 3]>,
+    /// Largest change of the fold angle between neighbouring skin triangles,
+    /// in degrees. Unlike face alignment it ignores rigid rotation, so it
+    /// measures creases rather than how far the breast turned.
+    pub maximum_crease_deg: f32,
+    pub worst_crease: Option<[[usize; 3]; 2]>,
 }
 
 #[cfg(test)]
@@ -46,10 +51,29 @@ pub(super) struct TissueSurface {
     indices: Vec<[u16; 4]>,
     triangles: Vec<[usize; 3]>,
     pub collision_triangles: Vec<[usize; 3]>,
+    /// Pairs of `triangles` sharing an edge (welded across UV seams).
+    adjacent: Vec<[usize; 2]>,
     affected: Vec<usize>,
     sampled: BTreeSet<usize>,
     binding: SurfaceBinding,
     smoothing: Option<super::tissue_smoothing::DisplacementSmoothing>,
+    embedding: Option<super::tissue_embedding::SmoothEmbedding>,
+}
+
+/// Triangle pairs sharing an edge, with vertices welded by position so UV
+/// seam duplicates count as one.
+fn adjacent_triangles(base: &[Vec3], triangles: &[[usize; 3]]) -> Vec<[usize; 2]> {
+    let key = |v: usize| (base[v] * 1e6).round().as_ivec3().to_array();
+    let mut edges: HashMap<([i32; 3], [i32; 3]), Vec<usize>> = HashMap::new();
+    for (index, t) in triangles.iter().enumerate() {
+        for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            let (a, b) = (key(a), key(b));
+            edges.entry(if a < b { (a, b) } else { (b, a) }).or_default().push(index);
+        }
+    }
+    let mut pairs: Vec<[usize; 2]> = edges.into_values().filter(|t| t.len() == 2 && t[0] != t[1]).map(|t| [t[0], t[1]]).collect();
+    pairs.sort_unstable();
+    pairs
 }
 
 /// Linear-blend skinning of selected vertices of one surface, unmorphed.
@@ -279,6 +303,7 @@ impl TissueSurface {
             .map(|t| [t[0], t[1], t[2]])
             .collect();
         let base: Vec<Vec3> = base.iter().copied().map(Vec3::from).collect();
+        let adjacent = adjacent_triangles(&base, &triangles);
         let smoothing = super::tissue_smoothing::DisplacementSmoothing::from_env(&base, &triangles, &affected)?;
         let sampled = triangles
             .iter()
@@ -299,16 +324,33 @@ impl TissueSurface {
             indices: indices.clone(),
             triangles,
             collision_triangles,
+            adjacent,
             affected: affected.into_iter().collect(),
             sampled,
             binding: binding.clone(),
             smoothing,
+            embedding: None,
         })
+    }
+
+    /// Replace the per-tetrahedron embedding with the smooth one.
+    pub fn embed_smoothly(&mut self, asset: &TissueAsset) -> anyhow::Result<()> {
+        self.embedding = Some(super::tissue_embedding::SmoothEmbedding::new(asset, &self.binding)?);
+        Ok(())
     }
 
     /// World displacement of each embedded vertex from its kinematic skin.
     fn displacement(&self, asset: &TissueAsset, nodes: &[Vec<DVec3>], frames: &[Frame]) -> Vec<Vec3> {
         let mut delta = vec![Vec3::ZERO; self.base.len()];
+        if let Some(embedding) = &self.embedding {
+            embedding.displacement(&mut delta, |region, node| {
+                nodes[region][node] - frames[region].point(asset.regions[region].initial_positions[node].into())
+            });
+            if let Some(smoothing) = &self.smoothing {
+                smoothing.apply(&mut delta);
+            }
+            return delta;
+        }
         for binding in &self.binding.vertices {
             let region = &asset.regions[binding.region];
             let ids = region.tetrahedra[binding.tetrahedron];
@@ -385,7 +427,10 @@ impl TissueSurface {
             maximum_displacement_m: delta.iter().map(|d| d.length() as f64).fold(0.0, f64::max),
             minimum_face_alignment: 1.0,
             worst_triangle: None,
+            maximum_crease_deg: 0.0,
+            worst_crease: None,
         };
+        let mut faces = Vec::with_capacity(self.triangles.len());
         for t in &self.triangles {
             let [a, b, c] = t.map(|i| before[i]);
             let [da, db, dc] = t.map(|i| before[i] + delta[i]);
@@ -398,9 +443,21 @@ impl TissueSurface {
                     metrics.worst_triangle = Some(*t);
                 }
             }
+            faces.push((old.normalize_or_zero(), new.normalize_or_zero()));
             for i in t {
                 old_normal[*i] += old;
                 new_normal[*i] += new;
+            }
+        }
+        for [a, b] in &self.adjacent {
+            let ((old_a, new_a), (old_b, new_b)) = (faces[*a], faces[*b]);
+            if old_a == Vec3::ZERO || old_b == Vec3::ZERO || new_a == Vec3::ZERO || new_b == Vec3::ZERO {
+                continue;
+            }
+            let crease = (new_a.angle_between(new_b) - old_a.angle_between(old_b)).abs().to_degrees();
+            if crease > metrics.maximum_crease_deg {
+                metrics.maximum_crease_deg = crease;
+                metrics.worst_crease = Some([self.triangles[*a], self.triangles[*b]]);
             }
         }
         let mut normals = self.normals.clone();

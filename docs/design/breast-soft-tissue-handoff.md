@@ -134,15 +134,25 @@ fixed skin. The selected asset is unchanged; the seam is the next blocker.
 The creases turned out to be the linear embedding in the coarse cage, not the
 seam: opt-in `CC_AVATAR_TISSUE_SURFACE_SMOOTHING=8` (Taubin smoothing of the
 skin displacement) removes the kinks and inverted skin triangles in the rig.
-On the ARDY jump, s40-k32 + smoothing doubles motion and is clean until the
-final frame, where the outer right breast edge distorts. Next: a finer, more
-uniform cage. Details in `artifacts/soft-tissue/calibration/README.md`.
+On the ARDY jump, s40-k32 + smoothing doubles motion (33 -> 58 mm).
+
+Finer cages (`artifacts/soft-tissue/cage-resolution/`) double the sag but cost
+25-90x per step: not real time. Instead the coarse cage stays the physics and
+the skin follows it smoothly: opt-in `CC_AVATAR_TISSUE_SURFACE_EMBEDDING=mls`
+plus `CC_AVATAR_TISSUE_SURFACE_SMOOTHING=4`. A new trace metric,
+`maximum_crease_deg`, measures folding without counting rotation (the earlier
+end-of-jump "distortion" was the old metric, not visible in frames). Jump
+peak crease: selected asset 47.8° today, 16.9° with mls + smoothing 4;
+s40-k32 with mls + smoothing 4 44.3° while moving twice as far. Defaults are
+unchanged. Details in `artifacts/soft-tissue/calibration/README.md`.
 
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the
    default cap (10 kPa now) and whether fingers should also rest on breast skin.
-2. Live 120 Hz performance with cap and clamp; neither is measured live yet.
+2. Live 120 Hz performance with cap, clamp and the mls embedding; none is
+   measured live yet. Then decide whether s40-k32 + mls + smoothing 4 becomes
+   the lab default.
 3. Default enablement still needs anatomical calibration and broader clips.
 
 Run from this worktree:

@@ -280,6 +280,9 @@ fn initialize_ready(
             .get(&skin.inverse_bindposes)
             .ok_or_else(|| anyhow::anyhow!("missing tissue inverse bind asset"))?;
         let mut surface = TissueSurface::capture(mesh, binding, skin, inverse)?;
+        if super::tissue_embedding::requested()? && !binding.vertices.is_empty() {
+            surface.embed_smoothly(&request.asset)?;
+        }
         surface.capture_morphs(mesh, &scene.images)?;
         surface.entity = Some(entity);
         if surface.has_deformation() {
@@ -547,6 +550,7 @@ impl Active {
         (integration.pose_samples, integration.pose_cache_hits) = pose_cache.counts();
         let nodes: Vec<_> = output.iter().map(|s| s.positions().to_vec()).collect();
         let mut maximum = 0.0_f64;
+        let mut crease = 0.0_f64;
         let mut surface_metrics = Vec::with_capacity(self.surfaces.len());
         for surface in &self.surfaces {
             if !surface.has_deformation() {
@@ -557,6 +561,7 @@ impl Active {
                 .ok_or_else(|| anyhow::anyhow!("tissue render mesh disappeared"))?;
             let metrics = surface.deform(mesh, &request.asset, &nodes, frames, globals)?;
             maximum = maximum.max(metrics.maximum_displacement_m);
+            crease = crease.max(metrics.maximum_crease_deg as f64);
             surface_metrics.push(metrics);
         }
         if let Some([ribcage, skin]) = self.rest_hands(request, &window, end, &nodes, frames, globals)? {
@@ -582,7 +587,7 @@ impl Active {
             }
         }
         if let Some(trace) = &request.trace {
-            trace.record(window.displayed_ms, &request.asset, &output, &integration, maximum, skin_error)?;
+            trace.record(window.displayed_ms, &request.asset, &output, &integration, maximum, crease, skin_error)?;
         }
         if window.displayed_ms >= self.report_ms + 1000 {
             self.report_ms = window.displayed_ms;

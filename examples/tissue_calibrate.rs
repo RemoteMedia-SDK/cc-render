@@ -35,13 +35,19 @@ fn main() -> anyhow::Result<()> {
         }
     }
     let asset = TissueAsset::from_json(&serde_json::to_vec(&json)?)?;
-    let mut regions = Vec::new();
+    // Fit every region and save before measuring: fits of large cages are slow.
     let mut fitted = asset.clone();
-    for (index, region) in asset.regions.iter().enumerate() {
+    let mut fit_errors = Vec::new();
+    for region in &mut fitted.regions {
+        fit_errors.push(if fit { refit(region)? } else { f64::NAN });
+    }
+    if let Some(path) = write {
+        fitted.validate()?;
+        std::fs::write(path, serde_json::to_vec(&fitted)?)?;
+    }
+    let mut regions = Vec::new();
+    for (region, fit_error) in fitted.regions.iter().zip(fit_errors) {
         let started = std::time::Instant::now();
-        let mut region = region.clone();
-        let fit_error = if fit { refit(&mut region)? } else { f64::NAN };
-        fitted.regions[index] = region.clone();
         let mut standing = region.solver(Frame::IDENTITY)?;
         standing.equilibrate(DVec3::NEG_Y * G, 4096)?;
         let rest = standing.positions().to_vec();
@@ -64,17 +70,18 @@ fn main() -> anyhow::Result<()> {
         regions.push(serde_json::json!({
             "name": region.name, "free_nodes": free.len(), "mass_kg": standing.metrics().mass_kg,
             "fit_error_mm": fit_error * 1e3, "static": statics,
-            "landing": landing(&standing, &free, nipple)?,
-            "shake_side": shake(&standing, DVec3::X)?, "shake_bounce": shake(&standing, DVec3::Y)?,
+            "landing": recorded(landing(&standing, &free, nipple)),
+            "shake_side": recorded(shake(&standing, DVec3::X)), "shake_bounce": recorded(shake(&standing, DVec3::Y)),
             "seconds": started.elapsed().as_secs_f64()}));
-    }
-    if let Some(path) = write {
-        fitted.validate()?;
-        std::fs::write(path, serde_json::to_vec(&fitted)?)?;
     }
     println!("{}", serde_json::json!({"overrides": overrides, "fit": fit,
         "material": json["regions"][0]["material"], "regions": regions}));
     Ok(())
+}
+
+/// A failed dynamic measurement is a result, not a reason to drop the others.
+fn recorded(result: anyhow::Result<serde_json::Value>) -> serde_json::Value {
+    result.unwrap_or_else(|error| serde_json::json!({"error": error.to_string()}))
 }
 
 /// The orientation rig's shakes: 3 cm at 3 Hz for 3 s with 0.5 s ramps.
@@ -83,6 +90,7 @@ fn shake(standing: &Tissue, axis: DVec3) -> anyhow::Result<serde_json::Value> {
     let mut solver = standing.clone();
     let (mut volume, mut offset): ((f64, f64), f64) = ((1., 1.), 0.);
     let mut worst: Vec<[f64; 3]> = Vec::new();
+    let started = std::time::Instant::now();
     for step in 1..=(4.0 * rate) as usize {
         let t = step as f64 / rate;
         let edge = (t.min(3. - t).min(0.5) / 0.5).max(0.);
@@ -98,7 +106,8 @@ fn shake(standing: &Tissue, axis: DVec3) -> anyhow::Result<serde_json::Value> {
             .map(|(p, rest)| (*p - frame.translation - *rest).length()).fold(offset, f64::max);
     }
     let dump = std::env::var("CAL_DUMP").is_ok().then_some(worst);
-    Ok(serde_json::json!({"volume_ratio": [volume.0, volume.1], "peak_node_mm": offset * 1e3, "worst_positions": dump}))
+    Ok(serde_json::json!({"volume_ratio": [volume.0, volume.1], "peak_node_mm": offset * 1e3, "worst_positions": dump,
+        "ms_per_step": started.elapsed().as_secs_f64() * 1e3 / (4.0 * rate)}))
 }
 
 fn mm(v: DVec3) -> [f64; 3] {

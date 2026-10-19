@@ -91,8 +91,11 @@ def chest_cap(points, loop):
     return points, np.vstack([cap, walls])
 
 
-def close_and_mesh(patch, shell_path):
-    reduction = min(.88, max(0., 1. - 128 / patch.n_points))
+def close_and_mesh(patch, shell_path, surface_points=128, max_volume=None, node_budget=512):
+    """`surface_points` sets the decimated skin resolution; `max_volume` (m^3)
+    bounds tetrahedron size for a more uniform interior. Defaults reproduce
+    the original small cage."""
+    reduction = min(.88, max(0., 1. - surface_points / patch.n_points))
     coarse = patch.decimate_pro(reduction, preserve_topology=True, splitting=False,
                                 boundary_vertex_deletion=False)
     points = np.asarray(coarse.points).copy()
@@ -108,11 +111,14 @@ def close_and_mesh(patch, shell_path):
         raise ValueError('Invalid closed tissue shell')
     shell.export(shell_path)
     mesher = tetgen.TetGen(shell.vertices, shell.faces)
-    nodes, cells = mesher.tetrahedralize(quality=True, minratio=1.8, nobisect=True, quiet=True)
+    options = dict(quality=True, minratio=1.8, nobisect=True, quiet=True)
+    if max_volume is not None:
+        options['maxvolume'] = max_volume
+    nodes, cells = mesher.tetrahedralize(**options)
     cap = trimesh.Trimesh(points, cap_faces, process=False)
     _, distance, _ = trimesh.proximity.closest_point(cap, nodes)
     fixed = distance < 1e-7
-    if len(nodes) > 512:
+    if len(nodes) > node_budget:
         raise ValueError(f'Tissue volume exceeds small-solver budget: {len(nodes)} nodes')
     tetra = nodes[cells]
     volume = np.linalg.det((tetra[:, 1:] - tetra[:, :1]).transpose(0, 2, 1)) / 6
@@ -125,10 +131,11 @@ def close_and_mesh(patch, shell_path):
         'volume_m3': float(abs(volume).sum()), 'minimum_tet_volume_m3': float(abs(volume).min()),
         'source_patch_vertices': patch.n_points, 'coarse_surface_vertices': len(points),
         'cap_inset_m': .004, 'collar_m': .025,
+        'surface_points': surface_points, 'max_volume_m3': max_volume,
     }
 
 
-def build(avatar, material_asset, output):
+def build(avatar, material_asset, output, **mesh_options):
     original = json.loads(material_asset.read_text())
     body = next(s for s in surfaces(avatar) if s['name'] == 'CC_Base_Body')
     asset = copy.deepcopy(original)
@@ -136,7 +143,7 @@ def build(avatar, material_asset, output):
     for side in range(2):
         patch, membership = skin_patch(body, side)
         nodes, cells, fixed, shell, report = close_and_mesh(
-            patch, output.with_name(output.stem + f'-shell-{side}.ply'))
+            patch, output.with_name(output.stem + f'-shell-{side}.ply'), **mesh_options)
         local = anchor_space(nodes, body['anchor_inverse'])
         region = asset['regions'][side]
         region.update(rest_positions=local.tolist(), initial_positions=local.tolist(),
@@ -162,5 +169,9 @@ if __name__ == '__main__':
     parser.add_argument('avatar', type=Path)
     parser.add_argument('material_asset', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--surface-points', type=int, default=128)
+    parser.add_argument('--max-volume', type=float, help='Maximum tetrahedron volume, m^3.')
+    parser.add_argument('--node-budget', type=int, default=512)
     args = parser.parse_args()
-    print(json.dumps(build(args.avatar, args.material_asset, args.output), indent=2))
+    print(json.dumps(build(args.avatar, args.material_asset, args.output, surface_points=args.surface_points,
+                           max_volume=args.max_volume, node_budget=args.node_budget), indent=2))

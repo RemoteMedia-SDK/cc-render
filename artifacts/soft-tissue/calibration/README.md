@@ -79,3 +79,57 @@ The chest cameras are fixed and only suit the orientation rig.
 
 Next: a finer, more uniform cage (element volumes span about 70-7,600 mm3,
 p5-p95) to remove the side-edge distortion; live 120 Hz cost unmeasured.
+(Superseded below: finer cages are too slow, and the distortion was the metric.)
+
+## Cage resolution (`../cage-resolution/`)
+
+`build_skin_tissue_volume.py` takes `--surface-points`, `--max-volume` and
+`--node-budget` (defaults reproduce the current cage exactly). Fitted and
+measured with s40-k32 material (per breast):
+
+| cage | nodes / tets | upside-down nipple | prone–supine | shake ms/step |
+|---|---|---|---|---|
+| current (128 surface points) | 241 / 657 | 30–41 mm | 16–29 mm | ~3.2 |
+| surf440 | ~630 / 2100 | 65–71 mm | 30–37 mm | 82–94 |
+| surf884 | ~1170 / 3950 | 73–75 mm | 30–37 mm | 190–280 |
+
+Finer cages move about twice as far with the same material and reach the
+literature range, but cost 25–90x per step (the fits took 343 s
+and 1136 s) and surf440's left side shake did not converge (force 0.0047 N).
+Not usable in real time. The CG iteration cap now grows with the system
+(`256.max(3 n)`); solves that converged before are unchanged.
+
+## Smooth display layer (MLS embedding)
+
+The coarse cage stays the physics; the skin is the fine layer. Opt-in
+`CC_AVATAR_TISSUE_SURFACE_EMBEDDING=mls` (`bevy_app/tissue_embedding.rs`)
+moves each skin vertex with linear-basis moving least squares over its 16
+nearest cage nodes (Wendland C2 weights, support 1.5x the 16th distance)
+instead of one tetrahedron's four nodes. It reproduces affine motion,
+including large rotations, exactly, and fixed nodes still carry zero
+displacement. Contacts and physics are unchanged.
+
+Crease metric: `maximum_crease_deg` in the tissue trace is the largest change
+of dihedral angle between adjacent skin triangles from the rest pose (welded
+across UV seams), so whole-breast rotation is not counted. The earlier
+face-alignment metric counted rotation of small nipple triangles as damage;
+the "outer-edge distortion" reported at the end of `jump-01` is not visible in
+frames.
+
+Peak crease (degrees), s40-k32, orientation rig
+(`orientation-lab/embed-*-01`) and the ARDY jump (`orientation-lab/jump-02`):
+
+| embedding | upside-down | tumble | shake side / bounce | face-down | side-left | jump (p95) |
+|---|---|---|---|---|---|---|
+| linear | 81.8 | 84.6 | 67.4 / 72.1 | 64.3 | 44.1 | 169.7 |
+| linear + smoothing 8 | 37.7 | 40.0 | 29.7 / 30.7 | 29.2 | 28.0 | 56.2 |
+| mls | 68.5 | 70.7 | 51.2 / 61.3 | 53.6 | 26.9 | 147.6 |
+| **mls + smoothing 4** | **26.4** | **27.7** | **31.3 / 23.4** | **19.8** | **18.3** | **44.3 (28)** |
+
+On the selected asset the jump peak falls from 47.8 (p95 26.2) with the
+current embedding to 16.9 (p95 9.8) with mls + smoothing 4. s40-k32 with
+mls + smoothing 4 creases about as much as the selected asset does today
+while moving about twice as far (58 vs 33 mm). Review video:
+`orientation-lab/jump-02/jump-current-vs-candidate{,-third-speed}.mp4`.
+Traces: `orientation-lab/embedding-traces.tar.gz`. Defaults are unchanged;
+live 120 Hz cost of the embedding is unmeasured.

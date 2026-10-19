@@ -145,7 +145,9 @@ impl<'a> System<'a> {
         // velocity updates; the nonlinear force/correction limits are separate.
         let threshold = norm_squared * 1e-18;
         let mut iterations = 0;
-        for _ in 0..256 {
+        // Exact-arithmetic CG needs at most one iteration per unknown; larger
+        // cages may exceed the original 256 cap that small cages never reach.
+        for _ in 0..256.max(3 * self.gradient.len()) {
             iterations += 1;
             if dot(&residual, &residual) <= threshold {
                 // Recursive residuals can drift. Confirm with the unchanged

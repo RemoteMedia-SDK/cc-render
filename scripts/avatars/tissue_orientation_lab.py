@@ -138,7 +138,7 @@ def capture(source, view, out, asset):
     environment = dict(CC_RENDER_FAST='0', CC_AVATAR_TISSUE_HZ='240', CC_AVATAR_TISSUE_ITERATIONS='32',
                        CC_TISSUE_LAB_FPS='60', CC_TISSUE_LAB_CLOCK='fixed', CC_TISSUE_LAB_TRACE_ONLY='0',
                        CC_AVATAR_TISSUE_TRACE_NODES='0', RUST_LOG='info')
-    for key in ['CC_AVATAR_TISSUE_SURFACE_SMOOTHING']:
+    for key in ['CC_AVATAR_TISSUE_SURFACE_SMOOTHING', 'CC_AVATAR_TISSUE_SURFACE_EMBEDDING']:
         if key in os.environ:
             environment[key] = os.environ[key]
     command = [str(BINARY), str(GLB), str(ARKIT), str(source), str(asset), view, str(out)]
@@ -167,7 +167,10 @@ def response(trace, segments):
             # Body frame: +x her left, +y up, +z forward; zero is the standing rest.
             segment_end_offsets_mm=[dict(segment=kind, pts_ms=pts, offset=[round(v, 1) for v in at(pts)])
                                     for kind, pts in ends])
-    return rows, dict(frames=len(rows), last_pts_ms=rows[-1]['pts_ms'] if rows else None, regions=regions)
+    creases = [(r.get('maximum_crease_deg', 0.), r['pts_ms']) for r in rows]
+    return rows, dict(frames=len(rows), last_pts_ms=rows[-1]['pts_ms'] if rows else None, regions=regions,
+                      peak_crease_deg=round(max(creases)[0], 1) if creases else None,
+                      peak_crease_pts_ms=max(creases)[1] if creases else None)
 
 
 def plot(rows, segments, title, output):
@@ -231,7 +234,7 @@ def scenario(name, folder, views, keep_frames, asset):
         side_by_side(name, completed, folder)
     (folder/'result.json').write_text(json.dumps(result, indent=2) + '\n')
     return dict(exit_codes={v: result['captures'][v]['exit_code'] for v in views},
-                **{k: result.get('response', {}).get(k) for k in ('frames', 'last_pts_ms')},
+                **{k: result.get('response', {}).get(k) for k in ('frames', 'last_pts_ms', 'peak_crease_deg')},
                 regions={r: {k: v for k, v in d.items() if k != 'segment_end_offsets_mm'}
                          for r, d in result.get('response', {}).get('regions', {}).items()})
 
