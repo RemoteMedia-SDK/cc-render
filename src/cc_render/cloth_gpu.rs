@@ -802,10 +802,6 @@ impl GpuClothBatch {
         let base = self.vertices * 8;
         let counters: [u32; 10] = std::array::from_fn(|k| word(base + k));
         let [candidates, overflow, substep_motion, margin_motion, contacts, nonfinite, ambiguous, witness, edge_candidates, _] = counters;
-        #[cfg(test)]
-        if ambiguous > 0 {
-            println!("GPU_AMBIGUOUS_WITNESS vertex {} triangle {}", witness & 0xfff, witness >> 12);
-        }
         let _ = witness;
         self.last = GpuReport {
             frame_ms: started.elapsed().as_secs_f64() * 1e3,

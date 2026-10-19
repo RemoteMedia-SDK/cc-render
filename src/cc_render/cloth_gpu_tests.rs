@@ -425,3 +425,94 @@ fn gpu_bedding_layer_separation_trace() {
         println!("GPU_SEPARATION tick {tick} {}", serde_json::json!(line));
     }
 }
+
+/// Triangle pairs of `a` and `b` that intersect (parry exact test after an AABB filter), and
+/// the centroid of the first few.
+pub(crate) fn layer_intersections(a: &ClothSolver, b: &ClothSolver) -> (usize, Vec<[f64; 3]>) {
+    use parry_ccd::{math::{Isometry as I, Point}, query::intersection_test, shape::Triangle};
+    let p = |v: DVec3| Point::new(v.x, v.y, v.z);
+    let boxes = |s: &ClothSolver| -> Vec<(DVec3, DVec3)> {
+        s.triangles.iter().map(|t| {
+            let [x, y, z] = t.map(|i| s.positions[i]);
+            (x.min(y).min(z), x.max(y).max(z))
+        }).collect()
+    };
+    let (ba, bb) = (boxes(a), boxes(b));
+    let mut count = 0;
+    let mut at = Vec::new();
+    for (ta, (alo, ahi)) in a.triangles.iter().zip(&ba) {
+        for (tb, (blo, bhi)) in b.triangles.iter().zip(&bb) {
+            if (*blo - *ahi).max_element() > 0. || (*alo - *bhi).max_element() > 0. { continue; }
+            let x = ta.map(|i| a.positions[i]);
+            let y = tb.map(|i| b.positions[i]);
+            if intersection_test(&I::identity(), &Triangle::new(p(x[0]), p(x[1]), p(x[2])),
+                &I::identity(), &Triangle::new(p(y[0]), p(y[1]), p(y[2]))).unwrap_or(false) {
+                count += 1;
+                if at.len() < 4 {
+                    at.push(((x[0] + x[1] + x[2]) / 3.).to_array().map(|c| (c * 100.).round() / 100.));
+                }
+            }
+        }
+    }
+    (count, at)
+}
+
+/// Diagnostic: authored bedding on the GPU, every CC_TRACE_EVERY ticks: inter-layer triangle
+/// intersections, worst stretch per layer and where, fastest published motion, cost and flags.
+#[test]
+#[ignore = "diagnostic: release, --nocapture"]
+fn gpu_bedding_quality_trace() {
+    let scene = std::env::var("CC_TRACE_SCENE").unwrap_or_else(|_| "scene-bedding.json".into());
+    let (mut solvers, colliders) = super::batch::bench::authored_layers(&scene);
+    let Some(mut batch) = gpu_batch(&solvers.iter().collect::<Vec<_>>()) else { return };
+    let ticks: usize = std::env::var("CC_TRACE_TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(300);
+    let every: usize = std::env::var("CC_TRACE_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
+    let mut window_ms = Vec::new();
+    let mut flags = (0u64, 0u64);
+    let mut speed = 0f64;
+    for tick in 1..=ticks {
+        let before: Vec<Vec<DVec3>> = solvers.iter().map(|s| s.positions.clone()).collect();
+        let mut layers: Vec<_> = solvers.iter_mut().zip(&colliders)
+            .map(|(solver, colliders)| ClothLayerStep { solver, colliders, grips: &mut [] }).collect();
+        if let Err(e) = batch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81) {
+            println!("GPU_QUALITY_ERROR tick {tick} {e} {}", serde_json::json!(batch.last));
+            return;
+        }
+        window_ms.push(batch.last.frame_ms);
+        flags.0 += batch.last.substep_motion_exceeded as u64;
+        flags.1 += batch.last.margin_exceeded as u64;
+        speed = speed.max(solvers.iter().zip(&before)
+            .flat_map(|(s, b)| s.positions.iter().zip(b).map(|(p, q)| p.distance(*q) * 60.)).fold(0., f64::max));
+        if let Ok(path) = std::env::var("CC_TRACE_DUMP") {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
+            writeln!(f, "{}", serde_json::json!({"tick": tick, "layers": solvers.iter().map(|s|
+                s.positions.iter().map(|p| p.to_array()).collect::<Vec<_>>()).collect::<Vec<_>>(),
+                "triangles": if tick == 1 { solvers.iter().map(|s| s.triangles.clone()).collect::<Vec<_>>() } else { vec![] }})).unwrap();
+        }
+        if tick % every != 0 { continue; }
+        let mut pairs = Vec::new();
+        for a in 0..solvers.len() {
+            for b in a + 1..solvers.len() {
+                let (n, at) = layer_intersections(&solvers[a], &solvers[b]);
+                pairs.push(serde_json::json!({"pair": [a, b], "intersections": n, "at": at}));
+            }
+        }
+        let stretch: Vec<_> = solvers.iter().map(|s| {
+            let (r, at) = s.springs.iter().filter(|e| e.stretch).map(|e| {
+                let [x, y] = e.vertices.map(|i| s.positions[i]);
+                (x.distance(y) / e.rest, ((x + y) * 0.5).to_array().map(|c| (c * 100.).round() / 100.))
+            }).fold((0., [0.; 3]), |m, x| if x.0 > m.0 { x } else { m });
+            serde_json::json!([(r * 1000.).round() / 1000., at])
+        }).collect();
+        window_ms.sort_by(f64::total_cmp);
+        println!("GPU_QUALITY {}", serde_json::json!({
+            "tick": tick, "resting": batch.resting(), "intersections": pairs, "stretch": stretch,
+            "published_speed": speed, "median_ms": window_ms[window_ms.len() / 2],
+            "p95_ms": window_ms[(window_ms.len() * 95 / 100).min(window_ms.len() - 1)],
+            "max_ms": window_ms[window_ms.len() - 1], "flags": [flags.0, flags.1],
+        }));
+        window_ms.clear();
+        speed = 0.;
+    }
+}

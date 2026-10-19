@@ -202,6 +202,18 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
             gpu_flags.1 += r.margin_exceeded as u64;
             gpu_ms.push(r.frame_ms);
         }
+        if std::env::var_os("TURNDOWN_GRIP_TRACE").is_some() {
+            for (i, layer_grips) in grips.iter().enumerate() {
+                for g in layer_grips {
+                    if g.peak_required_force_n() > 25. || frame == 1 {
+                        let at = solvers[i].surface().resolve(g.material_point()).unwrap().position;
+                        println!("GRIP_TRACE frame {frame} layer {} required {:.1} N state {:?} at {:?} hand {:?}",
+                            package.cloths[i].id, g.peak_required_force_n(), g.state(), at.to_array(),
+                            (starts[i].unwrap() + hand_offset(duvet_start, t)).to_array());
+                    }
+                }
+            }
+        }
         for grip in grips.iter().flatten() {
             peak_force = peak_force.max(grip.peak_applied_force_n());
             if frame < release_frame { held_through &= grip.state() == super::cloth_grip::ClampState::Held; }
