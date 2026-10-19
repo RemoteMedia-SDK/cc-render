@@ -66,6 +66,15 @@ const REST_DRIFT_M: f64 = 5e-3;
 const REST_SPEED_M_S: f64 = 0.05;
 const REST_SPEED_EXCEPTIONS: f64 = 0.005;
 const SETTLE_SECONDS: f64 = 1.5;
+
+/// `SETTLE_SECONDS`; test builds: CC_CLOTH_SETTLE_S overrides it (diagnostics only).
+fn settle_seconds() -> f64 {
+    #[cfg(test)]
+    if let Some(v) = std::env::var("CC_CLOTH_SETTLE_S").ok().and_then(|v| v.parse().ok()) {
+        return v;
+    }
+    SETTLE_SECONDS
+}
 const SETTLE_SPEED_M_S: f64 = 0.3;
 const SETTLE_SHARE: f64 = 0.95;
 /// A held grip's hand moving less than this over a tick holds still.
@@ -154,7 +163,7 @@ impl Rest {
         self.asleep = false;
         self.since_disturbed = if disturbed { Some(0.) } else { self.since_disturbed.map(|t| t + dt) };
         let positions = layers.iter().flat_map(|l| l.solver.positions.iter());
-        let settled = self.since_disturbed.is_some_and(|t| t + 1e-9 >= SETTLE_SECONDS) && {
+        let settled = self.since_disturbed.is_some_and(|t| t + 1e-9 >= settle_seconds()) && {
             let slow = positions
                 .clone()
                 .zip(tick_start)

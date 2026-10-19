@@ -158,10 +158,12 @@ pub(super) fn turndown_time() -> f32 {
 
 /// The fold line runs from the middle of the head edge to this far down the bedside edge from the
 /// gripped corner, turning the covers back off her whole half: the corner is laid on the bed's
-/// centre line just past its foot. (0.9 m, a small corner fold, left 45-50% of the entry area
-/// covered by the two-cover bed's duvet; 1.6 m lays the corner on the mattress's foot edge, from
-/// where it tips over, 0.4 m.)
-const FOLD_DOWN_BED_M: f32 = 1.7;
+/// centre line at its foot. (0.9 m, a small corner fold, left 45-50% of the entry area covered by
+/// the two-cover bed's duvet. With the duvet's bending at 0.1, folds of 1.4-1.75 m all hold,
+/// coverage changing <= 3 points; their corners settle 5-12 cm from where they were laid and
+/// the fastest cloth on the bed after release reaches 0.5-1.2 m/s, a ridge settling under
+/// gravity; 1.65 m is within both limits.)
+pub(super) const FOLD_DOWN_BED_M: f32 = 1.65;
 
 /// Where the gripped corner is laid: its mirror image across the fold line.
 pub(super) fn fold_point(start: Vec3) -> Vec3 {
