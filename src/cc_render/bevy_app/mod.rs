@@ -26,6 +26,10 @@ mod city_windows;
 mod vehicle_lights;
 mod street_lights;
 mod practical_lights;
+mod plumbing;
+mod water_collision;
+mod water_dynamics;
+mod water_skin;
 pub(crate) mod weather;
 mod weather_transition;
 mod wet_surfaces;
@@ -339,6 +343,7 @@ pub(super) fn run(
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
     package: Option<super::scene_package::ScenePackage>,
     weather_bridge: super::scene_weather::WeatherBridge,
+    water_bridge: super::scene_water::WaterBridge,
 ) {
     let glb_path = match config.glb_path.canonicalize() {
         Ok(p) => p,
@@ -620,6 +625,7 @@ pub(super) fn run(
     let packaged = package.is_some();
     if let Some(package) = package {
         app.insert_resource(weather_bridge);
+        app.insert_resource(water_bridge);
         environment::install(&mut app, package);
     }
     app.init_resource::<super::office::timeline::PoseTimeline>();

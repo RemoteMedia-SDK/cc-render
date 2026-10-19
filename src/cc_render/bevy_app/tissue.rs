@@ -24,6 +24,9 @@ use bevy::{
 };
 use std::{collections::HashMap, path::Path, sync::Arc};
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) struct TissueSurfaceUpdate;
+
 #[cfg(test)]
 #[path = "tissue_tests.rs"]
 pub(super) mod tests;
@@ -111,6 +114,7 @@ pub(super) fn install(app: &mut App, glb: &Path) -> anyhow::Result<()> {
         PostUpdate,
         (initialize, advance)
             .chain()
+            .in_set(TissueSurfaceUpdate)
             .after(bevy::render::mesh::inherit_weights)
             .after(TransformSystem::TransformPropagate),
     );

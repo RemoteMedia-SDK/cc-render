@@ -4,6 +4,10 @@
 mod native_recording;
 #[path = "condo_capture/weather_recording.rs"]
 mod weather_recording;
+#[path = "condo_capture/water_recording.rs"]
+mod water_recording;
+#[path = "condo_capture/navigation_recording.rs"]
+mod navigation_recording;
 use cc_render_plugin::cc_render::{
     CcRenderer, PhysicsConfig, RendererConfig,
 };
@@ -11,6 +15,7 @@ use std::{
     io::Write,
     path::Path,
     process::{Command, Stdio},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -76,7 +81,7 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(out)?;
     record_inputs(&args, out, seconds)?;
     let weather = weather_recording::WeatherCapture::new(out, options.frames)?;
-    let renderer = CcRenderer::spawn(RendererConfig {
+    let renderer = Arc::new(CcRenderer::spawn(RendererConfig {
         glb_path: args[1].clone().into(),
         arkit_map_path: args[2].clone().into(),
         scene_package_path: Some(args[3].clone().into()),
@@ -85,8 +90,8 @@ fn main() -> anyhow::Result<()> {
         fps: 30,
         physics: Some(PhysicsConfig::default()),
         ..Default::default()
-    })?;
-    let result = record(&renderer, out, &options, weather);
+    })?);
+    let result = record(&renderer, out, &options, weather, &args[1]);
     renderer.shutdown()?;
     result
 }
@@ -158,6 +163,7 @@ fn record_inputs(args: &[String], out: &Path, seconds: f32) -> anyhow::Result<()
             key.starts_with("CC_CONDO_")
                 || key.starts_with("CC_AVATAR_")
                 || key == "AVATAR_BEVY_GPU_INDEX"
+                || key == "AVATAR_START"
                 || key == "WGPU_BACKEND"
                 || key == "VK_ICD_FILENAMES"
         })
@@ -182,7 +188,7 @@ fn record_inputs(args: &[String], out: &Path, seconds: f32) -> anyhow::Result<()
     Ok(())
 }
 
-fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weather: weather_recording::WeatherCapture) -> anyhow::Result<()> {
+fn record(renderer: &Arc<CcRenderer>, out: &Path, options: &CaptureOptions, mut weather: weather_recording::WeatherCapture, avatar: &str) -> anyhow::Result<()> {
     let mut frames = Vec::new();
     let warmup = Instant::now();
     while !renderer.is_ready() {
@@ -200,6 +206,7 @@ fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weath
         .map(|path| native_recording::load(Path::new(path)))
         .transpose()?
         .unwrap_or_default();
+    let mut navigation = navigation_recording::NavigationCapture::from_env(renderer.clone(), out, avatar)?;
     let dimensions = format!("{}x{}", options.width, options.height);
     let mut ffmpeg = Command::new("/usr/bin/ffmpeg")
         .args([
@@ -236,14 +243,20 @@ fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weath
     let mut intervals = Vec::new();
     let mut count = 0;
     let mut replay = native_recording::PlaybackCursor::default();
+    let mut water = water_recording::WaterCapture::new(out, options.frames, renderer)?;
     let mut states = std::fs::File::create(out.join("states.ndjson"))?;
     let mut frame_times = std::fs::File::create(out.join("frame-times.ndjson"))?;
     while count < target {
         anyhow::ensure!(renderer.is_ready(), "renderer withdrew readiness during capture; inspect renderer log");
         anyhow::ensure!(started.elapsed() < options.timeout, "capture timeout");
         weather.advance(renderer, count)?;
-        replay.feed(renderer, &poses, started.elapsed().as_millis() as u64);
-        renderer.drain_frames(&mut frames);
+        water.advance(renderer, count)?;
+        if let Some(navigation) = navigation.as_mut() {
+            navigation.advance(&mut frames)?;
+        } else {
+            replay.feed(renderer.as_ref(), &poses, started.elapsed().as_millis() as u64);
+            renderer.drain_frames(&mut frames);
+        }
         for frame in frames.drain(..) {
             let now = Instant::now();
             intervals.push(now.duration_since(previous).as_secs_f64() * 1000.0);
@@ -255,6 +268,7 @@ fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weath
             }))?;
             input.write_all(&frame.pixels)?;
             weather.observe(renderer, count)?;
+            water.observe(renderer, count)?;
             writeln!(
                 states,
                 "{}",
@@ -283,8 +297,8 @@ fn record(renderer: &CcRenderer, out: &Path, options: &CaptureOptions, mut weath
     let report = serde_json::json!({"frames":count,"resolution":[options.width,options.height],"encoded_fps":30,
         "encoded_duration_seconds":count as f64/30.,
         "wall_seconds":started.elapsed().as_secs_f64(),"native_packets":packets,
-        "sent_packets":replay.sent,"total_packets":poses.len(),"final_state":final_state,"final_weather":renderer.weather_state(),
-        "avatar_evidence":if packets.is_some(){"unchanged recorded native playback"}else{"bind pose only; not motion acceptance"},
+        "sent_packets":replay.sent,"total_packets":poses.len(),"final_state":final_state,"final_weather":renderer.weather_state(),"final_water":renderer.water_state(),
+        "avatar_evidence":if navigation.is_some(){"live normal navigation command through CcRenderNode"}else if packets.is_some(){"unchanged recorded native playback"}else{"bind pose only; not motion acceptance"},
         "arrival_interval_p50_ms":intervals[intervals.len()/2],
         "arrival_interval_p95_ms":intervals[intervals.len()*95/100],
         "note":"Arrival timings include capture polling and encoder backpressure, not GPU timings."});

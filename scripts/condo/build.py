@@ -433,7 +433,9 @@ prepare_lamps(vehicle)
 export_selection(out/'vehicle-base.glb',[vehicle])
 from vehicle_variants import add_variants
 vehicle_variants=add_variants(out/'vehicle-base.glb',out/'vehicle.glb')
-manifest={'schema_version':1,'id':'toronto_condo','geometry':'interior-city.glb','floor_y':0,
+from plumbing import water_fixtures, shower_destination
+shower_destination(solids)
+manifest={'water_fixtures':water_fixtures(),'schema_version':1,'id':'toronto_condo','geometry':'interior-city.glb','floor_y':0,
     'solids':solids,'cameras':[
         {'id':'living','position':[-1.4,1.35,-2.8],'look_at':[.8,1.25,3.3],'fov_deg':55},
         {'id':'balcony','position':[0,1.65,6.2],'look_at':[200,-70,650],'fov_deg':62},

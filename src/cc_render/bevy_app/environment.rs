@@ -77,6 +77,7 @@ pub(crate) fn install(app: &mut App, package: ScenePackage) {
     super::city_windows::install(app);
     super::texture_filtering::install(app);
     super::practical_lights::install(app);
+    super::plumbing::install(app);
     super::wet_surfaces::install(app);
     app.add_plugins(MaterialPlugin::<LakeWater>::default())
         .insert_resource(package)

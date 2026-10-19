@@ -232,6 +232,7 @@ pub struct CcRenderer {
     weather_tx: watch::Sender<Option<super::scene_weather::WeatherRequest>>,
     weather_rx: watch::Receiver<Option<super::scene_weather::WeatherSnapshot>>,
     weather_revision: std::sync::atomic::AtomicU64,
+    water: super::scene_water::WaterControl,
 }
 
 impl Renderer for CcRenderer {
@@ -343,6 +344,8 @@ impl CcRenderer {
             requests: weather_requests, snapshots: weather_snapshots,
         };
 
+        let (water, water_bridge) = super::scene_water::WaterControl::new(
+            package.as_ref().map_or(&[], |p| p.water_fixtures.as_slice()));
         let cfg = Arc::clone(&config);
         let join = thread::Builder::new()
             .name("cc-render-bevy".into())
@@ -362,6 +365,7 @@ impl CcRenderer {
                     hud_rx,
                     package,
                     weather_bridge,
+                    water_bridge,
                 );
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
@@ -379,6 +383,7 @@ impl CcRenderer {
             grab_cmd_tx,
             scene_state_rx,
             hud_tx,
+            water,
             weather_tx,
             weather_rx,
             weather_revision: std::sync::atomic::AtomicU64::new(0),
@@ -397,6 +402,16 @@ impl CcRenderer {
 
     pub fn weather_state(&self) -> Option<super::scene_weather::WeatherSnapshot> {
         self.weather_rx.borrow().clone()
+    }
+
+    /// Set an authored fixture's valve opening (0 = off, 1 = full flow).
+    /// Returns a per-fixture revision; water_state reports applied observations.
+    pub fn set_water_flow(&self, fixture: &str, flow: f32) -> anyhow::Result<u64> {
+        self.water.set(fixture, flow)
+    }
+
+    pub fn water_state(&self) -> Vec<super::scene_water::WaterSnapshot> {
+        self.water.state()
     }
 
     /// Replace the display-only home overlay (latest wins); `None` hides it.
@@ -707,6 +722,7 @@ fn run_bevy_app(
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
     package: Option<super::scene_package::ScenePackage>,
     weather_bridge: super::scene_weather::WeatherBridge,
+    water_bridge: super::scene_water::WaterBridge,
 ) {
     super::bevy_app::run(
         config,
@@ -722,5 +738,6 @@ fn run_bevy_app(
         hud_rx,
         package,
         weather_bridge,
+        water_bridge,
     );
 }

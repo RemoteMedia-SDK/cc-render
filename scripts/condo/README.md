@@ -652,8 +652,8 @@ The script replaces the two original kitchen collision boxes with seven
 geometry-derived groups. Base units, refrigerator and island block XZ
 navigation; the upper cabinets, backsplash, hood and faucet have separate
 physical boxes. These conservative bounds do not model the sink cavity.
-Appliances remain static visual objects; door actuation, cooking, water flow
-and avatar interaction are not implemented. Iteration 97 is the visual baseline.
+Cooking and avatar-operated fixture use remain unimplemented. Running water
+is available through the scene controls described below. Iteration 97 is the visual baseline.
 `--refresh-room` rebakes all six existing atlases from the lightmapped Blender
 file, preserving already-applied geometry and UV layers. `--room` remains the
 initial bake from the normal scene and can produce different bevel UVs.
@@ -879,8 +879,184 @@ The ceiling fixture lies outside the current review camera, so its visible
 appearance has not been assessed by these captures.
 
 The mirror currently reflects the external environment map, not the bathroom
-or avatar. Practical lights still have hard shadow edges. All fixtures are static;
-running water, shower use and door interaction are not implemented.
+or avatar. Practical lights still have hard shadow edges. Running water is
+controlled independently as described below, with read-only avatar surface collisions.
+
+## Functional shower and faucets
+
+All condo packages include three independently controllable outlets:
+`kitchen_faucet`, `bathroom_faucet`, and `shower`. They start off.
+On `CcRenderer`, `set_water_flow("shower", 1.0)?` opens the shower fully;
+`set_water_flow("shower", 0.0)?` closes it. Values between zero and one
+adjust flow. Invalid values and unknown fixture IDs return errors.
+`water_state()` reports each fixture's applied revision, valve opening,
+litres/minute, cumulative estimated litres and visible/runoff particle counts.
+It also reports body/drain impacts, dropped emissions, unresolved collisions,
+collision geometry counts/revision, and any observation error.
+CPU collision-update and simulation timings are included in milliseconds.
+The returned revision is per fixture; observe it before treating a request as applied.
+Rapid requests retain the latest setting for each outlet independently.
+
+Water parcels integrate gravity and drag with substeps no longer than 1/120 s.
+Swept point/triangle queries test the avatar's previous and current skinned
+render meshes, including morph weights and optional tissue deformation.
+The collision solver reuses the tissue continuous-collision implementation;
+it accounts for both falling droplets and moving body surfaces. Impacts absorb
+normal momentum and retain tangential motion in a gravity-driven surface film.
+Runoff follows triangle material coordinates, crosses connected faces, and detaches
+into falling drops. The adapter only reads avatar geometry; it never edits
+bones, motion packets, or mesh vertices.
+The GPU renders the droplets; independent CPU collision queries use Bevy's task
+pool. The surface tree is refitted between periodic rebuilds, and idle water
+does not continuously reskin the avatar. Morph/topology caches warm during scene
+loading. Zero-area triangles are counted and excluded from collision surfaces.
+Water queries use a 10-micrometre contact tolerance and bounded interval subdivision
+for grazing contacts; the tissue solver retains its existing tolerance.
+
+Authored receiving planes represent the basin bottoms and shower floor. Drops
+make a small impact splash there and are absorbed on subsequent contact.
+Closing a valve stops emission and allows remaining drops to drain or expire.
+A fixed pool of 2,048 shower parcels and 512 per tap (3,072 total) bounds water
+entities and materials. Parcel lifetime is three seconds; surface attachment
+lasts at most 1.5 seconds. The simulation uses the scene clock and also runs
+without avatar playback. Collision-observation errors pause water advancement
+and are exposed in state; individual unresolved sweeps retire that parcel and
+increment an explicit diagnostic counter.
+
+This is a bounded parcel approximation, with estimated flow rates of 6 L/min
+per tap and 9 L/min for the shower at full opening. Parcels represent bundles
+of liquid, not volume-conserving fluid cells. There is no pressure/viscosity
+solve, two-way force on the avatar, basin filling, overflow, heat, steam,
+sound or wet clothing. Hair cards are triangle surfaces without alpha-cutout
+collision filtering. Receiving planes do not model basin walls or puddles.
+The existing
+lever meshes remain static. Direct scene controls do not generate an avatar
+reaching for a tap; ARDY retains ownership of any future body interaction.
+The concrete renderer API is not yet exposed through the SDK/node protocol.
+
+`scripts/condo/plumbing.py` defines the outlet positions and receiving heights
+in package coordinates and refreshes existing manifests without rebuilding the
+large GLBs. `build.py` includes the same definitions in new exports. To record
+an off/on/reduced-flow/off cycle through the public renderer API:
+
+```sh
+cargo test --offline --lib water
+cargo build --offline --example condo_capture
+AVATAR_BEVY_GPU_INDEX=1 CC_CONDO_VIEW=bathroom CC_CONDO_SECONDS=8 \
+  CC_CONDO_WATER_SEQUENCE=scripts/condo/water-cycle.json \
+  target/debug/examples/condo_capture \
+  ../remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb \
+  ../remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json \
+  scenes/toronto_condo/scene-lightmap.json /tmp/condo-water-NEW
+```
+
+The capture preserves the sequence, `water-requests.ndjson`,
+`water-states.ndjson`, and final water state in `capture.json`. State observations
+are sampled by the capture consumer, not synchronized GPU frame metadata.
+Use a fresh output directory and publish each render to the progress gallery.
+
+For stationary avatar interaction, `generate_water_motion.py OUTPUT` records a
+fixed-seed, semantic-only standing session. Run it in the SDK's configured ARDY
+Python environment. It saves its plan
+before sampling, requests, complete responses, unchanged packets and native journals.
+Use `CC_CONDO_NATIVE_PACKETS=OUTPUT/standing/packets.ndjson` with
+`AVATAR_START=-5.5,-4.3,90`. Pass `water-body-cycle.json` as the water sequence.
+The renderer must receive the same `AVATAR_START` recorded in service provenance.
+This uses the existing owner-approved session-start implementation from commit
+`2c1db23`: initial scene-root translation only, with world poses subsequently
+consumed unchanged. It does not disable or relax navigation admission.
+
+**Shower entry uses normal navigation.** Connect `condo_capture` to the existing
+scene-enabled ARDY daemon with `ARDY_SOCKET` and its startup signing-key path in
+`CC_CONDO_SCENE_KEY`, then set `CC_CONDO_NAVIGATE=shower_screen`. Do not set
+`CC_CONDO_NATIVE_PACKETS` in this mode. The capture submits a normal v3 goal:
+
+```json
+{"operation":"navigate","target_id":"shower_screen","pace":"normal"}
+```
+
+The shower screen's authored approach point lies under the water outlet. It stays
+a navigation obstacle; the planner must route around the glass. Older diagnostic
+packages without the detailed bathroom do not acquire this target.
+`navigation_recording.rs` uses the application's `CcRenderNode`, normal native
+bootstrap, registered capabilities, signed renderer-owned scene snapshots,
+navigation lifecycle and revision handoffs. ARDY supplies walking through the
+installed planned-navigation backend. There is no shower-specific step prompt or
+pose path. The capture preserves goals, signed requests, complete responses and
+node events (including arrival status). Its frame tap preserves raw frame metadata.
+
+For the entry water check, use `AVATAR_START=-4.4,-4.3,-90` on both the daemon and
+renderer, `CC_CONDO_VIEW=bathroom`, `CC_CONDO_SECONDS=30` and
+`CC_CONDO_WATER_SEQUENCE=scripts/condo/water-navigation-cycle.json` (on at zero,
+off at 25 seconds). Each fresh output directory creates a fresh motion session.
+
+The [normal-navigation recording](../../artifacts/toronto-condo/20261019T042823Z-normal-navigation-into-running-shower-completed/view.mp4)
+reports navigation completion at native 5,262 ms, then remains under the outlet
+through the 30-second capture without a motion rejection. It reaches 543 runoff
+parcels, has zero unresolved queries/dropped emissions, and finishes with no
+visible/runoff parcels after shutoff. The 900-frame 1080p capture takes 31.26
+seconds; this is not a GPU timing or general navigation-reliability benchmark.
+The earlier normal-command attempt explicitly rejected `shower_floor` because
+non-obstacle floor solids are not exported as office targets; that attempt is
+preserved. The final command uses the existing screen object without changing
+navigation admission or lifecycle code. Navigation/capture tests pass (22 + 6);
+the repository's existing Python text-slice failure remains. The scoped static
+quality gate still reports trait-method reachability findings and is not clean.
+Plans, source hashes, test logs and daemon journals are retained under
+`artifacts/toronto-condo-captures/water-navigation-v1/`.
+
+The first body-water GPU attempt omitted renderer start placement and was rejected
+at its first native root. It is retained as a failed gallery entry, not collision
+acceptance; the initial empty-shower image is evidence of that failure.
+
+Earlier body-water recordings use the same compiled source and preserve the complete
+eight-second sequence at 1920 × 1080:
+
+- [Standing with moving arms and hair](../../artifacts/toronto-condo/20261019T035528Z-shower-water-moving-skin-runoff-final-standing-validation/view.mp4):
+  554 peak runoff parcels, zero unresolved queries/dropped emissions, and zero
+  remaining particles after shutoff. All 160 native frames were sent and playback
+  reached 8,000 ms without motion rejection. Capture took 8.41 seconds;
+  arrival median/p95 were 33.19/42.64 ms.
+- [Walking into the running shower](../../artifacts/toronto-condo/20261019T035609Z-shower-entry-water-contact-with-native-late-wall-rejection/view.mp4):
+  first observed body contact at encoded frame 97 while the valve was open,
+  226 peak runoff parcels, zero unresolved queries/dropped emissions, and complete
+  drainage. Capture took 8.34 seconds; arrival median/p95 were 33.01/37.09 ms.
+  **The native action fails later:** ARDY's unchanged continuation crosses the
+  west-wall clearance reserve at 7,679 ms; playback rejects it at 7,646 ms.
+  This is water-contact evidence, not successful end-to-end shower entry.
+  This free-form entry test is superseded by the normal Navigate command above.
+
+One bounded semantic short-step retry was also retained. It passed root admission
+but moved only about 6 cm and did not enter the shower. Neither candidate was
+repaired. Service responses, conditioning audits and source equality reports are
+under `artifacts/toronto-condo-captures/water-body-native-v1/` and `water-body-native-v2/`.
+
+In the standing capture, active-water CPU skin/tree updates had a 26.75 ms median;
+parcel simulation had a 1.75 ms median. GPU rendering is enabled, but collision
+geometry remains CPU work. These short captures do not establish sustained 30 fps.
+Earlier failed performance/collision attempts are preserved in the gallery.
+Final source hashes, traces and test logs are under
+`artifacts/toronto-condo-captures/water-body-validation/`: 13 water, 6 shared
+collision, 12 tissue-system and 1 session-start Rust tests pass. The Python suite
+still has the unchanged baseline failure described below. Static quality analysis
+also flags the new Bevy systems as apparently unused and reports geometry-function
+complexity; it is not a clean quality gate.
+
+The earlier visual-particle baseline GPU recordings (1920 × 1080, 240 frames
+each, before avatar collision support) are archived in the
+[progress gallery](../../artifacts/toronto-condo/index.html):
+[bathroom shower and vanity](../../artifacts/toronto-condo/20261019T023502Z-functional-bathroom-water-shower-and-vanity/view.mp4)
+and [kitchen tap](../../artifacts/toronto-condo/20261019T023613Z-functional-kitchen-tap-flow-and-shutoff/view.mp4).
+All eight commands were observed in each trace, and the final off views match
+the initial dry views (no pixels differ by more than two 8-bit levels).
+The kitchen camera uses `CC_AVATAR_CAMERA_POS=-4.4,1.5,-0.05`,
+`CC_AVATAR_CAMERA_LOOK_AT=-5.55,0.97,-0.35`, and `CC_AVATAR_CAMERA_FOV_DEG=55`.
+Validation reports and source hashes are in
+`artifacts/toronto-condo-captures/water-validation/`.
+The water and scene-package Rust checks pass. The repository Python suite has
+one pre-existing failure in `test_root_acceptance_does_not_rewrite_the_candidate`:
+its text slice includes unrelated methods; both scanned source and test are
+unchanged from HEAD. The ownership gate has not been weakened.
 
 ## Baked sky-light diagnostic
 

@@ -1,0 +1,112 @@
+{
+  "scope": "Water collision and runoff; native action acceptance is separate",
+  "tests": {
+    "water": 13,
+    "tissue_collision": 6,
+    "tissue_system": 12,
+    "avatar_start": 1,
+    "python": {
+      "passed": 15,
+      "failed": 1,
+      "failure": "test_root_acceptance_does_not_rewrite_the_candidate",
+      "baseline_files_unchanged": true
+    }
+  },
+  "captures": {
+    "standing": {
+      "frames": 240,
+      "wall_seconds": 8.410067439,
+      "arrival_interval_p50_ms": 33.187559,
+      "arrival_interval_p95_ms": 42.644459000000005,
+      "sent_packets": 160,
+      "total_packets": 160,
+      "final_water": {
+        "body_impacts": 26814,
+        "collision_error": null,
+        "collision_meshes": 28,
+        "collision_revision": 237,
+        "collision_triangles": 190218,
+        "collision_update_ms": 0.0,
+        "degenerate_triangles": 1,
+        "drain_impacts": 4543,
+        "dropped_emissions": 0,
+        "flow": 0.0,
+        "id": "shower",
+        "liters_per_minute": 0.0,
+        "revision": 2,
+        "runoff_particles": 0,
+        "simulation_ms": 0.01544,
+        "total_liters": 0.7803894979500003,
+        "unresolved_collisions": 0,
+        "visible_particles": 0
+      },
+      "peak_runoff": 554,
+      "first_body_impact_encoded_frame": 7,
+      "native_motion_error": null,
+      "displayed_native_pts_ms": 8000,
+      "collision_update_ms": {
+        "p50": 26.751535999999998,
+        "p95": 34.336258,
+        "max": 43.010754999999996
+      },
+      "simulation_ms": {
+        "p50": 1.753398,
+        "p95": 3.011538,
+        "max": 18.675178
+      }
+    },
+    "entering": {
+      "frames": 240,
+      "wall_seconds": 8.335374745,
+      "arrival_interval_p50_ms": 33.006806,
+      "arrival_interval_p95_ms": 37.092561,
+      "sent_packets": 160,
+      "total_packets": 160,
+      "final_water": {
+        "body_impacts": 5359,
+        "collision_error": null,
+        "collision_meshes": 28,
+        "collision_revision": 237,
+        "collision_triangles": 190218,
+        "collision_update_ms": 0.0,
+        "degenerate_triangles": 1,
+        "drain_impacts": 5015,
+        "dropped_emissions": 0,
+        "flow": 0.0,
+        "id": "shower",
+        "liters_per_minute": 0.0,
+        "revision": 2,
+        "runoff_particles": 0,
+        "simulation_ms": 0.01363,
+        "total_liters": 0.76692017955,
+        "unresolved_collisions": 0,
+        "visible_particles": 0
+      },
+      "peak_runoff": 226,
+      "first_body_impact_encoded_frame": 97,
+      "native_motion_error": "native root validation rejected session=\"condo-water-entering\" revision=1 frame=7679 displayed=7646: \"office root-path validation rejected the unchanged candidate\"",
+      "displayed_native_pts_ms": 7646,
+      "collision_update_ms": {
+        "p50": 24.49222,
+        "p95": 32.359356,
+        "max": 34.469018999999996
+      },
+      "simulation_ms": {
+        "p50": 0.117482,
+        "p95": 1.8983400000000001,
+        "max": 3.090009
+      }
+    }
+  },
+  "limits": [
+    "Bounded parcels, not volume-conserving pressure/viscosity fluid",
+    "No pooling, basin walls, heat, steam, wet clothing, or two-way avatar forces",
+    "Hair cards collide as triangles without alpha filtering",
+    "CPU skin/tree update dominates; GPU renders droplets",
+    "Arrival intervals include capture polling and encoder backpressure; not GPU frame timings",
+    "State observations are sampled by capture consumer, not synchronized frame metadata",
+    "Native entry fails late wall reserve; bounded short-step retry does not enter",
+    "Static quality delta reports new system dead-code false positives and complexity findings; reviewed, not a clean gate"
+  ],
+  "source_hashes_match_final_capture_binary": true
+}

@@ -1255,7 +1255,12 @@
         1.1334999799728394,
         0.009000062942504883
       ],
-      "navigation_obstacle": true
+      "navigation_obstacle": true,
+      "approach": [
+        -0.3199999809265135,
+        0.0,
+        -0.605000066757202
+      ]
     },
     {
       "id": "shower_west_cladding",
@@ -3341,6 +3346,44 @@
       "collision_fixed_parts": [
         "bedside_shell"
       ]
+    }
+  ],
+  "water_fixtures": [
+    {
+      "id": "kitchen_faucet",
+      "kind": "faucet",
+      "outlet": [
+        -5.57,
+        1.1,
+        -0.35
+      ],
+      "surface_y": 0.765,
+      "spray_radius_m": 0.002,
+      "max_liters_per_minute": 6
+    },
+    {
+      "id": "bathroom_faucet",
+      "kind": "faucet",
+      "outlet": [
+        -5.51,
+        1.05,
+        -2.85
+      ],
+      "surface_y": 0.707,
+      "spray_radius_m": 0.002,
+      "max_liters_per_minute": 6
+    },
+    {
+      "id": "shower",
+      "kind": "shower",
+      "outlet": [
+        -5.55,
+        2.158,
+        -4.3
+      ],
+      "surface_y": 0.024,
+      "spray_radius_m": 0.105,
+      "max_liters_per_minute": 9
     }
   ]
 }

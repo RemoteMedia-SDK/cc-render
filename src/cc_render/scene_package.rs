@@ -65,6 +65,8 @@ pub struct ScenePackage {
     pub mechanisms: Vec<super::scene_mechanism::SceneMechanism>,
     #[serde(default)]
     pub cloths: Vec<super::scene_cloth::SceneCloth>,
+    #[serde(default)]
+    pub water_fixtures: Vec<super::scene_water::WaterFixture>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -166,6 +168,7 @@ impl ScenePackage {
                 && solid.half_extents.iter().all(|h| solid.border_radius_m < *h), "invalid solid border radius");
         }
         validate_point_lights(&self.point_lights)?;
+        super::scene_water::validate(&self.water_fixtures)?;
         super::scene_mechanism::validate_mechanisms(&self.mechanisms, &self.solids)?;
         super::scene_cloth::validate(self)?;
         Ok(())

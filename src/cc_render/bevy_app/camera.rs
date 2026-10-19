@@ -78,6 +78,37 @@ fn env_vec3_opt(key: &str) -> Option<Vec3> {
     Some(Vec3::new(x, y, z))
 }
 
+/// The avatar root at the session's start placement, `AVATAR_START=x,z,yaw_deg`, the same
+/// value the motion daemon maps ARDY's frame through (SDK `session_frame.py`). Translation
+/// only: the bind pose stands there until the first packet and the first root sweep starts
+/// from it; packets carry world roots (cancelled through this parent) and their own pelvis
+/// rotation, so the yaw is not applied here.
+pub(crate) fn avatar_start_transform() -> Transform {
+    parse_avatar_start(std::env::var("AVATAR_START").ok().as_deref()).expect("AVATAR_START must be \"x,z,yaw_deg\"")
+}
+
+fn parse_avatar_start(value: Option<&str>) -> Option<Transform> {
+    let Some(value) = value.filter(|s| !s.trim().is_empty()) else { return Some(Transform::IDENTITY) };
+    let v = value.split(',').map(|p| p.trim().parse::<f32>().ok()).collect::<Option<Vec<_>>>()?;
+    (v.len() == 3 && v.iter().all(|x| x.is_finite())).then(|| Transform::from_xyz(v[0], 0., v[1]))
+}
+
+#[cfg(test)]
+mod avatar_start_tests {
+    use super::*;
+
+    #[test]
+    fn the_start_places_the_avatar_root_on_the_ground_without_turning_it() {
+        assert_eq!(parse_avatar_start(None), Some(Transform::IDENTITY));
+        assert_eq!(parse_avatar_start(Some(" ")), Some(Transform::IDENTITY));
+        let placed = parse_avatar_start(Some("-4.2, -2.8, -90")).unwrap();
+        assert_eq!(placed.translation, Vec3::new(-4.2, 0., -2.8));
+        assert_eq!(placed.rotation, Quat::IDENTITY);
+        assert_eq!(parse_avatar_start(Some("1,2")), None);
+        assert_eq!(parse_avatar_start(Some("1,x,3")), None);
+    }
+}
+
 /// Effective camera position — `CC_AVATAR_CAMERA_POS=x,y,z` overrides
 /// the const default. Read by both `setup_scene` and
 /// `auto_orient_avatar` so they stay in sync.
@@ -940,7 +971,7 @@ pub(crate) fn setup_scene(
 
     // ─── Avatar scene ──────────────────────────────────────────────────
     let scene: Handle<Scene> = asset_server.load(format!("{}#Scene0", glb.filename));
-    commands.spawn((SceneRoot(scene), Transform::IDENTITY, AvatarRoot));
+    commands.spawn((SceneRoot(scene), avatar_start_transform(), AvatarRoot));
 
     // ─── Optional environment scene ────────────────────────────────────
     // Loaded through the `scene://` asset source registered in

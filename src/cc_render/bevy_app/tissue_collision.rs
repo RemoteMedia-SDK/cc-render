@@ -327,7 +327,7 @@ fn sample_position(
     )
 }
 
-fn swept_bounds(points: impl IntoIterator<Item = DVec3>, radius: f64) -> Aabb {
+pub(super) fn swept_bounds(points: impl IntoIterator<Item = DVec3>, radius: f64) -> Aabb {
     let (lo, hi) = points.into_iter().fold(
         (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
         |(lo, hi), p| (lo.min(p), hi.max(p)),
@@ -339,10 +339,11 @@ fn swept_bounds(points: impl IntoIterator<Item = DVec3>, radius: f64) -> Aabb {
 }
 
 #[derive(Debug)]
-struct Witness {
-    barycentric: [f64; 3],
-    normal: DVec3,
-    distance: f64,
+pub(super) struct Witness {
+    pub barycentric: [f64; 3],
+    pub normal: DVec3,
+    pub distance: f64,
+    pub fraction: f64,
 }
 
 fn witness(x: [DVec3; 4]) -> anyhow::Result<Witness> {
@@ -357,6 +358,7 @@ fn witness(x: [DVec3; 4]) -> anyhow::Result<Witness> {
     let distance = delta.length();
     anyhow::ensure!(distance.is_finite() && distance > 1e-12, ContactUnresolved);
     Ok(Witness {
+        fraction: 0.0,
         barycentric,
         normal: delta / distance,
         distance,
@@ -365,7 +367,11 @@ fn witness(x: [DVec3; 4]) -> anyhow::Result<Witness> {
 
 /// Conservative advancement for a linearly moving point and triangle. The
 /// maximum relative vertex speed bounds change of closest-point distance.
-fn sweep(old: [DVec3; 4], end: [DVec3; 4], radius: f64) -> anyhow::Result<Option<Witness>> {
+pub(super) fn sweep(old: [DVec3; 4], end: [DVec3; 4], radius: f64) -> anyhow::Result<Option<Witness>> {
+    sweep_with_tolerance(old, end, radius, 1e-8)
+}
+
+pub(super) fn sweep_with_tolerance(old: [DVec3; 4], end: [DVec3; 4], radius: f64, tolerance: f64) -> anyhow::Result<Option<Witness>> {
     let motion = std::array::from_fn::<_, 4, _>(|i| end[i] - old[i]);
     let speed = (1..4)
         .map(|i| (motion[0] - motion[i]).length())
@@ -373,14 +379,15 @@ fn sweep(old: [DVec3; 4], end: [DVec3; 4], radius: f64) -> anyhow::Result<Option
     let mut time = 0.0;
     for _ in 0..256 {
         let at = std::array::from_fn(|i| old[i] + time * motion[i]);
-        let hit = witness(at)?;
-        if hit.distance <= radius + 1e-8 {
+        let mut hit = witness(at)?;
+        if hit.distance <= radius + tolerance {
+            hit.fraction = time;
             return Ok(Some(hit));
         }
         // A separating plane is a lower bound over the entire interval.
         if [at, end]
             .into_iter()
-            .all(|p| (1..4).all(|i| (p[0] - p[i]).dot(hit.normal) > radius + 1e-8))
+            .all(|p| (1..4).all(|i| (p[0] - p[i]).dot(hit.normal) > radius + tolerance))
         {
             return Ok(None);
         }
@@ -392,7 +399,7 @@ fn sweep(old: [DVec3; 4], end: [DVec3; 4], radius: f64) -> anyhow::Result<Option
             return Ok(None);
         }
     }
-    Err(ContactUnresolved.into())
+    Err(anyhow::Error::new(ContactUnresolved).context("point/triangle advancement exhausted"))
 }
 
 #[cfg(test)]

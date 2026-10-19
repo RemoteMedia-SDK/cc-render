@@ -28,6 +28,7 @@ pub mod renderer;
 pub mod scene_package;
 pub mod scene_mechanism;
 pub mod scene_weather;
+pub mod scene_water;
 pub mod deformable_surface;
 pub mod cloth_solver;
 pub(crate) mod cloth_grip;
