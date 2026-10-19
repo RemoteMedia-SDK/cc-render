@@ -1,5 +1,6 @@
-//! Frictionless material-feature contact for deforming cloth surfaces.
-//! Both features receive inverse-mass-weighted response; no fixed-side proxy.
+//! Material-feature contact for deforming cloth surfaces, with Coulomb
+//! cloth-on-cloth friction. Both features receive inverse-mass-weighted
+//! response; no fixed-side proxy.
 use super::*;
 use parry_ccd::{
     math::{Isometry, Point},
@@ -7,16 +8,47 @@ use parry_ccd::{
     shape::{Segment, Triangle},
 };
 
+/// Coulomb coefficients of one fabric's surface sliding on cloth (itself or
+/// another layer). A contact uses the geometric mean of its two surfaces'
+/// coefficients, so a fabric against itself keeps its own values.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ClothFriction {
+    /// Slip that one contact can cancel completely, per metre of its normal
+    /// correction: below it the two cloth points stick.
+    pub stick: f64,
+    /// Slip removed per metre of normal correction once they slide.
+    pub slide: f64,
+}
+
+impl ClothFriction {
+    /// The coefficient the solver used for every cloth contact before
+    /// materials could author their own (and still the serde default): 0.2,
+    /// with no separate static value. Without friction the layers slide
+    /// freely on each other: the authored duvet slid off the foot of the bed
+    /// within two seconds; 0.2 keeps it on the bed.
+    pub(super) const LEGACY: Self = Self {
+        stick: 0.2,
+        slide: 0.2,
+    };
+
+    pub(super) fn between(self, other: Self) -> Self {
+        Self {
+            stick: (self.stick * other.stick).sqrt(),
+            slide: (self.slide * other.slide).sqrt(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum FeaturePair {
     VertexFace([usize; 4]),
     EdgeEdge([usize; 4]),
 }
 
-struct PairWitness {
-    weights: [f64; 4],
-    normal: DVec3,
-    distance: f64,
+pub(super) struct PairWitness {
+    pub weights: [f64; 4],
+    pub normal: DVec3,
+    pub distance: f64,
 }
 
 impl FeaturePair {
@@ -33,7 +65,7 @@ impl FeaturePair {
         }
     }
 
-    fn witness(self, positions: [DVec3; 4]) -> Result<PairWitness, ClothError> {
+    pub(super) fn witness(self, positions: [DVec3; 4]) -> Result<PairWitness, ClothError> {
         // Translation-local f64 geometry avoids losing small cloth gaps far
         // from the scene origin. Reconstruct material points from source data.
         let [a, b, c, d] = positions.map(|p| {
@@ -200,8 +232,10 @@ impl FeaturePair {
         fixed: &[FixedClothCollider],
         axis: &mut DVec3,
     ) -> Result<bool, ClothError> {
-        self.project_with_support(particles, thickness, axis, |_, p, d| {
-            std::array::from_fn(|k| fixed_support_direction(fixed, thickness * 0.5, p[k], d[k]))
+        self.project_with_support(particles, thickness, axis, ClothFriction::LEGACY, |_, p, d| {
+            Ok(std::array::from_fn(|k| {
+                fixed_support_direction(fixed, thickness * 0.5, p[k], d[k])
+            }))
         })
     }
 
@@ -210,7 +244,8 @@ impl FeaturePair {
         particles: &mut GripParticles<'_>,
         thickness: f64,
         axis: &mut DVec3,
-        support: impl Fn([usize; 4], [DVec3; 4], [DVec3; 4]) -> [DVec3; 4],
+        friction: ClothFriction,
+        support: impl Fn([usize; 4], [DVec3; 4], [DVec3; 4]) -> Result<[DVec3; 4], ClothError>,
     ) -> Result<bool, ClothError> {
         let ids = self.indices();
         let end = ids.map(|i| particles.positions[i]);
@@ -224,7 +259,7 @@ impl FeaturePair {
         if self.bounds_separate(old, end, thickness) {
             return Ok(false);
         }
-        let witness = match self.sweep(old, end, thickness)? {
+        let witness = match profiled!("pair_sweep", self.sweep(old, end, thickness))? {
             Some(witness) => witness,
             None => {
                 let witness = self.witness(end)?;
@@ -249,12 +284,13 @@ impl FeaturePair {
         let directions = std::array::from_fn(|k| {
             witness.normal * (witness.weights[k] * particles.inverse_mass[ids[k]])
         });
-        let directions = support(ids, end, directions);
+        profile_scope!("pair_supports");
+        let directions = support(ids, end, directions)?;
         let directions = support(
             ids,
             std::array::from_fn(|k| contact_points[usize::from(k >= self.split())]),
             directions,
-        );
+        )?;
         let mass = directions
             .into_iter()
             .zip(witness.weights)
@@ -266,7 +302,53 @@ impl FeaturePair {
         for (i, direction) in ids.into_iter().zip(directions) {
             particles.positions[i] += direction * (depth / mass);
         }
+        self.apply_friction(particles, &witness, depth, friction);
         Ok(true)
+    }
+
+    /// Coulomb friction between the two material contact points, at position
+    /// level (Macklin et al. 2014, "Unified particle physics", Eq. 24): the
+    /// tangential slip of the contact points since the substep start is
+    /// compared with the normal correction just applied. Slip within
+    /// `stick` times that correction is cancelled entirely (static friction:
+    /// the points move together); larger slip is reduced by `slide` times it
+    /// (kinetic friction). The bound is the same position-level Coulomb bound
+    /// the fixed contacts use, so friction never does more than the normal
+    /// response allows and never pins. Mass-weighted, so linear momentum is
+    /// conserved. With equal coefficients this is the plain bounded slip
+    /// reduction `min(mu * depth, slip)`.
+    fn apply_friction(
+        self,
+        particles: &mut GripParticles<'_>,
+        witness: &PairWitness,
+        depth: f64,
+        friction: ClothFriction,
+    ) {
+        let ids = self.indices();
+        let relative: DVec3 = ids
+            .into_iter()
+            .zip(witness.weights)
+            .map(|(i, w)| (particles.positions[i] - particles.previous[i]) * w)
+            .sum();
+        let tangent = relative - witness.normal * relative.dot(witness.normal);
+        let slip = tangent.length();
+        let inverse: f64 = ids
+            .into_iter()
+            .zip(witness.weights)
+            .map(|(i, w)| particles.inverse_mass[i] * w * w)
+            .sum();
+        if slip <= 0. || inverse <= 0. || depth <= 0. {
+            return;
+        }
+        let cancelled = if slip <= friction.stick * depth {
+            slip
+        } else {
+            (friction.slide * depth).min(slip)
+        };
+        let lambda = cancelled / inverse;
+        for (i, w) in ids.into_iter().zip(witness.weights) {
+            particles.positions[i] -= tangent * (w * particles.inverse_mass[i] * lambda / slip);
+        }
     }
 
     fn contact_points(self, positions: [DVec3; 4], weights: [f64; 4]) -> [DVec3; 2] {
@@ -281,8 +363,8 @@ impl FeaturePair {
     }
 }
 
-pub(super) fn fixed_support_direction(
-    fixed: &[FixedClothCollider],
+pub(super) fn fixed_support_direction<'a>(
+    fixed: impl IntoIterator<Item = &'a FixedClothCollider>,
     radius: f64,
     position: DVec3,
     mut direction: DVec3,
@@ -296,10 +378,34 @@ pub(super) fn fixed_support_direction(
         }
         let (distance, normal) = collider.distance_and_normal(position);
         if distance <= radius + 1e-8 {
+            let free = direction;
             direction -= normal * direction.dot(normal).min(0.);
+            direction = friction_cone(free, direction, collider.friction);
         }
     }
     direction
+}
+
+/// Limit a fixed-supported contact response to the support's Coulomb cone.
+/// The support reaction (`supported - free`) may cancel at most `friction`
+/// times its own magnitude of tangential response. Without this, a support
+/// that removes nearly all of a response's normal effectiveness turns the
+/// remainder into a large frictionless slide: the pair's depth is divided by
+/// a small effective mass, and the supported cloth jumps sideways along a
+/// rounded mattress edge. Alternating support status then makes it chatter.
+pub(super) fn friction_cone(free: DVec3, supported: DVec3, friction: f64) -> DVec3 {
+    let reaction = supported - free;
+    let normal_reaction = reaction.length();
+    if normal_reaction <= 0. {
+        return supported;
+    }
+    let normal = reaction / normal_reaction;
+    let tangent = supported - normal * supported.dot(normal);
+    let slip = tangent.length();
+    if slip <= 0. {
+        return supported;
+    }
+    supported - tangent * (friction * normal_reaction / slip).min(1.)
 }
 
 #[cfg(test)]

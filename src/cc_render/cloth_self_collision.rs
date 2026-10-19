@@ -1,5 +1,5 @@
 //! Swept spatial broad phase and shared-vertex exclusions for self contact.
-use super::pair::FeaturePair;
+use super::pair::{ClothFriction, FeaturePair};
 use super::*;
 use parry_ccd::{bounding_volume::Aabb, math::Point, partitioning::Qbvh};
 
@@ -8,6 +8,7 @@ pub(super) struct ContactLayer<'a> {
     pub triangles: &'a [[usize; 3]],
     pub radius: f64,
     pub fixed: &'a [FixedClothCollider],
+    pub friction: ClothFriction,
 }
 
 fn layer_for<'a, 'b>(layers: &'a [ContactLayer<'b>], vertex: usize) -> &'a ContactLayer<'b> {
@@ -17,58 +18,130 @@ fn layer_for<'a, 'b>(layers: &'a [ContactLayer<'b>], vertex: usize) -> &'a Conta
         .expect("validated cloth layer partition")
 }
 
+/// A fixed-contact pass that skips elements unchanged since the pass that
+/// began at clock `threshold` (0: process everything) and stamps every vertex
+/// it moves.
 fn fixed_contacts(
     particles: &mut GripParticles<'_>,
     layers: &[ContactLayer<'_>],
+    stamps: &mut [u64],
+    clock: &mut u64,
+    threshold: u64,
+    planes: &mut [Option<(DVec3, f64)>],
 ) -> Result<(), ClothError> {
     for layer in layers {
         let r = layer.range.clone();
         let mut local = GripParticles {
             positions: &mut particles.positions[r.clone()],
             previous: &particles.previous[r.clone()],
-            inverse_mass: &particles.inverse_mass[r],
+            inverse_mass: &particles.inverse_mass[r.clone()],
             h: particles.h,
         };
-        collision::collide_surface(&mut local, layer.triangles, layer.fixed, layer.radius)?;
+        collision::collide_surface_tracked(
+            &mut local,
+            layer.triangles,
+            layer.fixed,
+            layer.radius,
+            &mut collision::ContactStamps {
+                stamps: &mut stamps[r.clone()],
+                threshold,
+                clock,
+                planes: &mut planes[r],
+            },
+        )?;
     }
     Ok(())
 }
 
 pub(super) struct SelfCollisionTopology {
     edges: Vec<[usize; 2]>,
+    /// Global triangle indices incident to each vertex, for local supports.
+    vertex_triangles: Vec<Vec<usize>>,
     envelopes: Vec<(DVec3, DVec3)>,
     pairs: Vec<FeaturePair>,
-    thickness: f64,
+    /// Per-vertex contact radius the cached candidates were inflated with.
+    radii: Vec<f64>,
     axes: Vec<DVec3>,
+    /// Exact change tracking inside one contact solve. A pair evaluation is a
+    /// pure function of its four vertices (plus its own cached axis), so a
+    /// pair found inactive stays inactive until one of them moves.
+    clock: u64,
+    stamps: Vec<u64>,
+    pair_clean: Vec<u64>,
+    pair_resolved: Vec<u64>,
+    /// Clock at the start of the latest fixed-contact pass.
+    fixed_pass_start: u64,
+    /// Supporting planes swept fixed contacts clamped vertices to in this
+    /// substep (outward normal, collider friction); see `swept_support`.
+    swept_planes: Vec<Option<(DVec3, f64)>>,
+    /// Fixed-support rows per global face, with the pass-start clock of the
+    /// snapshot they were computed from. Rows depend only on the face's
+    /// snapshot vertices, so they stay exact while none of those changed.
+    face_rows: Vec<Option<(u64, std::sync::Arc<Vec<FaceSupport>>)>>,
+    /// Distance certificates. Feature distance is 1-Lipschitz in each vertex,
+    /// so a pair whose distance at the anchor positions exceeds its contact
+    /// gap by `slack` cannot touch while every one of its vertices (over the
+    /// whole substep path) stays within `slack / 2` of its anchor.
+    anchors: Vec<DVec3>,
+    slack: Vec<f64>,
+    reach: Vec<f64>,
 }
 
 impl SelfCollisionTopology {
     pub(super) fn new(triangles: &[[usize; 3]]) -> Self {
         let mut edges = std::collections::BTreeSet::new();
-        for &[a, b, c] in triangles {
+        let vertices = triangles.iter().flatten().map(|v| v + 1).max().unwrap_or(0);
+        let mut vertex_triangles = vec![Vec::new(); vertices];
+        for (t, &[a, b, c]) in triangles.iter().enumerate() {
             for [a, b] in [[a, b], [b, c], [c, a]] {
                 edges.insert([a.min(b), a.max(b)]);
+            }
+            for v in [a, b, c] {
+                vertex_triangles[v].push(t);
             }
         }
         Self {
             edges: edges.into_iter().collect(),
+            vertex_triangles,
             envelopes: Vec::new(),
             pairs: Vec::new(),
-            thickness: 0.,
+            radii: Vec::new(),
             axes: Vec::new(),
+            clock: 0,
+            stamps: Vec::new(),
+            pair_clean: Vec::new(),
+            pair_resolved: Vec::new(),
+            fixed_pass_start: 0,
+            swept_planes: Vec::new(),
+            face_rows: vec![None; triangles.len()],
+            anchors: Vec::new(),
+            slack: Vec::new(),
+            reach: Vec::new(),
         }
     }
 
+    #[cfg(test)]
     pub(super) fn candidates(
         &mut self,
         particles: &GripParticles<'_>,
         triangles: &[[usize; 3]],
         thickness: f64,
     ) -> &[FeaturePair] {
+        let radii = vec![thickness * 0.5; particles.positions.len()];
+        self.candidates_with(particles, triangles, &radii);
+        &self.pairs
+    }
+
+    fn candidates_with(
+        &mut self,
+        particles: &GripParticles<'_>,
+        triangles: &[[usize; 3]],
+        radii: &[f64],
+    ) {
         // A fat swept bound is a reusable spatial certificate, not a timed
         // refresh. Every endpoint must still fit; secondary corrections which
         // leave an envelope force a rebuild before the next contact pass.
-        let fits = self.thickness == thickness
+        let fits = self.radii == radii
             && self.envelopes.len() == particles.positions.len()
             && self.envelopes.iter().enumerate().all(|(i, (lo, hi))| {
                 [particles.previous[i], particles.positions[i]]
@@ -76,44 +149,73 @@ impl SelfCollisionTopology {
                     .all(|p| p.cmpge(*lo).all() && p.cmple(*hi).all())
             });
         if !fits {
-            let padding = 0.01;
-            self.pairs = self.collect_candidates(particles, triangles, thickness + 2. * padding);
+            profile_scope!("self_candidates_rebuild");
+            self.pairs = self.collect_candidates(particles, triangles, radii);
             self.axes = vec![DVec3::ZERO; self.pairs.len()];
+            self.pair_clean = vec![0; self.pairs.len()];
+            self.pair_resolved = vec![0; self.pairs.len()];
             self.envelopes = particles
                 .previous
                 .iter()
                 .zip(particles.positions.iter())
                 .map(|(a, b)| {
                     (
-                        a.min(*b) - DVec3::splat(padding),
-                        a.max(*b) + DVec3::splat(padding),
+                        a.min(*b) - DVec3::splat(CANDIDATE_PADDING),
+                        a.max(*b) + DVec3::splat(CANDIDATE_PADDING),
                     )
                 })
                 .collect();
-            self.thickness = thickness;
+            self.radii = radii.to_vec();
+            self.anchors = particles.positions.to_vec();
+            self.slack = vec![f64::NAN; self.pairs.len()];
+            self.measure_reach(particles);
         }
-        &self.pairs
+    }
+
+    /// Farthest any vertex has been from its anchor during this substep.
+    fn measure_reach(&mut self, particles: &GripParticles<'_>) {
+        if self.anchors.len() != particles.positions.len() {
+            self.reach = vec![f64::INFINITY; particles.positions.len()];
+            return;
+        }
+        self.reach = self
+            .anchors
+            .iter()
+            .zip(particles.previous.iter().zip(particles.positions.iter()))
+            .map(|(a, (p, q))| a.distance(*p).max(a.distance(*q)))
+            .collect();
+    }
+
+    fn extend_reach(&mut self, vertex: usize, position: DVec3) {
+        if let (Some(r), Some(a)) = (self.reach.get_mut(vertex), self.anchors.get(vertex)) {
+            *r = r.max(a.distance(position));
+        }
     }
 
     fn collect_candidates(
         &self,
         particles: &GripParticles<'_>,
         triangles: &[[usize; 3]],
-        thickness: f64,
+        radii: &[f64],
     ) -> Vec<FeaturePair> {
+        // Each feature is inflated by its own layer radius, the projection
+        // reserve and the envelope padding. Overlap therefore includes every
+        // pair that can come within its contact gap while all vertices stay
+        // inside their envelopes.
+        let inflate = |ids: &[usize]| radii[ids[0]] + CONTACT_RESERVE_LIMIT + CANDIDATE_PADDING;
         let mut tree = Qbvh::new();
         tree.clear_and_rebuild(
             triangles
                 .iter()
                 .enumerate()
-                .map(|(i, ids)| (i, bounds(ids, particles, thickness * 0.5))),
+                .map(|(i, ids)| (i, bounds(ids, particles, inflate(ids)))),
             0.,
         );
         let mut candidates = Vec::new();
         let mut hits = Vec::new();
         for vertex in 0..particles.positions.len() {
             hits.clear();
-            tree.intersect_aabb(&bounds(&[vertex], particles, thickness * 0.5), &mut hits);
+            tree.intersect_aabb(&bounds(&[vertex], particles, inflate(&[vertex])), &mut hits);
             for &face in &hits {
                 let [a, b, c] = triangles[face];
                 if ![a, b, c].into_iter().any(|v| vertex == v) {
@@ -125,12 +227,12 @@ impl SelfCollisionTopology {
             self.edges
                 .iter()
                 .enumerate()
-                .map(|(i, ids)| (i, bounds(ids, particles, thickness * 0.5))),
+                .map(|(i, ids)| (i, bounds(ids, particles, inflate(ids)))),
             0.,
         );
         for (i, &[a, b]) in self.edges.iter().enumerate() {
             hits.clear();
-            tree.intersect_aabb(&bounds(&[a, b], particles, thickness * 0.5), &mut hits);
+            tree.intersect_aabb(&bounds(&[a, b], particles, inflate(&[a, b])), &mut hits);
             for &j in &hits {
                 if j <= i {
                     continue;
@@ -155,14 +257,42 @@ impl SelfCollisionTopology {
         triangles: &[[usize; 3]],
         fixed: &[FixedClothCollider],
         thickness: f64,
+        friction: ClothFriction,
     ) -> Result<(), ClothError> {
         let layers = [ContactLayer {
             range: 0..particles.positions.len(),
             triangles,
             radius: thickness * 0.5,
             fixed,
+            friction,
         }];
         self.resolve_layers(particles, triangles, &layers)
+    }
+
+    /// Run a fixed-contact pass, skipping elements the previous pass already
+    /// left settled, and extend distance certificates by what it moved.
+    fn fixed_contacts_tracked(
+        &mut self,
+        particles: &mut GripParticles<'_>,
+        layers: &[ContactLayer<'_>],
+    ) -> Result<(), ClothError> {
+        let threshold = self.fixed_pass_start;
+        self.fixed_pass_start = self.clock + 1;
+        let start = self.fixed_pass_start;
+        fixed_contacts(
+            particles,
+            layers,
+            &mut self.stamps,
+            &mut self.clock,
+            threshold,
+            &mut self.swept_planes,
+        )?;
+        for i in 0..particles.positions.len() {
+            if self.stamps[i] >= start {
+                self.extend_reach(i, particles.positions[i]);
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn resolve_layers(
@@ -171,18 +301,58 @@ impl SelfCollisionTopology {
         triangles: &[[usize; 3]],
         layers: &[ContactLayer<'_>],
     ) -> Result<(), ClothError> {
-        fixed_contacts(particles, layers)?;
+        let radii: Vec<_> = (0..particles.positions.len())
+            .map(|i| layer_for(layers, i).radius)
+            .collect();
+        // Every vertex moved during integration and material projection.
+        self.clock += 1;
+        self.stamps = vec![self.clock; particles.positions.len()];
+        self.pair_clean.fill(0);
+        self.pair_resolved.fill(0);
+        self.swept_planes.clear();
+        self.swept_planes.resize(particles.positions.len(), None);
+        // The first pass of a substep processes everything.
+        self.fixed_pass_start = 0;
+        profiled!(
+            "fixed_contacts",
+            self.fixed_contacts_tracked(particles, layers)
+        )?;
+        self.measure_reach(particles);
+        #[cfg(test)]
+        crate::cc_render::cloth_profile::stage("fixed_first", usize::MAX, particles.positions);
         for iteration in 0..512 {
+            #[cfg(test)]
+            crate::cc_render::cloth_profile::count("self_iterations", 1);
             // Start with a 0.4 micrometre projection reserve; difficult coupled
             // contacts get 1 micrometre after 64 passes.
             // This is not an acceptance slop: the unpadded feature distance and
             // complete swept path must still certify the original thickness.
-            let reserve = if iteration < 64 { 4e-7 } else { 1e-6 };
-            if !self.project_layers(particles, triangles, layers, reserve)? {
+            let reserve = if iteration < 64 {
+                4e-7
+            } else {
+                CONTACT_RESERVE_LIMIT
+            };
+            if iteration == 64 {
+                self.pair_clean.fill(0);
+            }
+            if !profiled!(
+                "self_project",
+                self.project_layers(particles, triangles, layers, &radii, reserve)
+            )? {
+                #[cfg(test)]
+                count_iterations(iteration + 1);
                 return Ok(());
             }
-            fixed_contacts(particles, layers)?;
-            if self.resolved(particles, triangles, layers)? {
+            profiled!(
+                "fixed_contacts_repeat",
+                self.fixed_contacts_tracked(particles, layers)
+            )?;
+            if profiled!(
+                "self_resolved",
+                self.resolved(particles, triangles, layers, &radii)
+            )? {
+                #[cfg(test)]
+                count_iterations(iteration + 1);
                 return Ok(());
             }
         }
@@ -194,25 +364,110 @@ impl SelfCollisionTopology {
         particles: &mut GripParticles<'_>,
         triangles: &[[usize; 3]],
         layers: &[ContactLayer<'_>],
+        radii: &[f64],
         reserve: f64,
     ) -> Result<bool, ClothError> {
-        let thickness = layers.iter().map(|l| 2. * l.radius).fold(0., f64::max);
-        self.candidates(particles, triangles, thickness);
-        let supports = face_supports(particles.positions, layers)?;
+        self.candidates_with(particles, triangles, radii);
+        // Supports describe the fixed contacts at the start of this pass.
+        // They are evaluated lazily, per incident face, only for pairs that
+        // actually need a correction.
+        let snapshot = particles.positions.to_vec();
+        let near = NearColliders::new(&snapshot, layers);
+        let mut cache = std::mem::take(&mut self.face_rows);
+        cache.resize(triangles.len(), None);
+        let face_rows = std::cell::RefCell::new(cache);
+        let stamps_at_start = self.stamps.clone();
+        let supports = LazySupports {
+            positions: &snapshot,
+            snapshot_clock: self.clock,
+            stamps: &stamps_at_start,
+            triangles,
+            layers,
+            near: &near,
+            vertex_triangles: &self.vertex_triangles,
+            rows: &face_rows,
+        };
+        #[cfg(test)]
+        crate::cc_render::cloth_profile::count("self_pairs", self.pairs.len() as u64);
         let inverse_mass = particles.inverse_mass;
         let mut changed = false;
-        for (pair, axis) in self.pairs.iter().zip(&mut self.axes) {
+        let mut evaluations = 0u64;
+        let Self {
+            pairs,
+            axes,
+            clock,
+            stamps,
+            pair_clean,
+            pair_resolved,
+            anchors,
+            slack,
+            reach,
+            swept_planes,
+            ..
+        } = self;
+        for (k, (pair, axis)) in pairs.iter().zip(axes.iter_mut()).enumerate() {
             let ids = pair.indices();
-            let gap =
-                layer_for(layers, ids[0]).radius + layer_for(layers, ids[pair.split()]).radius;
-            changed |= pair.project_with_support(particles, gap + reserve, axis, |ids, p, d| {
-                let d = std::array::from_fn(|k| {
-                    let layer = layer_for(layers, ids[k]);
-                    pair::fixed_support_direction(layer.fixed, layer.radius, p[k], d[k])
-                });
-                supports.project(ids, inverse_mass, d)
-            })?;
+            if pair_clean[k] > ids.map(|i| stamps[i]).into_iter().max().unwrap() {
+                continue;
+            }
+            if certified_clear(*pair, k, anchors, slack, reach, radii) {
+                continue;
+            }
+            evaluations += 1;
+            let gap = radii[ids[0]] + radii[ids[pair.split()]];
+            let friction = layer_for(layers, ids[0])
+                .friction
+                .between(layer_for(layers, ids[pair.split()]).friction);
+            pair_resolved[k] = 0;
+            let mut project = |particles: &mut GripParticles<'_>, swept: bool| {
+                pair.project_with_support(particles, gap + reserve, axis, friction, |ids, p, d| {
+                    let d = std::array::from_fn(|k| {
+                        let layer = layer_for(layers, ids[k]);
+                        let d = pair::fixed_support_direction(
+                            near.colliders(layers, ids[k], p[k]),
+                            layer.radius,
+                            p[k],
+                            d[k],
+                        );
+                        if swept {
+                            swept_support(swept_planes[ids[k]], d)
+                        } else {
+                            d
+                        }
+                    });
+                    supports.project(ids, inverse_mass, d)
+                })
+            };
+            // A swept clamp plane is a conservative stand-in for the curved
+            // surface, not the surface. Where honouring it leaves the pair no
+            // movable response (both sides held against clamp planes, e.g. a
+            // fitted sheet folded on itself at the rounded corner), the pair
+            // uses the true-surface supports alone, as before. The projection
+            // reports that case before it moves anything.
+            let moved = match project(particles, true) {
+                Err(ClothError::SelfContactUnresolved) => project(particles, false)?,
+                result => result?,
+            };
+            if moved {
+                for i in ids {
+                    reach[i] = reach[i].max(anchors[i].distance(particles.positions[i]));
+                }
+                #[cfg(test)]
+                crate::cc_render::cloth_profile::count("self_pairs_projected", 1);
+                *clock += 1;
+                for i in ids {
+                    stamps[i] = *clock;
+                }
+                changed = true;
+            } else {
+                pair_clean[k] = *clock + 1;
+            }
         }
+        #[cfg(test)]
+        crate::cc_render::cloth_profile::count("self_pair_evaluations", evaluations);
+        let _ = evaluations;
+        drop(supports);
+        self.face_rows = face_rows.into_inner();
         Ok(changed)
     }
 
@@ -221,131 +476,313 @@ impl SelfCollisionTopology {
         particles: &GripParticles<'_>,
         triangles: &[[usize; 3]],
         layers: &[ContactLayer<'_>],
+        radii: &[f64],
     ) -> Result<bool, ClothError> {
-        let thickness = layers.iter().map(|l| 2. * l.radius).fold(0., f64::max);
-        self.candidates(particles, triangles, thickness);
-        for (pair, axis) in self.pairs.iter().zip(&self.axes) {
+        let _ = layers;
+        self.candidates_with(particles, triangles, radii);
+        for k in 0..self.pairs.len() {
+            let pair = self.pairs[k];
             let ids = pair.indices();
-            let gap =
-                layer_for(layers, ids[0]).radius + layer_for(layers, ids[pair.split()]).radius;
-            if !pair.resolved(particles, gap, *axis)? {
+            if self.pair_resolved[k] > ids.map(|i| self.stamps[i]).into_iter().max().unwrap() {
+                continue;
+            }
+            if certified_clear(pair, k, &self.anchors, &mut self.slack, &self.reach, radii) {
+                continue;
+            }
+            let gap = radii[ids[0]] + radii[ids[pair.split()]];
+            if !pair.resolved(particles, gap, self.axes[k])? {
                 return Ok(false);
             }
+            self.pair_resolved[k] = self.clock + 1;
         }
         Ok(true)
     }
 }
 
+/// A vertex a swept fixed contact clamped to a supporting plane this substep
+/// is supported by that plane for the rest of the substep's contact solve,
+/// exactly like a resting fixed contact: a cloth pair may not push it back
+/// through the plane, only off it, and its Coulomb cone limits the slide.
+///
+/// Without this the pair treats the vertex as free. On the mattress's rounded
+/// corner a fast fitted-sheet face is clamped to the witness's tangent plane,
+/// which lies up to 30 mm off the curved surface across the face, so a vertex
+/// 1.2 mm clear of the mattress sat on that plane. Each self-contact pass
+/// pushed it 6 um back under the plane (the top sheet above was pressed onto
+/// it), each swept pass restored it, and the coupled solve cycled for 512
+/// passes until it reported `SelfContactUnresolved`. Treated as supported,
+/// the pair moves the layer above instead and the stack converges.
+fn swept_support(plane: Option<(DVec3, f64)>, direction: DVec3) -> DVec3 {
+    match plane {
+        Some((normal, friction)) if direction != DVec3::ZERO => {
+            let supported = direction - normal * direction.dot(normal).min(0.);
+            pair::friction_cone(direction, supported, friction)
+        }
+        _ => direction,
+    }
+}
+
+/// True when the pair's anchor distance certificate proves it is farther
+/// apart than its largest contact gap (with projection reserve) everywhere on
+/// this substep's paths. Such a pair can neither need nor fail a correction.
+fn certified_clear(
+    pair: FeaturePair,
+    k: usize,
+    anchors: &[DVec3],
+    slack: &mut [f64],
+    reach: &[f64],
+    radii: &[f64],
+) -> bool {
+    let ids = pair.indices();
+    if anchors.len() != reach.len() || slack.len() <= k {
+        return false;
+    }
+    if slack[k].is_nan() {
+        let gap = radii[ids[0]] + radii[ids[pair.split()]];
+        slack[k] = pair
+            .witness(ids.map(|i| anchors[i]))
+            .map(|w| w.distance - gap - CONTACT_RESERVE_LIMIT - CERTIFICATE_MARGIN)
+            .unwrap_or(f64::NEG_INFINITY);
+    }
+    let moved = ids.map(|i| reach[i]).into_iter().fold(0., f64::max);
+    slack[k] > 2. * moved
+}
+
+/// Numerical allowance on distance certificates, far above f64 roundoff at
+/// scene scale and far below any contact gap.
+const CERTIFICATE_MARGIN: f64 = 1e-7;
+
+#[cfg(test)]
+fn count_iterations(n: usize) {
+    use crate::cc_render::cloth_profile::count;
+    match n {
+        1 => count("self_solves_1_pass", 1),
+        2..=4 => count("self_solves_2_4_passes", 1),
+        5..=16 => count("self_solves_5_16_passes", 1),
+        17..=64 => count("self_solves_17_64_passes", 1),
+        _ => count("self_solves_65_plus_passes", 1),
+    }
+}
+
+/// Envelope padding for cached self-contact candidates, in metres.
+const CANDIDATE_PADDING: f64 = 0.01;
+/// Largest projection reserve the contact passes add to a pair's gap.
+const CONTACT_RESERVE_LIMIT: f64 = 1e-6;
+
 struct FaceSupport {
     ids: [usize; 3],
     weights: [f64; 3],
     normal: DVec3,
+    friction: f64,
 }
 
+/// Dykstra corrections recover the mass-metric projection onto the
+/// intersection of support half-spaces. Plain cyclic clipping can add
+/// excessive support motion and even reverse the response to the load.
+fn project_supports<const N: usize>(
+    rows: &[&FaceSupport],
+    ids: [usize; N],
+    inverse_mass: &[f64],
+    mut directions: [DVec3; N],
+) -> [DVec3; N] {
+    let mut corrections = vec![0.; rows.len()];
+    for _ in 0..128 {
+        let before = directions;
+        for (slot, contact) in rows.iter().enumerate() {
+            let weights: [f64; N] = ids.map(|i| {
+                contact
+                    .ids
+                    .iter()
+                    .position(|j| *j == i)
+                    .map(|k| contact.weights[k])
+                    .unwrap_or(0.)
+            });
+            let mass: f64 = ids
+                .into_iter()
+                .zip(weights)
+                .map(|(i, w)| inverse_mass[i] * w * w)
+                .sum();
+            for k in 0..N {
+                directions[k] +=
+                    contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
+            }
+            let approach: f64 = directions
+                .iter()
+                .zip(weights)
+                .map(|(d, w)| d.dot(contact.normal) * w)
+                .sum();
+            corrections[slot] = approach.min(0.) / mass;
+            for k in 0..N {
+                directions[k] -=
+                    contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
+            }
+        }
+        if directions
+            .iter()
+            .zip(before)
+            .all(|(a, b)| a.distance(b) < 1e-10)
+        {
+            break;
+        }
+    }
+    directions
+}
+
+#[cfg(test)]
 struct FaceSupports {
     constraints: Vec<FaceSupport>,
     adjacent: Vec<Vec<usize>>,
 }
 
+#[cfg(test)]
 impl FaceSupports {
-    fn project(
-        &self,
-        ids: [usize; 4],
-        inverse_mass: &[f64],
-        mut directions: [DVec3; 4],
-    ) -> [DVec3; 4] {
+    fn project(&self, ids: [usize; 4], inverse_mass: &[f64], directions: [DVec3; 4]) -> [DVec3; 4] {
         let mut rows: Vec<_> = ids
             .into_iter()
             .flat_map(|i| self.adjacent[i].iter().copied())
             .collect();
         rows.sort_unstable();
         rows.dedup();
-        // Dykstra corrections recover the mass-metric projection onto the
-        // intersection. Plain cyclic clipping can add excessive support
-        // motion and even reverse the response to the original load.
-        let mut corrections = vec![0.; rows.len()];
-        for _ in 0..128 {
-            let before = directions;
-            for (slot, &row) in rows.iter().enumerate() {
-                let contact = &self.constraints[row];
-                let weights: [f64; 4] = ids.map(|i| {
-                    contact
-                        .ids
-                        .iter()
-                        .position(|j| *j == i)
-                        .map(|k| contact.weights[k])
-                        .unwrap_or(0.)
-                });
-                let mass: f64 = ids
-                    .into_iter()
-                    .zip(weights)
-                    .map(|(i, w)| inverse_mass[i] * w * w)
-                    .sum();
-                for k in 0..4 {
-                    directions[k] +=
-                        contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
-                }
-                let approach: f64 = directions
-                    .iter()
-                    .zip(weights)
-                    .map(|(d, w)| d.dot(contact.normal) * w)
-                    .sum();
-                corrections[slot] = approach.min(0.) / mass;
-                for k in 0..4 {
-                    directions[k] -=
-                        contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
-                }
-            }
-            if directions
-                .iter()
-                .zip(before)
-                .all(|(a, b)| a.distance(b) < 1e-10)
-            {
-                break;
-            }
-        }
-        directions
+        let rows: Vec<_> = rows.into_iter().map(|r| &self.constraints[r]).collect();
+        project_supports(&rows, ids, inverse_mass, directions)
     }
 }
 
-fn face_supports(
-    positions: &[DVec3],
-    layers: &[ContactLayer<'_>],
-) -> Result<FaceSupports, ClothError> {
-    let mut supports = FaceSupports {
-        constraints: Vec::new(),
-        adjacent: vec![Vec::new(); positions.len()],
-    };
-    for layer in layers {
-        let (min, max) = collision::surface_bounds(&positions[layer.range.clone()]);
-        let fixed: Vec<_> = layer
-            .fixed
-            .iter()
-            .filter(|collider| collider.intersects_bounds(min, max, layer.radius + 1e-8))
-            .collect();
-        for triangle in layer.triangles {
-            let ids = triangle.map(|i| i + layer.range.start);
-            let vertices = ids.map(|i| positions[i]);
-            for collider in &fixed {
-                if let Some((weights, _, normal)) =
-                    collider.triangle_contact(vertices, layer.radius + 1e-8)?
-                {
-                    let row = supports.constraints.len();
-                    supports.constraints.push(FaceSupport {
-                        ids,
-                        weights,
-                        normal,
-                    });
-                    for (i, weight) in ids.into_iter().zip(weights) {
-                        if weight > 0. {
-                            supports.adjacent[i].push(row);
-                        }
-                    }
-                }
-            }
+/// Fixed-collider supports of material faces, evaluated on demand from one
+/// position snapshot. Rows keep the (face, collider) order of a full sweep.
+struct LazySupports<'a> {
+    positions: &'a [DVec3],
+    /// Clock when `positions` was snapshot, and the stamps at that moment.
+    snapshot_clock: u64,
+    stamps: &'a [u64],
+    triangles: &'a [[usize; 3]],
+    layers: &'a [ContactLayer<'a>],
+    near: &'a NearColliders<'a>,
+    vertex_triangles: &'a [Vec<usize>],
+    rows: &'a std::cell::RefCell<Vec<Option<(u64, std::sync::Arc<Vec<FaceSupport>>)>>>,
+}
+
+/// Per-layer fixed colliders that can reach anything near the snapshot.
+/// A collider outside the layer's snapshot bounds grown by `NEAR_MARGIN`
+/// (plus the support reach) cannot support a point inside that grown box, so
+/// filtering preserves both the result and the collider order exactly.
+struct NearColliders<'a> {
+    layers: Vec<(DVec3, DVec3, Vec<&'a FixedClothCollider>)>,
+}
+
+const NEAR_MARGIN: f64 = 0.05;
+
+impl<'a> NearColliders<'a> {
+    fn new(positions: &[DVec3], layers: &[ContactLayer<'a>]) -> Self {
+        Self {
+            layers: layers
+                .iter()
+                .map(|layer| {
+                    let (min, max) = collision::surface_bounds(&positions[layer.range.clone()]);
+                    let (min, max) = (
+                        min - DVec3::splat(NEAR_MARGIN),
+                        max + DVec3::splat(NEAR_MARGIN),
+                    );
+                    let near = layer
+                        .fixed
+                        .iter()
+                        .filter(|c| c.intersects_bounds(min, max, layer.radius + 1e-8))
+                        .collect();
+                    (min, max, near)
+                })
+                .collect(),
         }
     }
-    Ok(supports)
+
+    /// Colliders to test for a point of the layer owning `vertex`.
+    fn colliders<'b>(
+        &'b self,
+        layers: &'b [ContactLayer<'a>],
+        vertex: usize,
+        point: DVec3,
+    ) -> Box<dyn Iterator<Item = &'a FixedClothCollider> + 'b> {
+        let index = layers
+            .iter()
+            .position(|l| l.range.contains(&vertex))
+            .expect("validated cloth layer partition");
+        let (min, max, near) = &self.layers[index];
+        if point.cmpge(*min).all() && point.cmple(*max).all() {
+            Box::new(near.iter().copied())
+        } else {
+            Box::new(layers[index].fixed.iter())
+        }
+    }
+}
+
+impl LazySupports<'_> {
+    fn face(&self, triangle: usize) -> Result<std::sync::Arc<Vec<FaceSupport>>, ClothError> {
+        let ids = self.triangles[triangle];
+        if let Some((clock, rows)) = &self.rows.borrow()[triangle] {
+            // Valid only if no vertex changed since that snapshot.
+            if ids.iter().all(|&i| self.stamps[i] <= *clock) {
+                return Ok(rows.clone());
+            }
+        }
+        profile_scope!("support_faces");
+        let layer = layer_for(self.layers, ids[0]);
+        let vertices = ids.map(|i| self.positions[i]);
+        let mut rows = Vec::new();
+        for collider in self.near.colliders(self.layers, ids[0], vertices[0]) {
+            if let Some((weights, _, normal)) =
+                collider.triangle_contact(vertices, layer.radius + 1e-8)?
+            {
+                rows.push(FaceSupport {
+                    ids,
+                    weights,
+                    normal,
+                    friction: collider.friction,
+                });
+            }
+        }
+        let rows = std::sync::Arc::new(rows);
+        self.rows.borrow_mut()[triangle] = Some((self.snapshot_clock, rows.clone()));
+        Ok(rows)
+    }
+
+    fn project(
+        &self,
+        ids: [usize; 4],
+        inverse_mass: &[f64],
+        directions: [DVec3; 4],
+    ) -> Result<[DVec3; 4], ClothError> {
+        let mut faces: Vec<_> = ids
+            .iter()
+            .flat_map(|&i| self.vertex_triangles.get(i).into_iter().flatten().copied())
+            .collect();
+        faces.sort_unstable();
+        faces.dedup();
+        let faces = faces
+            .into_iter()
+            .map(|t| self.face(t))
+            .collect::<Result<Vec<_>, _>>()?;
+        let rows: Vec<_> = faces
+            .iter()
+            .flat_map(|rows| rows.iter())
+            .filter(|row| {
+                row.ids
+                    .iter()
+                    .zip(row.weights)
+                    .any(|(i, w)| w > 0. && ids.contains(i))
+            })
+            .collect();
+        if rows.is_empty() {
+            return Ok(directions);
+        }
+        profile_scope!("support_dykstra");
+        let supported = project_supports(&rows, ids, inverse_mass, directions);
+        let friction = rows
+            .iter()
+            .map(|r| r.friction)
+            .fold(f64::INFINITY, f64::min);
+        Ok(std::array::from_fn(|k| {
+            pair::friction_cone(directions[k], supported[k], friction)
+        }))
+    }
 }
 
 fn bounds(ids: &[usize], particles: &GripParticles<'_>, radius: f64) -> Aabb {
@@ -369,6 +806,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_swept_clamp_plane_supports_a_vertex_like_a_resting_contact() {
+        let plane = Some((DVec3::Y, 0.5));
+        // Pushed back through the plane: the normal part is removed and the
+        // Coulomb cone limits what is left (0.5 x 2 of reaction = 1 of slide).
+        let into = swept_support(plane, DVec3::new(3., -2., 0.));
+        assert!(into.y.abs() < 1e-12, "{into:?}");
+        assert!((into.x - 2.).abs() < 1e-12, "{into:?}");
+        // Off the plane, and for an unclamped vertex, the response is free.
+        assert_eq!(swept_support(plane, DVec3::new(1., 2., 0.)), DVec3::new(1., 2., 0.));
+        assert_eq!(swept_support(None, DVec3::new(1., -2., 0.)), DVec3::new(1., -2., 0.));
+        // Within the cone a clamped vertex does not slide at all.
+        assert_eq!(swept_support(plane, DVec3::new(0.5, -2., 0.)), DVec3::ZERO);
+    }
+
+    #[test]
     fn coupled_supports_do_not_reverse_the_applied_load() {
         let supports = FaceSupports {
             constraints: [[0.9, 0.1, 0.], [0.1, 0.9, 0.]]
@@ -376,6 +828,7 @@ mod tests {
                     ids: [0, 1, 2],
                     weights,
                     normal: DVec3::Y,
+                    friction: 0.,
                 })
                 .into_iter()
                 .collect(),
@@ -429,6 +882,7 @@ mod tests {
                 &triangles,
                 &fixed,
                 0.001,
+                ClothFriction::LEGACY,
             )
             .unwrap();
         assert!(

@@ -31,6 +31,8 @@ fn triangle() -> ClothSolver {
             bend_compliance: 0.05,
             air_drag_per_second: 0.2,
             spring_damping_ratio: 1.0,
+            cloth_static_friction: 0.2,
+            cloth_kinetic_friction: 0.2,
             substeps: 24,
         },
     )
@@ -392,4 +394,28 @@ fn check_condo_trace(
         report["tail_max_speed_m_s"].as_f64().unwrap() < 0.05,
         "{report}"
     );
+}
+
+#[test]
+fn letting_go_fades_the_clamp_out_instead_of_dropping_it() {
+    let (mut a, mut b) = (triangle(), triangle());
+    let (mut ga, mut gb) = (capture(&a, 20.), capture(&b, 20.));
+    for _ in 0..120 {
+        tick(&mut a, &mut ga);
+        tick(&mut b, &mut gb);
+    }
+    ga.release();
+    gb.let_go(0.25);
+    assert_eq!(gb.state(), ClampState::Released);
+    tick(&mut a, &mut ga);
+    tick(&mut b, &mut gb);
+    // Opening over 0.25 s, the clamp still carries most of the weight on the first tick.
+    assert!(gb.peak_applied_force_n() > 0.5 * 0.8 * 9.81);
+    assert!(b.max_speed() < 0.5 * a.max_speed());
+    for _ in 0..20 {
+        tick(&mut b, &mut gb);
+    }
+    // Then it is gone: the cloth falls freely.
+    assert_eq!(gb.peak_applied_force_n(), 0.0);
+    assert_eq!(gb.state(), ClampState::Released);
 }

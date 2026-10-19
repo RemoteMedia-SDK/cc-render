@@ -120,7 +120,10 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ready: ResMut<ClothReadiness>,
+    mut simulation: ResMut<simulation::ClothSimulation>,
 ) {
+    simulation.starts_at_rest =
+        !package.cloths.is_empty() && package.cloths.iter().all(|c| c.starts_at_rest);
     for cloth in &package.cloths {
         let mesh = mesh_for(cloth);
         let bounds = mesh.compute_aabb().expect("validated cloth bounds");
@@ -250,7 +253,10 @@ fn advance(
     observations.0.clear();
     let mut entries: Vec<_> = cloths.iter_mut().collect();
     entries.sort_by(|a, b| a.0.id.cmp(&b.0.id));
-    let before: Vec<_> = entries.iter().map(|e| e.0.clock.ticks).collect();
+    let before: Vec<_> = entries
+        .iter()
+        .map(|e| (e.0.clock.ticks, e.0.solver.surface().revision()))
+        .collect();
     let missing_mesh = entries.iter().any(|e| meshes.get(&e.1 .0).is_none());
     let mut layers: Vec<_> = entries.iter_mut().map(|e| &mut *e.0).collect();
     let result = if missing_mesh {
@@ -263,10 +269,14 @@ fn advance(
             cloth.error = Some(error.clone());
         }
     }
-    for ((cloth, handle, mut bounds), before) in entries.into_iter().zip(before) {
+    for ((cloth, handle, mut bounds), (ticks, revision)) in entries.into_iter().zip(before) {
+        let paused = cloth.clock.ticks == ticks;
+        // Simulated time advanced but the settled batch published nothing.
+        let resting = !paused && cloth.solver.surface().revision() == revision;
         let mesh = meshes.get_mut(&handle.0);
         if let Some(mesh) = mesh {
-            if cloth.clock.ticks != before {
+            // A resting surface keeps its revision; its mesh is already current.
+            if cloth.solver.surface().revision() != revision {
                 mesh.insert_attribute(
                     Mesh::ATTRIBUTE_POSITION,
                     cloth
@@ -282,9 +292,11 @@ fn advance(
                     *bounds = current;
                 }
             }
-            observations
-                .0
-                .push(cloth.snapshot(Some(mesh), cloth.clock.ticks == before));
+            let mut snapshot = cloth.snapshot(Some(mesh), paused);
+            if resting && snapshot.status == "running" {
+                snapshot.status = "resting".into();
+            }
+            observations.0.push(snapshot);
         } else {
             observations.0.push(cloth.snapshot(None, true));
         }

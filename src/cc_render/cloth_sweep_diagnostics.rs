@@ -82,7 +82,9 @@ impl SweepCase {
         let radius = f64::from_bits(self.radius);
         match (self.old.as_slice(), self.end.as_slice()) {
             ([old], [end]) => {
-                collider.project_swept_particle(&mut vector(*end), vector(*old), radius)
+                collider
+                    .project_swept_particle(&mut vector(*end), vector(*old), radius)
+                    .map(|_| ())
             }
             ([a, b, c], [x, y, z]) => collider
                 .swept_triangle([*a, *b, *c].map(vector), [*x, *y, *z].map(vector), radius)

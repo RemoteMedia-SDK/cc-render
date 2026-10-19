@@ -24,11 +24,16 @@ pub struct SceneCloth {
     pub collision_fixed_parts: Vec<String>,
     pub replaces_nodes: Vec<String>,
     pub color_srgb: [f32; 3],
+    /// The surface's initial positions are a drape this solver already
+    /// brought to rest in this scene (see `bake_settled_drape`), so the live
+    /// batch may start asleep instead of re-proving rest.
+    #[serde(default)]
+    pub starts_at_rest: bool,
     #[serde(skip)]
     pub(crate) loaded: Option<Arc<ClothAsset>>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ClothAsset {
     pub schema_version: u32,

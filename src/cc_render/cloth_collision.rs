@@ -117,15 +117,16 @@ impl FixedClothCollider {
         Ok(Some(witness_weights(weights)?))
     }
 
+    /// Returns whether a correction was applied.
     fn project_triangle(
         &self,
         indices: [usize; 3],
         particles: &mut GripParticles<'_>,
         radius: f64,
-    ) -> Result<(), ClothError> {
+    ) -> Result<bool, ClothError> {
         let vertices = indices.map(|i| particles.positions[i]);
         let Some((weights, depth, normal)) = self.triangle_contact(vertices, radius)? else {
-            return Ok(());
+            return Ok(false);
         };
         let inverse_mass = indices
             .into_iter()
@@ -147,7 +148,7 @@ impl FixedClothCollider {
         for (i, w) in indices.into_iter().zip(weights) {
             particles.positions[i] += correction * (particles.inverse_mass[i] * w);
         }
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -166,33 +167,161 @@ pub(super) fn witness_weights(weights: [f64; 3]) -> Result<[f64; 3], ClothError>
     Ok(weights.map(|w| w / sum))
 }
 
+/// Exact change tracking for repeated fixed-contact passes in one substep.
+/// Every particle and face correction depends only on its own vertices (and
+/// the substep start). An element none of whose vertices changed since the
+/// previous pass began was processed then with these same inputs, without
+/// effect, so processing it again cannot change anything.
+pub(super) struct ContactStamps<'a> {
+    /// Layer-local stamps: the clock value of each vertex's last change.
+    pub stamps: &'a mut [u64],
+    /// Elements whose vertices are all stamped below this are clean.
+    pub threshold: u64,
+    pub clock: &'a mut u64,
+    /// Layer-local supporting planes (outward normal, collider friction) a
+    /// swept face or particle response clamped each vertex to in this
+    /// substep. They act as supports for the rest of the substep's contact
+    /// solve (`SweptSupports`).
+    pub planes: &'a mut [Option<(DVec3, f64)>],
+}
+
+impl ContactStamps<'_> {
+    pub(super) fn clean(&self, ids: &[usize]) -> bool {
+        ids.iter().all(|&i| self.stamps[i] < self.threshold)
+    }
+
+    pub(super) fn touch(&mut self, i: usize) {
+        *self.clock += 1;
+        self.stamps[i] = *self.clock;
+    }
+
+    /// Run `apply` on an element unless it is clean; stamp what it moved.
+    pub(super) fn apply<const N: usize, R>(
+        &mut self,
+        ids: [usize; N],
+        positions: &mut [DVec3],
+        apply: impl FnOnce(&mut [DVec3]) -> R,
+    ) -> Option<R> {
+        if self.clean(&ids) {
+            return None;
+        }
+        let before = ids.map(|i| positions[i]);
+        let result = apply(positions);
+        for (i, old) in ids.into_iter().zip(before) {
+            if positions[i] != old {
+                self.touch(i);
+            }
+        }
+        Some(result)
+    }
+}
+
+/// Particle projection against every fixed collider the surface can reach.
+fn collide_particles(
+    particles: &mut GripParticles<'_>,
+    colliders: &[FixedClothCollider],
+    radius: f64,
+    stamps: &mut ContactStamps<'_>,
+) {
+    let (mut min, mut max) = surface_bounds(particles.positions);
+    for collider in colliders {
+        if !collider.intersects_bounds(min, max, radius) {
+            continue;
+        }
+        let mut bounds = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
+        for i in 0..particles.positions.len() {
+            let old = particles.previous[i];
+            stamps.apply([i], particles.positions, |p| {
+                collider.project(&mut p[i], old, radius)
+            });
+            bounds.0 = bounds.0.min(particles.positions[i]);
+            bounds.1 = bounds.1.max(particles.positions[i]);
+        }
+        (min, max) = bounds;
+    }
+}
+
+/// One full fixed-contact pass over every particle and face.
+#[cfg(test)]
 pub(super) fn collide_surface(
     particles: &mut GripParticles<'_>,
     triangles: &[[usize; 3]],
     colliders: &[FixedClothCollider],
     radius: f64,
 ) -> Result<(), ClothError> {
+    let mut stamps = vec![0; particles.positions.len()];
+    let mut planes = vec![None; particles.positions.len()];
+    let mut clock = 0;
+    collide_surface_tracked(
+        particles,
+        triangles,
+        colliders,
+        radius,
+        &mut ContactStamps {
+            stamps: &mut stamps,
+            threshold: 0,
+            clock: &mut clock,
+            planes: &mut planes,
+        },
+    )
+}
+
+pub(super) fn collide_surface_tracked(
+    particles: &mut GripParticles<'_>,
+    triangles: &[[usize; 3]],
+    colliders: &[FixedClothCollider],
+    radius: f64,
+    stamps: &mut ContactStamps<'_>,
+) -> Result<(), ClothError> {
     #[cfg(test)]
     let mut probe = probe::ContactProbe::new(particles);
-    super::sweep::collide_swept(particles, triangles, colliders, radius)?;
+    profiled!(
+        "fixed_swept",
+        super::sweep::collide_swept(particles, triangles, colliders, radius, stamps)
+    )?;
     #[cfg(test)]
     probe.record("swept", particles);
-    collide_particles(particles.positions, particles.previous, colliders, radius);
+    collide_particles(particles, colliders, radius, stamps);
     #[cfg(test)]
     probe.record("particles_before_triangles", particles);
+    profile_scope!("fixed_triangles");
+    // Face bounds are taken once at stage start. A face is skipped only when
+    // its start bound, grown by the largest vertex displacement any correction
+    // in this stage has made, misses the collider: its current bound then
+    // misses too, and `triangle_contact` would return no contact.
+    let start = particles.positions.to_vec();
+    let boxes: Vec<_> = triangles
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|i| start[i]);
+            (a.min(b).min(c), a.max(b).max(c))
+        })
+        .collect();
+    let mut displaced = 0f64;
     let (mut min, mut max) = surface_bounds(particles.positions);
     for collider in colliders {
         if !collider.intersects_bounds(min, max, radius) {
             continue;
         }
-        for triangle in triangles {
-            collider.project_triangle(*triangle, particles, radius)?;
+        for (triangle, (lo, hi)) in triangles.iter().zip(&boxes) {
+            if !collider.intersects_bounds(*lo, *hi, radius + displaced) || stamps.clean(triangle) {
+                continue;
+            }
+            let before = triangle.map(|i| particles.positions[i]);
+            if collider.project_triangle(*triangle, particles, radius)? {
+                for (i, old) in triangle.iter().zip(before) {
+                    displaced = displaced.max(particles.positions[*i].distance(start[*i]));
+                    if particles.positions[*i] != old {
+                        stamps.touch(*i);
+                    }
+                }
+            }
         }
         (min, max) = surface_bounds(particles.positions);
     }
     #[cfg(test)]
     probe.record("triangles", particles);
-    collide_particles(particles.positions, particles.previous, colliders, radius);
+    collide_particles(particles, colliders, radius, stamps);
     #[cfg(test)]
     probe.record("particles_after_triangles", particles);
     Ok(())

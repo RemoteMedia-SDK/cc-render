@@ -22,10 +22,10 @@ impl FixedClothCollider {
         old: DVec3,
         witness: &Witness,
         radius: f64,
-    ) {
+    ) -> bool {
         let depth = radius - witness.distance - (*position - witness.point).dot(witness.normal);
         if depth <= 0. {
-            return;
+            return false;
         }
         *position += witness.normal * depth;
         let displacement = *position - old;
@@ -33,29 +33,31 @@ impl FixedClothCollider {
         if tangent.length() > 0. {
             *position -= tangent * (self.friction * depth / tangent.length()).min(1.);
         }
+        true
     }
 
+    /// Returns the supporting-plane normal the particle was clamped to.
     fn project_swept_particle(
         &self,
         end: &mut DVec3,
         old: DVec3,
         radius: f64,
-    ) -> Result<(), ClothError> {
+    ) -> Result<Option<DVec3>, ClothError> {
         let motion = *end - old;
         let speed = motion.length();
         if speed <= radius || !self.intersects_bounds(old.min(*end), old.max(*end), radius) {
-            return Ok(());
+            return Ok(None);
         }
         let tolerance = 1e-8;
         if self.distance_and_normal(old).0 < radius - tolerance {
-            return Ok(());
+            return Ok(None);
         }
         let mut t = 0.;
         for _ in 0..128 {
             let at = old + motion * t;
             let (distance, normal) = self.distance_and_normal(at);
             if distance <= radius + 2. * tolerance {
-                self.project_swept_contact(
+                let clamped = self.project_swept_contact(
                     end,
                     old,
                     &Witness {
@@ -65,17 +67,17 @@ impl FixedClothCollider {
                     },
                     radius,
                 );
-                return Ok(());
+                return Ok(clamped.then_some(normal));
             }
             // The supporting plane bounds the entire remaining straight path.
             // Tangential motion does not close its gap and must not stall CCD.
             let closing = -motion.dot(normal);
             if closing <= 0. || distance - closing * (1. - t) >= radius {
-                return Ok(());
+                return Ok(None);
             }
             let increment = (distance - radius - tolerance) / closing;
             if t + increment > 1. {
-                return Ok(());
+                return Ok(None);
             }
             t += increment * 0.9;
         }
@@ -190,6 +192,7 @@ impl FixedClothCollider {
         indices: [usize; 3],
         particles: &mut GripParticles<'_>,
         radius: f64,
+        planes: &mut [Option<(DVec3, f64)>],
     ) -> Result<(), ClothError> {
         let old = indices.map(|i| particles.previous[i]);
         let end = indices.map(|i| particles.positions[i]);
@@ -206,12 +209,14 @@ impl FixedClothCollider {
         // prevents the other corners crossing behind the contact witness.
         // Ordinary slow contacts retain the mass-weighted point response.
         for i in indices {
-            self.project_swept_contact(
+            if self.project_swept_contact(
                 &mut particles.positions[i],
                 particles.previous[i],
                 &witness,
                 radius,
-            );
+            ) {
+                planes[i] = Some((witness.normal, self.friction));
+            }
         }
         Ok(())
     }
@@ -222,6 +227,7 @@ pub(super) fn collide_swept(
     triangles: &[[usize; 3]],
     colliders: &[FixedClothCollider],
     radius: f64,
+    stamps: &mut collision::ContactStamps<'_>,
 ) -> Result<(), ClothError> {
     // Same motion threshold as each particle/face, evaluated once for settled
     // cloth instead of repeating it for every face and every scene collider.
@@ -239,16 +245,31 @@ pub(super) fn collide_swept(
         if !collider.intersects_bounds(old_min.min(min), old_max.max(max), radius) {
             continue;
         }
-        for (end, old) in particles.positions.iter_mut().zip(particles.previous) {
-            let result = collider.project_swept_particle(end, *old, radius);
-            #[cfg(test)]
-            if let Err(error) = &result {
-                diagnostics::capture(collider, &[*old], &[*end], radius, error);
+        for i in 0..particles.positions.len() {
+            let old = particles.previous[i];
+            let result = stamps.apply([i], particles.positions, |p| {
+                let result = collider.project_swept_particle(&mut p[i], old, radius);
+                #[cfg(test)]
+                if let Err(error) = &result {
+                    diagnostics::capture(collider, &[old], &[p[i]], radius, error);
+                }
+                result
+            });
+            if let Some(normal) = result.transpose()?.flatten() {
+                stamps.planes[i] = Some((normal, collider.friction));
             }
-            result?;
         }
         for triangle in triangles {
-            collider.project_swept_triangle(*triangle, particles, radius)?;
+            if stamps.clean(triangle) {
+                continue;
+            }
+            let before = triangle.map(|i| particles.positions[i]);
+            collider.project_swept_triangle(*triangle, particles, radius, stamps.planes)?;
+            for (i, old) in triangle.iter().zip(before) {
+                if particles.positions[*i] != old {
+                    stamps.touch(*i);
+                }
+            }
         }
         (min, max) = collision::surface_bounds(particles.positions);
     }

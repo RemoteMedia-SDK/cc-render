@@ -4,12 +4,30 @@
 //! Small-step XPBD with accumulated multipliers across material passes
 //! (Macklin et al., https://mmacklin.com/xpbd.pdf). Opposite-vertex springs
 //! approximate bending;
-//! they are not a calibrated shell material. Swept self-contact is frictionless;
+//! they are not a calibrated shell material. Swept self-contact carries
+//! per-material Coulomb friction (`cloth_pair`);
 //! dynamic-body coupling and runtime hand admission are not implemented here.
 //! The crate-private contact clamp is an explicitly limited coupling prototype.
 use std::collections::BTreeMap;
 
 const CONSTRAINT_PASSES: usize = 4;
+
+/// Attribute wall time to a solver phase in test builds; a no-op otherwise.
+macro_rules! profiled {
+    ($name:literal, $body:expr) => {{
+        #[cfg(test)]
+        let _timer = crate::cc_render::cloth_profile::Timer::start($name);
+        $body
+    }};
+}
+
+/// Attribute the rest of the enclosing block to a phase in test builds.
+macro_rules! profile_scope {
+    ($name:literal) => {
+        #[cfg(test)]
+        let _profile_guard = crate::cc_render::cloth_profile::Timer::start($name);
+    };
+}
 
 use bevy::math::{DQuat, DVec3, Vec2, Vec3};
 use bevy_rapier3d::rapier::parry::{math::Isometry, shape::SharedShape};
@@ -28,9 +46,33 @@ pub struct ClothParameters {
     pub air_drag_per_second: f64,
     pub spring_damping_ratio: f64,
     pub substeps: usize,
+    /// Coulomb coefficient of this fabric's surface against cloth below
+    /// which a contact sticks (static). Authored per material; the default
+    /// is the solver's former global 0.2.
+    #[serde(default = "legacy_stick_friction")]
+    pub cloth_static_friction: f64,
+    /// Coulomb coefficient once that contact slides (kinetic), at most the
+    /// static one.
+    #[serde(default = "legacy_slide_friction")]
+    pub cloth_kinetic_friction: f64,
+}
+
+fn legacy_stick_friction() -> f64 {
+    pair::ClothFriction::LEGACY.stick
+}
+
+fn legacy_slide_friction() -> f64 {
+    pair::ClothFriction::LEGACY.slide
 }
 
 impl ClothParameters {
+    fn friction(&self) -> pair::ClothFriction {
+        pair::ClothFriction {
+            stick: self.cloth_static_friction,
+            slide: self.cloth_kinetic_friction,
+        }
+    }
+
     fn validate(&self) -> Result<(), ClothError> {
         if !self.total_mass_kg.is_finite()
             || self.total_mass_kg <= 0.0
@@ -41,9 +83,12 @@ impl ClothParameters {
                 self.bend_compliance,
                 self.air_drag_per_second,
                 self.spring_damping_ratio,
+                self.cloth_static_friction,
+                self.cloth_kinetic_friction,
             ]
             .iter()
             .any(|v| !v.is_finite() || *v < 0.0)
+            || self.cloth_kinetic_friction > self.cloth_static_friction
             || !(1..=256).contains(&self.substeps)
         {
             return Err(ClothError::InvalidInput);
@@ -171,21 +216,6 @@ impl FixedClothCollider {
         )
     }
 
-    fn project_particles(
-        &self,
-        positions: &mut [DVec3],
-        previous: &[DVec3],
-        radius: f64,
-    ) -> (DVec3, DVec3) {
-        let mut bounds = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
-        for (position, old) in positions.iter_mut().zip(previous) {
-            self.project(position, *old, radius);
-            bounds.0 = bounds.0.min(*position);
-            bounds.1 = bounds.1.max(*position);
-        }
-        bounds
-    }
-
     fn project(&self, position: &mut DVec3, previous: DVec3, radius: f64) {
         if !self.intersects_bounds(*position, *position, radius) {
             return;
@@ -214,30 +244,60 @@ struct DistanceSpring {
     stretch: bool,
 }
 
+/// Per-substep XPBD terms of one spring; they depend only on its material,
+/// the endpoint masses and the substep length.
+#[derive(Clone, Copy)]
+struct SpringTerms {
+    gamma: f64,
+    alpha: f64,
+    denominator: f64,
+}
+
 impl DistanceSpring {
-    fn project(&self, particles: &mut GripParticles<'_>, accumulated: &mut f64) {
-        let positions = &mut *particles.positions;
-        let previous = particles.previous;
-        let inverse_mass = particles.inverse_mass;
-        let h = particles.h;
+    fn terms(&self, inverse_mass: &[f64], h: f64) -> SpringTerms {
         let [a, b] = self.vertices;
-        let delta = positions[a] - positions[b];
-        let length = delta.length();
-        if length <= f64::EPSILON {
-            return;
-        }
         // XPBD Eq. 26 (https://mmacklin.com/xpbd.pdf): accumulated elastic
         // and Rayleigh damping multiplier; reset once per physical substep.
         // beta = 2*zeta*sqrt(k*m_eff), gamma = compliance*beta/h.
         let inverse_effective_mass = inverse_mass[a] + inverse_mass[b];
         let gamma =
             2.0 * self.damping_ratio * (self.compliance / inverse_effective_mass).sqrt() / h;
+        let alpha = self.compliance / (h * h);
+        SpringTerms {
+            gamma,
+            alpha,
+            denominator: (1.0 + gamma) * inverse_effective_mass + alpha,
+        }
+    }
+
+    #[cfg(test)]
+    fn project(&self, particles: &mut GripParticles<'_>, accumulated: &mut f64) {
+        let terms = self.terms(particles.inverse_mass, particles.h);
+        self.project_with(particles, accumulated, &terms);
+    }
+
+    fn project_with(
+        &self,
+        particles: &mut GripParticles<'_>,
+        accumulated: &mut f64,
+        terms: &SpringTerms,
+    ) {
+        let positions = &mut *particles.positions;
+        let previous = particles.previous;
+        let inverse_mass = particles.inverse_mass;
+        let [a, b] = self.vertices;
+        let delta = positions[a] - positions[b];
+        let length = delta.length();
+        if length <= f64::EPSILON {
+            return;
+        }
         let normal = delta / length;
         let relative_displacement =
             normal.dot((positions[a] - previous[a]) - (positions[b] - previous[b]));
-        let alpha = self.compliance / (h * h);
-        let lambda = -(length - self.rest + alpha * *accumulated + gamma * relative_displacement)
-            / ((1.0 + gamma) * inverse_effective_mass + alpha);
+        let lambda = -(length - self.rest
+            + terms.alpha * *accumulated
+            + terms.gamma * relative_displacement)
+            / terms.denominator;
         *accumulated += lambda;
         let correction = normal * lambda;
         positions[a] += correction * inverse_mass[a];
@@ -249,6 +309,9 @@ impl DistanceSpring {
 struct PendingConstraints {
     multipliers: Vec<f64>,
     grips: Vec<ClothGrip>,
+    /// Spring terms for `terms_h`, computed once per tick.
+    terms: Vec<SpringTerms>,
+    terms_h: f64,
 }
 
 impl PendingConstraints {
@@ -260,6 +323,8 @@ impl PendingConstraints {
         Ok(Self {
             multipliers: vec![0.; solver.springs.len()],
             grips,
+            terms: Vec::new(),
+            terms_h: f64::NAN,
         })
     }
 
@@ -276,12 +341,26 @@ impl PendingConstraints {
         } else {
             &mut []
         };
-        solver.project_constraints(particles, interval, grips, &mut self.multipliers)
+        if self.terms_h != particles.h {
+            self.terms = solver
+                .springs
+                .iter()
+                .map(|s| s.terms(particles.inverse_mass, particles.h))
+                .collect();
+            self.terms_h = particles.h;
+        }
+        solver.project_constraints(
+            particles,
+            interval,
+            grips,
+            &mut self.multipliers,
+            &self.terms,
+        )
     }
 
-    fn commit(&mut self, grips: &mut [ClothGrip]) {
+    fn commit(&mut self, grips: &mut [ClothGrip], dt: f64) {
         for grip in &mut self.grips {
-            grip.finish();
+            grip.finish(dt);
         }
         grips.clone_from_slice(&self.grips);
     }
@@ -296,6 +375,8 @@ pub struct ClothSolver {
     self_collision: self_collision::SelfCollisionTopology,
     springs: Vec<DistanceSpring>,
     parameters: ClothParameters,
+    /// The material's rest shape (GPU self-contact skips pairs that are neighbours in it).
+    rest: Vec<DVec3>,
 }
 
 impl ClothSolver {
@@ -330,6 +411,7 @@ impl ClothSolver {
             .map(|mass| 1.0 / mass)
             .collect();
         let springs = material_springs(&rest, &triangles, parameters)?;
+        let rest_shape = rest.clone();
         let velocities = vec![DVec3::ZERO; initial.len()];
         let triangles: Vec<_> = triangles.iter().map(|t| t.map(|i| i as usize)).collect();
         let self_collision = self_collision::SelfCollisionTopology::new(&triangles);
@@ -342,11 +424,43 @@ impl ClothSolver {
             self_collision,
             springs,
             parameters,
+            rest: rest_shape,
         })
+    }
+
+    pub(crate) fn rest_positions(&self) -> &[DVec3] {
+        &self.rest
     }
 
     pub fn surface(&self) -> &DeformedSurface {
         &self.surface
+    }
+
+    /// Resume from a recorded drape (benches only); publishes one revision.
+    #[cfg(test)]
+    pub(crate) fn restore_state(&mut self, positions: Vec<DVec3>, velocities: Vec<DVec3>) {
+        assert_eq!(positions.len(), self.positions.len());
+        self.surface
+            .update_positions(positions.iter().map(|p| p.as_vec3()).collect())
+            .unwrap();
+        self.positions = positions;
+        self.velocities = velocities;
+    }
+
+    /// Diagnostics: `[kinetic, gravity potential, stretch, bend]` energies in
+    /// joules of the committed state, the same estimates the energy probe uses.
+    #[cfg(test)]
+    pub(crate) fn energy_terms(&self, gravity: DVec3) -> [f64; 4] {
+        let mut e = [0.; 4];
+        for ((p, v), w) in self.positions.iter().zip(&self.velocities).zip(&self.inverse_mass) {
+            e[0] += 0.5 * v.length_squared() / w;
+            e[1] -= gravity.dot(*p) / w;
+        }
+        for s in &self.springs {
+            let r = self.positions[s.vertices[0]].distance(self.positions[s.vertices[1]]) - s.rest;
+            e[if s.stretch { 2 } else { 3 }] += 0.5 * r * r / s.compliance.max(1e-30);
+        }
+        e
     }
 
     pub fn max_speed(&self) -> f64 {
@@ -395,9 +509,10 @@ impl ClothSolver {
         interval: [f64; 2],
         grips: &mut [ClothGrip],
         multipliers: &mut [f64],
+        terms: &[SpringTerms],
     ) -> Result<(), ClothError> {
-        for (spring, multiplier) in self.springs.iter().zip(multipliers) {
-            spring.project(particles, multiplier);
+        for ((spring, multiplier), terms) in self.springs.iter().zip(multipliers).zip(terms) {
+            spring.project_with(particles, multiplier, terms);
         }
         for grip in grips {
             grip.project(particles, interval)?;
@@ -444,15 +559,55 @@ impl ClothSolver {
                 constraints.project(self, &mut particles, interval, pass)?;
             }
             self.self_collision
-                .resolve(&mut particles, &self.triangles, colliders, radius * 2.)?;
+                .resolve(
+                    &mut particles,
+                    &self.triangles,
+                    colliders,
+                    radius * 2.,
+                    self.parameters.friction(),
+                )?;
             reconstruct_velocities(&positions, &previous, &mut velocities, h)?;
+            damp_edge_velocities(&self.springs, &self.inverse_mass, &mut velocities, h);
         }
         self.surface
             .update_positions(positions.iter().map(|v| v.as_vec3()).collect())?;
         self.positions = positions;
         self.velocities = velocities;
-        constraints.commit(grips);
+        constraints.commit(grips, dt);
         Ok(())
+    }
+}
+
+/// Rate of the viscous edge dashpots, per second.
+///
+/// Distance springs damp only along their own axis (`spring_damping_ratio`).
+/// Out-of-plane and shear vibration of tensioned, nearly flat cloth is then
+/// left almost undamped: XPBD's numerical dissipation shrinks with the
+/// substep, and the authored bedding (48 substeps) kept a hanging flap
+/// fluttering at ~1 m/s after ten seconds while the same sheet at 24
+/// substeps settled. Real cloth loses that energy to fibre friction and air.
+/// At 20/s a single-edge relative velocity decays with a 50 ms time constant,
+/// while smooth large-scale motion (small relative velocity per edge) keeps
+/// its drape: measured drift during the condo drape was unchanged.
+const EDGE_DAMPING_PER_SECOND: f64 = 20.;
+
+/// Viscous internal damping: every material edge dashpot acts on the full
+/// relative velocity of its endpoints (axial, shear and out-of-plane), as a
+/// mass-weighted implicit decay. Common translation is untouched and linear
+/// momentum is conserved.
+fn damp_edge_velocities(
+    springs: &[DistanceSpring],
+    inverse_mass: &[f64],
+    velocities: &mut [DVec3],
+    h: f64,
+) {
+    let keep = 1. - (-EDGE_DAMPING_PER_SECOND * h).exp();
+    for spring in springs.iter().filter(|s| s.stretch) {
+        let [a, b] = spring.vertices;
+        let (wa, wb) = (inverse_mass[a], inverse_mass[b]);
+        let correction = (velocities[a] - velocities[b]) * keep / (wa + wb);
+        velocities[a] -= correction * wa;
+        velocities[b] += correction * wb;
     }
 }
 
@@ -469,23 +624,6 @@ fn reconstruct_velocities(
         }
     }
     Ok(())
-}
-
-fn collide_particles(
-    positions: &mut [DVec3],
-    previous: &[DVec3],
-    colliders: &[FixedClothCollider],
-    radius: f64,
-) {
-    let (mut min, mut max) = positions.iter().fold(
-        (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
-        |(lo, hi), p| (lo.min(*p), hi.max(*p)),
-    );
-    for collider in colliders {
-        if collider.intersects_bounds(min, max, radius) {
-            (min, max) = collider.project_particles(positions, previous, radius);
-        }
-    }
 }
 
 #[path = "cloth_collision.rs"]
@@ -577,3 +715,10 @@ mod self_tests;
 #[path = "cloth_batch.rs"]
 mod batch;
 pub(crate) use batch::{ClothBatch, ClothLayerStep};
+
+#[path = "cloth_gpu.rs"]
+mod gpu;
+#[allow(unused_imports)]
+pub(crate) use gpu::{gpu_adapter, GpuClothBatch, GpuReport, KinematicCollider, KinematicShape};
+#[cfg(test)]
+pub(crate) use gpu::AnyBatch;

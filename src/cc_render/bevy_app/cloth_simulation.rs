@@ -1,11 +1,57 @@
 //! A single content-time clock and atomic physics tick for all live cloth layers.
 use super::*;
-use crate::cc_render::cloth_solver::{ClothBatch, ClothLayerStep};
+use crate::cc_render::cloth_solver::{
+    ClothBatch, ClothError, ClothLayerStep, ClothSolver, GpuClothBatch,
+};
+
+/// The live solver: the GPU batch when a suitable adapter exists, otherwise the CPU reference.
+pub(super) enum LiveBatch {
+    Gpu(GpuClothBatch),
+    Cpu(ClothBatch),
+}
+
+impl LiveBatch {
+    fn new(solvers: &[&ClothSolver], cpu_reference: bool) -> Result<Self, ClothError> {
+        if cpu_reference {
+            return Ok(Self::Cpu(ClothBatch::new(solvers)?));
+        }
+        Ok(match GpuClothBatch::new(solvers)? {
+            Some(gpu) => Self::Gpu(gpu),
+            None => Self::Cpu(ClothBatch::new(solvers)?),
+        })
+    }
+
+    pub(super) fn backend(&self) -> &'static str {
+        match self {
+            Self::Gpu(_) => "gpu",
+            Self::Cpu(_) => "cpu",
+        }
+    }
+
+    fn start_at_rest(&mut self) {
+        match self {
+            Self::Gpu(b) => b.start_at_rest(),
+            Self::Cpu(b) => b.start_at_rest(),
+        }
+    }
+
+    fn step(&mut self, layers: &mut [ClothLayerStep<'_>], dt: f64, gravity: DVec3) -> Result<(), ClothError> {
+        match self {
+            Self::Gpu(b) => b.step(layers, dt, gravity),
+            Self::Cpu(b) => b.step(layers, dt, gravity),
+        }
+    }
+}
 
 #[derive(Resource, Default)]
 pub(super) struct ClothSimulation {
-    batch: Option<ClothBatch>,
+    batch: Option<LiveBatch>,
     ids: Vec<String>,
+    /// Every layer's authored start is a baked rest drape.
+    pub(super) starts_at_rest: bool,
+    /// Use the CPU reference even when a GPU is available (reference tests).
+    #[allow(dead_code)]
+    pub(super) cpu_reference: bool,
 }
 
 impl ClothSimulation {
@@ -19,13 +65,22 @@ impl ClothSimulation {
             if ids.windows(2).any(|pair| pair[0] == pair[1]) {
                 return Err("duplicate cloth layer id".into());
             }
-            self.batch = Some(
-                ClothBatch::new(&layers.iter().map(|l| &l.solver).collect::<Vec<_>>())
-                    .map_err(|e| e.to_string())?,
-            );
+            let mut batch = LiveBatch::new(&layers.iter().map(|l| &l.solver).collect::<Vec<_>>(), self.cpu_reference)
+                .map_err(|e| e.to_string())?;
+            tracing::info!(target: "cc_render", "live cloth solver: {} ({} layers)", batch.backend(), layers.len());
+            if self.starts_at_rest {
+                batch.start_at_rest();
+            }
+            self.batch = Some(batch);
             self.ids = ids;
         }
         Ok(())
+    }
+
+    /// "gpu" or "cpu" once the batch exists.
+    #[allow(dead_code)]
+    pub(super) fn backend(&self) -> Option<&'static str> {
+        self.batch.as_ref().map(LiveBatch::backend)
     }
 
     pub(super) fn advance(
