@@ -101,6 +101,12 @@ Coordinate-centering remains a rejected experiment
   ribcage (up to 23 mm); they now bend up to 14° with zero residual. See the
   [hand clamp checkpoint](../../artifacts/soft-tissue/avatar-contact/hand-clamp-01/README.md).
 
+- Display-only hand rest on the solved breast skin (second exception
+  amendment): works while corrections stay within 50 mm; seed 739's last
+  ~150 ms need 58 mm to 30 cm (hand wedged between both breasts), so the
+  source motion is the limit. See the
+  [hand rest checkpoint](../../artifacts/soft-tissue/avatar-contact/hand-rest-01/README.md).
+
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the

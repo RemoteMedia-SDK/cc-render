@@ -302,15 +302,8 @@ impl TissueSurface {
         })
     }
 
-    pub fn deform(
-        &self,
-        mesh: &mut Mesh,
-        asset: &TissueAsset,
-        nodes: &[Vec<DVec3>],
-        frames: &[Frame],
-        globals: &HashMap<Entity, Mat4>,
-    ) -> anyhow::Result<SurfaceMetrics> {
-        let palette = self.palette(globals)?;
+    /// World displacement of each embedded vertex from its kinematic skin.
+    fn displacement(&self, asset: &TissueAsset, nodes: &[Vec<DVec3>], frames: &[Frame]) -> Vec<Vec3> {
         let mut delta = vec![Vec3::ZERO; self.base.len()];
         for binding in &self.binding.vertices {
             let region = &asset.regions[binding.region];
@@ -324,6 +317,43 @@ impl TissueSurface {
                 .sum();
             delta[binding.vertex] += (movement * binding.influence).as_vec3();
         }
+        delta
+    }
+
+    /// Triangles touching simulated skin (mesh vertex indices).
+    pub fn tissue_triangles(&self) -> &[[usize; 3]] {
+        &self.triangles
+    }
+
+    /// World positions of the deformed skin, as `deform` displays it; only
+    /// vertices of `tissue_triangles` are meaningful (others are zero).
+    pub fn deformed_positions(
+        &self,
+        asset: &TissueAsset,
+        nodes: &[Vec<DVec3>],
+        frames: &[Frame],
+        globals: &HashMap<Entity, Mat4>,
+    ) -> anyhow::Result<Vec<DVec3>> {
+        let palette = self.palette(globals)?;
+        let delta = self.displacement(asset, nodes, frames);
+        let mut positions = vec![DVec3::ZERO; self.base.len()];
+        for i in &self.sampled {
+            let skin: Mat4 = (0..4).map(|k| palette[self.indices[*i][k] as usize] * self.weights[*i][k]).sum();
+            positions[*i] = (skin.transform_point3(self.base[*i]) + delta[*i]).as_dvec3();
+        }
+        Ok(positions)
+    }
+
+    pub fn deform(
+        &self,
+        mesh: &mut Mesh,
+        asset: &TissueAsset,
+        nodes: &[Vec<DVec3>],
+        frames: &[Frame],
+        globals: &HashMap<Entity, Mat4>,
+    ) -> anyhow::Result<SurfaceMetrics> {
+        let palette = self.palette(globals)?;
+        let delta = self.displacement(asset, nodes, frames);
         let mut matrices = vec![Mat3::IDENTITY; self.base.len()];
         let mut before = vec![Vec3::ZERO; self.base.len()];
         for i in &self.sampled {

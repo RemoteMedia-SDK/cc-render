@@ -15,6 +15,15 @@ fingers to the surface” (penetrating renderer-owned fingers bend at the
 knuckles; the wrist/palm clamp stays as the guard).
 Evidence: `artifacts/soft-tissue/avatar-contact/hand-clamp-01/README.md`.
 
+Second amendment, same session: the owner observed fingers and the palm
+sinking into the breast and stated “fingers should also rest on the breast
+skin rather than pressing through it”, then selected “Palm too”: the whole
+displayed hand rests on the **deformed breast skin**. This is display-only:
+after each tissue step, the arm (two-bone IK) and fingers are adjusted against
+the solved skin; the tissue itself is still pressed by the generated hand
+(bounded pressure), so the breast visibly compresses under a hand that stays
+on its surface.
+
 ## Why model-native routes do not cover it now
 
 The seed-739 chest rub drives ARDY's hands into the torso. Post-generation
@@ -44,6 +53,12 @@ contract rejects.
   unsupported contact instead of hiding it. A bounded correction that does not
   fully converge is applied and its residual reported (withholding it makes
   the hand jump). Fingers that cannot clear report their residual.
+- **Breast-skin rest (display only):** after the tissue step, the same
+  minimal-norm wrist correction and finger bend are solved against the solved
+  breast skin plus the ribcage, and written to the displayed arm and finger
+  joint world transforms for that frame only. Tissue sampling, its
+  FK-versus-display check and the next frame start from the ribcage-only
+  correction, so the adjusted hand never feeds back into the tissue.
 - **Untouched:** ARDY packets, service history, root/pelvis, legs, spine and
   every other joint. Validators keep reading the raw generated motion.
 - **Opt-in:** active only with the volumetric tissue path and

@@ -20,8 +20,12 @@ use std::{collections::HashMap, sync::Arc};
 
 /// Clearance kept between hand skin and the ribcage surface.
 const MARGIN_M: f64 = 0.001;
-/// Larger corrections are reported as unsupported contact, not applied.
+/// Larger ribcage corrections are reported as unsupported contact, not applied.
 const MAX_CORRECTION_M: f64 = 0.05;
+/// Bound for the display-only rest on breast skin; the approved 50 mm unless
+/// the owner widens it (seed 739 needs up to 71 mm, then 16-30 cm once the
+/// generated hand wedges between both breasts).
+const MAX_SKIN_REST_M: f64 = MAX_CORRECTION_M;
 /// Ribcage = torso skin dominated by these bones (waist, pelvis and neck excluded).
 const RIBCAGE_BONES: [&str; 8] = [
     "CC_Base_Spine01", "CC_Base_Spine02", "CC_Base_L_RibsTwist", "CC_Base_R_RibsTwist",
@@ -97,6 +101,10 @@ pub(crate) struct HandRibcageClamp {
     torso_open: Vec<[bool; 3]>,
     caps: Vec<Cap>,
     arms: [Arm; 2],
+    /// Simulated breast skin triangles (body mesh indices).
+    breast: Vec<[usize; 3]>,
+    /// Open edges of ribcage followed by breast triangles as one surface.
+    skin_open: Vec<[bool; 3]>,
 }
 
 #[derive(Resource, Clone)]
@@ -260,6 +268,8 @@ impl HandRibcageClamp {
         let torso = surfaces.iter().find(|s| s.binding().mesh_name == "CC_Base_Body")
             .ok_or_else(|| anyhow::anyhow!("hand clamp requires the tissue-bound body surface"))?;
         let (vertices, torso_faces) = ribcage(torso, &bones)?;
+        let breast = torso.tissue_triangles().to_vec();
+        let skin: Vec<[usize; 3]> = torso_faces.iter().map(|f| f.map(|i| vertices[i])).chain(breast.iter().copied()).collect();
         let hands = surfaces.iter()
             .find(|s| s.dominant_joints().iter().any(|j| bones.name(j) == "CC_Base_L_Hand"))
             .ok_or_else(|| anyhow::anyhow!("hand clamp requires the hand contact surface"))?;
@@ -271,6 +281,8 @@ impl HandRibcageClamp {
             torso_faces,
             caps: asset.regions.iter().zip(anchors).map(|(region, anchor)| cap(region, *anchor)).collect(),
             arms: [left?, right?],
+            skin_open: open_edges(&skin),
+            breast,
         })
     }
 
@@ -279,30 +291,68 @@ impl HandRibcageClamp {
             [self.arms[0].points.len(), self.arms[1].points.len()])
     }
 
-    fn faces(&self, matrices: &HashMap<Entity, Mat4>) -> anyhow::Result<Vec<Face>> {
+    fn ribcage_faces(&self, matrices: &HashMap<Entity, Mat4>, open: &[[bool; 3]]) -> anyhow::Result<Vec<Face>> {
         let torso = self.torso.positions(matrices)?;
-        let mut faces: Vec<Face> = self.torso_faces.iter().zip(&self.torso_open).map(|(f, open)| {
-            let points = f.map(|i| torso[i]);
-            Face { points, normal: (points[1] - points[0]).cross(points[2] - points[0]).normalize_or_zero(), open_edges: *open }
-        }).collect();
+        Ok(self.torso_faces.iter().zip(open).map(|(f, open)| face(f.map(|i| torso[i]), *open)).collect())
+    }
+
+    fn cap_faces(&self, matrices: &HashMap<Entity, Mat4>) -> anyhow::Result<Vec<Face>> {
+        let mut faces = Vec::new();
         for cap in &self.caps {
             let anchor = frame(*matrices.get(&cap.anchor).ok_or_else(|| anyhow::anyhow!("missing cap anchor"))?)?;
-            faces.extend(cap.faces.iter().zip(&cap.open_edges).map(|(f, open)| {
-                let points = f.map(|p| anchor.point(p));
-                Face { points, normal: (points[1] - points[0]).cross(points[2] - points[0]).normalize_or_zero(), open_edges: *open }
-            }));
+            faces.extend(cap.faces.iter().zip(&cap.open_edges).map(|(f, open)| face(f.map(|p| anchor.point(p)), *open)));
         }
         Ok(faces)
     }
 
-    /// Corrected CC5 local rotations for `rotations` (the retarget of `pose`).
-    pub fn correct(&self, pose: &SkeletalPose, mut rotations: [Quat; 22]) -> anyhow::Result<Correction> {
+    /// Ribcage correction applied before tissue sampling and display.
+    pub fn correct(&self, pose: &SkeletalPose, rotations: [Quat; 22]) -> anyhow::Result<Correction> {
         let matrices = self.rig.sample_rotations(pose, &rotations);
-        let faces = self.faces(&matrices)?;
+        let mut faces = self.ribcage_faces(&matrices, &self.torso_open)?;
+        faces.extend(self.cap_faces(&matrices)?);
+        self.solve(pose, rotations, &faces, MAX_CORRECTION_M)
+    }
+
+    /// Display-only rest on the solved breast skin (`skin`: world positions
+    /// by body vertex, from `TissueSurface::deformed_positions`) plus the
+    /// ribcage. The breast skin closes the surface, so caps are not used.
+    pub fn rest_on_skin(&self, pose: &SkeletalPose, base: &Correction, skin: &[DVec3]) -> anyhow::Result<Correction> {
+        let matrices = self.rig.sample_with(pose, &base.rotations, &base.fingers);
+        let (ribcage_open, breast_open) = self.skin_open.split_at(self.torso_faces.len());
+        let mut faces = self.ribcage_faces(&matrices, ribcage_open)?;
+        faces.extend(self.breast.iter().zip(breast_open).map(|(f, open)| face(f.map(|i| skin[i]), *open)));
+        self.solve(pose, base.rotations, &faces, MAX_SKIN_REST_M)
+    }
+
+    /// World transforms to display for `rest` instead of `base`: each changed
+    /// rig joint receives the same world-space change, applied to `displayed`.
+    pub fn display_overrides(
+        &self,
+        pose: &SkeletalPose,
+        base: &Correction,
+        rest: &Correction,
+        displayed: &HashMap<Entity, Mat4>,
+    ) -> Vec<(Entity, Mat4)> {
+        let from = self.rig.sample_with(pose, &base.rotations, &base.fingers);
+        let to = self.rig.sample_with(pose, &rest.rotations, &rest.fingers);
+        let mut overrides: Vec<_> = to.iter().filter_map(|(entity, target)| {
+            let source = from.get(entity)?;
+            if target.abs_diff_eq(*source, 1e-7) {
+                return None;
+            }
+            Some((*entity, *target * source.inverse() * *displayed.get(entity)?))
+        }).collect();
+        overrides.sort_by_key(|(entity, _)| *entity);
+        overrides
+    }
+
+    /// Wrist/palm push-out with arm IK, then finger bends, against `faces`.
+    fn solve(&self, pose: &SkeletalPose, mut rotations: [Quat; 22], faces: &[Face], bound: f64) -> anyhow::Result<Correction> {
+        let matrices = self.rig.sample_rotations(pose, &rotations);
         let mut report = [HandCorrection::default(); 2];
         for (arm, report) in self.arms.iter().zip(&mut report) {
             let points = arm.points.positions(&matrices)?;
-            let nearby = nearby_faces(&faces, &points, MAX_CORRECTION_M + MARGIN_M);
+            let nearby = nearby_faces(faces, &points, bound + MARGIN_M);
             let push = push_out(&points, &nearby, MARGIN_M);
             report.penetration_m = push.penetration;
             if push.delta == DVec3::ZERO {
@@ -310,7 +360,7 @@ impl HandRibcageClamp {
             }
             // An unconverged but bounded correction is still applied (and its
             // residual reported): withholding it would make the hand jump.
-            if push.delta.length() > MAX_CORRECTION_M {
+            if push.delta.length() > bound {
                 report.unsupported = true;
                 continue;
             }
@@ -335,16 +385,16 @@ impl HandRibcageClamp {
             rotations[arm.smpl[2]] = local(new_fore.inverse() * hand_rotation);
             report.correction_m = push.delta.length();
         }
-        // Residual against the same ribcage (torso and caps do not depend on arms).
+        // Residual against the same surface (it does not depend on the arms).
         let matrices = self.rig.sample_rotations(pose, &rotations);
         let mut fingers = HashMap::new();
         for (arm, report) in self.arms.iter().zip(&mut report) {
             if report.correction_m > 0.0 {
                 let points = arm.points.positions(&matrices)?;
-                report.residual_m = push_out(&points, &nearby_faces(&faces, &points, MARGIN_M), 0.0).penetration;
+                report.residual_m = push_out(&points, &nearby_faces(faces, &points, MARGIN_M), 0.0).penetration;
             }
             let hand = *matrices.get(&arm.bones[2]).ok_or_else(|| anyhow::anyhow!("missing hand bone"))?;
-            let nearby = nearby_faces(&faces, &[hand.w_axis.truncate().as_dvec3()], FINGER_REACH_M);
+            let nearby = nearby_faces(faces, &[hand.w_axis.truncate().as_dvec3()], FINGER_REACH_M);
             for finger in &arm.fingers {
                 let fit = conform_finger(&finger.rig, hand, &nearby, MARGIN_M);
                 report.finger_penetration_m = report.finger_penetration_m.max(fit.penetration);
@@ -439,6 +489,10 @@ pub(super) fn conform_finger(rig: &FingerRig, hand: Mat4, faces: &[Face], margin
         magnitude += FINGER_STEP_RAD;
     }
     fit(best.0, best.1, penetration)
+}
+
+fn face(points: [DVec3; 3], open_edges: [bool; 3]) -> Face {
+    Face { points, normal: (points[1] - points[0]).cross(points[2] - points[0]).normalize_or_zero(), open_edges }
 }
 
 pub(super) fn nearby_faces(faces: &[Face], points: &[DVec3], radius: f64) -> Vec<Face> {
