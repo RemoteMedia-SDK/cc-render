@@ -107,6 +107,12 @@ Coordinate-centering remains a rejected experiment
   source motion is the limit. See the
   [hand rest checkpoint](../../artifacts/soft-tissue/avatar-contact/hand-rest-01/README.md).
 
+- Preregistered regeneration (12 semantic attempts): 3/12 pass the clamp and
+  rest without unsupported frames; best `gentle-740` and `rub-740` show hands
+  resting on the upper chest. Hands still pass through each other where they
+  cross (outside the exception). See the
+  [matrix checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-matrix-01/README.md).
+
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the

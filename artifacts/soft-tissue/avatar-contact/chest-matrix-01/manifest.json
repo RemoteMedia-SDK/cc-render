@@ -1,0 +1,359 @@
+{
+  "descriptions": {
+    "rest": "A person rests both hands flat on their chest.",
+    "gentle": "A person gently rubs their chest with both hands.",
+    "rub": "A person rubs their chest with both hands."
+  },
+  "seeds": [
+    740,
+    741,
+    742,
+    743
+  ],
+  "initial": "A person stands calmly.",
+  "criteria": {
+    "completes": "tissue replay reaches 8000 ms",
+    "contact": "at least one frame with active tissue contact",
+    "ribcage_supported": "no unsupported ribcage-clamp frames",
+    "rest_supported": "no unsupported breast-skin rest frames (corrections <= 50 mm)",
+    "fingers_rest": "finger residual <= 1 mm in every frame",
+    "rank": "passing attempts ordered by smallest maximum rest correction"
+  },
+  "sources": {
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/ardy_worker.py": "185025c14fd08e3266f1765b1f366ceec97e87e67a9e809afe9df92643d89ebf",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/motion_backend.py": "20c4e3848a9c2b801e3c24b02ba4061419aadae653e7cc351e4ea6f4714e58a1",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/motion_service.py": "1d5f3be2af4308d62d6ba25cb58ba520179a215719fae5ac2afc1df016078e1d",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/motion_policy.py": "ed8074589f78ea8e9a239a0214b0622eef4d047782b0b74f956a02c5ab9dea33",
+    "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars/ardy_adapter.py": "8a370e48f7c024e9e89739cb3b1781d1cfeb5569463b1bed022e49530ea29a77",
+    "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py": "3e4bb2e2f5f9d646d71b4dcec663e659a89c26c369073a8896a4fcf342968833",
+    "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/avatar-contact/generate_chest_touch_matrix.py": "dd3cc58fb6df427e5df0e4b35093ae74df3233072cc7f18b5007f07cca47c8f2"
+  },
+  "environment": {
+    "ARDY_MODEL": "core40",
+    "CUDA_VISIBLE_DEVICES": "1",
+    "ARDY_GPU": "1",
+    "TEXT_ENCODER_DEVICE": "cuda:0",
+    "ARDY_DEVICE": "cuda:0",
+    "TEXT_ENCODER_MODE": "local",
+    "LLM2VEC_QUANTIZE": "nf4",
+    "HF_HOME": "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/hf",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "PYTHONPATH": "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/scripts/avatars"
+  },
+  "policy": "Preregistered matrix; one attempt per cell; semantic only; every attempt kept.",
+  "runs": [
+    {
+      "case": [
+        "rest",
+        740
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rest-740-01",
+        "--description",
+        "A person rests both hands flat on their chest.",
+        "--seed",
+        "740",
+        "--session-id",
+        "tissue-lab-chest-rest-740",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792376755.9463804,
+      "exit_code": 0,
+      "completed_unix": 1792376807.1920776,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "198852fc38faf84051d471b4ced0f03cdea3212e17483035ba88d37c7b9b125a"
+    },
+    {
+      "case": [
+        "rest",
+        741
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rest-741-01",
+        "--description",
+        "A person rests both hands flat on their chest.",
+        "--seed",
+        "741",
+        "--session-id",
+        "tissue-lab-chest-rest-741",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792376807.226377,
+      "exit_code": 0,
+      "completed_unix": 1792376852.774744,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "c492f23de1f79d3b1d1fa06c6b9c2f6d7439434b22cd6de920200b08f504d3f9"
+    },
+    {
+      "case": [
+        "rest",
+        742
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rest-742-01",
+        "--description",
+        "A person rests both hands flat on their chest.",
+        "--seed",
+        "742",
+        "--session-id",
+        "tissue-lab-chest-rest-742",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792376852.8104303,
+      "exit_code": 0,
+      "completed_unix": 1792376946.2781296,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "bebe542c4464cc4261caf95fbe5742d2f79f50a6d0d8c478be35084fed5d4506"
+    },
+    {
+      "case": [
+        "rest",
+        743
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rest-743-01",
+        "--description",
+        "A person rests both hands flat on their chest.",
+        "--seed",
+        "743",
+        "--session-id",
+        "tissue-lab-chest-rest-743",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792376946.311025,
+      "exit_code": 0,
+      "completed_unix": 1792377012.2778301,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "7bcf68f79222672174180c1f943c204813ff3050b31c5cf386b65ec0e328f45b"
+    },
+    {
+      "case": [
+        "gentle",
+        740
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-gentle-740-01",
+        "--description",
+        "A person gently rubs their chest with both hands.",
+        "--seed",
+        "740",
+        "--session-id",
+        "tissue-lab-chest-gentle-740",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377012.3125885,
+      "exit_code": 0,
+      "completed_unix": 1792377075.8788686,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "9fa75c8b384750690b16189b53d227b182e1367dbdf255aa5b1d093c34044ba6"
+    },
+    {
+      "case": [
+        "gentle",
+        741
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-gentle-741-01",
+        "--description",
+        "A person gently rubs their chest with both hands.",
+        "--seed",
+        "741",
+        "--session-id",
+        "tissue-lab-chest-gentle-741",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377075.9204,
+      "exit_code": 0,
+      "completed_unix": 1792377121.5269663,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "3861f6d18f9bb9a623e1e045bd730032f2a4954ab971903c4934430a73fc7454"
+    },
+    {
+      "case": [
+        "gentle",
+        742
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-gentle-742-01",
+        "--description",
+        "A person gently rubs their chest with both hands.",
+        "--seed",
+        "742",
+        "--session-id",
+        "tissue-lab-chest-gentle-742",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377121.5623348,
+      "exit_code": 0,
+      "completed_unix": 1792377177.5522957,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "e8925bfb150bcd1f8346ad685550e742382f44410b2c06d8dd61cceae1b7fe44"
+    },
+    {
+      "case": [
+        "gentle",
+        743
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-gentle-743-01",
+        "--description",
+        "A person gently rubs their chest with both hands.",
+        "--seed",
+        "743",
+        "--session-id",
+        "tissue-lab-chest-gentle-743",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377177.5830274,
+      "exit_code": 0,
+      "completed_unix": 1792377222.5719097,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "592ce4b9d3b313741dab3d9e8e12b5aa2c91eb42ecc90fe3c3458a0b187b0a4c"
+    },
+    {
+      "case": [
+        "rub",
+        740
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rub-740-01",
+        "--description",
+        "A person rubs their chest with both hands.",
+        "--seed",
+        "740",
+        "--session-id",
+        "tissue-lab-chest-rub-740",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377222.6068585,
+      "exit_code": 0,
+      "completed_unix": 1792377267.6329062,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "df61cafdc91b1962fd6cd114531883b5c8954a831fc10e1c0588146f13dc41fd"
+    },
+    {
+      "case": [
+        "rub",
+        741
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rub-741-01",
+        "--description",
+        "A person rubs their chest with both hands.",
+        "--seed",
+        "741",
+        "--session-id",
+        "tissue-lab-chest-rub-741",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377267.6690085,
+      "exit_code": 0,
+      "completed_unix": 1792377315.0890384,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "b1aafbbe40980556d645b380112dbcfa489afa64c7d1b19e853635fd1f83bf38"
+    },
+    {
+      "case": [
+        "rub",
+        742
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rub-742-01",
+        "--description",
+        "A person rubs their chest with both hands.",
+        "--seed",
+        "742",
+        "--session-id",
+        "tissue-lab-chest-rub-742",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377315.1212573,
+      "exit_code": 0,
+      "completed_unix": 1792377386.6177764,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "ead427c51fc3b1a9fce08cc41afb46cbf56ec67e2e55e7db534a6e6519e05827"
+    },
+    {
+      "case": [
+        "rub",
+        743
+      ],
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/.runtime/office/venv/bin/python",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/scripts/avatars/record_tissue_jump.py",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/lab-chest-rub-743-01",
+        "--description",
+        "A person rubs their chest with both hands.",
+        "--seed",
+        "743",
+        "--session-id",
+        "tissue-lab-chest-rub-743",
+        "--initial-description",
+        "A person stands calmly."
+      ],
+      "started_unix": 1792377386.6543117,
+      "exit_code": 0,
+      "completed_unix": 1792377432.903409,
+      "sources_unchanged": true,
+      "packets_unchanged": true,
+      "audit_clean": true,
+      "packets_sha256": "537822cc9988f1873dbb3e5e469e34345efa1d698a92988368290c0e14130085"
+    }
+  ]
+}
