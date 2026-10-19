@@ -251,6 +251,11 @@ impl AvatarGeometry {
         Ok(())
     }
 
+    /// World position of SMPL-22 joint `i` in the matrices `world` returned for a pose.
+    pub(crate) fn smpl_joint(&self, world: &[Mat4], i: usize) -> Vec3 {
+        world[self.mapped[i]].w_axis.truncate()
+    }
+
     pub(crate) fn world(&self, pose: &SkeletalPose) -> Result<Vec<Mat4>, String> {
         let mut source = [Quat::IDENTITY; 22];
         let mut target = [Mat3::IDENTITY; 22];

@@ -22,20 +22,20 @@ use super::cloth_grip::{ClampMaterial, ClothGrip};
 use super::cloth_solver::{AnyBatch, ClothLayerStep, ClothSolver};
 use super::scene_package::ScenePackage;
 
-const DT: f64 = 1.0 / 60.0;
-const HAND_RADIUS_M: f32 = 0.015;
+pub(super) const DT: f64 = 1.0 / 60.0;
+pub(super) const HAND_RADIUS_M: f32 = 0.015;
 /// Mattress top (bed_mattress: centre y 0.48, half height 0.14).
-const MATTRESS_TOP_Y: f32 = 0.62;
+pub(super) const MATTRESS_TOP_Y: f32 = 0.62;
 /// The mattress footprint (bed_mattress: centre x 4.2, z -3.4; half extents 0.9, 1.06).
-const BED_X: [f32; 2] = [3.3, 5.1];
-const BED_Z: [f32; 2] = [-4.46, -2.34];
+pub(super) const BED_X: [f32; 2] = [3.3, 5.1];
+pub(super) const BED_Z: [f32; 2] = [-4.46, -2.34];
 /// Her half of the mattress top, below the pillows to hip level (x, z ranges).
 const ENTRY: ([f32; 2], [f32; 2]) = ([4.2, 5.1], [-4.0, -2.9]);
 /// Where the hand takes the covers: the corner of their head edge on her (bedside) side, the
 /// top-facing face furthest towards +x and -z.
 const CORNER: [f32; 2] = [1., -1.];
 
-fn covered(positions: &[Vec3], triangles: &[[u32; 3]], x: f32, z: f32) -> bool {
+pub(super) fn covered(positions: &[Vec3], triangles: &[[u32; 3]], x: f32, z: f32) -> bool {
     triangles.iter().any(|t| {
         let [a, b, c] = t.map(|i| positions[i as usize]);
         let d = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
@@ -101,7 +101,7 @@ fn intersecting_pairs(a: (&[Vec3], &[[u32; 3]]), b: (&[Vec3], &[[u32; 3]]), rest
 
 /// The top-facing triangle of `cloth` on the mattress furthest along `towards` (a corner), or
 /// nearest `at` on the ground, and the ball pose resting on it.
-fn grip_site(cloth: &ClothSolver, triangles: &[[u32; 3]], towards: Option<[f32; 2]>, at: [f32; 2])
+pub(super) fn grip_site(cloth: &ClothSolver, triangles: &[[u32; 3]], towards: Option<[f32; 2]>, at: [f32; 2])
     -> (usize, Isometry<f32>) {
     let positions = cloth.surface().positions();
     let (index, centre, normal) = triangles.iter().enumerate().filter_map(|(i, t)| {
@@ -130,15 +130,15 @@ fn grip_site(cloth: &ClothSolver, triangles: &[[u32; 3]], towards: Option<[f32; 
 /// higher leaves the flap tented from the hand: 16 cm above the mattress dropped it 20-30 cm in
 /// free fall (~2 m/s); 8-12 cm above the 3-4 cm two-cover pile let the tent topple sideways and
 /// carried the corner 20-60 cm.
-const LAID_CLEARANCE_M: f32 = 0.005;
+pub(super) const LAID_CLEARANCE_M: f32 = 0.005;
 
 /// The hand opens over this long (ClothGrip::let_go).
-const LET_GO_S: f64 = 0.25;
+pub(super) const LET_GO_S: f64 = 0.25;
 
 /// Hand height that lays the gripped point of a `radius` layer on the stack under `at` (x, z):
 /// the highest cloth particle within 6 cm there, below the mattress top + 10 cm, other than the
 /// gripped layer's particles within 10 cm of the gripped point (the flap hanging from the hand).
-fn laying_hand_y(solvers: &[ClothSolver], radii: &[f32], gripped: (usize, Vec3), at: [f32; 2]) -> f32 {
+pub(super) fn laying_hand_y(solvers: &[ClothSolver], radii: &[f32], gripped: (usize, Vec3), at: [f32; 2]) -> f32 {
     let mut top: Option<(f32, f32)> = None;
     for (i, s) in solvers.iter().enumerate() {
         let r = radii[i];
@@ -152,7 +152,7 @@ fn laying_hand_y(solvers: &[ClothSolver], radii: &[f32], gripped: (usize, Vec3),
     y + r + radii[gripped.0] + LAID_CLEARANCE_M + HAND_RADIUS_M
 }
 
-fn turndown_time() -> f32 {
+pub(super) fn turndown_time() -> f32 {
     std::env::var("TURNDOWN_TIME").ok().and_then(|v| v.parse().ok()).unwrap_or(1.)
 }
 
@@ -164,7 +164,7 @@ fn turndown_time() -> f32 {
 const FOLD_DOWN_BED_M: f32 = 1.7;
 
 /// Where the gripped corner is laid: its mirror image across the fold line.
-fn fold_point(start: Vec3) -> Vec3 {
+pub(super) fn fold_point(start: Vec3) -> Vec3 {
     // TURNDOWN_REACH scales the sweep from the grip to the fold's mirror point (diagnostics only).
     let reach = std::env::var("TURNDOWN_REACH").ok().and_then(|v| v.parse().ok()).unwrap_or(1.);
     // TURNDOWN_FOLD_M: how far down the bedside edge the fold line ends (diagnostics only).
@@ -173,7 +173,7 @@ fn fold_point(start: Vec3) -> Vec3 {
 }
 
 /// `laid_hand_y`: where the hand comes down to (see `laying_hand_y`), once it starts down.
-fn hand_offset(start: Vec3, t: f32, laid_hand_y: Option<f32>) -> Vec3 {
+pub(super) fn hand_offset(start: Vec3, t: f32, laid_hand_y: Option<f32>) -> Vec3 {
     let ease = |s: f32| { let s = s.clamp(0., 1.); s * s * (3. - 2. * s) };
     let lift = Vec3::Y * 0.35;
     let fold = fold_point(start);

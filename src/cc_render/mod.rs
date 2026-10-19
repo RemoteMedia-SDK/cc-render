@@ -36,6 +36,8 @@ pub(crate) mod cloth_grip;
 #[cfg(test)]
 mod cloth_turndown_tests;
 #[cfg(test)]
+mod cloth_under_covers_tests;
+#[cfg(test)]
 mod cloth_gpu_probe_tests;
 pub mod scene_cloth;
 
