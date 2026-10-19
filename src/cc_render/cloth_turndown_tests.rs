@@ -16,7 +16,7 @@ use bevy::math::{DVec3, Vec3};
 use bevy_rapier3d::rapier::parry::{math::Isometry, shape::Ball};
 
 use super::cloth_grip::{ClampMaterial, ClothGrip};
-use super::cloth_solver::{ClothBatch, ClothLayerStep, ClothSolver};
+use super::cloth_solver::{AnyBatch, ClothLayerStep, ClothSolver};
 use super::scene_package::ScenePackage;
 
 const DT: f64 = 1.0 / 60.0;
@@ -84,12 +84,22 @@ fn grip_site(cloth: &ClothSolver, triangles: &[[u32; 3]], towards: Option<[f32; 
 /// The hand's offset from where it gripped, at `t` seconds: up 0.35 m, then over to the corner's
 /// mirror image across the fold line (from the middle of the head edge to the bedside edge 0.9 m
 /// down), then down onto the covers: the corner folded back over them.
+///
+/// Laid means resting on the covers: the hand comes down until the gripped point is about a
+/// centimetre above the folded stack under it (fitted sheet, top sheet and duvet reach ~0.67-0.70 m
+/// there). Letting go 16 cm above the mattress (as this test first did) dropped the tented flap
+/// 20-30 cm in free fall, ~2 m/s, which says nothing about whether the fold holds.
+const LAID_HAND_ABOVE_MATTRESS_M: f32 = 0.08;
+
 fn hand_offset(start: Vec3, t: f32) -> Vec3 {
     let ease = |s: f32| { let s = s.clamp(0., 1.); s * s * (3. - 2. * s) };
     let lift = Vec3::Y * 0.35;
     let fold = Vec3::new(4.2, 0., start.z + 0.9);
     let laid = Vec3::new(fold.x, start.y + 0.35, fold.z) - start;
-    let down = Vec3::new(fold.x, MATTRESS_TOP_Y + 0.16, fold.z) - start;
+    // TURNDOWN_LAID_HAND_M overrides the laying height (diagnostics only).
+    let above = std::env::var("TURNDOWN_LAID_HAND_M").ok().and_then(|v| v.parse().ok())
+        .unwrap_or(LAID_HAND_ABOVE_MATTRESS_M);
+    let down = Vec3::new(fold.x, MATTRESS_TOP_Y + above, fold.z) - start;
     if t < 0.4 { lift * ease(t / 0.4) }
     else if t < 1.6 { lift.lerp(laid, ease((t - 0.4) / 1.2)) }
     else { laid.lerp(down, ease((t - 1.6) / 0.4)) }
@@ -99,7 +109,8 @@ fn hand_offset(start: Vec3, t: f32) -> Vec3 {
 #[ignore]
 fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
     let mut package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("scenes/toronto_condo/scene-bedding-settled.json")).unwrap();
+        .join("scenes/toronto_condo").join(std::env::var("TURNDOWN_SCENE")
+            .unwrap_or_else(|_| "scene-bedding-settled.json".into()))).unwrap();
     // Counterfactual materials (diagnostic only): TURNDOWN_PARAMS=<layer id or *>.<parameter>=<json
     // value>,... overrides authored cloth parameters before the solvers are built. The baked drape
     // then need not be at rest under them; compare with a TURNDOWN_STILL control.
@@ -121,8 +132,11 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
     let colliders: Vec<_> = package.cloths.iter().map(|c| c.colliders(&package).unwrap()).collect();
     let triangles: Vec<Vec<[u32; 3]>> = package.cloths.iter()
         .map(|c| c.loaded.as_ref().unwrap().triangles.clone()).collect();
-    let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
+    // TURNDOWN_GPU=1: the live GPU solver instead of the CPU reference.
+    let mut batch = AnyBatch::from_env(&solvers.iter().collect::<Vec<_>>(), "TURNDOWN_GPU");
     batch.start_at_rest();
+    let mut gpu_flags = (0u64, 0u64);
+    let mut gpu_ms: Vec<f64> = Vec::new();
     let cover = |solvers: &[ClothSolver], i: usize| coverage(solvers[i].surface().positions(), &triangles[i]);
     let before = (cover(&solvers, top), cover(&solvers, duvet));
 
@@ -151,6 +165,8 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
     let hold_s: f32 = std::env::var("TURNDOWN_HOLD_S").ok().and_then(|v| v.parse().ok()).unwrap_or(0.);
     let release_frame = 121 + (hold_s * 60.) as u32;
     let last_frame = release_frame + 179;
+    let mut frames_out = std::env::var("CC_TURNDOWN_FRAMES").ok()
+        .map(|path| std::io::BufWriter::new(std::fs::File::create(path).unwrap()));
     let mut peak_force = 0f64;
     let mut held_through = true;
     // The gripped duvet point where the hand lays it down (the last held tick), its largest
@@ -175,7 +191,17 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
         }
         let mut layers: Vec<ClothLayerStep> = solvers.iter_mut().zip(&colliders).zip(grips.iter_mut())
             .map(|((solver, colliders), grips)| ClothLayerStep { solver, colliders, grips }).collect();
-        batch.step(&mut layers, DT, -DVec3::Y * 9.81).unwrap();
+        if let Err(e) = batch.step(&mut layers, DT, -DVec3::Y * 9.81) {
+            panic!("frame {frame}: {e} {:?}", batch.gpu_report());
+        }
+        if let Some(r) = batch.gpu_report() {
+            if std::env::var_os("TURNDOWN_GPU_TRACE").is_some() {
+                println!("GPU_FRAME {frame} {}", serde_json::json!(r));
+            }
+            gpu_flags.0 += r.substep_motion_exceeded as u64;
+            gpu_flags.1 += r.margin_exceeded as u64;
+            gpu_ms.push(r.frame_ms);
+        }
         for grip in grips.iter().flatten() {
             peak_force = peak_force.max(grip.peak_applied_force_n());
             if frame < release_frame { held_through &= grip.state() == super::cloth_grip::ClampState::Held; }
@@ -186,9 +212,12 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
             holding_force = grips[duvet][0].peak_applied_force_n();
         }
         let published: Vec<Vec<Vec3>> = solvers.iter().map(|s| s.surface().positions().to_vec()).collect();
-        let tick_speed = published.iter().zip(&last_published)
-            .flat_map(|(a, b)| a.iter().zip(b).map(|(p, q)| p.distance(*q) as f64 / DT))
-            .fold(0., f64::max);
+        // Fastest published particle per layer this tick: (speed m/s, position).
+        let fastest: Vec<(f64, [f32; 3])> = published.iter().zip(&last_published)
+            .map(|(a, b)| a.iter().zip(b).map(|(p, q)| (p.distance(*q) as f64 / DT, p.to_array()))
+                .fold((0., [0.; 3]), |m, x| if x.0 > m.0 { x } else { m }))
+            .collect();
+        let tick_speed = fastest.iter().map(|f| f.0).fold(0., f64::max);
         last_published = published;
         if frame >= release_frame {
             max_excursion = max_excursion.max(point.distance(laid));
@@ -199,6 +228,7 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
             let grip = &grips[duvet][0];
             let point = solvers[duvet].surface().resolve(grip.material_point()).unwrap().position;
             frames.push(serde_json::json!({"frame": frame, "state": grip.state(),
+                "grip_force_n": grips.iter().flatten().map(|g| g.peak_required_force_n()).collect::<Vec<_>>(),
                 "hand": (duvet_start + if still { Vec3::ZERO } else { hand_offset(duvet_start, t) }).to_array(),
                 "duvet_point": point.to_array(), "anchor": grip.anchor(1.).to_array(),
                 "max_edge_stretch_ratio": solvers.iter().map(|s| s.max_edge_stretch_ratio()).fold(0., f64::max),
@@ -211,10 +241,22 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
             let point = solvers[duvet].surface().resolve(grips[duvet][0].material_point()).unwrap().position;
             let energies = [fitted, top, duvet].map(|i| solvers[i].energy_terms(gravity));
             let speeds = [fitted, top, duvet].map(|i| solvers[i].max_speed());
+            let published_fastest = [fitted, top, duvet].map(|i| fastest[i]);
             println!("TURNDOWN_ENERGY {}", serde_json::json!({
                 "frame": frame, "since_release_s": (frame as f64 - release_frame as f64) / 60.,
                 "layers": energies, "speeds": speeds, "duvet_point": point.to_array(),
+                "published_fastest": published_fastest,
             }));
+        }
+        // CC_TURNDOWN_FRAMES=<file>: every layer's positions every other tick (30 fps), mm-rounded,
+        // and the hand, for rendering previews.
+        if let Some(file) = frames_out.as_mut().filter(|_| frame % 2 == 0) {
+            use std::io::Write;
+            let hand = duvet_start + if still { Vec3::ZERO } else { hand_offset(duvet_start, t) };
+            let layers: Vec<Vec<[f32; 3]>> = [fitted, top, duvet].iter().map(|&i| solvers[i].surface().positions()
+                .iter().map(|p| p.to_array().map(|x| (x * 1000.).round() / 1000.)).collect()).collect();
+            writeln!(file, "{}", serde_json::json!({"frame": frame, "held": frame < release_frame,
+                "hand": hand.to_array(), "layers": layers})).unwrap();
         }
         if frame % 30 == 0 {
             eprintln!("turndown frame {frame}/{last_frame} after {:.0} s", clock.elapsed().as_secs_f64());
@@ -242,8 +284,17 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
         }
         hits as f64 / total as f64
     };
+    let gpu_median = {
+        let mut m = gpu_ms.clone();
+        m.sort_by(f64::total_cmp);
+        m.get(m.len() / 2).copied()
+    };
+    let gpu_max = gpu_ms.iter().copied().reduce(f64::max);
     let report = serde_json::json!({
         "entry_area_m": {"x": ENTRY.0, "z": ENTRY.1},
+        "gpu": !gpu_ms.is_empty(),
+        "gpu_tunnel_flags_substep_motion": gpu_flags.0, "gpu_tunnel_flags_margin": gpu_flags.1,
+        "gpu_frame_ms_median": gpu_median, "gpu_frame_ms_max": gpu_max,
         "covered_before": {"top_sheet": before.0, "duvet": before.1},
         "covered_after": {"top_sheet": after.0, "duvet": after.1, "either": either(&solvers)},
         "grip": {"duvet_at": duvet_start.to_array(), "held_until_release": held_through,
@@ -275,4 +326,18 @@ fn one_hand_turns_the_covers_down_far_enough_to_get_into_bed() {
             "report": report, "layers": layers, "frames": frames })).unwrap()).unwrap();
     }
     assert!(held_through, "{report}");
+    let report_number = |key: &str| report[key].as_f64().unwrap();
+    assert!(report_number("max_edge_stretch_ratio") < 1.1, "{report}");
+    assert!(report_number("max_particle_penetration_m") <= 0., "{report}");
+    if still {
+        // Gripping without moving must not disturb the baked drape beyond its rest tolerance.
+        assert!(max_drift <= 0.005, "{report}");
+        return;
+    }
+    // A turned-down duvet stays turned down: once let go, the gripped point stays near where the
+    // hand laid it, nothing whips back (published motion, not substep contact exchange), and the
+    // entry area is clearly more open than when the corner sprang back (28% duvet cover).
+    assert!(report_number("final_distance_from_laid_m") < 0.10, "{report}");
+    assert!(report_number("max_published_speed_after_release_m_s") < 1.0, "{report}");
+    assert!(after.1 < 0.2, "{report}");
 }

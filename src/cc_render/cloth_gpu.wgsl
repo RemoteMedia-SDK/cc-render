@@ -38,7 +38,7 @@ struct Params {
     relaxation: f32,
     edges: u32,
     edge_slot_capacity: u32,
-    _pad0: u32,
+    propagate_supports: u32,
     _pad1: u32,
 }
 
@@ -138,6 +138,8 @@ struct Counters {
 // Stretch-edge neighbours of every particle (CSR): neighbours[adjacency[i] .. adjacency[i + 1]].
 @group(0) @binding(26) var<storage, read_write> adjacency: array<u32>;
 @group(0) @binding(27) var<storage, read_write> neighbours: array<u32>;
+// Support normals propagated by this contact pass (4 per particle; see solve_pair).
+@group(0) @binding(28) var<storage, read_write> propagate: array<atomic<i32>>;
 
 var<push_constant> step: Step;
 
@@ -363,6 +365,7 @@ fn materials(@builtin(local_invocation_index) lid: u32) {
             v = v * exp(-layers[vlayer[i]].drag * h) + params.gravity.xyz * h;
         }
         set_wpos(i, p.xyz + v * h);
+        support[i] = vec4<f32>(0.0);
     }
     for (var k = lid; k < params.springs; k += ONE_GROUP) { lambda[k] = 0.0; }
     storageBarrier();
@@ -478,7 +481,6 @@ fn collide_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 fn collide_vertex(i: u32) {
     var p = pos[i];
-    support[i] = vec4<f32>(0.0);
     if (p.w <= 0.0) { return; }
     let layer = vlayer[i];
     let radius = layers[layer].radius;
@@ -585,6 +587,14 @@ fn apply_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
         pos[i] = vec4<f32>(pos[i].xyz + d, pos[i].w);
         for (var k = 0u; k < 4u; k++) { atomicStore(&acc[i * 4u + k], 0); }
     }
+    let held = atomicLoad(&propagate[i * 4u + 3u]);
+    if (held > 0) {
+        let n = vec3<f32>(f32(atomicLoad(&propagate[i * 4u])), f32(atomicLoad(&propagate[i * 4u + 1u])),
+            f32(atomicLoad(&propagate[i * 4u + 2u])));
+        // A collider support stands; otherwise the layers beneath hold it.
+        if (length(n) > 0.0 && support[i].w == 0.0) { support[i] = vec4<f32>(normalize(n), 2.0); }
+        for (var k = 0u; k < 4u; k++) { atomicStore(&propagate[i * 4u + k], 0); }
+    }
     collide_vertex(i);
 }
 
@@ -596,25 +606,19 @@ fn apply_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
 // free side takes the correction; Coulomb friction (static `stick`, kinetic `slide`) reduces
 // the relative slip of the two points since the substep start.
 //
-// Stacked layers (shock propagation, Guendelman et al. 2003): when the contact normal is mostly
-// vertical, the lower side's inverse masses are scaled by STACK_SCALE in this contact, so a
-// heavy layer resting on a light one pushes the stack's correction upward instead of driving
-// the light layer through the one beneath it before the averaged passes converge.
-const STACK_SCALE: f32 = 0.05;
-
+// Supports propagate up a resting stack: a particle pressed against particles that are
+// themselves supported (by a collider, or through the layers beneath) is held by that
+// reaction too, and becomes supported for the next pass (`propagate`, applied in apply_acc).
+// The light top sheet between the heavy duvet and the supported fitted sheet then passes the
+// correction up instead of being driven through the fitted sheet. A lifted flap touches no
+// supported particle and is unaffected.
 fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick: f32, slide: f32) {
     var dirs: array<vec3<f32>, 4>;
     var w = 0.0;
     var wf = 0.0;
     var rel = vec3<f32>(0.0);
-    let g_len = length(params.gravity.xyz);
-    var up = vec3<f32>(0.0);
-    if (g_len > 0.0) { up = -params.gravity.xyz / g_len; }
-    // Positive side (g > 0) lies along +normal from the negative side.
-    let vertical = dot(normal, up);
     for (var k = 0u; k < 4u; k++) {
-        var im = pos[ids[k]].w;
-        if ((vertical > 0.5 && g[k] < 0.0) || (vertical < -0.5 && g[k] > 0.0)) { im *= STACK_SCALE; }
+        let im = pos[ids[k]].w;
         var dk = normal * (im * g[k]);
         let sup = support[ids[k]];
         if (sup.w > 0.0) { dk -= sup.xyz * min(dot(dk, sup.xyz), 0.0); }
@@ -633,10 +637,28 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
     }
     var back = vec3<f32>(0.0);
     if (slip > 0.0) { back = tangent / slip * (cancel / wf); }
+    // Which side rests on a supported side: every particle with real weight on that side is
+    // supported with its normal facing the other side.
+    var a_held = true;
+    var b_held = true;
     for (var k = 0u; k < 4u; k++) {
-        var im = pos[ids[k]].w;
-        if ((vertical > 0.5 && g[k] < 0.0) || (vertical < -0.5 && g[k] > 0.0)) { im *= STACK_SCALE; }
-        add_acc(ids[k], dirs[k] * l - back * (im * g[k]));
+        let sup = support[ids[k]];
+        if (abs(g[k]) < 0.05) { continue; }
+        if (g[k] > 0.0) {
+            a_held = a_held && sup.w > 0.0 && dot(sup.xyz, -normal) > 0.5;
+        } else {
+            b_held = b_held && sup.w > 0.0 && dot(sup.xyz, normal) > 0.5;
+        }
+    }
+    for (var k = 0u; k < 4u; k++) {
+        add_acc(ids[k], dirs[k] * l - back * (pos[ids[k]].w * g[k]));
+        if (params.propagate_supports != 0u && abs(g[k]) >= 0.05 && ((g[k] > 0.0 && b_held) || (g[k] < 0.0 && a_held))) {
+            let n = normal * sign(g[k]);
+            atomicAdd(&propagate[ids[k] * 4u], i32(round(n.x * 1e6)));
+            atomicAdd(&propagate[ids[k] * 4u + 1u], i32(round(n.y * 1e6)));
+            atomicAdd(&propagate[ids[k] * 4u + 2u], i32(round(n.z * 1e6)));
+            atomicAdd(&propagate[ids[k] * 4u + 3u], 1);
+        }
     }
     atomicAdd(&counters.contacts, 1u);
 }
@@ -671,13 +693,20 @@ fn vertex_face(v: u32, t: u32) {
     let over = plane_weights(pv.xyz - n1 * h1, pa.xyz, pb.xyz, pc.xyz);
     let over_face = all(over >= vec3<f32>(-0.02));
     let interior = wts.x > 1e-4 && wts.y > 1e-4 && wts.z > 1e-4;
-    // In the plane over the face at the substep start: no trustworthy side (the CPU reference's
-    // initially intersecting surface). The frame fails.
+    var side = select(-1.0, 1.0, h0 > 0.0);
     if (over_face && abs(h0) < 1e-7) {
-        atomicAdd(&counters.ambiguous, 1u);
-        return;
+        // In the face's plane at the substep start (a crossing the previous substep left just
+        // unresolved): it came from the side it is moving away from. At rest relative to the
+        // face it has no trustworthy side (the CPU reference's initially intersecting surface)
+        // and the frame fails.
+        let approach = dot(vel[v].xyz - (vel[tri.x].xyz * wts.x + vel[tri.y].xyz * wts.y
+            + vel[tri.z].xyz * wts.z), n0_raw / n0_len);
+        if (abs(approach) < 1e-4) {
+            atomicAdd(&counters.ambiguous, 1u);
+            return;
+        }
+        side = select(1.0, -1.0, approach > 0.0);
     }
-    let side = select(-1.0, 1.0, h0 > 0.0);
     let crossed = h0 * h1 < 0.0 && over_face;
     var normal = n1 * side;
     var separation = h1 * side;
@@ -750,18 +779,25 @@ fn edge_edge(e: u32, f: u32) {
     let d0 = mix(prev[ea.x].xyz, prev[ea.y].xyz, st.x) - mix(prev[fa.x].xyz, prev[fa.y].xyz, st.y);
     let d0_len = length(d0);
     let inner = st.x > 1e-4 && st.x < 1.0 - 1e-4 && st.y > 1e-4 && st.y < 1.0 - 1e-4;
+    var start_dir = d0;
     if (inner && d0_len < 1e-7) {
-        atomicAdd(&counters.ambiguous, 1u);
-        return;
+        // Touching at the substep start: the edges came from the sides they are moving away
+        // from; at rest relative to each other there is no trustworthy side and the frame fails.
+        let vrel = mix(vel[ea.x].xyz, vel[ea.y].xyz, st.x) - mix(vel[fa.x].xyz, vel[fa.y].xyz, st.y);
+        if (length(vrel) < 1e-4) {
+            atomicAdd(&counters.ambiguous, 1u);
+            return;
+        }
+        start_dir = -vrel;
     }
     var normal: vec3<f32>;
     var separation: f32;
-    if (inner && dot(d, d0) < 0.0) {
-        normal = d0 / d0_len;
+    if (inner && dot(d, start_dir) < 0.0) {
+        normal = normalize(start_dir);
         separation = dot(d, normal);
     } else {
         if (dist >= gap) { return; }
-        if (dist > 1e-9) { normal = d / dist; } else { normal = d0 / max(d0_len, 1e-12); }
+        if (dist > 1e-9) { normal = d / dist; } else { normal = normalize(start_dir); }
         separation = dist;
     }
     let depth = gap - separation;

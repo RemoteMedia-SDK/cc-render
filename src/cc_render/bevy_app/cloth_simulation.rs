@@ -11,7 +11,10 @@ pub(super) enum LiveBatch {
 }
 
 impl LiveBatch {
-    fn new(solvers: &[&ClothSolver]) -> Result<Self, ClothError> {
+    fn new(solvers: &[&ClothSolver], cpu_reference: bool) -> Result<Self, ClothError> {
+        if cpu_reference {
+            return Ok(Self::Cpu(ClothBatch::new(solvers)?));
+        }
         Ok(match GpuClothBatch::new(solvers)? {
             Some(gpu) => Self::Gpu(gpu),
             None => Self::Cpu(ClothBatch::new(solvers)?),
@@ -46,6 +49,9 @@ pub(super) struct ClothSimulation {
     ids: Vec<String>,
     /// Every layer's authored start is a baked rest drape.
     pub(super) starts_at_rest: bool,
+    /// Use the CPU reference even when a GPU is available (reference tests).
+    #[allow(dead_code)]
+    pub(super) cpu_reference: bool,
 }
 
 impl ClothSimulation {
@@ -59,7 +65,7 @@ impl ClothSimulation {
             if ids.windows(2).any(|pair| pair[0] == pair[1]) {
                 return Err("duplicate cloth layer id".into());
             }
-            let mut batch = LiveBatch::new(&layers.iter().map(|l| &l.solver).collect::<Vec<_>>())
+            let mut batch = LiveBatch::new(&layers.iter().map(|l| &l.solver).collect::<Vec<_>>(), self.cpu_reference)
                 .map_err(|e| e.to_string())?;
             tracing::info!(target: "cc_render", "live cloth solver: {} ({} layers)", batch.backend(), layers.len());
             if self.starts_at_rest {

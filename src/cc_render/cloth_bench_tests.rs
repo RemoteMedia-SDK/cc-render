@@ -622,7 +622,7 @@ fn bake_settled_drape() {
         .iter()
         .map(|d| d.colliders(&package).unwrap())
         .collect();
-    let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
+    let mut batch = super::super::gpu::AnyBatch::from_env(&solvers.iter().collect::<Vec<_>>(), "CC_CLOTH_BAKE_GPU");
     let gravity = bevy_rapier3d::prelude::RapierConfiguration::new(1.)
         .gravity
         .as_dvec3();
@@ -671,7 +671,7 @@ fn bake_settled_drape() {
 fn baked_drape_rests_when_simulated(scene: &str) {
     let (mut solvers, colliders) = authored_layers(scene);
     let start: Vec<Vec<DVec3>> = solvers.iter().map(|s| s.positions.clone()).collect();
-    let mut batch = ClothBatch::new(&solvers.iter().collect::<Vec<_>>()).unwrap();
+    let mut batch = super::super::gpu::AnyBatch::from_env(&solvers.iter().collect::<Vec<_>>(), "CC_CLOTH_BAKE_GPU");
     let gravity = bevy_rapier3d::prelude::RapierConfiguration::new(1.)
         .gravity
         .as_dvec3();

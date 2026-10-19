@@ -712,3 +712,5 @@ pub(crate) use batch::{ClothBatch, ClothLayerStep};
 mod gpu;
 #[allow(unused_imports)]
 pub(crate) use gpu::{gpu_adapter, GpuClothBatch, GpuReport, KinematicCollider, KinematicShape};
+#[cfg(test)]
+pub(crate) use gpu::AnyBatch;

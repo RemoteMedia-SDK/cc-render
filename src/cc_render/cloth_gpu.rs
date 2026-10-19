@@ -73,6 +73,8 @@ pub(crate) struct GpuOptions {
     pub edge_passes: u32,
     /// Substeps between edge-edge candidate rebuilds (a multiple of `rebuild_every`).
     pub edge_rebuild_every: u32,
+    /// Particles pressed onto supported particles become supported (see solve_pair).
+    pub propagate_supports: bool,
 }
 
 impl Default for GpuOptions {
@@ -88,6 +90,7 @@ impl Default for GpuOptions {
             skip_edges: false,
             edge_passes: 1,
             edge_rebuild_every: 12,
+            propagate_supports: true,
         }
         .with_test_overrides()
     }
@@ -107,6 +110,7 @@ impl GpuOptions {
             if let Some(v) = get("CC_GPU_SKIP_EDGES") { o.skip_edges = v > 0.; }
             if let Some(v) = get("CC_GPU_EDGE_PASSES") { o.edge_passes = v as u32; }
             if let Some(v) = get("CC_GPU_EDGE_REBUILD_EVERY") { o.edge_rebuild_every = v as u32; }
+            if let Some(v) = get("CC_GPU_PROPAGATE") { o.propagate_supports = v > 0.; }
             return o;
         }
         #[allow(unreachable_code)]
@@ -151,7 +155,7 @@ struct Pipelines {
     edge_candidates: wgpu::ComputePipeline,
 }
 
-const BINDINGS: u32 = 28;
+const BINDINGS: u32 = 29;
 /// Particles the one-workgroup stages hold in workgroup memory (cloth_gpu.wgsl `wx`).
 const MAX_VERTICES: usize = 4096;
 
@@ -339,6 +343,7 @@ pub(crate) struct GpuClothBatch {
     rest: Rest,
     pub(crate) options: GpuOptions,
     frame_dt: f64,
+    cell: f32,
     pub(crate) last: GpuReport,
 }
 
@@ -453,6 +458,14 @@ impl GpuClothBatch {
             edge_list.extend(seen.into_iter().flat_map(|(a, b)| [a as u32, b as u32, l as u32, 0]));
         }
         let edge_count = (edge_list.len() / 4) as u32;
+        // Hash cells at least half the longest material edge: a triangle or edge then spans a
+        // handful of cells whatever the mesh resolution (a 2 m fixture edge in 6 cm cells
+        // overflowed the edge-hash slots).
+        let longest = solvers
+            .iter()
+            .flat_map(|s| s.springs.iter().filter(|sp| sp.stretch).map(|sp| sp.rest))
+            .fold(0., f64::max);
+        let cell = (0.5 * longest).max(0.06) as f32;
         // Stretch-edge neighbours per particle (CSR) for the edge dashpots.
         let mut neighbour_lists = vec![Vec::new(); vertices];
         for (offset, sp) in &all {
@@ -500,6 +513,7 @@ impl GpuClothBatch {
         let ecand = zeroed("ecand", CANDIDATE_CAPACITY as u64 * 8);
         let adjacency = storage("adjacency", &bytes_u32(&adjacency), wgpu::BufferUsages::empty());
         let neighbours = storage("neighbours", &bytes_u32(&neighbour_ids), wgpu::BufferUsages::empty());
+        let propagate = zeroed("propagate", vertices as u64 * 16);
         let readback = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
             size: vertices as u64 * 32 + 64 * 64 + COUNTER_WORDS as u64 * 4,
@@ -510,7 +524,7 @@ impl GpuClothBatch {
             &params, &pos, &prev, &vel, &vlayer, &layers, &springs, &colour_start, &lambda,
             &tri_buffer, &cell_count, &cell_start, &sorted, &cand, &acc, &colliders, &grips,
             &anchors, &counters, &built, &support, &edges, &ecount, &estart, &eslots, &ecand,
-            &adjacency, &neighbours,
+            &adjacency, &neighbours, &propagate,
         ];
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("cloth"),
@@ -549,6 +563,7 @@ impl GpuClothBatch {
             rest: Rest::new(),
             options: GpuOptions::default(),
             frame_dt: 1. / 60.,
+            cell,
             last: GpuReport::default(),
         }))
     }
@@ -689,11 +704,11 @@ impl GpuClothBatch {
             o.contact_iterations,
             o.rebuild_every.max(1),
         ]));
-        params.extend(bytes_f32(&[o.cell, o.margin]));
+        params.extend(bytes_f32(&[self.cell.max(o.cell), o.margin]));
         params.extend(bytes_u32(&[CANDIDATE_CAPACITY]));
         params.extend(bytes_f32(&[EDGE_DAMPING_PER_SECOND as f32]));
         params.extend(bytes_u32(&[self.springs, o.relaxation.to_bits()]));
-        params.extend(bytes_u32(&[self.edges, (self.edges as u64 * EDGE_SLOTS_PER_EDGE) as u32, 0, 0]));
+        params.extend(bytes_u32(&[self.edges, (self.edges as u64 * EDGE_SLOTS_PER_EDGE) as u32, o.propagate_supports as u32, 0]));
         let b = &self.buffers;
         let queue = &gpu.queue;
         queue.write_buffer(&b.params, 0, &params);
@@ -958,3 +973,53 @@ impl GpuClothBatch {
 #[cfg(test)]
 #[path = "cloth_gpu_tests.rs"]
 mod tests;
+
+/// Test tools that run either solver: the GPU batch when `env` is set to 1 (and a GPU exists),
+/// otherwise the CPU reference.
+#[cfg(test)]
+pub(crate) enum AnyBatch {
+    Cpu(ClothBatch),
+    Gpu(GpuClothBatch),
+}
+
+#[cfg(test)]
+impl AnyBatch {
+    pub(crate) fn from_env(solvers: &[&ClothSolver], env: &str) -> Self {
+        if std::env::var(env).as_deref() == Ok("1") {
+            if let Some(gpu) = GpuClothBatch::new(solvers).unwrap() {
+                return Self::Gpu(gpu);
+            }
+            panic!("{env}=1 but no suitable GPU adapter");
+        }
+        Self::Cpu(ClothBatch::new(solvers).unwrap())
+    }
+
+    pub(crate) fn step(&mut self, layers: &mut [ClothLayerStep<'_>], dt: f64, gravity: DVec3) -> Result<(), ClothError> {
+        match self {
+            Self::Cpu(b) => b.step(layers, dt, gravity),
+            Self::Gpu(b) => b.step(layers, dt, gravity),
+        }
+    }
+
+    pub(crate) fn resting(&self) -> bool {
+        match self {
+            Self::Cpu(b) => b.resting(),
+            Self::Gpu(b) => b.resting(),
+        }
+    }
+
+    pub(crate) fn start_at_rest(&mut self) {
+        match self {
+            Self::Cpu(b) => b.start_at_rest(),
+            Self::Gpu(b) => b.start_at_rest(),
+        }
+    }
+
+    /// The GPU frame report (None on the CPU reference).
+    pub(crate) fn gpu_report(&self) -> Option<GpuReport> {
+        match self {
+            Self::Cpu(_) => None,
+            Self::Gpu(b) => Some(b.last),
+        }
+    }
+}
