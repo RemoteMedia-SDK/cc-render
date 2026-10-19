@@ -552,6 +552,7 @@ impl Active {
         let mut maximum = 0.0_f64;
         let mut crease = 0.0_f64;
         let mut surface_metrics = Vec::with_capacity(self.surfaces.len());
+        let surface_started = std::time::Instant::now();
         for surface in &self.surfaces {
             if !surface.has_deformation() {
                 continue;
@@ -564,6 +565,7 @@ impl Active {
             crease = crease.max(metrics.maximum_crease_deg as f64);
             surface_metrics.push(metrics);
         }
+        integration.surface_ms = surface_started.elapsed().as_secs_f64() * 1000.0;
         if let Some([ribcage, skin]) = self.rest_hands(request, &window, end, &nodes, frames, globals)? {
             (integration.hand_clamp, integration.hand_rest) = (Some(ribcage), Some(skin));
         }
@@ -621,6 +623,8 @@ struct IntegrationReport {
     sampling_ms: f64,
     elasticity_ms: f64,
     collision_ms: f64,
+    // Displayed skin (embedding, smoothing, metrics) for this output frame.
+    surface_ms: f64,
 }
 
 impl IntegrationReport {
@@ -640,6 +644,7 @@ impl IntegrationReport {
         self.sampling_ms += other.sampling_ms;
         self.elasticity_ms += other.elasticity_ms;
         self.collision_ms += other.collision_ms;
+        self.surface_ms += other.surface_ms;
     }
 }
 

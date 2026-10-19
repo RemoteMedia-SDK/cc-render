@@ -156,9 +156,12 @@ smoothing 4 is the lab candidate. See `orientation-lab/jump-03/`.
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the
    default cap (10 kPa now) and whether fingers should also rest on breast skin.
-2. Live 120 Hz performance with cap, clamp and the mls embedding; none is
-   measured live yet. Then decide whether the accepted s40-k32-v4 + mls +
-   smoothing 4 candidate becomes the lab default.
+2. Live 120 Hz (`artifacts/soft-tissue/live120-01/`): the accepted
+   s40-k32-v4 + mls + smoothing 4 candidate costs no measurable delivery; the
+   skin layer adds ~0.15 ms per output frame and the material solves slightly
+   faster. Live playback is still short of smooth 30 FPS (~210 of ~239
+   readbacks) for every setup. Cap and clamp are still unmeasured live.
+   Next: decide whether the candidate becomes the lab default.
 3. Default enablement still needs anatomical calibration and broader clips.
 
 Run from this worktree:
