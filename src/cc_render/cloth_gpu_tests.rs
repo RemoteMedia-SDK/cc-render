@@ -286,6 +286,7 @@ fn bench_gpu_cloth_ticks() {
     let (mut solvers, colliders) = super::batch::bench::authored_layers(&scene);
     let Some(mut batch) = gpu_batch(&solvers.iter().collect::<Vec<_>>()) else { return };
     println!("GPU_ADAPTER {}", gpu_adapter().unwrap_or("none"));
+    println!("GPU_LAYOUT {}", batch.layout_summary());
     let mut window = Vec::new();
     let mut flags = (0u32, 0u32);
     let mut published_speed = 0f64;
@@ -306,7 +307,7 @@ fn bench_gpu_cloth_ticks() {
             window.sort_by(f64::total_cmp);
             println!("GPU_BENCH {}", serde_json::json!({
                 "scene": scene, "tick": tick, "median_ms": window[window.len() / 2], "max_ms": window[window.len() - 1],
-                "candidates": batch.last.candidates, "contacts": batch.last.contacts, "resting": batch.resting(),
+                "candidates": batch.last.candidates, "contacts": batch.last.contacts, "resting": batch.resting(), "colliders": batch.last.colliders,
                 "max_published_speed": published_speed,
                 "tunnel_flags_substep_motion": flags.0, "tunnel_flags_margin": flags.1,
                 "max_stretch": solvers.iter().map(|s| s.max_edge_stretch_ratio()).fold(0., f64::max),
@@ -338,4 +339,89 @@ fn gpu_shader_is_valid_wgsl() {
     naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
         .validate(&module)
         .unwrap_or_else(|e| panic!("{}", e.emit_to_string(include_str!("cloth_gpu.wgsl"))));
+}
+
+/// Diagnostic: the authored bedding's first ticks on the GPU, with per-tick inter-layer
+/// distances (parry mesh distance, as the live drape test) and vertex-face gap violations.
+#[test]
+#[ignore = "diagnostic: release, --nocapture"]
+fn gpu_bedding_layer_separation_trace() {
+    use parry_ccd::{math::{Isometry as I, Point}, query::{distance, PointQuery}, shape::{TriMesh, Triangle}};
+    let (mut solvers, colliders) = super::batch::bench::authored_layers("scene-bedding.json");
+    let Some(mut batch) = gpu_batch(&solvers.iter().collect::<Vec<_>>()) else { return };
+    let ticks: usize = std::env::var("CC_TRACE_TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(20);
+    for tick in 1..=ticks {
+        let mut layers: Vec<_> = solvers.iter_mut().zip(&colliders)
+            .map(|(solver, colliders)| ClothLayerStep { solver, colliders, grips: &mut [] }).collect();
+        if let Err(e) = batch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81) {
+            println!("GPU_SEPARATION_ERROR tick {tick} {e} {}", serde_json::json!(batch.last));
+            return;
+        }
+        let every: usize = std::env::var("CC_TRACE_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
+        if tick % every != 0 { continue; }
+        let p = |v: DVec3| Point::new(v.x, v.y, v.z);
+        let mesh = |s: &ClothSolver| TriMesh::new(s.positions.iter().map(|v| p(*v)).collect(),
+            s.triangles.iter().map(|t| t.map(|i| i as u32)).collect());
+        let mut line = Vec::new();
+        for a in 0..solvers.len() {
+            for b in a + 1..solvers.len() {
+                let gap = distance(&I::identity(), &mesh(&solvers[a]), &I::identity(), &mesh(&solvers[b])).unwrap();
+                let need = (solvers[a].parameters.thickness_m + solvers[b].parameters.thickness_m) as f64 * 0.5;
+                // Vertices of either layer closer to the other's faces than the gap.
+                let mut violations = 0;
+                for (x, y) in [(a, b), (b, a)] {
+                    for v in &solvers[x].positions {
+                        for t in &solvers[y].triangles {
+                            let [q0, q1, q2] = t.map(|i| solvers[y].positions[i]);
+                            if (q0.min(q1).min(q2) - *v).max_element() > need || (*v - q0.max(q1).max(q2)).max_element() > need { continue; }
+                            if Triangle::new(p(q0), p(q1), p(q2)).distance_to_local_point(&p(*v), true) < need - 1e-5 { violations += 1; }
+                        }
+                    }
+                }
+                line.push(serde_json::json!({"pair": [a, b], "mesh_gap_m": gap, "needed_m": need, "vertex_face_violations": violations}));
+            }
+        }
+        // On the flat mattress top (y > 0.6, away from its edges) the layers' order is known:
+        // fitted (1) under top (2). Count top vertices below the fitted surface and their depth.
+        let (fitted, top) = (&solvers[1], &solvers[2]);
+        let (mut below, mut deepest, mut shallow) = (0, 0f64, 0);
+        for v in &top.positions {
+            if v.y < 0.6 || v.x < 3.45 || v.x > 4.95 || v.z < -4.3 || v.z > -2.5 { continue; }
+            let mut best: Option<(f64, f64)> = None;
+            for t in &fitted.triangles {
+                let [q0, q1, q2] = t.map(|i| fitted.positions[i]);
+                if (q0.min(q1).min(q2) - *v).max_element() > 0.05 || (*v - q0.max(q1).max(q2)).max_element() > 0.05 { continue; }
+                let tri = Triangle::new(p(q0), p(q1), p(q2));
+                let d = tri.distance_to_local_point(&p(*v), true);
+                let mut n = (q1 - q0).cross(q2 - q0).normalize();
+                if n.y < 0. { n = -n; }
+                let h = (*v - q0).dot(n);
+                if best.map_or(true, |b| d < b.0) { best = Some((d, h)); }
+            }
+            if let Some((d, h)) = best {
+                if h < 0. { below += 1; deepest = deepest.max(-h); }
+                else if d < 0.001 - 1e-5 { shallow += 1; }
+            }
+        }
+        line.push(serde_json::json!({"top_below_fitted_on_mattress_top": below, "deepest_m": deepest, "top_within_gap": shallow}));
+        // Actual triangle-triangle intersections between fitted and top, with where they are.
+        if std::env::var_os("CC_TRACE_INTERSECTIONS").is_some() {
+            use parry_ccd::query::intersection_test;
+            let mut hits = Vec::new();
+            for ta in &fitted.triangles {
+                let a = ta.map(|i| fitted.positions[i]);
+                let (alo, ahi) = (a[0].min(a[1]).min(a[2]), a[0].max(a[1]).max(a[2]));
+                for tb in &top.triangles {
+                    let b = tb.map(|i| top.positions[i]);
+                    if (b[0].min(b[1]).min(b[2]) - ahi).max_element() > 0. || (alo - b[0].max(b[1]).max(b[2])).max_element() > 0. { continue; }
+                    let (x, y) = (Triangle::new(p(a[0]), p(a[1]), p(a[2])), Triangle::new(p(b[0]), p(b[1]), p(b[2])));
+                    if intersection_test(&I::identity(), &x, &I::identity(), &y).unwrap_or(false) {
+                        hits.push(((a[0] + a[1] + a[2]) / 3.).to_array().map(|c| (c * 100.).round() / 100.));
+                    }
+                }
+            }
+            line.push(serde_json::json!({"fitted_top_triangle_intersections": hits.len(), "at": hits.iter().take(12).collect::<Vec<_>>()}));
+        }
+        println!("GPU_SEPARATION tick {tick} {}", serde_json::json!(line));
+    }
 }

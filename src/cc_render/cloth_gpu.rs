@@ -45,6 +45,11 @@ pub(crate) struct GpuReport {
     /// that moved more than half the candidate margin since the last candidate rebuild.
     pub substep_motion_exceeded: u32,
     pub margin_exceeded: u32,
+    /// Contacts with no trustworthy side (vertex in a face's plane or on it at a substep
+    /// start); any fails the frame.
+    pub ambiguous: u32,
+    pub edge_candidates: u32,
+    pub colliders: u32,
     pub resting: bool,
 }
 
@@ -62,18 +67,27 @@ pub(crate) struct GpuOptions {
     pub relaxation: f32,
     /// Diagnostics only: no face-collider contact.
     pub skip_faces: bool,
+    /// Diagnostics only: no edge-edge contact.
+    pub skip_edges: bool,
+    /// Contact passes per substep that include the edge-edge candidates.
+    pub edge_passes: u32,
+    /// Substeps between edge-edge candidate rebuilds (a multiple of `rebuild_every`).
+    pub edge_rebuild_every: u32,
 }
 
 impl Default for GpuOptions {
     fn default() -> Self {
         Self {
             passes: CONSTRAINT_PASSES as u32,
-            contact_iterations: 4,
-            rebuild_every: 2,
+            contact_iterations: 3,
+            rebuild_every: 4,
             margin: 0.01,
             cell: 0.06,
             relaxation: 1.0,
             skip_faces: false,
+            skip_edges: false,
+            edge_passes: 1,
+            edge_rebuild_every: 12,
         }
         .with_test_overrides()
     }
@@ -90,6 +104,9 @@ impl GpuOptions {
             if let Some(v) = get("CC_GPU_RELAXATION") { o.relaxation = v; }
             if let Some(v) = get("CC_GPU_REBUILD_EVERY") { o.rebuild_every = v as u32; }
             if let Some(v) = get("CC_GPU_SKIP_FACES") { o.skip_faces = v > 0.; }
+            if let Some(v) = get("CC_GPU_SKIP_EDGES") { o.skip_edges = v > 0.; }
+            if let Some(v) = get("CC_GPU_EDGE_PASSES") { o.edge_passes = v as u32; }
+            if let Some(v) = get("CC_GPU_EDGE_REBUILD_EVERY") { o.edge_rebuild_every = v as u32; }
             return o;
         }
         #[allow(unreachable_code)]
@@ -100,6 +117,10 @@ impl GpuOptions {
 const CANDIDATE_CAPACITY: u32 = 1 << 20;
 const TABLE: u64 = 16384;
 const MAX_COLLIDERS: usize = 256;
+/// Cell insertions per edge the edge hash can hold on average.
+const EDGE_SLOTS_PER_EDGE: u64 = 48;
+const PARAMS_BYTES: u64 = 96;
+const COUNTER_WORDS: usize = 16;
 const COLLIDER_BYTES: usize = 128;
 
 struct Gpu {
@@ -122,10 +143,15 @@ struct Pipelines {
     collide_faces: wgpu::ComputePipeline,
     apply_acc: wgpu::ComputePipeline,
     contact_pairs: wgpu::ComputePipeline,
-    damping: wgpu::ComputePipeline,
+    finish: wgpu::ComputePipeline,
+    edge_clear: wgpu::ComputePipeline,
+    edge_count: wgpu::ComputePipeline,
+    edge_scan: wgpu::ComputePipeline,
+    edge_scatter: wgpu::ComputePipeline,
+    edge_candidates: wgpu::ComputePipeline,
 }
 
-const BINDINGS: u32 = 21;
+const BINDINGS: u32 = 28;
 /// Particles the one-workgroup stages hold in workgroup memory (cloth_gpu.wgsl `wx`).
 const MAX_VERTICES: usize = 4096;
 
@@ -199,7 +225,7 @@ fn gpu() -> Option<&'static Gpu> {
             bind_group_layouts: &[&layout],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStages::COMPUTE,
-                range: 0..16,
+                range: 0..20,
             }],
         });
         let pipeline = |entry: &str| {
@@ -223,7 +249,12 @@ fn gpu() -> Option<&'static Gpu> {
             collide_faces: pipeline("collide_faces"),
             apply_acc: pipeline("apply_acc"),
             contact_pairs: pipeline("contact_pairs"),
-            damping: pipeline("damping"),
+            finish: pipeline("finish"),
+            edge_clear: pipeline("edge_clear"),
+            edge_count: pipeline("edge_count"),
+            edge_scan: pipeline("edge_scan"),
+            edge_scatter: pipeline("edge_scatter"),
+            edge_candidates: pipeline("edge_candidates"),
         };
         Some(Gpu {
             device,
@@ -298,6 +329,7 @@ pub(crate) struct GpuClothBatch {
     vertices: usize,
     colours: u32,
     springs: u32,
+    edges: u32,
     triangle_count: u32,
     buffers: Buffers,
     /// GPU particle state no longer matches the committed CPU state (first frame, failed frame,
@@ -306,6 +338,7 @@ pub(crate) struct GpuClothBatch {
     published: Vec<u64>,
     rest: Rest,
     pub(crate) options: GpuOptions,
+    frame_dt: f64,
     pub(crate) last: GpuReport,
 }
 
@@ -389,7 +422,12 @@ impl GpuClothBatch {
             let (offset, s) = all[k];
             spring_bytes.extend(bytes_u32(&[(s.vertices[0] + offset) as u32, (s.vertices[1] + offset) as u32]));
             spring_bytes.extend(bytes_f32(&[s.rest as f32, s.compliance as f32, s.damping_ratio as f32]));
-            spring_bytes.extend(bytes_u32(&[s.stretch as u32, 0, 0]));
+            let solver = solvers[layout.iter().position(|r| r.start == offset).unwrap()];
+            spring_bytes.extend(bytes_u32(&[s.stretch as u32]));
+            spring_bytes.extend(bytes_f32(&[
+                solver.inverse_mass[s.vertices[0]] as f32,
+                solver.inverse_mass[s.vertices[1]] as f32,
+            ]));
         }
         let tris: Vec<u32> = solvers
             .iter()
@@ -402,9 +440,36 @@ impl GpuClothBatch {
             })
             .collect();
         let triangle_count = (tris.len() / 4) as u32;
+        // Unique material edges of every layer, with the layer.
+        let mut edge_list = Vec::new();
+        for (l, (s, r)) in solvers.iter().zip(&layout).enumerate() {
+            let mut seen = std::collections::BTreeSet::new();
+            for t in &s.triangles {
+                for k in 0..3 {
+                    let (a, b) = (t[k] + r.start, t[(k + 1) % 3] + r.start);
+                    seen.insert((a.min(b), a.max(b)));
+                }
+            }
+            edge_list.extend(seen.into_iter().flat_map(|(a, b)| [a as u32, b as u32, l as u32, 0]));
+        }
+        let edge_count = (edge_list.len() / 4) as u32;
+        // Stretch-edge neighbours per particle (CSR) for the edge dashpots.
+        let mut neighbour_lists = vec![Vec::new(); vertices];
+        for (offset, sp) in &all {
+            if sp.stretch {
+                let [a, b] = sp.vertices.map(|v| v + offset);
+                neighbour_lists[a].push(b as u32);
+                neighbour_lists[b].push(a as u32);
+            }
+        }
+        let mut adjacency = vec![0u32];
+        for list in &neighbour_lists {
+            adjacency.push(adjacency.last().unwrap() + list.len() as u32);
+        }
+        let neighbour_ids: Vec<u32> = neighbour_lists.concat();
         let params = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("params"),
-            size: 80,
+            size: PARAMS_BYTES,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -425,19 +490,27 @@ impl GpuClothBatch {
         let colliders = zeroed("colliders", (MAX_COLLIDERS * COLLIDER_BYTES) as u64);
         let grips = zeroed("grips", 64 * 64);
         let anchors = zeroed("anchors", 64 * 257 * 16);
-        let counters = zeroed("counters", 32);
+        let counters = zeroed("counters", COUNTER_WORDS as u64 * 4);
         let built = zeroed("built", vertices as u64 * 16);
         let support = zeroed("support", vertices as u64 * 16);
+        let edges = storage("edges", &bytes_u32(&edge_list), wgpu::BufferUsages::empty());
+        let ecount = zeroed("ecount", TABLE * 4);
+        let estart = zeroed("estart", TABLE * 4);
+        let eslots = zeroed("eslots", edge_count as u64 * EDGE_SLOTS_PER_EDGE * 4);
+        let ecand = zeroed("ecand", CANDIDATE_CAPACITY as u64 * 8);
+        let adjacency = storage("adjacency", &bytes_u32(&adjacency), wgpu::BufferUsages::empty());
+        let neighbours = storage("neighbours", &bytes_u32(&neighbour_ids), wgpu::BufferUsages::empty());
         let readback = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
-            size: vertices as u64 * 32 + 64 * 64 + 32,
+            size: vertices as u64 * 32 + 64 * 64 + COUNTER_WORDS as u64 * 4,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let entries: Vec<&wgpu::Buffer> = vec![
             &params, &pos, &prev, &vel, &vlayer, &layers, &springs, &colour_start, &lambda,
             &tri_buffer, &cell_count, &cell_start, &sorted, &cand, &acc, &colliders, &grips,
-            &anchors, &counters, &built, &support,
+            &anchors, &counters, &built, &support, &edges, &ecount, &estart, &eslots, &ecand,
+            &adjacency, &neighbours,
         ];
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("cloth"),
@@ -458,6 +531,7 @@ impl GpuClothBatch {
             vertices,
             colours: (starts.len() - 1) as u32,
             springs: order.len() as u32,
+            edges: edge_count,
             triangle_count,
             buffers: Buffers {
                 params,
@@ -474,8 +548,17 @@ impl GpuClothBatch {
             published: Vec::new(),
             rest: Rest::new(),
             options: GpuOptions::default(),
+            frame_dt: 1. / 60.,
             last: GpuReport::default(),
         }))
+    }
+
+    /// Particles, springs, spring colours, triangles and edges of the batch.
+    pub(crate) fn layout_summary(&self) -> String {
+        format!(
+            "particles {} springs {} colours {} triangles {} edges {}",
+            self.vertices, self.springs, self.colours, self.triangle_count, self.edges
+        )
     }
 
     pub(crate) fn start_at_rest(&mut self) {
@@ -591,6 +674,7 @@ impl GpuClothBatch {
         if grip_count > 0 && (substeps as usize + 1) * grip_count as usize > 64 * 257 {
             return Err(ClothError::InvalidInput);
         }
+        self.frame_dt = dt;
         let collider_bytes = self.colliders(layers, kinematic)?;
         let o = self.options;
         let mut params = bytes_f32(&[gravity.x as f32, gravity.y as f32, gravity.z as f32, 0., dt as f32]);
@@ -609,6 +693,7 @@ impl GpuClothBatch {
         params.extend(bytes_u32(&[CANDIDATE_CAPACITY]));
         params.extend(bytes_f32(&[EDGE_DAMPING_PER_SECOND as f32]));
         params.extend(bytes_u32(&[self.springs, o.relaxation.to_bits()]));
+        params.extend(bytes_u32(&[self.edges, (self.edges as u64 * EDGE_SLOTS_PER_EDGE) as u32, 0, 0]));
         let b = &self.buffers;
         let queue = &gpu.queue;
         queue.write_buffer(&b.params, 0, &params);
@@ -619,7 +704,7 @@ impl GpuClothBatch {
             queue.write_buffer(&b.grips, 0, &grip_bytes);
             queue.write_buffer(&b.anchors, 0, &anchor_bytes);
         }
-        queue.write_buffer(&b.counters, 0, &[0u8; 32]);
+        queue.write_buffer(&b.counters, 0, &[0u8; COUNTER_WORDS * 4]);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         {
             let p = &gpu.pipelines;
@@ -628,15 +713,20 @@ impl GpuClothBatch {
             let groups = |n: usize| (n as u32).div_ceil(256).max(1);
             let (vg, tg) = (groups(self.vertices), groups(self.triangle_count as usize));
             for substep in 0..substeps {
-                let push = |pass: &mut wgpu::ComputePass<'_>, relax: f32| {
+                let mut continue_edges = true;
+                let push = |pass: &mut wgpu::ComputePass<'_>, relax: f32, edges_on: bool| {
                     let mut bytes = substep.to_le_bytes().to_vec();
                     bytes.extend(bytes_f32(&[substep as f32 / substeps as f32, (substep + 1) as f32 / substeps as f32, relax]));
+                    bytes.extend((edges_on as u32).to_le_bytes());
                     pass.set_push_constants(0, &bytes);
                 };
-                let mut run = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32| {
+                let mut run_with = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32, edges_on: bool| {
                     pass.set_pipeline(pipeline);
-                    push(pass, relax);
+                    push(pass, relax, edges_on);
                     pass.dispatch_workgroups(groups, 1, 1);
+                };
+                let mut run = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32| {
+                    run_with(pass, pipeline, groups, relax, false);
                 };
                 run(&mut pass, &p.materials, 1, 1.);
                 if substep % o.rebuild_every.max(1) == 0 {
@@ -645,10 +735,23 @@ impl GpuClothBatch {
                     run(&mut pass, &p.hash_scan, 1, 1.);
                     run(&mut pass, &p.hash_scatter, vg, 1.);
                     run(&mut pass, &p.find_candidates, tg, 1.);
+                    let eg = groups(self.edges as usize);
+                    if o.skip_edges || substep % o.edge_rebuild_every.max(1) != 0 { continue_edges = false; }
+                    if continue_edges {
+                    run(&mut pass, &p.edge_clear, (TABLE as u32).div_ceil(256), 1.);
+                    run(&mut pass, &p.edge_count, eg, 1.);
+                    run(&mut pass, &p.edge_scan, 1, 1.);
+                    run(&mut pass, &p.edge_scatter, eg, 1.);
+                    run(&mut pass, &p.edge_candidates, eg, 1.);
+                    }
                 }
                 run(&mut pass, &p.collide_vertices, vg, 1.);
-                for _ in 0..o.contact_iterations {
-                    run(&mut pass, &p.contact_pairs, 128, o.relaxation);
+                for iteration in 0..o.contact_iterations {
+                    // Edge-edge pairs once per substep (first pass): undoing a crossing needs one
+                    // pass; at rest they mostly duplicate the vertex-face contacts of stacked
+                    // sheets and cost as much again.
+                    let edges_on = iteration < o.edge_passes.min(o.contact_iterations);
+                    run_with(&mut pass, &p.contact_pairs, 128, o.relaxation, edges_on);
                     run(&mut pass, &p.apply_acc, vg, o.relaxation);
                 }
                 // Face samples once per substep, after the contact passes: repeating them in
@@ -659,15 +762,16 @@ impl GpuClothBatch {
                     run(&mut pass, &p.collide_faces, tg, 1.);
                     run(&mut pass, &p.apply_acc, vg, 1.);
                 }
-                run(&mut pass, &p.damping, 1, 1.);
+                run(&mut pass, &p.finish, vg, 1.);
             }
         }
         let v = self.vertices as u64;
         encoder.copy_buffer_to_buffer(&b.pos, 0, &b.readback, 0, v * 16);
         encoder.copy_buffer_to_buffer(&b.vel, 0, &b.readback, v * 16, v * 16);
-        encoder.copy_buffer_to_buffer(&b.counters, 0, &b.readback, v * 32, 32);
+        let words = COUNTER_WORDS as u64 * 4;
+        encoder.copy_buffer_to_buffer(&b.counters, 0, &b.readback, v * 32, words);
         if grip_count > 0 {
-            encoder.copy_buffer_to_buffer(&b.grips, 0, &b.readback, v * 32 + 32, grip_count as u64 * 64);
+            encoder.copy_buffer_to_buffer(&b.grips, 0, &b.readback, v * 32 + words, grip_count as u64 * 64);
         }
         queue.submit([encoder.finish()]);
         let slice = b.readback.slice(..);
@@ -681,15 +785,31 @@ impl GpuClothBatch {
         b.readback.unmap();
         let word = |i: usize| data[i].to_bits();
         let base = self.vertices * 8;
-        let counters: [u32; 6] = std::array::from_fn(|k| word(base + k));
-        let [candidates, overflow, substep_motion, margin_motion, contacts, nonfinite] = counters;
+        let counters: [u32; 10] = std::array::from_fn(|k| word(base + k));
+        let [candidates, overflow, substep_motion, margin_motion, contacts, nonfinite, ambiguous, witness, edge_candidates, _] = counters;
+        #[cfg(test)]
+        if ambiguous > 0 {
+            println!("GPU_AMBIGUOUS_WITNESS vertex {} triangle {}", witness & 0xfff, witness >> 12);
+        }
+        let _ = witness;
+        self.last = GpuReport {
+            frame_ms: started.elapsed().as_secs_f64() * 1e3,
+            candidates,
+            contacts,
+            substep_motion_exceeded: substep_motion,
+            margin_exceeded: margin_motion,
+            ambiguous,
+            edge_candidates,
+            colliders: (collider_bytes.len() / COLLIDER_BYTES) as u32,
+            resting: false,
+        };
         // A failed frame publishes nothing and the GPU state is reloaded from the committed CPU
         // state before the next one.
         if nonfinite > 0 {
             self.dirty = true;
             return Err(ClothError::NonfiniteState);
         }
-        if overflow > 0 {
+        if overflow > 0 || ambiguous > 0 {
             self.dirty = true;
             return Err(ClothError::SelfContactUnresolved);
         }
@@ -725,7 +845,7 @@ impl GpuClothBatch {
             layer.solver.velocities.copy_from_slice(&velocities[range.clone()]);
             layer.solver.surface = surface;
             for grip in layer.grips.iter_mut() {
-                let g = base + 8 + grip_index * 16;
+                let g = base + COUNTER_WORDS + grip_index * 16;
                 grip.gpu_result(word(g + 3), data[g + 12] as f64, data[g + 13] as f64);
                 grip.finish();
                 grip_index += 1;
@@ -736,14 +856,8 @@ impl GpuClothBatch {
         if kinematic.is_empty() {
             self.rest.observe(layers, &tick_start, dt, inputs);
         }
-        self.last = GpuReport {
-            frame_ms: started.elapsed().as_secs_f64() * 1e3,
-            candidates,
-            contacts,
-            substep_motion_exceeded: substep_motion,
-            margin_exceeded: margin_motion,
-            resting: self.rest.asleep,
-        };
+        self.last.frame_ms = started.elapsed().as_secs_f64() * 1e3;
+        self.last.resting = self.rest.asleep;
         Ok(())
     }
 
@@ -774,8 +888,10 @@ impl GpuClothBatch {
             .fold((DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)), |(lo, hi), p| {
                 (lo.min(*p), hi.max(*p))
             });
-        // Anything the cloth can reach this frame: generous against the fastest cloth motion.
-        let reach = 0.5;
+        // Anything the cloth can reach this frame: its bounds grown by the fastest particle's
+        // motion over the frame plus 5 cm (collider bounds are tested again per particle).
+        let speed = layers.iter().flat_map(|l| l.solver.velocities.iter()).map(|v| v.length()).fold(0., f64::max);
+        let reach = 0.05 + speed * self.frame_dt.max(1. / 60.) * 2.;
         let mut fixed: Vec<(Vec<u64>, &FixedClothCollider, u32)> = Vec::new();
         for (index, layer) in layers.iter().enumerate() {
             for c in layer.colliders {
