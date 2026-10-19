@@ -92,7 +92,6 @@ impl ClothBatch {
                 },
                 interval,
                 pass,
-                layer.colliders,
             )?;
         }
         Ok(())

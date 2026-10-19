@@ -242,18 +242,18 @@ struct FaceSupport {
     normal: DVec3,
 }
 
-pub(super) struct FaceSupports {
+struct FaceSupports {
     constraints: Vec<FaceSupport>,
     adjacent: Vec<Vec<usize>>,
 }
 
 impl FaceSupports {
-    pub(super) fn project<const N: usize>(
+    fn project(
         &self,
-        ids: [usize; N],
+        ids: [usize; 4],
         inverse_mass: &[f64],
-        mut directions: [DVec3; N],
-    ) -> [DVec3; N] {
+        mut directions: [DVec3; 4],
+    ) -> [DVec3; 4] {
         let mut rows: Vec<_> = ids
             .into_iter()
             .flat_map(|i| self.adjacent[i].iter().copied())
@@ -268,7 +268,7 @@ impl FaceSupports {
             let before = directions;
             for (slot, &row) in rows.iter().enumerate() {
                 let contact = &self.constraints[row];
-                let weights: [f64; N] = ids.map(|i| {
+                let weights: [f64; 4] = ids.map(|i| {
                     contact
                         .ids
                         .iter()
@@ -281,7 +281,7 @@ impl FaceSupports {
                     .zip(weights)
                     .map(|(i, w)| inverse_mass[i] * w * w)
                     .sum();
-                for k in 0..N {
+                for k in 0..4 {
                     directions[k] +=
                         contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
                 }
@@ -291,7 +291,7 @@ impl FaceSupports {
                     .map(|(d, w)| d.dot(contact.normal) * w)
                     .sum();
                 corrections[slot] = approach.min(0.) / mass;
-                for k in 0..N {
+                for k in 0..4 {
                     directions[k] -=
                         contact.normal * (corrections[slot] * inverse_mass[ids[k]] * weights[k]);
                 }
@@ -308,7 +308,7 @@ impl FaceSupports {
     }
 }
 
-pub(super) fn face_supports(
+fn face_supports(
     positions: &[DVec3],
     layers: &[ContactLayer<'_>],
 ) -> Result<FaceSupports, ClothError> {

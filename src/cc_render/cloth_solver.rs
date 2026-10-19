@@ -215,17 +215,7 @@ struct DistanceSpring {
 }
 
 impl DistanceSpring {
-    #[cfg(test)]
     fn project(&self, particles: &mut GripParticles<'_>, accumulated: &mut f64) {
-        self.project_supported(particles, accumulated, |directions| directions);
-    }
-
-    fn project_supported(
-        &self,
-        particles: &mut GripParticles<'_>,
-        accumulated: &mut f64,
-        support: impl Fn([DVec3; 2]) -> [DVec3; 2],
-    ) {
         let positions = &mut *particles.positions;
         let previous = particles.previous;
         let inverse_mass = particles.inverse_mass;
@@ -246,23 +236,12 @@ impl DistanceSpring {
         let relative_displacement =
             normal.dot((positions[a] - previous[a]) - (positions[b] - previous[b]));
         let alpha = self.compliance / (h * h);
-        let residual = length - self.rest + alpha * *accumulated + gamma * relative_displacement;
-        // Project the proposed load into the fixed-contact tangent cone. The
-        // same supported directions determine the effective inverse mass;
-        // clipping the correction afterward would change spring compliance.
-        let sign = -residual.signum();
-        let directions = support([
-            normal * (sign * inverse_mass[a]),
-            normal * (-sign * inverse_mass[b]),
-        ]);
-        let supported_mass = sign * normal.dot(directions[0] - directions[1]);
-        if supported_mass <= f64::EPSILON {
-            return;
-        }
-        let lambda = -residual / ((1.0 + gamma) * supported_mass + alpha);
+        let lambda = -(length - self.rest + alpha * *accumulated + gamma * relative_displacement)
+            / ((1.0 + gamma) * inverse_effective_mass + alpha);
         *accumulated += lambda;
-        positions[a] += directions[0] * lambda.abs();
-        positions[b] += directions[1] * lambda.abs();
+        let correction = normal * lambda;
+        positions[a] += correction * inverse_mass[a];
+        positions[b] -= correction * inverse_mass[b];
     }
 }
 
@@ -290,31 +269,14 @@ impl PendingConstraints {
         particles: &mut GripParticles<'_>,
         interval: [f64; 2],
         pass: usize,
-        fixed: &[FixedClothCollider],
     ) -> Result<(), ClothError> {
-        let layers = [self_collision::ContactLayer {
-            range: 0..particles.positions.len(),
-            triangles: &solver.triangles,
-            radius: solver.parameters.thickness_m as f64 * 0.5,
-            fixed,
-        }];
-        let supports = self_collision::face_supports(particles.positions, &layers)?;
-        let inverse_mass = particles.inverse_mass;
-        for (spring, multiplier) in solver.springs.iter().zip(&mut self.multipliers) {
-            spring.project_supported(particles, multiplier, |directions| {
-                supports.project(spring.vertices, inverse_mass, directions)
-            });
-        }
         // Grip capacity/force is integrated once per physical substep.
         let grips = if pass + 1 == CONSTRAINT_PASSES {
             &mut self.grips[..]
         } else {
             &mut []
         };
-        for grip in grips {
-            grip.project(particles, interval)?;
-        }
-        Ok(())
+        solver.project_constraints(particles, interval, grips, &mut self.multipliers)
     }
 
     fn commit(&mut self, grips: &mut [ClothGrip]) {
@@ -427,6 +389,22 @@ impl ClothSolver {
         self.step_with_grips(dt, gravity, colliders, &mut [])
     }
 
+    fn project_constraints(
+        &self,
+        particles: &mut GripParticles<'_>,
+        interval: [f64; 2],
+        grips: &mut [ClothGrip],
+        multipliers: &mut [f64],
+    ) -> Result<(), ClothError> {
+        for (spring, multiplier) in self.springs.iter().zip(multipliers) {
+            spring.project(particles, multiplier);
+        }
+        for grip in grips {
+            grip.project(particles, interval)?;
+        }
+        Ok(())
+    }
+
     /// Coupling accepts acquired material contacts only, never task targets.
     /// Both cloth and clamp state commit together after a successful step.
     pub(crate) fn step_with_grips(
@@ -463,7 +441,7 @@ impl ClothSolver {
                 h,
             };
             for pass in 0..CONSTRAINT_PASSES {
-                constraints.project(self, &mut particles, interval, pass, colliders)?;
+                constraints.project(self, &mut particles, interval, pass)?;
             }
             self.self_collision
                 .resolve(&mut particles, &self.triangles, colliders, radius * 2.)?;
