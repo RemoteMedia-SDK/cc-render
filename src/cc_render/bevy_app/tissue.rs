@@ -37,6 +37,7 @@ pub(super) struct TissueRequest {
     rate: u32,
     snapshot: Option<(std::path::PathBuf, u64)>,
     trace: Option<trace::Trace>,
+    contact: super::tissue_collision::ContactPolicy,
 }
 
 #[derive(Resource, Default)]
@@ -103,6 +104,7 @@ pub(super) fn install(app: &mut App, glb: &Path) -> anyhow::Result<()> {
         rate,
         snapshot,
         trace: trace::Trace::from_env()?,
+        contact: super::tissue_collision::ContactPolicy::from_env()?,
     });
     app.init_resource::<TissueReadiness>()
         .init_resource::<super::capture::TissueFramePts>()
@@ -275,8 +277,8 @@ fn initialize_ready(
         &[]
     } else {
         &surfaces
-    })?;
-    tracing::info!(counts=?contacts.counts(), "source-time body contact bound");
+    }, request.contact)?;
+    tracing::info!(counts=?contacts.counts(), policy=?request.contact, "source-time body contact bound");
     Ok(Active {
         rig,
         contacts,
@@ -518,6 +520,9 @@ struct IntegrationReport {
     active_contact_samples: usize,
     maximum_penetration_m: f64,
     maximum_normal_force_n: f64,
+    // Overlap permitted at the contact pressure cap (diagnostic, not repaired).
+    force_limited_contact_samples: usize,
+    maximum_force_limited_penetration_m: f64,
     sampling_ms: f64,
     elasticity_ms: f64,
     collision_ms: f64,
@@ -530,6 +535,10 @@ impl IntegrationReport {
         self.subdivisions += other.subdivisions;
         self.active_contact_samples += other.active_contact_samples;
         self.maximum_penetration_m = self.maximum_penetration_m.max(other.maximum_penetration_m);
+        self.force_limited_contact_samples += other.force_limited_contact_samples;
+        self.maximum_force_limited_penetration_m = self
+            .maximum_force_limited_penetration_m
+            .max(other.maximum_force_limited_penetration_m);
         self.maximum_normal_force_n = self
             .maximum_normal_force_n
             .max(other.maximum_normal_force_n);
@@ -612,6 +621,11 @@ fn integrate_interval(
                     .map(|m| m.maximum_penetration_m)
                     .fold(0.0, f64::max);
                 report.maximum_normal_force_n = metrics.iter().map(|m| m.normal_force_n).sum();
+                report.force_limited_contact_samples = metrics.iter().map(|m| m.force_limited_contacts).sum();
+                report.maximum_force_limited_penetration_m = metrics
+                    .iter()
+                    .map(|m| m.maximum_force_limited_penetration_m)
+                    .fold(0.0, f64::max);
             }
             Err(error) => failure = Some((0, error)),
         }

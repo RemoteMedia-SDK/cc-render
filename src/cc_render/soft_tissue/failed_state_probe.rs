@@ -63,6 +63,8 @@ fn load(state: &Value, asset: &crate::cc_render::soft_tissue::TissueAsset) -> Lo
         surface_point: vec3(&c["surface_point"]),
         normal: vec3(&c["normal"]),
         stiffness_n_per_m: f(&c["stiffness_n_per_m"]),
+        // Dumps recorded before the force cap existed were uncapped.
+        max_force_n: if c["max_force_n"].is_null() { f64::INFINITY } else { f(&c["max_force_n"]) },
     }).collect();
     Loaded {
         tissue,

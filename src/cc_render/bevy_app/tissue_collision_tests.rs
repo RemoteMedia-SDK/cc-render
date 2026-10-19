@@ -19,7 +19,8 @@ fn tissue_sweep_detects_crossing_with_clear_endpoints_and_is_frame_covariant() {
         c - DVec3::Z * 0.2,
     ];
     let hit = sweep(old, end, CLEARANCE).unwrap().unwrap();
-    assert!((hit.distance - CLEARANCE).abs() < 2e-8);
+    // Conservative advancement stops at most SWEEP_TOLERANCE before contact.
+    assert!(hit.distance >= CLEARANCE - 2e-8 && hit.distance <= CLEARANCE + SWEEP_TOLERANCE);
     assert!(hit.normal.dot(DVec3::NEG_Z) > 0.999999);
     let rotation = bevy::math::DQuat::from_rotation_y(0.7);
     let transform = |p: DVec3| rotation * p + DVec3::new(18.0, -24.0, 30.0);
@@ -45,6 +46,11 @@ fn tissue_sweep_separates_parallel_motion_and_rejects_ambiguous_initial_intersec
 }
 
 fn contact_fixture(free_weight: f64) -> (TissueAsset, BodyContacts) {
+    // The original penalty tests run uncapped; the pressure cap has its own.
+    contact_fixture_with(free_weight, ContactPolicy { max_pressure_pa: f64::INFINITY, strict: false })
+}
+
+fn contact_fixture_with(free_weight: f64, policy: ContactPolicy) -> (TissueAsset, BodyContacts) {
     let mut asset = super::super::tissue::tests::fixture_asset();
     asset.regions[0].material.strain_damping_per_second = 0.0;
     asset.regions[0].material.iterations = 8;
@@ -61,6 +67,7 @@ fn contact_fixture(free_weight: f64) -> (TissueAsset, BodyContacts) {
                 influence: 1.0,
             },
         }],
+        policy,
     };
     (asset, contact)
 }
@@ -183,6 +190,73 @@ fn tissue_contact_rejects_kinematic_skin_overlap() {
         .unwrap_err();
     assert!(error.is::<ContactUnresolved>());
     assert_eq!(original[0].positions(), unchanged);
+}
+
+#[test]
+fn tissue_contact_pressure_cap_bounds_force_and_reports_permitted_overlap() {
+    // A 30 mm intrusion at the uncapped penalty is resolved by force; with a
+    // bounded pressure the reaction stays at the cap and overlap is reported.
+    let policy = ContactPolicy { max_pressure_pa: 2_000.0, strict: false };
+    let (asset, contact) = contact_fixture_with(1.0, policy);
+    let original = vec![asset.regions[0].solver(Frame::IDENTITY).unwrap()];
+    let unchanged = original[0].positions().to_vec();
+    let mut candidate = original.clone();
+    candidate[0].step(1.0 / 120.0, Frame::IDENTITY, DVec3::NEG_Y * 9.81).unwrap();
+    let metrics = contact
+        .resolve(&original, &mut candidate, &asset, &contact_pose(0.12), &contact_pose(0.09), 1.0 / 120.0)
+        .unwrap();
+    let cap = policy.max_pressure_pa * contact.samples[0].area;
+    assert!(metrics[0].force_limited_contacts > 0, "{metrics:?}");
+    assert!(metrics[0].normal_force_n <= cap * (1.0 + 1e-12), "{metrics:?}");
+    assert!(metrics[0].maximum_force_limited_penetration_m > RESIDUAL);
+    assert_eq!(metrics[0].maximum_penetration_m, metrics[0].maximum_force_limited_penetration_m);
+    assert_eq!(original[0].positions(), unchanged);
+    assert_eq!(&candidate[0].positions()[..3], &unchanged[..3]);
+    // Strict mode rejects the same permitted overlap instead of reporting it.
+    let (_, strict) = contact_fixture_with(1.0, ContactPolicy { strict: true, ..policy });
+    let mut candidate = original.clone();
+    candidate[0].step(1.0 / 120.0, Frame::IDENTITY, DVec3::NEG_Y * 9.81).unwrap();
+    let error = strict
+        .resolve(&original, &mut candidate, &asset, &contact_pose(0.12), &contact_pose(0.09), 1.0 / 120.0)
+        .unwrap_err();
+    assert!(error.is::<ContactUnresolved>());
+}
+
+#[test]
+fn tissue_sweep_terminates_on_recorded_grazing_motion() {
+    // Seed-739 replay with a 10 kPa cap, 7881.20 ms: the sample slides along a
+    // hand face at almost exactly the clearance. A 1e-8 m tolerance exhausted
+    // 256 conservative-advancement iterations 1.4e-8 m short of contact.
+    let old = [
+        DVec3::new(-0.06817058812314611, 1.2179012734564287, 0.153855322000856),
+        DVec3::new(-0.06455394625663757, 1.217216968536377, 0.15519660711288452),
+        DVec3::new(-0.06819744408130646, 1.2204720973968506, 0.15317469835281372),
+        DVec3::new(-0.06883394718170166, 1.2175859212875366, 0.15448200702667236),
+    ];
+    let end = [
+        DVec3::new(-0.06816648372460249, 1.2179038455551892, 0.15386175961990448),
+        DVec3::new(-0.06453630328178406, 1.2172183990478516, 0.15520501136779785),
+        DVec3::new(-0.06818009912967682, 1.220473289489746, 0.15318351984024048),
+        DVec3::new(-0.06881639361381531, 1.2175869941711426, 0.15449070930480957),
+    ];
+    let hit = sweep(old, end, CLEARANCE).unwrap().expect("grazing sample is within tolerance");
+    assert!(hit.distance <= CLEARANCE + SWEEP_TOLERANCE);
+}
+
+#[test]
+fn tissue_contact_excuses_only_receding_inherited_overlap() {
+    // The sample starts 0.35 mm from the face, inside the inner band. When
+    // the face recedes to 0.45 mm the step is valid even without a pressure
+    // cap; when it stays, the uncapped penalty must still clear it.
+    let (asset, contact) = contact_fixture(1.0);
+    let original = vec![asset.regions[0].solver(Frame::IDENTITY).unwrap()];
+    let mut candidate = original.clone();
+    candidate[0].step(1.0 / 240.0, Frame::IDENTITY, DVec3::NEG_Y * 9.81).unwrap();
+    let metrics = contact
+        .resolve(&original, &mut candidate, &asset, &contact_pose(0.10035), &contact_pose(0.10045), 1.0 / 240.0)
+        .unwrap();
+    assert!(metrics[0].maximum_penetration_m <= RESIDUAL, "{metrics:?}");
+    assert_eq!(metrics[0].force_limited_contacts, 0);
 }
 
 #[test]

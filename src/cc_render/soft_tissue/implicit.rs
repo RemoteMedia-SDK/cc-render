@@ -367,9 +367,9 @@ impl Tissue {
                 .point
                 .barycentric
                 .map(|w| contact.normal * (contact.point.influence * w));
-            let stiffness = contact.stiffness_n_per_m;
+            let (force, stiffness) = (contact.force(depth), contact.tangent(depth));
             for a in 0..4 {
-                system.gradient[ids[a]] -= stiffness * depth * derivatives[a];
+                system.gradient[ids[a]] -= force * derivatives[a];
                 system.diagonal[ids[a]] += stiffness * outer(derivatives[a], derivatives[a]);
             }
             for (index, [a, b]) in tet.edge_indices.iter().zip(material::EDGE_PAIRS) {
@@ -682,6 +682,7 @@ mod tests {
             surface_point: DVec3::ZERO,
             normal: DVec3::new(0.4, 1.0, 0.1).normalize(),
             stiffness_n_per_m: 5000.0,
+            max_force_n: f64::INFINITY,
         };
         contact.surface_point = contact.point.position(&x, &tissue.tets) + 0.002 * contact.normal;
         let dt = 1.0 / 240.0;
@@ -747,6 +748,40 @@ mod tests {
             assert!(((plus[node] - minus[node]) / (2.0 * eps)).distance(product[node]) < 1e-7);
         }
         assert!(dot(&direction, &product) > 0.0);
+    }
+
+    #[test]
+    fn capped_contact_energy_force_and_tangent_are_consistent() {
+        let tissue = super::super::tests::cube(Frame::IDENTITY, true);
+        let x = tissue.positions.clone();
+        let mut contact = PlaneContact {
+            point: crate::cc_render::soft_tissue::EmbeddedPoint {
+                tetrahedron: 0, barycentric: [0.1, 0.2, 0.3, 0.4], influence: 1.0, offset: DVec3::ZERO,
+            },
+            surface_point: DVec3::ZERO,
+            normal: DVec3::new(0.4, 1.0, 0.1).normalize(),
+            stiffness_n_per_m: 5000.0,
+            max_force_n: 2.0,
+        };
+        let point = contact.point.position(&x, &tissue.tets);
+        // Below the 0.4 mm cap depth the quadratic penalty is unchanged.
+        for (depth, limited) in [(1e-4, false), (4e-4 - 1e-9, false), (4e-4 + 1e-9, true), (3e-3, true)] {
+            contact.surface_point = point + depth * contact.normal;
+            assert!((contact.depth(&x, &tissue.tets) - depth).abs() < 1e-15);
+            assert_eq!(contact.is_force_limited(depth), limited);
+            // Central differences only away from the curvature jump at the cap.
+            let eps = 1e-8;
+            if (depth - 4e-4).abs() > 10.0 * eps {
+                let at = |d: f64| contact.depth_energy(d);
+                assert!(((at(depth + eps) - at(depth - eps)) / (2.0 * eps) - contact.force(depth)).abs() < 1e-6);
+            }
+            assert!(contact.force(depth) <= contact.max_force_n);
+            assert_eq!(contact.tangent(depth), if limited { 0.0 } else { 5000.0 });
+        }
+        // Energy and force are continuous where the cap starts.
+        let limit = 4e-4;
+        assert!((contact.depth_energy(limit * (1.0 + 1e-12)) - contact.depth_energy(limit * (1.0 - 1e-12))).abs() < 1e-12);
+        assert!((contact.force(limit) - 2.0).abs() < 1e-12);
     }
 
     #[test]

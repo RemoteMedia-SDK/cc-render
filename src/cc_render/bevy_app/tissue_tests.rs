@@ -51,7 +51,7 @@ fn tissue_region_failure_does_not_commit_successful_sibling() {
         }],
         skin: vec![],
     }));
-    let error = integrate_interval(&mut solvers, 0.0, 1000.0 / 240.0, 0, &pose_at, &BodyContacts::new(&[]).unwrap(), &asset)
+    let error = integrate_interval(&mut solvers, 0.0, 1000.0 / 240.0, 0, &pose_at, &BodyContacts::new(&[], Default::default()).unwrap(), &asset)
         .err().expect("the invalid second region must reject the whole interval");
     assert!(error.to_string().starts_with("region 1,"));
     for (solver, (positions, velocities)) in solvers.iter().zip(before) {
@@ -120,7 +120,7 @@ fn fixture() -> (World, Active) {
             rig,
             anchors: vec![anchor],
             surfaces: vec![],
-            contacts: BodyContacts::new(&[]).unwrap(),
+            contacts: BodyContacts::new(&[], Default::default()).unwrap(),
             solvers: vec![],
             session: None,
             origin_ms: 0.0,
@@ -186,6 +186,7 @@ fn playback_render_rate_check(method: crate::cc_render::soft_tissue::TimeIntegra
             rate: 120,
             snapshot: None,
             trace: None,
+            contact: Default::default(),
         };
         let mut timeline = trajectory();
         let mut meshes = Assets::<Mesh>::default();
@@ -241,6 +242,7 @@ fn late_second_source_knot_does_not_change_initial_tissue_velocity() {
             rate: 120,
             snapshot: None,
             trace: None,
+            contact: Default::default(),
         };
         let mut timeline = trajectory();
         let first = timeline.sample(0.0).unwrap();
@@ -280,7 +282,7 @@ fn tissue_starts_at_first_observed_pose_then_preserves_render_rate_independence(
         let (world, mut active) = fixture();
         let original: Vec<_> = world.iter_entities()
             .filter_map(|e| e.get::<Transform>().map(|t| (e.id(), *t))).collect();
-        let request = TissueRequest { asset: fixture_asset(), rate: 120, snapshot: None, trace: None };
+        let request = TissueRequest { asset: fixture_asset(), rate: 120, snapshot: None, trace: None, contact: Default::default() };
         let mut timeline = trajectory();
         let mut meshes = Assets::default();
         // The first presentation is inside the [50, 100] ms source interval.
@@ -327,6 +329,7 @@ fn tissue_request_excludes_breast_springs_without_changing_other_secondary_bones
         rate: 120,
         snapshot: None,
             trace: None,
+            contact: Default::default(),
     });
     app.add_systems(Update, auto_detect_chains);
     let parent = app.world_mut().spawn(Transform::IDENTITY).id();
@@ -364,7 +367,7 @@ fn tissue_subdivision_resolves_fast_attachment_motion_and_rolls_back_failure() {
                 }],
             }))
         },
-        &BodyContacts::new(&[]).unwrap(),
+        &BodyContacts::new(&[], Default::default()).unwrap(),
         &asset,
     )
     .unwrap();
@@ -384,7 +387,7 @@ fn tissue_subdivision_resolves_fast_attachment_motion_and_rolls_back_failure() {
                 ..Frame::IDENTITY
             }]
         })),
-        &BodyContacts::new(&[]).unwrap(),
+        &BodyContacts::new(&[], Default::default()).unwrap(),
         &asset
     )
     .is_err());
@@ -418,13 +421,13 @@ fn tissue_subdivision_recovers_from_nonlinear_nonconvergence() {
         skin: vec![], frames: vec![frame(at)],
     });
     let report = integrate_interval(&mut solvers, 0., duration, 0,
-        &|at| pose_at(at).map(Arc::new), &BodyContacts::new(&[]).unwrap(), &asset).unwrap();
+        &|at| pose_at(at).map(Arc::new), &BodyContacts::new(&[], Default::default()).unwrap(), &asset).unwrap();
     assert!(report.subdivisions > 0);
     assert_eq!(solvers[0].frame().translation, frame(duration).translation);
     assert!(solvers[0].metrics().minimum_volume_ratio > 0.);
     let cache = tissue_motion::ContactPoseCache::default();
     let cached_report = integrate_interval(&mut cached, 0., duration, 0,
-        &|at| cache.sample(at, || pose_at(at)), &BodyContacts::new(&[]).unwrap(), &asset).unwrap();
+        &|at| cache.sample(at, || pose_at(at)), &BodyContacts::new(&[], Default::default()).unwrap(), &asset).unwrap();
     assert_eq!(cached_report.subdivisions, report.subdivisions);
     assert_eq!(cached[0].positions(), solvers[0].positions());
     assert_eq!(cached[0].velocities(), solvers[0].velocities());

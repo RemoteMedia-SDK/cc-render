@@ -17,6 +17,7 @@ fn plane(tissue: &Tissue, node: usize, x: f64) -> PlaneContact {
         surface_point: DVec3::X * x,
         normal: DVec3::NEG_X,
         stiffness_n_per_m: 25_000.0,
+        max_force_n: f64::INFINITY,
     }
 }
 

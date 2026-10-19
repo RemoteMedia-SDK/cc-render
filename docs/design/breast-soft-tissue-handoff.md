@@ -86,17 +86,22 @@ Coordinate-centering remains a rejected experiment
   friction, edge/edge, mutual-breast and environmental contact remain open.
   Do not default-enable the replacement on the present evidence.
 
-## Resume with one bounded investigation
+## Contact status after rim and pressure-cap work
 
-1. Decide (owner) how contact should treat skin samples whose embedding is mostly
-   on Fixed attachment nodes (tet 587, nodes 52/41/164 Fixed, free weight
-   0.11–0.22). Candidates: a finer or compliant attachment rim under contactable
-   skin (asset change, needs fidelity evidence), or an approved rule for such
-   samples. Do not relax the 100 µm residual, project skin, or alter arm motion.
-2. Then complete the same seed-739 replay, render compression/release, repeat the
-   unchanged-jump regression, focused tests and live performance check.
-3. `CC_TISSUE_FAILED_STATE_DIR=<dir>` records any nonlinear failure; reload it with
-   the ignored `failed_state_precision` probe (usage in its doc comment).
+- `0a8ee06`: compliant skin-side rim variants (`soften_tissue_rim.py`) and an
+  attachment-aware pressure partition; the reviewed bounce is unchanged at 1e-5.
+- Bounded contact pressure (default 10 kPa, `CC_AVATAR_TISSUE_CONTACT_PRESSURE_PA`):
+  **the seed-739 chest rub now completes through 8000 ms** at 2/10/50 kPa on both
+  rims. Hands visibly pass ~2–3 mm into the breasts (reported, not repaired).
+  See the [pressure-cap checkpoint](../../artifacts/soft-tissue/avatar-contact/pressure-cap-02/README.md).
+
+## Resume
+
+1. Owner decision pending: stopping the hand at the body overrides ARDY's pose
+   and needs a recorded, bounded exception under [motion ownership](model-owned-motion.md);
+   alternatives are reject-and-regenerate or model-native contact conditioning.
+2. Choose the default cap from the comparison video; run the live 120 Hz check.
+3. Hand-versus-rigid-body penetration is not measured anywhere yet.
 
 Run from this worktree:
 

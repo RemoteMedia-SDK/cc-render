@@ -51,6 +51,7 @@ pub(super) fn record(
             "surface_point": bits(c.surface_point),
             "normal": bits(c.normal),
             "stiffness_n_per_m": c.stiffness_n_per_m.to_bits(),
+            "max_force_n": c.max_force_n.to_bits(),
         })).collect::<Vec<_>>(),
         "iterate": iterate.iter().map(|p| bits(*p)).collect::<Vec<_>>(),
     });

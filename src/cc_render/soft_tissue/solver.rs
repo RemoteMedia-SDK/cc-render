@@ -360,6 +360,11 @@ impl Tissue {
     pub fn rest_positions(&self) -> &[DVec3] {
         &self.rest
     }
+    /// Overlap of a contact plane at the committed positions.
+    pub fn contact_depth(&self, contact: &PlaneContact) -> f64 {
+        contact.depth(&self.positions, &self.tets)
+    }
+
     pub fn frame(&self) -> Frame {
         self.frame
     }
