@@ -186,7 +186,7 @@ impl BodyContacts {
         );
         let mut penalty_scale = vec![1.0; original.len()];
         for round in 0..MAX_CONTACT_ROUNDS {
-            let Planes { contacts: mut contacts, vertices, .. } =
+            let Planes { mut contacts, vertices, .. } =
                 self.planes(&bounds, original, candidate, asset, old, end, CLEARANCE)?;
             if contacts.iter().all(Vec::is_empty) {
                 return Ok(vec![ContactMetrics::default(); original.len()]);

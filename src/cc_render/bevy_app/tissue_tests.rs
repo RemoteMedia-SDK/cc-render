@@ -117,6 +117,7 @@ fn fixture() -> (World, Active) {
     (
         world,
         Active {
+            hand_clamp: None,
             rig,
             anchors: vec![anchor],
             surfaces: vec![],

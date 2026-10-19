@@ -43,6 +43,7 @@ impl ContactPoseCache {
     }
 }
 
+#[derive(Clone)]
 struct Node {
     entity: Entity,
     parent: Option<usize>,
@@ -50,6 +51,7 @@ struct Node {
     mapped: Option<usize>,
 }
 
+#[derive(Clone)]
 pub(super) struct TissueRig {
     nodes: Vec<Node>,
     index: HashMap<Entity, usize>,
@@ -128,14 +130,43 @@ impl TissueRig {
         Ok(index)
     }
 
-    pub fn sample(&self, pose: &SkeletalPose) -> HashMap<Entity, Mat4> {
-        let rotations = fk_retarget_smpl_to_cc5_with_align(
+    pub fn parent_of(&self, entity: Entity) -> Option<Entity> {
+        let node = &self.nodes[*self.index.get(&entity)?];
+        node.parent.map(|p| self.nodes[p].entity)
+    }
+
+    /// CC5 parent-local rotations of the 22 mapped bones, as displayed.
+    pub fn retarget(&self, pose: &SkeletalPose) -> [Quat; 22] {
+        fk_retarget_smpl_to_cc5_with_align(
             &pose.joint_quats,
             &self.calibrated_world,
             &self.inter_rest,
             self.pelvis_parent,
             self.align,
-        );
+        )
+    }
+
+    pub fn sample(&self, pose: &SkeletalPose) -> HashMap<Entity, Mat4> {
+        self.sample_rotations(pose, &self.retarget(pose))
+    }
+
+    /// World matrices for given mapped rotations; forearm twist follows the hand.
+    pub fn sample_rotations(&self, pose: &SkeletalPose, rotations: &[Quat; 22]) -> HashMap<Entity, Mat4> {
+        self.sample_with(pose, rotations, &HashMap::new())
+    }
+
+    /// Rest local transform of a rig node (unmapped bones keep it when posed).
+    pub fn local_of(&self, entity: Entity) -> Option<Transform> {
+        self.index.get(&entity).map(|i| self.nodes[*i].local)
+    }
+
+    /// As `sample_rotations`, with local rotations of unmapped bones replaced.
+    pub fn sample_with(
+        &self,
+        pose: &SkeletalPose,
+        rotations: &[Quat; 22],
+        overrides: &HashMap<Entity, Quat>,
+    ) -> HashMap<Entity, Mat4> {
         let mut matrices = Vec::<Mat4>::with_capacity(self.nodes.len());
         let mut twist_rotations = HashMap::new();
         for (rig, mapped) in &self.twists {
@@ -153,7 +184,7 @@ impl TissueRig {
                     local.translation = parent.inverse().transform_point3(pose.root_pos.into());
                 }
             }
-            if let Some(rotation) = twist_rotations.get(&node.entity) {
+            if let Some(rotation) = twist_rotations.get(&node.entity).or_else(|| overrides.get(&node.entity)) {
                 local.rotation = *rotation;
             }
             let world = parent * local.compute_matrix();

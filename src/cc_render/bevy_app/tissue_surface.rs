@@ -51,7 +51,56 @@ pub(super) struct TissueSurface {
     binding: SurfaceBinding,
 }
 
+/// Linear-blend skinning of selected vertices of one surface, unmorphed.
+pub(super) struct SkinSubset {
+    joints: Vec<Entity>,
+    inverse_bind: Vec<Mat4>,
+    base: Vec<Vec3>,
+    weights: Vec<[f32; 4]>,
+    indices: Vec<[u16; 4]>,
+}
+
+impl SkinSubset {
+    pub fn len(&self) -> usize {
+        self.base.len()
+    }
+
+    pub fn positions(&self, globals: &HashMap<Entity, Mat4>) -> anyhow::Result<Vec<DVec3>> {
+        let palette: Vec<Mat4> = self.joints.iter().zip(&self.inverse_bind)
+            .map(|(joint, inverse)| globals.get(joint).map(|world| *world * *inverse)
+                .ok_or_else(|| anyhow::anyhow!("missing hand clamp skin joint")))
+            .collect::<anyhow::Result<_>>()?;
+        self.base.iter().zip(self.weights.iter().zip(&self.indices)).map(|(p, (w, j))| {
+            let skin: Mat4 = (0..4).map(|k| palette[j[k] as usize] * w[k]).sum();
+            anyhow::ensure!(skin.is_finite(), "nonfinite hand clamp skin transform");
+            Ok(skin.transform_point3(*p).as_dvec3())
+        }).collect()
+    }
+}
+
 impl TissueSurface {
+    pub fn subset(&self, vertices: &[usize]) -> SkinSubset {
+        SkinSubset {
+            joints: self.joints.clone(),
+            inverse_bind: self.inverse_bind.clone(),
+            base: vertices.iter().map(|i| self.base[*i]).collect(),
+            weights: vertices.iter().map(|i| self.weights[*i]).collect(),
+            indices: vertices.iter().map(|i| self.indices[*i]).collect(),
+        }
+    }
+
+    /// The joint with the largest skin weight on each vertex.
+    pub fn dominant_joints(&self) -> Vec<Entity> {
+        self.weights.iter().zip(&self.indices).map(|(w, j)| {
+            let k = (0..4).max_by(|a, b| w[*a].total_cmp(&w[*b])).unwrap();
+            self.joints[j[k] as usize]
+        }).collect()
+    }
+
+    pub fn bind_positions(&self) -> &[Vec3] {
+        &self.base
+    }
+
     pub fn capture_morphs(&mut self, mesh: &Mesh, images: &Assets<Image>) -> anyhow::Result<()> {
         self.morph_geometry = super::tissue_morph::MorphGeometry::capture(mesh, images)?;
         if let Some(morphs) = &self.morph_geometry {

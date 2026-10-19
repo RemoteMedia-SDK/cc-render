@@ -54,6 +54,8 @@ struct TissueState {
 
 struct Active {
     rig: TissueRig,
+    /// Owner-approved display hand clamp (docs/design/hand-ribcage-clamp-exception.md).
+    hand_clamp: Option<std::sync::Arc<super::hand_clamp::HandRibcageClamp>>,
     anchors: Vec<Entity>,
     surfaces: Vec<TissueSurface>,
     contacts: BodyContacts,
@@ -182,6 +184,32 @@ fn initialize(
     }
 }
 
+/// Opt-in owner-approved exception; ARDY packets and history are never modified.
+/// `1`: wrist/palm guard plus finger conformance (approved scope).
+/// `whole`: rigid whole-hand translation, kept only for comparison.
+fn hand_clamp_from_env(
+    commands: &mut Commands,
+    rig: &TissueRig,
+    surfaces: &[TissueSurface],
+    names: &HashMap<Entity, String>,
+    bind: &CC5BindRotations,
+    asset: &TissueAsset,
+    anchors: &[Entity],
+) -> anyhow::Result<Option<Arc<super::hand_clamp::HandRibcageClamp>>> {
+    use super::hand_clamp::{HandClampResource, HandPoints, HandRibcageClamp};
+    let points = match std::env::var("CC_AVATAR_HAND_RIBCAGE_CLAMP").as_deref() {
+        Ok("1") => HandPoints::Palm,
+        Ok("whole") => HandPoints::Whole,
+        Ok(other) => anyhow::bail!("CC_AVATAR_HAND_RIBCAGE_CLAMP must be 1 or whole, not {other:?}"),
+        Err(_) => return Ok(None),
+    };
+    let clamp = Arc::new(HandRibcageClamp::new(rig, surfaces, names, &bind.entities, asset, anchors, points)?);
+    tracing::warn!(counts=?clamp.counts(), ?points,
+        "EXCEPTION-ASSISTED run: hand ribcage clamp active (docs/design/hand-ribcage-clamp-exception.md)");
+    commands.insert_resource(HandClampResource(clamp.clone()));
+    Ok(Some(clamp))
+}
+
 fn initialize_ready(
     commands: &mut Commands,
     request: &TissueRequest,
@@ -279,8 +307,11 @@ fn initialize_ready(
         &surfaces
     }, request.contact)?;
     tracing::info!(counts=?contacts.counts(), policy=?request.contact, "source-time body contact bound");
+    let names = scene.bones.iter().map(|(e, n)| (e, n.as_str().to_owned())).collect();
+    let hand_clamp = hand_clamp_from_env(commands, &rig, &surfaces, &names, bind, &request.asset, &anchors)?;
     Ok(Active {
         rig,
+        hand_clamp,
         contacts,
         anchors,
         surfaces,
@@ -296,12 +327,45 @@ fn initialize_ready(
 }
 
 impl Active {
+    /// Skeleton at a source time, with the approved hand clamp when active.
+    /// Display applies the identical correction to the identical retarget.
+    fn matrices_at(
+        &self,
+        knots: &[crate::cc_render::renderer::SkeletalPose],
+        at: f64,
+    ) -> anyhow::Result<(HashMap<Entity, Mat4>, [super::hand_clamp::HandCorrection; 2])> {
+        let pose = tissue_motion::sample_pose(knots, at)?;
+        let rotations = self.rig.retarget(&pose);
+        let Some(clamp) = &self.hand_clamp else {
+            return Ok((self.rig.sample_rotations(&pose, &rotations), Default::default()));
+        };
+        let correction = clamp.correct(&pose, rotations)?;
+        Ok((self.rig.sample_with(&pose, &correction.rotations, &correction.fingers), correction.report))
+    }
+
+    /// The approved hand clamp at the displayed time, for the frame report.
+    fn hand_clamp_report(
+        &self,
+        window: &crate::cc_render::office::timeline::MotionWindow,
+        end: f64,
+    ) -> anyhow::Result<Option<[super::hand_clamp::HandCorrection; 2]>> {
+        if self.hand_clamp.is_none() {
+            return Ok(None);
+        }
+        let report = self.matrices_at(&window.knots, end)?.1;
+        if report.iter().any(|c| c.unsupported) {
+            tracing::warn!(displayed_ms = window.displayed_ms, hand_clamp = ?report,
+                "hand ribcage penetration exceeds the approved clamp; left unrepaired");
+        }
+        Ok(Some(report))
+    }
+
     fn pose_at(
         &self,
         knots: &[crate::cc_render::renderer::SkeletalPose],
         at: f64,
     ) -> anyhow::Result<ContactPose> {
-        let matrices = self.rig.sample(&tissue_motion::sample_pose(knots, at)?);
+        let (matrices, _) = self.matrices_at(knots, at)?;
         let frames = self
             .anchors
             .iter()
@@ -320,8 +384,7 @@ impl Active {
         knots: &[crate::cc_render::renderer::SkeletalPose],
         at: f64,
     ) -> anyhow::Result<Vec<Frame>> {
-        let pose = tissue_motion::sample_pose(knots, at)?;
-        let matrices = self.rig.sample(&pose);
+        let (matrices, _) = self.matrices_at(knots, at)?;
         self.anchors
             .iter()
             .map(|e| tissue_motion::frame(matrices[e]))
@@ -465,6 +528,7 @@ impl Active {
             )?);
         }
         (integration.pose_samples, integration.pose_cache_hits) = pose_cache.counts();
+        integration.hand_clamp = self.hand_clamp_report(&window, end)?;
         let nodes: Vec<_> = output.iter().map(|s| s.positions().to_vec()).collect();
         let mut maximum = 0.0_f64;
         let mut surface_metrics = Vec::with_capacity(self.surfaces.len());
@@ -522,6 +586,10 @@ struct IntegrationReport {
     maximum_normal_force_n: f64,
     // Overlap permitted at the contact pressure cap (diagnostic, not repaired).
     force_limited_contact_samples: usize,
+    // Displayed-time hand clamp per side [left, right]; present only when the
+    // owner-approved exception is active (exception-assisted run).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hand_clamp: Option<[super::hand_clamp::HandCorrection; 2]>,
     maximum_force_limited_penetration_m: f64,
     sampling_ms: f64,
     elasticity_ms: f64,

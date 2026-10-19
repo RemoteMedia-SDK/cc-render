@@ -10,6 +10,7 @@ pub(super) mod overrides;
 pub(super) mod pose;
 pub(crate) mod twist;
 mod skinning;
+mod hand_clamp;
 mod tissue;
 mod tissue_collision;
 mod tissue_motion;

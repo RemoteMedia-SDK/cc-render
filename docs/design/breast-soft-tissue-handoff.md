@@ -95,13 +95,18 @@ Coordinate-centering remains a rejected experiment
   rims. Hands visibly pass ~2–3 mm into the breasts (reported, not repaired).
   See the [pressure-cap checkpoint](../../artifacts/soft-tissue/avatar-contact/pressure-cap-02/README.md).
 
+- Owner-approved exception (`docs/design/hand-ribcage-clamp-exception.md`,
+  opt-in `CC_AVATAR_HAND_RIBCAGE_CLAMP=1`): wrist/palm ribcage guard plus
+  finger conformance. On seed 739 only the right hand's fingers entered the
+  ribcage (up to 23 mm); they now bend up to 14° with zero residual. See the
+  [hand clamp checkpoint](../../artifacts/soft-tissue/avatar-contact/hand-clamp-01/README.md).
+
 ## Resume
 
-1. Owner decision pending: stopping the hand at the body overrides ARDY's pose
-   and needs a recorded, bounded exception under [motion ownership](model-owned-motion.md);
-   alternatives are reject-and-regenerate or model-native contact conditioning.
-2. Choose the default cap from the comparison video; run the live 120 Hz check.
-3. Hand-versus-rigid-body penetration is not measured anywhere yet.
+1. Owner review of the finger-conformance and pressure-cap videos; choose the
+   default cap (10 kPa now) and whether fingers should also rest on breast skin.
+2. Live 120 Hz performance with cap and clamp; neither is measured live yet.
+3. Default enablement still needs anatomical calibration and broader clips.
 
 Run from this worktree:
 
