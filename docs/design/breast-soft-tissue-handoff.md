@@ -146,13 +146,19 @@ peak crease: selected asset 47.8° today, 16.9° with mls + smoothing 4;
 s40-k32 with mls + smoothing 4 44.3° while moving twice as far. Defaults are
 unchanged. Details in `artifacts/soft-tissue/calibration/README.md`.
 
+The undamped candidate bounced too much ("the nipples bounce around wildly a
+bit too much"); shear viscosity 4 Pa s (damping ratio 0.20, settles in about
+0.3 s, sag unchanged) was accepted by the owner ("4 Pa's looks great"):
+`beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json` with mls +
+smoothing 4 is the lab candidate. See `orientation-lab/jump-03/`.
+
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the
    default cap (10 kPa now) and whether fingers should also rest on breast skin.
 2. Live 120 Hz performance with cap, clamp and the mls embedding; none is
-   measured live yet. Then decide whether s40-k32 + mls + smoothing 4 becomes
-   the lab default.
+   measured live yet. Then decide whether the accepted s40-k32-v4 + mls +
+   smoothing 4 candidate becomes the lab default.
 3. Default enablement still needs anatomical calibration and broader clips.
 
 Run from this worktree:

@@ -133,3 +133,31 @@ while moving about twice as far (58 vs 33 mm). Review video:
 `orientation-lab/jump-02/jump-current-vs-candidate{,-third-speed}.mp4`.
 Traces: `orientation-lab/embedding-traces.tar.gz`. Defaults are unchanged;
 live 120 Hz cost of the embedding is unmeasured.
+
+## Damping the bounce (`sweep7`, `orientation-lab/jump-03`)
+
+Owner review of the s40-k32 jump: "the nipples bounce around wildly a bit too
+much". At 0.4 Pa s the landing rings for about five cycles (damping ratio
+0.07-0.09; the right breast still moves 4.5 mm 1 s after landing), and the
+nipple, at the tip of a breast pivoting on its attachment, travels about twice
+as far as the centroid. Shear viscosity damps without changing any static
+result (`ringdown.py sweep7`):
+
+| shear viscosity | damping ratio | right > 2 mm lasts | at 1 s | jump peak skin | jump bounce rms |
+|---|---|---|---|---|---|
+| 0.4 Pa s | 0.08 | 1.48 s | 4.5 mm | 56.9 mm | 5.8 / 7.5 mm |
+| 2 Pa s | 0.14 | 0.57 s | 0.6 mm | 56.4 mm | 5.1 / 5.8 mm |
+| **4 Pa s** | **0.20** | **0.30 s** | **0 mm** | **54.1 mm** | **4.6 / 5.0 mm** |
+
+(Selected asset for reference: 32.6 mm peak skin, 2.6 / 2.7 mm bounce rms.)
+"Bounce rms" is the free-node centroid offset minus its 0.4 s moving average,
+left / right. At 4 Pa s the jump peak crease also falls from 44.3 to 34.2
+degrees and shake steps get slightly cheaper (2.4-2.6 ms).
+
+**Owner verdict on `jump-03/jump-damping-comparison.mp4`: "4 Pa's looks
+great."** The accepted lab candidate is
+`assets/tissue/beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json`
+(the s40-k32 asset with only shear viscosity changed) with
+`CC_AVATAR_TISSUE_SURFACE_EMBEDDING=mls CC_AVATAR_TISSUE_SURFACE_SMOOTHING=4`.
+Defaults are unchanged; live 120 Hz cost is still unmeasured. Traces:
+`orientation-lab/damping-traces.tar.gz`.
