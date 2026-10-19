@@ -125,7 +125,9 @@ fn gpu_layers_stack_at_their_radii_without_crossing() {
             .iter_mut()
             .map(|solver| ClothLayerStep { solver, colliders: &floor, grips: &mut [] })
             .collect();
-        batch.step(&mut steps, 1. / 60., -DVec3::Y * 9.81).unwrap();
+        if let Err(e) = batch.step(&mut steps, 1. / 60., -DVec3::Y * 9.81) {
+            panic!("tick {tick}: {e} {:?}", batch.last);
+        }
         flags.0 += batch.last.substep_motion_exceeded;
         flags.1 += batch.last.margin_exceeded;
         if tick % 10 == 9 {
@@ -458,7 +460,8 @@ pub(crate) fn layer_intersections(a: &ClothSolver, b: &ClothSolver) -> (usize, V
 }
 
 /// Diagnostic: authored bedding on the GPU, every CC_TRACE_EVERY ticks: inter-layer triangle
-/// intersections, worst stretch per layer and where, fastest published motion, cost and flags.
+/// intersections, worst stretch per layer and where, fastest published motion, cost (frame and
+/// GPU wall time) and flags; with CC_GPU_PROFILE=1, GPU milliseconds per stage of the last frame.
 #[test]
 #[ignore = "diagnostic: release, --nocapture"]
 fn gpu_bedding_quality_trace() {
@@ -468,6 +471,7 @@ fn gpu_bedding_quality_trace() {
     let ticks: usize = std::env::var("CC_TRACE_TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(300);
     let every: usize = std::env::var("CC_TRACE_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
     let mut window_ms = Vec::new();
+    let mut window_gpu_ms = Vec::new();
     let mut flags = (0u64, 0u64);
     let mut speed = 0f64;
     for tick in 1..=ticks {
@@ -479,6 +483,7 @@ fn gpu_bedding_quality_trace() {
             return;
         }
         window_ms.push(batch.last.frame_ms);
+        window_gpu_ms.push(batch.last.gpu_ms);
         flags.0 += batch.last.substep_motion_exceeded as u64;
         flags.1 += batch.last.margin_exceeded as u64;
         speed = speed.max(solvers.iter().zip(&before)
@@ -506,13 +511,17 @@ fn gpu_bedding_quality_trace() {
             serde_json::json!([(r * 1000.).round() / 1000., at])
         }).collect();
         window_ms.sort_by(f64::total_cmp);
+        window_gpu_ms.sort_by(f64::total_cmp);
         println!("GPU_QUALITY {}", serde_json::json!({
+            "gpu_median_ms": window_gpu_ms[window_gpu_ms.len() / 2],
+            "profile_ms": batch.profile.iter().map(|(l, ms)| (l, (ms * 1e3).round() / 1e3)).collect::<Vec<_>>(),
             "tick": tick, "resting": batch.resting(), "intersections": pairs, "stretch": stretch,
             "published_speed": speed, "median_ms": window_ms[window_ms.len() / 2],
             "p95_ms": window_ms[(window_ms.len() * 95 / 100).min(window_ms.len() - 1)],
             "max_ms": window_ms[window_ms.len() - 1], "flags": [flags.0, flags.1],
         }));
         window_ms.clear();
+        window_gpu_ms.clear();
         speed = 0.;
     }
 }

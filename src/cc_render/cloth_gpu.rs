@@ -51,6 +51,8 @@ pub(crate) struct GpuReport {
     pub edge_candidates: u32,
     pub colliders: u32,
     pub resting: bool,
+    /// Wall time from submitting the frame's work to its results being readable.
+    pub gpu_ms: f64,
 }
 
 /// Solver resolution; defaults follow the CPU reference where it has an equivalent.
@@ -75,6 +77,8 @@ pub(crate) struct GpuOptions {
     pub edge_rebuild_every: u32,
     /// Particles pressed onto supported particles become supported (see solve_pair).
     pub propagate_supports: bool,
+    /// Test builds: time every dispatch of a frame (GPU timestamps) into `GpuClothBatch::profile`.
+    pub profile: bool,
 }
 
 impl Default for GpuOptions {
@@ -91,6 +95,7 @@ impl Default for GpuOptions {
             edge_passes: 1,
             edge_rebuild_every: 12,
             propagate_supports: true,
+            profile: false,
         }
         .with_test_overrides()
     }
@@ -111,6 +116,7 @@ impl GpuOptions {
             if let Some(v) = get("CC_GPU_EDGE_PASSES") { o.edge_passes = v as u32; }
             if let Some(v) = get("CC_GPU_EDGE_REBUILD_EVERY") { o.edge_rebuild_every = v as u32; }
             if let Some(v) = get("CC_GPU_PROPAGATE") { o.propagate_supports = v > 0.; }
+            if let Some(v) = get("CC_GPU_PROFILE") { o.profile = v > 0.; }
             return o;
         }
         #[allow(unreachable_code)]
@@ -133,7 +139,12 @@ struct Gpu {
     layout: wgpu::BindGroupLayout,
     pipelines: Pipelines,
     info: String,
+    /// Test builds on adapters that have them: timestamps inside compute passes (profiling).
+    timestamps: bool,
 }
+
+/// Dispatches per frame the profiler can time.
+const PROFILE_QUERIES: u32 = 4096;
 
 /// One compute pipeline per shader stage (cloth_gpu.wgsl), all on one layout.
 struct Pipelines {
@@ -153,6 +164,22 @@ struct Pipelines {
     edge_scan: wgpu::ComputePipeline,
     edge_scatter: wgpu::ComputePipeline,
     edge_candidates: wgpu::ComputePipeline,
+}
+
+impl Pipelines {
+    /// The entry point a pipeline runs (profiling labels).
+    fn label(&self, pipeline: &wgpu::ComputePipeline) -> &'static str {
+        let all = [
+            (&self.materials, "materials"), (&self.hash_clear, "hash_clear"), (&self.hash_count, "hash_count"),
+            (&self.hash_scan, "hash_scan"), (&self.hash_scatter, "hash_scatter"),
+            (&self.find_candidates, "find_candidates"), (&self.collide_vertices, "collide_vertices"),
+            (&self.collide_faces, "collide_faces"), (&self.apply_acc, "apply_acc"),
+            (&self.contact_pairs, "contact_pairs"), (&self.finish, "finish"), (&self.edge_clear, "edge_clear"),
+            (&self.edge_count, "edge_count"), (&self.edge_scan, "edge_scan"), (&self.edge_scatter, "edge_scatter"),
+            (&self.edge_candidates, "edge_candidates"),
+        ];
+        all.iter().find(|(p, _)| std::ptr::eq(*p, pipeline)).map_or("?", |(_, l)| l)
+    }
 }
 
 const BINDINGS: u32 = 29;
@@ -191,10 +218,13 @@ fn gpu() -> Option<&'static Gpu> {
         {
             return None;
         }
+        let profiling = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES;
+        let timestamps = cfg!(test) && adapter.features().contains(profiling);
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("cloth"),
-                required_features: wgpu::Features::PUSH_CONSTANTS,
+                required_features: wgpu::Features::PUSH_CONSTANTS
+                    | if timestamps { profiling } else { wgpu::Features::empty() },
                 required_limits: limits,
                 memory_hints: wgpu::MemoryHints::Performance,
             },
@@ -266,6 +296,7 @@ fn gpu() -> Option<&'static Gpu> {
             layout,
             pipelines,
             info: format!("{:?}", adapter.get_info()),
+            timestamps,
         })
     })
     .as_ref()
@@ -345,6 +376,9 @@ pub(crate) struct GpuClothBatch {
     frame_dt: f64,
     cell: f32,
     pub(crate) last: GpuReport,
+    /// With `options.profile`: GPU milliseconds of the last frame per entry point, in first
+    /// dispatch order.
+    pub(crate) profile: Vec<(&'static str, f64)>,
 }
 
 impl GpuClothBatch {
@@ -565,6 +599,7 @@ impl GpuClothBatch {
             frame_dt: 1. / 60.,
             cell,
             last: GpuReport::default(),
+            profile: Vec::new(),
         }))
     }
 
@@ -721,9 +756,20 @@ impl GpuClothBatch {
         }
         queue.write_buffer(&b.counters, 0, &[0u8; COUNTER_WORDS * 4]);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        let queries = (o.profile && gpu.timestamps).then(|| {
+            gpu.device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("profile"),
+                ty: wgpu::QueryType::Timestamp,
+                count: PROFILE_QUERIES,
+            })
+        });
+        let labels = std::cell::RefCell::new(Vec::<&'static str>::new());
         {
             let p = &gpu.pipelines;
             let mut pass = encoder.begin_compute_pass(&Default::default());
+            if let Some(q) = &queries {
+                pass.write_timestamp(q, 0);
+            }
             pass.set_bind_group(0, &b.bind_group, &[]);
             let groups = |n: usize| (n as u32).div_ceil(256).max(1);
             let (vg, tg) = (groups(self.vertices), groups(self.triangle_count as usize));
@@ -735,12 +781,19 @@ impl GpuClothBatch {
                     bytes.extend((edges_on as u32).to_le_bytes());
                     pass.set_push_constants(0, &bytes);
                 };
-                let mut run_with = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32, edges_on: bool| {
+                let run_with = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32, edges_on: bool| {
                     pass.set_pipeline(pipeline);
                     push(pass, relax, edges_on);
                     pass.dispatch_workgroups(groups, 1, 1);
+                    if let Some(q) = &queries {
+                        let mut labels = labels.borrow_mut();
+                        if labels.len() + 1 < PROFILE_QUERIES as usize {
+                            labels.push(p.label(pipeline));
+                            pass.write_timestamp(q, labels.len() as u32);
+                        }
+                    }
                 };
-                let mut run = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32| {
+                let run = |pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, groups: u32, relax: f32| {
                     run_with(pass, pipeline, groups, relax, false);
                 };
                 run(&mut pass, &p.materials, 1, 1.);
@@ -788,10 +841,46 @@ impl GpuClothBatch {
         if grip_count > 0 {
             encoder.copy_buffer_to_buffer(&b.grips, 0, &b.readback, v * 32 + words, grip_count as u64 * 64);
         }
+        let labels = labels.into_inner();
+        let stamps = queries.as_ref().map(|q| {
+            let bytes = (labels.len() as u64 + 1) * 8;
+            let resolve = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("profile_resolve"),
+                size: bytes,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let read = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("profile_read"),
+                size: bytes,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            encoder.resolve_query_set(q, 0..labels.len() as u32 + 1, &resolve, 0);
+            encoder.copy_buffer_to_buffer(&resolve, 0, &read, 0, bytes);
+            read
+        });
+        let submitted = std::time::Instant::now();
         queue.submit([encoder.finish()]);
         let slice = b.readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |_| {});
         gpu.device.poll(wgpu::Maintain::Wait);
+        let gpu_ms = submitted.elapsed().as_secs_f64() * 1e3;
+        if let Some(read) = stamps {
+            read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+            gpu.device.poll(wgpu::Maintain::Wait);
+            let ticks: Vec<u64> = read.slice(..).get_mapped_range().chunks_exact(8)
+                .map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect();
+            let period_ms = gpu.queue.get_timestamp_period() as f64 * 1e-6;
+            self.profile.clear();
+            for (k, label) in labels.iter().enumerate() {
+                let ms = ticks[k + 1].saturating_sub(ticks[k]) as f64 * period_ms;
+                match self.profile.iter_mut().find(|(l, _)| l == label) {
+                    Some(entry) => entry.1 += ms,
+                    None => self.profile.push((label, ms)),
+                }
+            }
+        }
         let data: Vec<f32> = slice
             .get_mapped_range()
             .chunks_exact(4)
@@ -813,6 +902,7 @@ impl GpuClothBatch {
             edge_candidates,
             colliders: (collider_bytes.len() / COLLIDER_BYTES) as u32,
             resting: false,
+            gpu_ms,
         };
         // A failed frame publishes nothing and the GPU state is reloaded from the committed CPU
         // state before the next one.
