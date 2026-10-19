@@ -134,11 +134,11 @@ def write_source(name, folder):
     return folder/'packets.ndjson'
 
 
-def capture(source, view, out):
+def capture(source, view, out, asset):
     environment = dict(CC_RENDER_FAST='0', CC_AVATAR_TISSUE_HZ='240', CC_AVATAR_TISSUE_ITERATIONS='32',
                        CC_TISSUE_LAB_FPS='60', CC_TISSUE_LAB_CLOCK='fixed', CC_TISSUE_LAB_TRACE_ONLY='0',
                        CC_AVATAR_TISSUE_TRACE_NODES='0', RUST_LOG='info')
-    command = [str(BINARY), str(GLB), str(ARKIT), str(source), str(ASSET), view, str(out)]
+    command = [str(BINARY), str(GLB), str(ARKIT), str(source), str(asset), view, str(out)]
     with out.with_suffix('.log').open('x') as log:
         result = subprocess.run(command, cwd=ROOT, env={**os.environ, **environment},
                                 stdout=log, stderr=subprocess.STDOUT)
@@ -207,13 +207,13 @@ def side_by_side(name, views, folder):
     subprocess.run(command, check=True)
 
 
-def scenario(name, folder, views, keep_frames):
+def scenario(name, folder, views, keep_frames, asset):
     from review_tissue_lab import encode
     source = write_source(name, folder/'source')
     result = dict(captures={})
     for view in views:
         capture_dir = folder/view
-        launch = capture(source, view, capture_dir)
+        launch = capture(source, view, capture_dir, asset)
         result['captures'][view] = launch
         if launch['exit_code'] != 0:
             continue
@@ -233,7 +233,7 @@ def scenario(name, folder, views, keep_frames):
                          for r, d in result.get('response', {}).get('regions', {}).items()})
 
 
-def run(names, label, views, keep_frames, jobs):
+def run(names, label, views, keep_frames, jobs, asset):
     """Scenarios run `jobs` at a time. An existing label gains only new scenarios."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     out = LAB/label
@@ -244,7 +244,7 @@ def run(names, label, views, keep_frames, jobs):
     summary_path = out/'summary.json'
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     with ThreadPoolExecutor(jobs) as pool:
-        futures = {name: pool.submit(scenario, name, out/name, views, keep_frames) for name in names}
+        futures = {name: pool.submit(scenario, name, out/name, views, keep_frames, asset) for name in names}
         for name, future in futures.items():
             summary[name] = future.result()
             summary_path.write_text(json.dumps(summary, indent=2) + '\n')
@@ -262,6 +262,7 @@ def main():
                         choices=['front', 'side', 'chest-front', 'chest-side'])
     runner.add_argument('--keep-frames', action='store_true', help='Keep the PNG frames after encoding.')
     runner.add_argument('--jobs', type=int, default=4, help='Scenarios rendered at once.')
+    runner.add_argument('--asset', type=Path, default=ASSET, help='Tissue asset (default: the selected one).')
     args = parser.parse_args()
     if args.command == 'list':
         for name, segments in SCENARIOS.items():
@@ -271,7 +272,7 @@ def main():
     unknown = sorted(set(names) - set(SCENARIOS))
     if unknown or not args.label.replace('-', '').isalnum():
         parser.error(f'unknown scenarios {unknown} or invalid label')
-    run(names, args.label, args.views, args.keep_frames, max(1, args.jobs))
+    run(names, args.label, args.views, args.keep_frames, max(1, args.jobs), args.asset.resolve())
 
 
 if __name__ == '__main__':

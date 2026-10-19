@@ -124,6 +124,13 @@ responses (4–10 mm held, 7 mm peak for a 3 cm, 3 Hz bounce, settled within
 ~0.3 s): the material is far stiffer and more damped than tissue. This is the
 calibration baseline.
 
+Calibration checkpoint (`artifacts/soft-tissue/calibration/`, headless
+`examples/tissue_calibrate.rs`): shear 40 Pa, shear viscosity 0.4 Pa s and
+stiffening 32 (`...calibrated-s40-k32-prototype.json`) raises upside-down
+nipple travel from 17 to 36 mm and prone–supine from 8 to 22 mm, at 5.2 Hz and
+damping ratio 0.08, but hard shakes dent the skin where the coarse cage meets
+fixed skin. The selected asset is unchanged; the seam is the next blocker.
+
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the
