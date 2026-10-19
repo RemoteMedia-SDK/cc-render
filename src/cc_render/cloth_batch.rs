@@ -1,4 +1,5 @@
 //! One transactional physics tick across independently authored cloth layers.
+use crate::cc_render::cloth_grip::ClampState;
 use super::self_collision::{ContactLayer, SelfCollisionTopology};
 use super::*;
 use std::ops::Range;
@@ -28,8 +29,18 @@ struct Layout {
 /// drape itself moves well under a millimetre per tick. Resting zeroes those
 /// velocities; it never moves a particle or skips a failure.
 ///
-/// Wake: any grip, a different gravity or fixed-collider snapshot, or a layer
-/// surface published outside this batch.
+/// Settle: once something has moved the cloth from outside (see `disturbed`),
+/// the batch also sleeps `SETTLE_SECONDS` after the last such movement, as
+/// soon as nothing moves faster than `SETTLE_SPEED_M_S`, even if it has not
+/// met the quiet window. Stacked covers kept awake keep creeping slowly
+/// (millimetres to centimetres per second where they hang over sharp edges);
+/// this ends the simulation of a disturbance instead of the creep. A cloth
+/// still visibly falling or sliding is never frozen. The authored drape,
+/// never disturbed, rests only by the quiet window.
+///
+/// Wake: anything that disturbs it, or a layer surface published outside
+/// this batch. A grip held still, or a body collider lying still, does not
+/// keep it awake.
 pub(super) struct Rest {
     pub(super) asleep: bool,
     /// Adopt the first tick's inputs as a rest state instead of simulating.
@@ -38,11 +49,20 @@ pub(super) struct Rest {
     anchor: Vec<DVec3>,
     pub(super) inputs: u64,
     pub(super) revisions: Vec<u64>,
+    /// Simulated seconds since the last disturbance (None: never disturbed).
+    since_disturbed: Option<f64>,
+    last_inputs: Option<u64>,
+    last_grips: Vec<ClampState>,
+    last_bodies: u64,
 }
 
 const REST_SECONDS: f64 = 0.5;
 const REST_DRIFT_M: f64 = 5e-3;
 const REST_SPEED_M_S: f64 = 0.05;
+const SETTLE_SECONDS: f64 = 1.5;
+const SETTLE_SPEED_M_S: f64 = 0.3;
+/// A held grip's hand moving less than this over a tick holds still.
+const GRIP_STILL_M: f64 = 1e-5;
 
 impl Rest {
     pub(super) fn new() -> Self {
@@ -53,7 +73,29 @@ impl Rest {
             anchor: Vec::new(),
             inputs: 0,
             revisions: Vec::new(),
+            since_disturbed: None,
+            last_inputs: None,
+            last_grips: Vec::new(),
+            last_bodies: 0,
         }
+    }
+
+    /// Whether something outside the cloth moves it this tick: a held grip's
+    /// hand moving, a grip taken or let go, the body colliders (`bodies`, a key
+    /// of their shapes and poses; 0 for none) moving or changing, or a
+    /// different gravity or fixed-collider snapshot. Call once per tick.
+    pub(super) fn disturbed(&mut self, layers: &[ClothLayerStep<'_>], inputs: u64, bodies: u64) -> bool {
+        let grips: Vec<ClampState> = layers.iter().flat_map(|l| l.grips.iter().map(|g| g.state())).collect();
+        let hand_moved = layers.iter().flat_map(|l| l.grips.iter()).any(|g| {
+            g.state() == ClampState::Held && g.anchor(0.).distance(g.anchor(1.)) > GRIP_STILL_M
+        });
+        let changed = grips != self.last_grips
+            || bodies != self.last_bodies
+            || self.last_inputs.is_some_and(|last| last != inputs);
+        self.last_grips = grips;
+        self.last_bodies = bodies;
+        self.last_inputs = Some(inputs);
+        hand_moved || changed
     }
 
     pub(super) fn inputs(layers: &[ClothLayerStep<'_>], gravity: DVec3) -> u64 {
@@ -84,10 +126,10 @@ impl Rest {
         }
     }
 
-    pub(super) fn holds(&self, layers: &[ClothLayerStep<'_>], inputs: u64) -> bool {
+    pub(super) fn holds(&self, layers: &[ClothLayerStep<'_>], inputs: u64, disturbed: bool) -> bool {
         self.asleep
+            && !disturbed
             && inputs == self.inputs
-            && layers.iter().all(|l| l.grips.is_empty())
             && layers
                 .iter()
                 .map(|l| l.solver.surface.revision())
@@ -100,15 +142,22 @@ impl Rest {
         tick_start: &[DVec3],
         dt: f64,
         inputs: u64,
+        disturbed: bool,
     ) {
         self.asleep = false;
+        self.since_disturbed = if disturbed { Some(0.) } else { self.since_disturbed.map(|t| t + dt) };
         let positions = layers.iter().flat_map(|l| l.solver.positions.iter());
+        let settled = self.since_disturbed.is_some_and(|t| t + 1e-9 >= SETTLE_SECONDS)
+            && positions
+                .clone()
+                .zip(tick_start)
+                .all(|(p, a)| p.distance_squared(*a) <= (SETTLE_SPEED_M_S * dt).powi(2));
         let quiet = self.anchor.len()
             == layers
                 .iter()
                 .map(|l| l.solver.positions.len())
                 .sum::<usize>()
-            && layers.iter().all(|l| l.grips.is_empty())
+            && !disturbed
             && positions
                 .clone()
                 .zip(&self.anchor)
@@ -117,13 +166,14 @@ impl Rest {
                 .clone()
                 .zip(tick_start)
                 .all(|(p, a)| p.distance_squared(*a) <= (REST_SPEED_M_S * dt).powi(2));
-        if !quiet {
+        if !quiet && !settled {
             self.anchor = positions.copied().collect();
             self.quiet_seconds = 0.;
             return;
         }
         self.quiet_seconds += dt;
-        if self.quiet_seconds + 1e-9 >= REST_SECONDS {
+        if settled || self.quiet_seconds + 1e-9 >= REST_SECONDS {
+            self.since_disturbed = None;
             for layer in layers.iter_mut() {
                 layer.solver.velocities.fill(DVec3::ZERO);
             }
@@ -279,6 +329,7 @@ impl ClothBatch {
     ) -> Result<(), ClothError> {
         self.validate(layers, dt, gravity)?;
         let inputs = Rest::inputs(layers, gravity);
+        let disturbed = self.rest.disturbed(layers, inputs, 0);
         if std::mem::take(&mut self.rest.adopt_on_first_tick) {
             // The baked drape already rested under these inputs: record them
             // and sleep. Any later change to them, a grip or an external
@@ -290,7 +341,7 @@ impl ClothBatch {
             self.rest.inputs = inputs;
             self.rest.revisions = layers.iter().map(|l| l.solver.surface.revision()).collect();
         }
-        if self.rest.holds(layers, inputs) {
+        if self.rest.holds(layers, inputs, disturbed) {
             #[cfg(test)]
             crate::cc_render::cloth_profile::count("resting_ticks", 1);
             return Ok(());
@@ -426,7 +477,7 @@ impl ClothBatch {
             "commit",
             self.commit_layers(layers, &positions, &velocities, &mut constraints)
         )?;
-        self.rest.observe(layers, &tick_start, dt, inputs);
+        self.rest.observe(layers, &tick_start, dt, inputs, disturbed);
         #[cfg(test)]
         self.energy_probe.finish_tick();
         Ok(())

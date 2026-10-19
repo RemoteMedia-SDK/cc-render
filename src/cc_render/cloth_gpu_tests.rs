@@ -594,3 +594,44 @@ fn gpu_two_covers_rest_on_the_mattress() {
     }
     assert_eq!(layer_intersections(&solvers[0], &solvers[1]).0, 0);
 }
+
+/// Settle: a sheet hanging from a hand rests once the hand has held still for the settle time
+/// (1.5 s) and the sheet moves slower than 0.3 m/s, while still held, costs nothing while it
+/// rests, and wakes the frame the hand moves again.
+#[test]
+fn gpu_held_sheet_rests_after_the_hand_stops_and_wakes_when_it_moves() {
+    let clamp = ClampMaterial { compliance_m_n: 0.0002, damping_ratio: 1.0, capacity_n: 40. };
+    let mut sheet = grid(11, 0.5, 1.0, sheet_params(24));
+    let pose = Isometry::translation(-0.25 + 0.03, 1.0 + 0.015, -0.25 + 0.03);
+    let grip = ClothGrip::capture(sheet.surface(), &Ball::new(0.015), &pose, 0, clamp).unwrap().unwrap();
+    let Some(mut batch) = gpu_batch(&[&sheet]) else { return };
+    let mut grips = vec![grip];
+    let mut step = |sheet: &mut ClothSolver, grips: &mut Vec<ClothGrip>, lift: f32| {
+        let p = Isometry::translation(pose.translation.x, pose.translation.y + lift, pose.translation.z);
+        grips[0].observe_pose(&p).unwrap();
+        let mut layers = [ClothLayerStep { solver: sheet, colliders: &[], grips: grips.as_mut_slice() }];
+        batch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+        batch.resting()
+    };
+    // The hand rises 20 cm over the first second: the sheet never rests while it moves.
+    for frame in 1..=60 {
+        assert!(!step(&mut sheet, &mut grips, 0.2 * frame as f32 / 60.), "resting while lifted, frame {frame}");
+    }
+    let mut rest_frame = None;
+    for frame in 1..=300 {
+        if step(&mut sheet, &mut grips, 0.2) {
+            rest_frame = Some(frame);
+            break;
+        }
+    }
+    let rest_frame = rest_frame.expect("the held sheet did not rest within 5 s of the hand stopping");
+    assert!(rest_frame >= 90, "rested {rest_frame} frames after the hand stopped, before the settle time");
+    assert_eq!(grips[0].state(), crate::cc_render::cloth_grip::ClampState::Held);
+    let frozen = sheet.positions.clone();
+    for _ in 0..30 {
+        assert!(step(&mut sheet, &mut grips, 0.2));
+    }
+    assert_eq!(sheet.positions, frozen);
+    assert!(!step(&mut sheet, &mut grips, 0.21), "the hand moved and the sheet stayed asleep");
+    println!("held sheet rested {rest_frame} frames after the hand stopped");
+}

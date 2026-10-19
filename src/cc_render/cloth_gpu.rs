@@ -34,6 +34,29 @@ pub(crate) struct KinematicCollider {
     pub friction: f64,
 }
 
+/// A key of the body colliders' shapes and poses over the frame: equal on consecutive frames
+/// only while every body lies still (start = end) where it lay, so a moving, added or removed
+/// body disturbs a resting batch. 0 for no bodies.
+fn body_key(kinematic: &[KinematicCollider]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    if kinematic.is_empty() {
+        return 0;
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for k in kinematic {
+        let shape = match k.shape {
+            KinematicShape::Sphere { radius } => [0., radius, 0.],
+            KinematicShape::Capsule { half_height, radius } => [1., radius, half_height],
+        };
+        for v in shape.into_iter().chain(k.start.0.to_array()).chain(k.start.1.to_array())
+            .chain(k.end.0.to_array()).chain(k.end.1.to_array()).chain([k.friction])
+        {
+            v.to_bits().hash(&mut hasher);
+        }
+    }
+    hasher.finish() | 1
+}
+
 /// What one GPU frame did, read back with the positions.
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 pub(crate) struct GpuReport {
@@ -668,6 +691,7 @@ impl GpuClothBatch {
         }
         let started = std::time::Instant::now();
         let inputs = Rest::inputs(layers, gravity);
+        let disturbed = self.rest.disturbed(layers, inputs, body_key(kinematic));
         if std::mem::take(&mut self.rest.adopt_on_first_tick) {
             for layer in layers.iter_mut() {
                 layer.solver.velocities.fill(DVec3::ZERO);
@@ -676,7 +700,7 @@ impl GpuClothBatch {
             self.rest.inputs = inputs;
             self.rest.revisions = layers.iter().map(|l| l.solver.surface.revision()).collect();
         }
-        if kinematic.is_empty() && self.rest.holds(layers, inputs) {
+        if self.rest.holds(layers, inputs, disturbed) {
             self.last = GpuReport {
                 frame_ms: started.elapsed().as_secs_f64() * 1e3,
                 resting: true,
@@ -961,9 +985,7 @@ impl GpuClothBatch {
         }
         self.dirty = false;
         self.published = layers.iter().map(|l| l.solver.surface.revision()).collect();
-        if kinematic.is_empty() {
-            self.rest.observe(layers, &tick_start, dt, inputs);
-        }
+        self.rest.observe(layers, &tick_start, dt, inputs, disturbed);
         self.last.frame_ms = started.elapsed().as_secs_f64() * 1e3;
         self.last.resting = self.rest.asleep;
         Ok(())
