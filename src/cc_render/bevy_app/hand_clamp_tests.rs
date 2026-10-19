@@ -41,7 +41,7 @@ fn push_out_moves_a_rigid_point_set_just_outside_and_leaves_clear_sets_alone() {
     let faces = cube();
     let hand: Vec<DVec3> = (0..5).map(|i| DVec3::new(0.3 + 0.1 * i as f64, 0.5, 0.98 + 0.004 * i as f64)).collect();
     let push = push_out(&hand, &faces, 0.001);
-    assert!(push.converged && (push.penetration - 0.02).abs() < 1e-12);
+    assert!((push.penetration - 0.02).abs() < 1e-12);
     assert!(push.delta.distance(DVec3::Z * 0.021) < 1e-9, "{:?}", push.delta);
     for p in &hand {
         assert!(signed_distance(*p + push.delta, &faces).unwrap().0 >= 0.001 - 1e-9);
@@ -84,8 +84,9 @@ fn push_out_takes_the_shortest_exit_from_a_concave_corner() {
         })
     };
     let faces: Vec<Face> = wall(DVec3::X, DVec3::Y).into_iter().chain(wall(DVec3::Y, DVec3::X)).collect();
-    let push = push_out(&[DVec3::new(-0.01, -0.01, 0.0)], &faces, 0.001);
-    assert!(push.converged);
+    let point = DVec3::new(-0.01, -0.01, 0.0);
+    let push = push_out(&[point], &faces, 0.001);
+    assert!(signed_distance(point + push.delta, &faces).unwrap().0 >= 0.001 - 1e-5);
     // Exact up to the 10 µm stopping tolerance; never beyond the shortest exit.
     assert!(push.delta.distance(DVec3::new(0.011, 0.011, 0.0)) < 2e-5, "{:?}", push.delta);
     assert!(push.delta.length() <= DVec3::new(0.011, 0.011, 0.0).length() + 1e-9);

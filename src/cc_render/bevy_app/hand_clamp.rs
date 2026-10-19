@@ -512,7 +512,6 @@ pub(super) fn signed_distance(p: DVec3, faces: &[Face]) -> Option<(f64, DVec3)> 
 pub(super) struct PushOut {
     pub penetration: f64,
     pub delta: DVec3,
-    pub converged: bool,
 }
 
 /// Points within this distance of the surface constrain the translation, so a
@@ -539,7 +538,7 @@ pub(super) fn push_out(points: &[DVec3], faces: &[Face], margin: f64) -> PushOut
             })
             .collect();
         if worst <= 1e-5 {
-            return PushOut { penetration, delta, converged: true };
+            return PushOut { penetration, delta };
         }
         let mut x = DVec3::ZERO;
         let mut increments = vec![DVec3::ZERO; constraints.len()];
@@ -557,9 +556,7 @@ pub(super) fn push_out(points: &[DVec3], faces: &[Face], margin: f64) -> PushOut
         }
         delta = x;
     }
-    let converged = points.iter().filter_map(|p| signed_distance(*p + delta, faces))
-        .all(|(d, _)| d >= margin - 1e-5);
-    PushOut { penetration, delta, converged }
+    PushOut { penetration, delta }
 }
 
 /// Two-bone IK: world rotations of the upper arm and forearm that move the

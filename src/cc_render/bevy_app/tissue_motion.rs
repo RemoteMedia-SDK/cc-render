@@ -146,6 +146,7 @@ impl TissueRig {
         )
     }
 
+    #[cfg(test)]
     pub fn sample(&self, pose: &SkeletalPose) -> HashMap<Entity, Mat4> {
         self.sample_rotations(pose, &self.retarget(pose))
     }
