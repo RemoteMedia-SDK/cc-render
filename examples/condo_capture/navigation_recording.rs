@@ -24,6 +24,9 @@ impl Renderer for CaptureRenderer {
     fn skeletal_queue_depth(&self) -> usize { self.inner.skeletal_queue_depth() }
     fn office_command(&self, command: OfficeCommand) { self.inner.office_command(command); }
     fn scene_state(&self) -> SceneState { self.inner.scene_state() }
+    fn grab(&self, cmd: cc_render_plugin::cc_render::GrabCmd) { self.inner.grab(cmd); }
+    fn release(&self, hand: cc_render_plugin::cc_render::Hand) { self.inner.release(hand); }
+    fn grab_config(&self) -> Option<cc_render_plugin::cc_render::GrabConfig> { self.inner.grab_config() }
 }
 
 pub struct NavigationCapture {
@@ -41,6 +44,8 @@ pub struct NavigationCapture {
     started: Instant,
     prompt: Option<super::prompt_recording::TimedPrompt>,
     prompt_report: std::path::PathBuf,
+    caddy: Option<super::caddy_recording::CaddyTask>,
+    caddy_report: std::path::PathBuf,
 }
 
 fn ingest(runtime: &tokio::runtime::Runtime, node: &CcRenderNode, value: Value) -> anyhow::Result<()> {
@@ -67,9 +72,13 @@ fn worker(socket: UnixStream, receiver: mpsc::Receiver<Value>, sender: mpsc::Sen
 }
 
 impl NavigationCapture {
+    pub fn task_finished(&self) -> bool { self.caddy.as_ref().is_some_and(|task| task.finished()) }
+
     pub fn from_env(renderer: Arc<CcRenderer>, out: &Path, avatar: &str) -> anyhow::Result<Option<Self>> {
         let Ok(target) = std::env::var("CC_CONDO_NAVIGATE") else { return Ok(None) };
         let prompt = super::prompt_recording::TimedPrompt::from_env()?;
+        let caddy = super::caddy_recording::CaddyTask::from_env(&serde_json::to_value(renderer.scene_state())?)?;
+        anyhow::ensure!(prompt.is_none() || caddy.is_none(), "choose timed prompt or caddy task");
         anyhow::ensure!(std::env::var_os("CC_CONDO_NATIVE_PACKETS").is_none(), "navigation and packet replay are exclusive");
         let mut socket = BufReader::new(UnixStream::connect(std::env::var("ARDY_SOCKET")?)?);
         socket.get_ref().set_read_timeout(Some(Duration::from_secs(120)))?;
@@ -92,7 +101,8 @@ impl NavigationCapture {
             events: File::create(out.join("navigation-events.ndjson"))?,
             goals: File::create(out.join("navigation-goals.ndjson"))?, target,
             session: format!("{}-731", out.file_name().unwrap().to_string_lossy()), submitted:false,
-            ticks:0, started:Instant::now(), prompt, prompt_report:out.join("prompt-duration.json") };
+            ticks:0, started:Instant::now(), prompt, prompt_report:out.join("prompt-duration.json"),
+            caddy, caddy_report:out.join("caddy-task.json") };
         this.goal(1, 0, 2, json!({"description":"A person stands relaxed in the room."}))?;
         Ok(Some(this))
     }
@@ -109,7 +119,7 @@ impl NavigationCapture {
             let (envelope, response) = result.map_err(anyhow::Error::msg)?;
             if let Some(error) = response.get("error") {
                 ingest(&self.runtime, &self.node, json!({"kind":"motion_error","error":error}))?;
-                writeln!(self.events, "{}", json!({"kind":"worker_error","error":error}))?;
+                self.observe_event(json!({"kind":"worker_error","error":error}))?;
                 continue;
             }
             for frame in response["frames"].as_array().ok_or_else(|| anyhow::anyhow!("missing native frames"))? {
@@ -146,16 +156,28 @@ impl NavigationCapture {
             if matches!(value["kind"].as_str(), Some("motion_goal" | "scene_step")) {
                 self.requests.try_send(value)?;
             } else {
-                writeln!(self.events, "{value}")?;
-                let next = self.prompt.as_mut().and_then(|p| p.observe(&value, &self.session, &self.target));
-                if let Some((revision, pts, description)) = next {
-                    self.goal(revision, pts, 2, json!({"description":description}))?;
-                }
+                self.observe_event(value)?;
             }
         }
         if let Some(prompt) = self.prompt.as_mut() { prompt.save(&self.prompt_report)?; }
+        if let Some(caddy) = self.caddy.as_ref() { caddy.save(&self.caddy_report)?; }
         self.events.flush()?;
         frames.append(&mut self.renderer.frames.lock());
+        Ok(())
+    }
+
+    fn observe_event(&mut self, value:Value) -> anyhow::Result<()> {
+        writeln!(self.events, "{value}")?;
+        let next = self.prompt.as_mut().and_then(|p| p.observe(&value, &self.session, &self.target));
+        if let Some((revision, pts, description)) = next {
+            self.goal(revision, pts, 2, json!({"description":description}))?;
+        }
+        let action = self.caddy.as_mut().and_then(|task| task.observe(&value,&self.session,
+            &self.target,&self.renderer.inner.water_state()));
+        match action {
+            Some(super::caddy_recording::Action::Goal(revision,pts,version,goal)) => self.goal(revision,pts,version,goal)?,
+            None => {},
+        }
         Ok(())
     }
 }

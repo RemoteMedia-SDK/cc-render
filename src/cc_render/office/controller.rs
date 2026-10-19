@@ -112,6 +112,7 @@ pub struct Observation {
     pub position_valid: bool,
     pub pelvis: [f32; 3],
     pub wrists: [[f32; 3]; 2],
+    pub palm_geometry: [Option<PalmGeometry>; 2],
     pub heading: f32,
     pub displayed_pts_ms: u64,
     /// Identity of the pose actually applied, not the latest requested goal.
@@ -129,6 +130,13 @@ pub struct Observation {
     pub debug_rotation_deltas: Option<[[f32; 4]; 3]>,
     pub stale_frames: u64,
     pub underrun_frames: u64,
+}
+/// Captured hand-local geometry, shared by dispensing guidance and liquid diagnostics.
+#[derive(Clone, Debug, Serialize)]
+pub struct PalmGeometry {
+    pub center: [f32; 3],
+    pub normal: [f32; 3],
+    pub forward: [f32; 3],
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JointTarget {

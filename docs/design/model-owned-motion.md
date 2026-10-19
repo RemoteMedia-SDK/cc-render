@@ -8,6 +8,10 @@ Scene-referenced contact regions and support surfaces are desired outcomes, not 
 
 Read the adjacent SDK's `scripts/avatars/docs/spatial-conditioning-audit.md` and pending `openspec/changes/add-model-owned-spatial-goals/` before implementing spatial support. This clarification supersedes any interpretation below that would ban scene geometry itself; it does not authorize raw timed joint/root targets, hidden wrapper channels, reference-pose placement or renderer repair. The installed native world-hand encoder currently requires root XZ constraints, so simply enabling its end-effector wrapper is not an approved solution.
 
+## Shower-caddy override (owner instruction, 2026-10-19)
+
+For the current shampoo sequence, the owner explicitly instructed: "ignore the model-owned-motion". This supersedes the restriction below for guiding the bottle over the receiving palm and tilting it during dispensing. The implementation records its native hand position/orientation and required root channels and measures actual liquid contact before returning the bottle. Pickup, placement, normal navigation and the timed washing lifecycle remain separately observable. See the adjacent SDK `openspec/changes/add-guided-palm-dispensing/` for implementation and validation.
+
 ## Decision
 
 **Task code describes desired outcomes. Ardy generates body motion. Physics determines object response. No other subsystem authors or repairs body motion.**

@@ -308,8 +308,14 @@ fn observe(
     tx: Res<SceneStateTx>,
     time: Res<Time>,
     _fsms: Res<GrabFsms>,
+    hand_rigs: Option<Res<super::hand::HandRigs>>,
 ) {
     office.now = time.elapsed_secs_f64();
+    office.observed.palm_geometry = std::array::from_fn(|i| {
+        let palm = hand_rigs.as_ref()?.hands[i].as_ref()?.rig.palm;
+        Some(super::controller::PalmGeometry { center: palm.palm().to_array(),
+            normal: palm.normal.to_array(), forward: palm.forward.to_array() })
+    });
     if let Some(p) = bind.entities[0].and_then(|e| globals.get(e).ok()) {
         office.observed.ready = bind.captured && office.motion_ready;
         office.observed.position_valid = bind.captured;

@@ -71,6 +71,7 @@ type LakeWater = ExtendedMaterial<StandardMaterial, WaterExtension>;
 
 pub(crate) fn install(app: &mut App, package: ScenePackage) {
     super::mechanisms::install(app);
+    super::scene_props::install(app);
     super::cloth::install(app);
     super::weather::install(app);
     super::sky::install(app);

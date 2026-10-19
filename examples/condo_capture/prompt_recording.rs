@@ -12,6 +12,7 @@ pub(super) struct TimedPrompt {
     stop_requested_pts_ms: Option<u64>,
     ended_pts_ms: Option<u64>,
     error: Option<String>,
+    prompt_revision: Option<u64>,
     #[serde(skip)]
     dirty: bool,
 }
@@ -23,15 +24,24 @@ impl TimedPrompt {
         Ok(Some(Self::new(description, seconds)?))
     }
 
-    fn new(description: String, seconds: f64) -> anyhow::Result<Self> {
+    pub fn new(description: String, seconds: f64) -> anyhow::Result<Self> {
         anyhow::ensure!(!description.trim().is_empty() && description.chars().count() <= 2048,
             "follow-up prompt must contain 1..2048 characters");
         anyhow::ensure!(seconds.is_finite() && (1.0..=120.0).contains(&seconds),
             "prompt duration must be within 1..120 seconds");
         Ok(Self { description, requested_duration_ms:(seconds * 1000.).round() as u64,
             status:"waiting_for_arrival", started_pts_ms:None, stop_requested_pts_ms:None,
-            ended_pts_ms:None, error:None, dirty:true })
+            ended_pts_ms:None, error:None, prompt_revision:None, dirty:true })
     }
+
+    pub fn start(&mut self, revision: u64, pts: u64) -> (u64, u64, String) {
+        self.prompt_revision = Some(revision);
+        self.status = "waiting_for_prompt_display";
+        self.dirty = true;
+        (revision, pts, self.description.clone())
+    }
+
+    pub fn complete(&self) -> bool { self.status == "complete" }
 
     pub fn save(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
         if self.dirty {
@@ -55,9 +65,7 @@ impl TimedPrompt {
                 && goal["session_id"] == session && goal["generation_revision"] == 2
                 && goal["goal"]["operation"] == "navigate" && goal["goal"]["target_id"] == target {
                 let pts = event["displayed_pts_ms"].as_u64()?;
-                self.status = "waiting_for_prompt_display";
-                self.dirty = true;
-                return Some((3, pts, self.description.clone()));
+                return Some(self.start(3, pts));
             }
             return None;
         }
@@ -67,7 +75,8 @@ impl TimedPrompt {
         if avatar["native_stream"]["session_id"] != session || avatar["ready"] != true { return None; }
         let pts = avatar["displayed_pts_ms"].as_u64()?;
         let revision = avatar["native_stream"]["generation_revision"].as_u64()?;
-        if revision == 3 && self.stop_requested_pts_ms.is_none() {
+        let prompt_revision = self.prompt_revision?;
+        if revision == prompt_revision && self.stop_requested_pts_ms.is_none() {
             let start = *self.started_pts_ms.get_or_insert_with(|| {
                 self.status = "running"; self.dirty = true; pts
             });
@@ -75,9 +84,9 @@ impl TimedPrompt {
                 self.stop_requested_pts_ms = Some(pts);
                 self.status = "waiting_for_end_display";
                 self.dirty = true;
-                return Some((4, pts, "A person stands relaxed under the shower.".into()));
+                return Some((prompt_revision + 1, pts, "A person stands relaxed under the shower.".into()));
             }
-        } else if revision == 4 && self.stop_requested_pts_ms.is_some() {
+        } else if revision == prompt_revision + 1 && self.stop_requested_pts_ms.is_some() {
             self.ended_pts_ms = Some(pts);
             self.status = "complete";
             self.dirty = true;

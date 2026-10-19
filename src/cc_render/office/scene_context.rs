@@ -16,6 +16,15 @@ pub struct SceneSnapshot {
     /// doing with its palm (openspec add-conforming-hand-grasps). Absent when none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     held: Vec<HeldObject>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    palms: Vec<PalmGeometry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct PalmGeometry {
+    joint: &'static str,
+    #[serde(flatten)]
+    geometry: super::controller::PalmGeometry,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -23,6 +32,8 @@ struct HeldObject {
     joint: &'static str,
     object: String,
     zone: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    in_hand: Option<[f32; 7]>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -80,11 +91,18 @@ impl SceneSnapshot {
             c.anchors.iter().filter_map(move |(hand, point, grip)| {
                 let zone = super::hand::grip_zone(object?, *point, (*grip)?)?;
                 Some(HeldObject { joint: if *hand == crate::cc_render::Hand::Left { "LeftHand" } else { "RightHand" },
-                                  object: c.object.clone(), zone: zone.id })
+                                  object: c.object.clone(), zone: zone.id,
+                                  in_hand: c.latch.and_then(|l| l.seat).map(|(start,end,_,progress)| {
+                                      let t = super::hand::seat_blend(&start,&end,progress*super::hand::SEAT_BLEND_S);
+                                      let p=t.translation; let q=t.rotation;
+                                      [p.x,p.y,p.z,q.x,q.y,q.z,q.w]
+                                  }) })
             })
         }).collect();
+        let palms=office.avatar.palm_geometry.iter().enumerate().filter_map(|(i,p)|
+            p.clone().map(|geometry| PalmGeometry { joint: if i==0 { "LeftHand" } else { "RightHand" }, geometry })).collect();
         Ok(Self { version: 1, session_id: session_id.into(), scene_revision: revision,
-            displayed_pts_ms: office.avatar.displayed_pts_ms, floor_y: 0., objects, held })
+            displayed_pts_ms: office.avatar.displayed_pts_ms, floor_y: 0., objects, held, palms })
     }
 }
 

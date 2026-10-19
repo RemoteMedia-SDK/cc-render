@@ -18,6 +18,8 @@ mod tissue_surface;
 mod visibility;
 mod environment;
 mod mechanisms;
+mod scene_props;
+mod pouring;
 pub(crate) mod cloth;
 mod sky;
 mod texture_filtering;

@@ -296,6 +296,7 @@ impl CcRenderer {
         let package = package_path.as_deref().map(super::scene_package::ScenePackage::load).transpose()?;
         if let Some(package) = &package {
             anyhow::ensure!(package.mechanisms.is_empty() || config.physics.is_some(), "articulated scene requires physics");
+            anyhow::ensure!(package.props.is_empty() || config.physics.is_some(), "scene props require physics");
             super::bevy_app::weather::CondoWeather::from_env()?;
             anyhow::ensure!(config.scene_glb_path.is_none(), "choose scene_package_path or scene_glb_path, not both");
             config.scene_glb_path = Some(package.geometry.clone());

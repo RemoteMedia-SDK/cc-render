@@ -60,6 +60,9 @@ pub(super) fn observe_skin(
         return;
     }
     if !input.activity.0
+        // A tilted container can begin emitting without a valve command. Observe
+        // current skin before that first parcel, including while taps are off.
+        && !package.water_fixtures.iter().any(|f| f.container.is_some())
         && input
             .valves
             .requests

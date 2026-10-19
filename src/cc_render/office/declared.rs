@@ -150,7 +150,9 @@ impl DeclaredState {
             self.hands_swapped = Some(false);
         }
         let phase = if self.hands_swapped == Some(true) { mirrored } else { declared };
-        let done = if phase.relations.is_empty() {
+        // Liquid contact is observed by the task from the plumbing simulation. A pose
+        // or elapsed settle time cannot finish a dispensing interaction by itself.
+        let done = if phase.dispense.is_some() { false } else if phase.relations.is_empty() {
             match &phase.stand_at {
                 Some(stand) => {
                     let near = resolve_zone(owner, &stand.zone, &office.objects, &office.homes).is_some_and(|(z, t)| {

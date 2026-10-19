@@ -38,6 +38,7 @@ pub(super) struct WaterSimulation {
     pub dropped_emissions: u64,
     pub unresolved_collisions: u64,
     pub elapsed_ms: f64,
+    pub near_palm_impacts: [u64; 2],
 }
 
 impl WaterSimulation {
@@ -51,6 +52,7 @@ impl WaterSimulation {
             dropped_emissions: 0,
             unresolved_collisions: 0,
             elapsed_ms: 0.,
+            near_palm_impacts: [0; 2],
         }
     }
     pub fn advance(
@@ -86,6 +88,7 @@ impl WaterSimulation {
             );
             for result in results {
                 self.body_impacts += result.body;
+                for hand in 0..2 { self.near_palm_impacts[hand] += result.near_palm[hand]; }
                 self.drain_impacts += result.drain;
                 if self.unresolved_collisions == 0 {
                     if let Some(reason) = &result.error {
@@ -144,6 +147,17 @@ struct Counts {
     drain: u64,
     unresolved: u64,
     error: Option<String>,
+    near_palm: [u64; 2],
+}
+
+impl Counts {
+    fn record_impact(&mut self, hit: bool, position: DVec3, surfaces: &WaterSurfaces) {
+        if !hit { return; }
+        self.body += 1;
+        for (hand,palm) in surfaces.palms.iter().enumerate() {
+            self.near_palm[hand] += u64::from(palm.is_some_and(|center| center.distance(position) <= 0.04));
+        }
+    }
 }
 
 fn step_parallel(
@@ -174,7 +188,7 @@ fn step_particles(particles: &mut [Parcel], step: Step, surfaces: &WaterSurfaces
             continue;
         }
         match move_parcel(p, step.dt, step.from, step.to, surfaces) {
-            Ok(hit) => count.body += u64::from(hit),
+            Ok(hit) => count.record_impact(hit,p.position,surfaces),
             Err(error) => {
                 p.active = false;
                 count.unresolved += 1;
@@ -290,6 +304,23 @@ mod tests {
     }
     fn region() -> parry_ccd::bounding_volume::Aabb {
         bounds([DVec3::splat(-10.), DVec3::splat(10.)], 0.)
+    }
+    #[test]
+    fn water_palm_diagnostic_requires_a_real_surface_impact() {
+        let mut surfaces = WaterSurfaces::default();
+        let (p,t) = plane(0.);
+        surfaces.update(p,t,&[region()]).unwrap();
+        surfaces.palms = [Some(DVec3::new(0.,1.,0.)),Some(DVec3::splat(5.))];
+        let parcel = Parcel { active:true,position:DVec3::new(-0.01,1.,0.),
+            velocity:DVec3::X*2.,..Default::default() };
+        let step = Step {dt:1./120.,from:0.,to:1.,height:-2.,sequence:1};
+        let hit = step_particles(&mut [parcel.clone()],step,&surfaces);
+        assert_eq!(hit.body,1);
+        assert_eq!(hit.near_palm,[1,0]);
+        let mut away = parcel;
+        away.velocity = -DVec3::X;
+        let miss = step_particles(&mut [away],step,&surfaces);
+        assert_eq!(miss.near_palm,[0,0]);
     }
     #[test]
     fn water_parallel_batches_match_serial_contacts_and_runoff() {
@@ -427,6 +458,7 @@ mod tests {
     #[test]
     fn water_empty_shower_drains_and_shutoff_emits_nothing() {
         let fixture = WaterFixture {
+            container: None,
             id: "test".into(),
             kind: WaterKind::Shower,
             outlet: [0., 2.2, 0.],

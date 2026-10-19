@@ -19,6 +19,9 @@ opt-level = 1
 debug = 1
 incremental = true
 
+[profile.dev.package."*"]
+debug = false  # Dependency debuginfo dominates target/ size
+
 # Cloth contact queries dominate the interactive scene's CPU time. Optimizing
 # Parry preserves the recorded trajectory while reducing the measured cost.
 [profile.dev.package.parry3d]
