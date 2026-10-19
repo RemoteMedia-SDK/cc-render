@@ -1,0 +1,39 @@
+{
+  "prompt": {
+    "description": "A person stands in place under a running shower, washing their body with their hands and rinsing off.",
+    "requested_duration_ms": 30000,
+    "status": "complete",
+    "started_pts_ms": 5972,
+    "stop_requested_pts_ms": 35979,
+    "ended_pts_ms": 36704,
+    "error": null
+  },
+  "displayed_native_duration_ms": 30732,
+  "stop_request_after_ms": 30007,
+  "navigation_completed_pts_ms": [
+    5290
+  ],
+  "encoded_washing_frame_range": [
+    196,
+    1058
+  ],
+  "encoded_washing_seconds": 28.766666666666666,
+  "motion_errors": [],
+  "water_on_for_every_washing_frame": true,
+  "washing_unresolved_collisions": 0,
+  "final_unresolved_collisions": 1,
+  "first_unresolved_encoded_frame": 1298,
+  "peak_runoff_particles": 583,
+  "final_visible_particles": 0,
+  "dropped_emissions": 0,
+  "washing_source_responses": 16,
+  "washing_audits_all_zero_future_constraints": true,
+  "wall_seconds": 76.557864211,
+  "encoded_duration_seconds": 50.0,
+  "visual_review": "At encoded 10/20/25/30s, changing hand/arm gestures reach along legs and hips under running water. Repetitive bent-over washing; no assertion of complete body coverage or contact fidelity.",
+  "checks": {
+    "capture_rust_tests": "8 passed",
+    "python_tests": "15 passed; existing root-acceptance text-slice failure unchanged",
+    "static": "edit-check unchanged; quality delta flags archive source duplicates, test reachability and new observe complexity 16"
+  }
+}

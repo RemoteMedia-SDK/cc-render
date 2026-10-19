@@ -8,6 +8,8 @@ mod weather_recording;
 mod water_recording;
 #[path = "condo_capture/navigation_recording.rs"]
 mod navigation_recording;
+#[path = "condo_capture/prompt_recording.rs"]
+mod prompt_recording;
 use cc_render_plugin::cc_render::{
     CcRenderer, PhysicsConfig, RendererConfig,
 };

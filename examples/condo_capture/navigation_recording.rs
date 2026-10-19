@@ -39,6 +39,8 @@ pub struct NavigationCapture {
     submitted: bool,
     ticks: u64,
     started: Instant,
+    prompt: Option<super::prompt_recording::TimedPrompt>,
+    prompt_report: std::path::PathBuf,
 }
 
 fn ingest(runtime: &tokio::runtime::Runtime, node: &CcRenderNode, value: Value) -> anyhow::Result<()> {
@@ -67,6 +69,7 @@ fn worker(socket: UnixStream, receiver: mpsc::Receiver<Value>, sender: mpsc::Sen
 impl NavigationCapture {
     pub fn from_env(renderer: Arc<CcRenderer>, out: &Path, avatar: &str) -> anyhow::Result<Option<Self>> {
         let Ok(target) = std::env::var("CC_CONDO_NAVIGATE") else { return Ok(None) };
+        let prompt = super::prompt_recording::TimedPrompt::from_env()?;
         anyhow::ensure!(std::env::var_os("CC_CONDO_NATIVE_PACKETS").is_none(), "navigation and packet replay are exclusive");
         let mut socket = BufReader::new(UnixStream::connect(std::env::var("ARDY_SOCKET")?)?);
         socket.get_ref().set_read_timeout(Some(Duration::from_secs(120)))?;
@@ -89,7 +92,7 @@ impl NavigationCapture {
             events: File::create(out.join("navigation-events.ndjson"))?,
             goals: File::create(out.join("navigation-goals.ndjson"))?, target,
             session: format!("{}-731", out.file_name().unwrap().to_string_lossy()), submitted:false,
-            ticks:0, started:Instant::now() };
+            ticks:0, started:Instant::now(), prompt, prompt_report:out.join("prompt-duration.json") };
         this.goal(1, 0, 2, json!({"description":"A person stands relaxed in the room."}))?;
         Ok(Some(this))
     }
@@ -144,8 +147,13 @@ impl NavigationCapture {
                 self.requests.try_send(value)?;
             } else {
                 writeln!(self.events, "{value}")?;
+                let next = self.prompt.as_mut().and_then(|p| p.observe(&value, &self.session, &self.target));
+                if let Some((revision, pts, description)) = next {
+                    self.goal(revision, pts, 2, json!({"description":description}))?;
+                }
             }
         }
+        if let Some(prompt) = self.prompt.as_mut() { prompt.save(&self.prompt_report)?; }
         self.events.flush()?;
         frames.append(&mut self.renderer.frames.lock());
         Ok(())

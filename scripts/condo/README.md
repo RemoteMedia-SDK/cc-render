@@ -1005,6 +1005,45 @@ quality gate still reports trait-method reachability findings and is not clean.
 Plans, source hashes, test logs and daemon journals are retained under
 `artifacts/toronto-condo-captures/water-navigation-v1/`.
 
+For a timed washing prompt after arrival, add these settings to the same live
+navigation capture:
+
+```sh
+CC_CONDO_AFTER_NAV_PROMPT='A person stands in place under a running shower, washing their body with their hands and rinsing off.'
+CC_CONDO_PROMPT_SECONDS=30
+CC_CONDO_SECONDS=50
+CC_CONDO_WATER_SEQUENCE=scripts/condo/water-washing-cycle.json
+```
+
+The capture waits for the matching Navigate completion before submitting the
+semantic prompt. Its timer starts on the first displayed frame of that revision;
+bootstrap, navigation, generation ahead and playback stalls do not consume the
+requested duration. After 30 seconds of displayed native time it submits a relaxed
+standing prompt through the ordinary replacement handoff. Its native boundary is
+normally 0.2–0.6 seconds ahead, with additional observation latency.
+`prompt-duration.json` records start, stop request and
+first displayed replacement timestamps, or an explicit failure. Motion remains
+model-generated; a timed prompt does not guarantee washing quality or collision
+acceptance. This sequence keeps water on until capture second 46 and allows four
+seconds for drainage. Use the report to verify completion before accepting a run.
+
+The [timed washing recording](../../artifacts/toronto-condo/20261019T044851Z-normal-navigation-then-thirty-second-shower-washing-prompt/view.mp4)
+completed normal navigation at native 5,290 ms. Washing started at 5,972 ms;
+the standing replacement was requested at 35,979 ms and first observed at
+36,704 ms: **30.732 seconds of native washing motion**. The video shows repeated
+bending and hands moving along the legs and hips. All 16 washing responses have
+zero future constraints and no policy exceptions; no motion rejection occurred.
+Water stayed on through every washing frame, reaching 583 runoff parcels. One
+unresolved water query occurred later, at encoded frame 1,298, after washing had
+ended; no emissions were dropped and the system drained completely. The capture
+produced 50 seconds of video in 76.56 seconds of wall time, so this is not a
+real-time performance result. The washing segment spans about 28.77 encoded
+seconds because the capture uses fixed 30 fps while native playback uses its own
+clock. Eight capture tests pass; the existing Python text-slice failure remains.
+Static checks report archive-source duplicates, test reachability and a complexity
+score of 16 for the new event observer. Full reports and the fixed-seed attempt
+plan are retained in `artifacts/toronto-condo-captures/water-washing-v1/`.
+
 The first body-water GPU attempt omitted renderer start placement and was rejected
 at its first native root. It is retained as a failed gallery entry, not collision
 acceptance; the initial empty-shower image is evidence of that failure.
