@@ -28,6 +28,8 @@ pub(super) struct WaterSurfaces {
     pub update_ms: f64,
     pub degenerate_triangles: usize,
     pub history_valid: bool,
+    /// Read-only palm regions for contact diagnostics; never a collision substitute.
+    pub palms: [Option<DVec3>; 2],
 }
 
 pub(super) struct Hit {

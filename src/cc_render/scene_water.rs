@@ -9,6 +9,16 @@ use tokio::sync::watch;
 pub enum WaterKind {
     Faucet,
     Shower,
+    Pour,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PourSource {
+    pub prop: String,
+    /// Mouth position in the physical prop's local coordinates (Y up).
+    pub mouth: [f32; 3],
+    pub capacity_liters: f64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -22,12 +32,18 @@ pub struct WaterFixture {
     pub surface_y: f32,
     pub spray_radius_m: f32,
     pub max_liters_per_minute: f32,
+    pub container: Option<PourSource>,
 }
 
 pub(crate) fn validate(fixtures: &[WaterFixture]) -> Result<()> {
     ensure!(fixtures.len() <= 16, "water fixture capacity exceeded");
     let mut ids = HashSet::new();
     for fixture in fixtures {
+        ensure!((fixture.kind == WaterKind::Pour) == fixture.container.is_some(), "pour needs a container");
+        if let Some(c) = &fixture.container {
+            ensure!(!c.prop.is_empty() && c.mouth.iter().all(|v| v.is_finite())
+                && c.capacity_liters.is_finite() && (0.001..=2.).contains(&c.capacity_liters), "invalid pour container");
+        }
         ensure!(
             !fixture.id.is_empty() && ids.insert(&fixture.id),
             "duplicate/empty water fixture id"
@@ -66,6 +82,8 @@ pub struct WaterSnapshot {
     pub visible_particles: usize,
     pub runoff_particles: usize,
     pub body_impacts: u64,
+    /// Actual skin impacts within 4cm of an upward-facing palm, [left, right].
+    pub near_palm_impacts: [u64; 2],
     pub drain_impacts: u64,
     pub dropped_emissions: u64,
     pub unresolved_collisions: u64,

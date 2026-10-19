@@ -20,6 +20,9 @@ impl ColliderBox {
         let a = self.rotation.inverse() * (start - self.center);
         let delta = self.rotation.inverse() * (end - start);
         let extent = self.half + Vec3::splat(radius);
+        // Negative radius erodes the box. An exhausted axis is empty, not a
+        // reversed slab whose endpoints can be sorted back into a solid.
+        if extent.min_element() < 0. { return false; }
         let (mut lo, mut hi) = (0.0_f32, 1.0_f32);
         for axis in 0..3 {
             if delta[axis].abs() < 1e-7 {
@@ -174,6 +177,21 @@ pub(super) fn foot_key(
 mod tests {
     use super::*;
     use crate::cc_render::office::{pathfinder, scene_metadata, starter_objects};
+
+    #[test]
+    fn eroded_thin_colliders_are_empty_without_losing_real_contacts() {
+        for rotation in [Quat::IDENTITY, Quat::from_rotation_z(0.4)] {
+            let slab = ColliderBox { owner:"shelf".into(),center:Vec3::new(1.,2.,3.),
+                half:Vec3::new(0.08,0.009,0.28),rotation };
+            let start=slab.center+rotation*Vec3::new(0.,-0.1,0.);
+            let end=slab.center+rotation*Vec3::new(0.01,0.1,0.01);
+            assert!(slab.intersects(start,end,0.), "actual shelf contact remains");
+            assert!(slab.intersects(start,end,-0.005), "nonempty erosion remains a solid");
+            assert!(!slab.intersects(start,end,-0.05), "eroded thin shelf has no interior");
+            assert!(!slab.intersects(slab.center,slab.center,-0.05));
+            assert!(!slab.intersects(start+rotation*Vec3::X,end+rotation*Vec3::X,0.));
+        }
+    }
 
     #[test]
     fn sofa_contacts_come_from_parts_and_survive_scene_transforms() {

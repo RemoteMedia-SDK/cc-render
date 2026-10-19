@@ -137,6 +137,13 @@ pub enum HandChoice { Either }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Dispense {
+    pub outlet: String,
+    pub receiver: Joint,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InteractionPhase {
     pub id: String,
     pub prompt: String,
@@ -148,6 +155,8 @@ pub struct InteractionPhase {
     pub relations: Vec<Relation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition: Option<Transition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispense: Option<Dispense>,
     pub timeout_s: f32,
 }
 
@@ -362,6 +371,12 @@ pub fn validate(object_id: &str, zones: &[Zone], interactions: &[Interaction],
             if phase.stand_at.as_ref().is_some_and(|s| !resolves(&s.zone) || s.facing_deg.is_some_and(|f| !f.is_finite())) {
                 return bad("stands at an unknown zone");
             }
+            if phase.dispense.as_ref().is_some_and(|d|
+                !matches!(d.receiver, Joint::LeftHand | Joint::RightHand)
+                || !zones.iter().any(|z| z.id == d.outlet && z.kind == ZoneKind::WorkingPoint)
+                || phase.transition.is_some() || phase.stand_at.is_some()) {
+                return bad("dispensing needs a local outlet and receiving hand without a transition or approach");
+            }
             for relation in &phase.relations {
                 let [t0, t1] = relation.window_s();
                 if !(t0.is_finite() && t1.is_finite() && 0. <= t0 && t0 < t1 && t1 <= phase.timeout_s) {
@@ -404,6 +419,7 @@ impl InteractionPhase {
     /// This phase with its left and right hands exchanged in every relation and anchor.
     pub fn swapped_hands(&self) -> Self {
         let mut phase = self.clone();
+        if let Some(dispense) = phase.dispense.as_mut() { dispense.receiver = dispense.receiver.mirrored(); }
         for relation in &mut phase.relations {
             match relation {
                 Relation::Touch { joints, .. } | Relation::Hold { joints, .. } =>

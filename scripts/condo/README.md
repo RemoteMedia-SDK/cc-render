@@ -1040,6 +1040,191 @@ produced 50 seconds of video in 76.56 seconds of wall time, so this is not a
 real-time performance result. The washing segment spans about 28.77 encoded
 seconds because the capture uses fixed 30 fps while native playback uses its own
 clock. Eight capture tests pass; the existing Python text-slice failure remains.
+
+## Shower caddy and dispensing bottles
+
+`scene-shower-caddy.json` extends the lightmapped condo with a bronze wall caddy
+and three labeled, independent rigid bodies: `shampoo`, `conditioner`, and
+`body_wash`. Regenerate its assets with:
+
+```sh
+blender --background --python-exit-code 1 --python scripts/condo/shower_caddy.py -- /tmp/new-caddy-preview
+```
+
+Package `props` carry verified geometry, compound collision shapes and optional
+dynamic mass. Loose bottles settle under physics. The caddy experiment now uses
+the existing declared `interact` attachment and placement behavior, explicitly
+requested after the failed `grasp` experiment. Held bottles follow the attached
+hand and set-down uses the declared support zone; this is not proof of a
+contact-admitted rigid grip or purely dynamic placement. Each open bottle
+has 250 ml available and dispenses from its transformed mouth when tilted past
+horizontal. It stops upright or empty. Liquid uses the existing gravity parcels
+and moving-skin collision/runoff; shampoo viscosity, squeeze pressure, liquid
+free surfaces, and decreasing bottle mass are not simulated.
+
+For the live experiment, start the ordinary scene daemon with
+the `beautiful_assistant` calibration and a matching
+scene key. Use the existing navigation capture with these settings and select
+`scenes/toronto_condo/scene-shower-caddy.json` as the scene argument:
+
+```sh
+unset AVATAR_START
+unset ARDY_SCENE_GUIDANCE
+CC_CONDO_VIEW=bathroom
+CC_CONDO_NAVIGATE=shower_screen
+CC_CONDO_CADDY_TASK=shampoo
+CC_CONDO_SECONDS=90
+CC_CONDO_WATER_SEQUENCE=scripts/condo/water-caddy-cycle.json
+```
+
+The caddy task and `CC_CONDO_AFTER_NAV_PROMPT` are mutually exclusive. Normal
+navigation completes first, followed by `interact(target, pick_up)`.
+The pickup prompt explicitly describes standing upright and reaching up to a high
+shelf near head height. Pickup, pouring and return use generic bottle wording,
+without shampoo, conditioner or body-wash names in the model prompt. This is semantic posture intent; the measured
+contact zone remains the actual bottle on the existing shelf.
+The initial attach reach uses calibrated avatar wrist measurements and at most
+two native measured-miss retries, as subsequently approved by the owner. Observed
+attachment ends pickup targeting.
+Pickup ends at observed attachment; the additional two-second hold phase has
+been removed per the owner's playback correction.
+After matching pickup completion, the task waits for the actual bottle attachment
+before submitting `interact(target, pour_into_hand)`. It does not wait for shelf
+departure before starting the next motion: the completed pickup can stop while
+the held bottle is still near its original position. Observed departure remains
+necessary for successful pouring.
+The owner explicitly superseded the motion-ownership restriction for this work.
+Pouring now guides the bottle outlet over the upward receiving palm using the
+actual acquired grip transform and captured hand geometry. Both hand positions
+and orientations, and the native encoder's required root channels, are recorded
+in the audit. Up to two same-seed measured-miss retries are retained per block. The experiment observes the declared right-hand coupling rather
+than the separate physical-grip registry. It requests `interact(target, set_down)`
+after observing a lift, at least 0.1 ml dispensed and three actual skin
+impacts within 4 cm of the upward left palm. Counters start at the first displayed
+pour revision, excluding earlier incidental drips. After 10 seconds without those
+outcomes, it still attempts set-down but retains an explicit pour failure.
+The palm distance is a diagnostic approximation, not exact hand-mesh identity.
+The bottle must remain in that shelf region during a one-second observation
+window after observed release. Only then does `interact(shower_caddy, face_outwards)`
+use the ordinary approach-navigation planner to face into the shower, away from
+the caddy wall. Its declared stand phase requires observed position and facing;
+the washing prompt starts only after that turn completes. The requested order is
+**grab → pour into hand → put back → face outwards → shower animation**.
+The final shower prompt runs for 30 seconds of displayed native time, then waits
+for its relaxed continuation to be displayed before completing the task.
+The return phase first faces the caddy through normal approach navigation and
+then plays an explicit right-hand placement prompt. The owner approved bounded
+calibrated hand guidance for this put-back phase as well: targeting ends after
+observed release. Washing remains unconstrained semantic animation, with an
+upright, forward-looking prompt to avoid excessive head turns.
+
+`caddy-task.json` identifies the object handling
+as `declared_interact_coupling` and records the evidence or failure; a
+pour timeout never counts as successful manipulation.
+The recording finalizes early on a terminal caddy-task result.
+
+The [complete sequence recording](../../artifacts/toronto-condo/20261019T072033Z-complete-shower-sequence-grab-pour-put-back-face-outwards-wa/view.mp4)
+passes the full sequence at fixed seed 731. It observes 7.79 ml dispensed with
+49 left-palm impacts, shelf release and settling, an outward turn, and 30.599
+seconds of displayed washing animation. The bottle remains upright and released
+on the shelf throughout washing. All 16 washing blocks have zero future
+conditioning; the observed-release placement block also has zero future
+conditioning. The turn uses navigation channels without hand targets. This is
+one successful seed, not a reliability matrix. The 80 targeted Python tests and
+nine capture-example Rust tests pass. Source snapshots, all reach attempts,
+audits and validation are retained in
+`artifacts/toronto-condo-captures/shower-caddy-outwards-v2/`; the failed unguided
+return is retained separately under `shower-caddy-outwards-v1/`.
+
+The subsequent generic-bottle wording run also passes at seed 731, with 571
+total left-palm impacts and 30.6 displayed seconds of washing. Its
+[clip](../../artifacts/toronto-condo-captures/shower-generic-bottle-v2/pour-and-return.mp4)
+and evidence are in `artifacts/toronto-condo-captures/shower-generic-bottle-v2/`.
+The first generic run exposed the pickup handoff stall described above and is
+retained as `shower-generic-bottle-v1/`. Hand guidance was still needed; this
+combined prompt and handoff change does not isolate the effect of the product
+name. Ten capture tests pass, including attached-but-still-near-shelf handoff.
+
+The guided-pour implementation now passes with the upright pickup. The [latest
+recording](../../artifacts/toronto-condo/20261019T125839Z-upright-pickup-guided-palm-pour-shelf-return-and-30-second-s/view.mp4)
+(seed 731) visibly tips the bottle over the open left palm, observes 448 total
+left-palm impacts, returns the bottle upright and released, turns outward, and
+completes 30.6 displayed seconds of washing. All 16 washing blocks have zero
+future conditioning. The task first observes successful pouring at 22,006 ms;
+already committed pouring finishes displaying at 24,438 ms. This queued tail
+is retained unchanged. There is also a [12.5-second pour/return excerpt](../../artifacts/toronto-condo-captures/shower-guided-pour-v4/pour-and-return.mp4).
+
+Evidence, source snapshots, channel audits and checks are under
+`artifacts/toronto-condo-captures/shower-guided-pour-v4/`. The three preceding
+attempts remain in `shower-guided-pour-v{1,2,3}/`: attachment handoff, missing
+wrist-audit metadata, and a late head-twist failure during washing, respectively.
+The latter motivated the explicit upright, forward-looking washing prompt.
+91 targeted SDK tests and 16 renderer context/interaction/capture tests pass.
+The broader renderer Python suite still has its existing ownership source-text
+matcher failure; structural checks retain findings in the larger uncommitted
+work. This establishes one fixed-seed end-to-end pass, not a reliability matrix.
+
+Before guided dispensing, the upright-reach revision improved pickup posture
+but did **not** pass that full sequence. Two seed-731 captures reduce maximum displayed pickup
+torso tilt from 56.6 degrees to 17.9 degrees while still attaching the shampoo.
+Pickup takes about 5.7 seconds from the goal request, versus 5.2 seconds before;
+this is a posture improvement, not a latency fix. The more upright continuation
+raises the bottle toward the face during pouring and records no palm impacts.
+Explicitly prompting a downward pour over the upward cupped left palm also
+misses. Both attempts return the bottle and correctly retain the pour failure,
+without starting washing. Evidence, source snapshots and all model attempts are
+retained in `artifacts/toronto-condo-captures/shower-caddy-upright-v{1,2}/`.
+The v2 directory includes a five-second `pickup.mp4` excerpt and `validation.json`.
+Nine capture-example Rust tests pass; the Python suite has 15 passes and the
+existing ownership source-text matcher failure. Structural checks still flag
+duplication in the larger uncommitted caddy work.
+
+The subsequent [semantic playback trial](../../artifacts/toronto-condo/20261019T054449Z-interact-plays-unconstrained-ardy-after-arrival-pickup-misse/view.mp4)
+uses the same seed 731. All eight generated interaction blocks carry the native
+semantic audit: zero future channels/values and no exceptions. The pickup misses
+its contact zone (closest 35.6 cm, 0/175 observed frames) and times out after 10
+seconds; no bottle attaches and pouring/set-down never start. This verifies the
+unconstrained handoff, not successful manipulation. All 74 targeted Python tests
+pass. Source snapshots, prepared/native audits and validation logs are retained
+in `artifacts/toronto-condo-captures/shower-caddy-interact-v3/`.
+
+The first `interact` run passed its pickup reach relation and attached the bottle,
+then reported a shelf collision. It exposed an empty-box erosion bug in the
+generic segment/cuboid test: negative half extents were being sorted back into
+slabs. `ColliderBox::intersects` now treats that eroded box as empty. Regression
+coverage includes rotated thin slabs, true contact and nonempty erosion; the
+existing penetration tolerances remain unchanged.
+
+The [interact retry](../../artifacts/toronto-condo/20261019T053403Z-interact-bottle-attachment-succeeds-but-sustained-hold-fails/view.mp4)
+uses seed 731 with scene guidance disabled. The bottle attaches at native
+16,049 ms, but the hold relation passes only 45/55 observed frames, below the
+unchanged 90% requirement. Upward movement peaks at 3 mm; the coupled bottle
+also moves beyond the west wall during holding. Pickup therefore fails before
+the pour or set-down requests. This is not accepted manipulation. All 34
+targeted Rust tests pass, including the thin-collider regression and existing
+coupling, declared-interaction, support and native-seat checks. The known Python
+source-slice failure remains. Both runs and source snapshots are retained under
+`artifacts/toronto-condo-captures/shower-caddy-interact-v{1,2}/`.
+
+The caddy variant moves the shared shower/bottle approach to 30 cm in front of
+the shelf's measured bounds, still under the spray. The old shower destination
+had only 18.6 cm clearance once the caddy was added; the unchanged native root
+validator requires 20 cm.
+
+The earlier [grasp attempt](../../artifacts/toronto-condo/20261019T051803Z-shower-caddy-reach-misses-physical-shampoo-grip/view.mp4)
+completes normal navigation at native 12,605 ms, then fails the physical grasp at
+17,301 ms. The closest sampled right wrist is 11.7 cm from the shampoo bottle,
+outside the unchanged 5 cm grip bound. No bottle lift or dispensing occurred;
+the pour-and-return prompt did not run. This did not establish an end-to-end
+interaction. Both earlier configuration/clearance failures are also
+retained in the gallery. Plans, source hashes and diagnostics are under
+`artifacts/toronto-condo-captures/shower-caddy-v{1,2,3}/`.
+
+All 36 targeted Rust tests pass. The Python ownership suite remains at 15 passes
+and one pre-existing source-slice failure in
+`test_root_acceptance_does_not_rewrite_the_candidate`; no policy or validator was
+weakened. Source-model output, rendered reach, and successful prop manipulation
+are separate evidence levels; only the first two were observed in this attempt.
 Static checks report archive-source duplicates, test reachability and a complexity
 score of 16 for the new event observer. Full reports and the fixed-seed attempt
 plan are retained in `artifacts/toronto-condo-captures/water-washing-v1/`.

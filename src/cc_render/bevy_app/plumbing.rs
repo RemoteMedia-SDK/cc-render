@@ -36,12 +36,23 @@ pub(super) fn install(app: &mut App) {
         .add_systems(Startup, spawn)
         .add_systems(
             PostUpdate,
-            (observe_skin, advance, display, observe)
+            (observe_skin, observe_palms, advance, display, observe)
                 .chain()
                 .after(TransformSystem::TransformPropagate)
                 .after(bevy::render::mesh::inherit_weights)
                 .after(super::tissue::TissueSurfaceUpdate),
         );
+}
+
+fn observe_palms(mut surfaces: ResMut<WaterSurfaces>,
+    rigs: Option<Res<crate::cc_render::office::hand::HandRigs>>,
+    transforms: Query<&GlobalTransform>) {
+    surfaces.palms = std::array::from_fn(|hand| {
+        let rig = rigs.as_ref()?.hands[hand].as_ref()?;
+        let world = transforms.get(rig.hand).ok()?;
+        let normal = world.compute_transform().rotation * rig.rig.palm.normal;
+        (normal.y > 0.2).then(|| world.transform_point(rig.rig.palm.palm()).as_dvec3())
+    });
 }
 
 fn spawn(
@@ -59,6 +70,8 @@ fn spawn(
         reflectance: 0.25,
         ..default()
     });
+    let soap = materials.add(StandardMaterial { base_color:Color::srgb(0.76,0.64,0.32),
+        perceptual_roughness:0.24, ..default() });
     for (fixture, definition) in package.water_fixtures.iter().enumerate() {
         let simulation = WaterSimulation::new(definition.kind);
         for index in 0..simulation.particles.len() {
@@ -66,7 +79,7 @@ fn spawn(
                 Name::new(format!("Water:{}:{index}", definition.id)),
                 Drop { fixture, index },
                 Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
+                MeshMaterial3d(if definition.container.is_some() { soap.clone() } else { material.clone() }),
                 Transform::default(),
                 Visibility::Hidden,
                 NotShadowCaster,
@@ -88,10 +101,16 @@ fn advance(
     surfaces: Res<WaterSurfaces>,
     mut plumbing: ResMut<Plumbing>,
     mut activity: ResMut<WaterActivity>,
+    props: Query<(&super::physics::props::Prop, &GlobalTransform)>,
 ) {
     let settings = bridge.requests.borrow();
     for outlet in &mut plumbing.0 {
         outlet.setting = settings[&outlet.fixture.id];
+        if let Some(container) = &outlet.fixture.container {
+            let pose = props.iter().find(|(p,_)| p.id == container.prop).map(|(_,t)| t);
+            outlet.setting.flow = super::pouring::update(&mut outlet.fixture, pose,
+                outlet.total_liters, time.delta_secs_f64());
+        }
         if surfaces.error.is_none() {
             outlet.total_liters +=
                 f64::from(outlet.setting.flow * outlet.fixture.max_liters_per_minute)
@@ -158,6 +177,7 @@ fn observe(plumbing: Res<Plumbing>, bridge: Res<WaterBridge>, surfaces: Res<Wate
                 visible_particles: o.simulation.particles.iter().filter(|p| p.active).count(),
                 runoff_particles: o.simulation.particles.iter().filter(|p| p.runoff()).count(),
                 body_impacts: o.simulation.body_impacts,
+                near_palm_impacts: o.simulation.near_palm_impacts,
                 drain_impacts: o.simulation.drain_impacts,
                 dropped_emissions: o.simulation.dropped_emissions,
                 unresolved_collisions: o.simulation.unresolved_collisions,

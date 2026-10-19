@@ -10,6 +10,8 @@ mod water_recording;
 mod navigation_recording;
 #[path = "condo_capture/prompt_recording.rs"]
 mod prompt_recording;
+#[path = "condo_capture/caddy_recording.rs"]
+mod caddy_recording;
 use cc_render_plugin::cc_render::{
     CcRenderer, PhysicsConfig, RendererConfig,
 };
@@ -136,6 +138,10 @@ fn capture_asset_paths(args: &[String], folder: &Path, package: &serde_json::Val
         paths.push(folder.join(cloth["surface"].as_str()
             .ok_or_else(|| anyhow::anyhow!("missing cloth surface"))?));
     }
+    for prop in package["props"].as_array().into_iter().flatten() {
+        paths.push(folder.join(prop["geometry"].as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing prop geometry"))?));
+    }
     Ok(paths)
 }
 
@@ -188,6 +194,10 @@ fn record_inputs(args: &[String], out: &Path, seconds: f32) -> anyhow::Result<()
         }
     }
     Ok(())
+}
+
+fn capture_complete(frames: usize, target: usize, navigation: Option<&navigation_recording::NavigationCapture>) -> bool {
+    frames >= target || (frames > 0 && navigation.is_some_and(navigation_recording::NavigationCapture::task_finished))
 }
 
 fn record(renderer: &Arc<CcRenderer>, out: &Path, options: &CaptureOptions, mut weather: weather_recording::WeatherCapture, avatar: &str) -> anyhow::Result<()> {
@@ -248,7 +258,7 @@ fn record(renderer: &Arc<CcRenderer>, out: &Path, options: &CaptureOptions, mut 
     let mut water = water_recording::WaterCapture::new(out, options.frames, renderer)?;
     let mut states = std::fs::File::create(out.join("states.ndjson"))?;
     let mut frame_times = std::fs::File::create(out.join("frame-times.ndjson"))?;
-    while count < target {
+    while !capture_complete(count, target, navigation.as_ref()) {
         anyhow::ensure!(renderer.is_ready(), "renderer withdrew readiness during capture; inspect renderer log");
         anyhow::ensure!(started.elapsed() < options.timeout, "capture timeout");
         weather.advance(renderer, count)?;

@@ -67,6 +67,8 @@ pub struct ScenePackage {
     pub cloths: Vec<super::scene_cloth::SceneCloth>,
     #[serde(default)]
     pub water_fixtures: Vec<super::scene_water::WaterFixture>,
+    #[serde(default)]
+    pub props: Vec<super::scene_props::SceneProp>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -122,11 +124,12 @@ impl ScenePackage {
         for part in package.mechanisms.iter().flat_map(|m| &m.parts) {
             part.verify_asset(package.geometry.parent().unwrap())?;
         }
+        for prop in &package.props { prop.verify_asset(package.geometry.parent().unwrap())?; }
         for cloth in &mut package.cloths { cloth.load(package.geometry.parent().unwrap())?; }
         Ok(package)
     }
 
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         ensure!(self.schema_version == 1, "unsupported scene package version");
         ensure!(!self.id.is_empty() && self.floor_y == 0.0, "scene uses a local finished floor at y=0");
         ensure!(!self.solids.is_empty() && !self.cameras.is_empty(), "scene needs solids and cameras");
@@ -170,6 +173,16 @@ impl ScenePackage {
         validate_point_lights(&self.point_lights)?;
         super::scene_water::validate(&self.water_fixtures)?;
         super::scene_mechanism::validate_mechanisms(&self.mechanisms, &self.solids)?;
+        ensure!(self.props.len() <= 128, "scene prop capacity exceeded");
+        for prop in &self.props {
+            prop.validate()?;
+            ensure!(!self.solids.iter().any(|s| s.id == prop.object.id), "prop duplicates solid id");
+        }
+        for source in self.water_fixtures.iter().filter_map(|f| f.container.as_ref()) {
+            ensure!(self.props.iter().any(|p| p.object.id == source.prop && p.object.dynamic),
+                "pour source must name a dynamic scene prop");
+        }
+        super::office::validate_objects(&self.office_objects()).map_err(anyhow::Error::msg)?;
         super::scene_cloth::validate(self)?;
         Ok(())
     }
@@ -182,7 +195,8 @@ impl ScenePackage {
             keypoints: Default::default(), approach: s.approach.unwrap_or([0.0; 3]),
             seat: None, seat_surface_part: None, grasp: None, surface: None,
             zones: Vec::new(), interactions: Vec::new(),
-        }).chain(self.mechanisms.iter().flat_map(|m| m.office_objects())).collect()
+        }).chain(self.mechanisms.iter().flat_map(|m| m.office_objects()))
+            .chain(self.props.iter().map(|p| p.object.clone())).collect()
     }
 
     pub(crate) fn static_solids(&self) -> impl Iterator<Item = &SceneSolid> {
