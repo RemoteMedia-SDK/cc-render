@@ -1,0 +1,341 @@
+//! GPU batch against the CPU reference on shared fixtures, plus kinematic body colliders.
+//! Every test prints GPU_SKIPPED and passes trivially when no suitable adapter exists.
+use super::*;
+use crate::cc_render::cloth_grip::{ClampMaterial, ClothGrip};
+use bevy_rapier3d::rapier::parry::{math::Isometry, shape::{Ball, SharedShape}};
+
+pub(crate) fn sheet_params(substeps: usize) -> ClothParameters {
+    ClothParameters {
+        total_mass_kg: 0.3,
+        thickness_m: 0.002,
+        stretch_compliance: 1e-7,
+        bend_compliance: 0.05,
+        air_drag_per_second: 0.2,
+        spring_damping_ratio: 1.,
+        cloth_static_friction: 0.2,
+        cloth_kinetic_friction: 0.2,
+        substeps,
+    }
+}
+
+/// An n x n flat square sheet of side `size`, centred at (0, y, 0).
+pub(crate) fn grid(n: usize, size: f32, y: f32, parameters: ClothParameters) -> ClothSolver {
+    let mut points = Vec::new();
+    let mut uv = Vec::new();
+    for j in 0..n {
+        for i in 0..n {
+            let (u, v) = (i as f32 / (n - 1) as f32, j as f32 / (n - 1) as f32);
+            points.push(Vec3::new((u - 0.5) * size, y, (v - 0.5) * size));
+            uv.push(Vec2::new(u, v));
+        }
+    }
+    let mut triangles = Vec::new();
+    for j in 0..n - 1 {
+        for i in 0..n - 1 {
+            let a = (j * n + i) as u32;
+            let (b, c, d) = (a + 1, a + n as u32, a + n as u32 + 1);
+            triangles.push([a, b, d]);
+            triangles.push([a, d, c]);
+        }
+    }
+    ClothSolver::new(points.clone(), points, triangles, uv, parameters).unwrap()
+}
+
+fn gpu_batch(solvers: &[&ClothSolver]) -> Option<GpuClothBatch> {
+    let batch = GpuClothBatch::new(solvers).unwrap();
+    if batch.is_none() {
+        println!("GPU_SKIPPED no suitable adapter");
+    }
+    batch
+}
+
+fn box_collider(half: [f32; 3], centre: [f32; 3], friction: f64) -> FixedClothCollider {
+    FixedClothCollider::new(
+        SharedShape::cuboid(half[0], half[1], half[2]),
+        Isometry::translation(centre[0], centre[1], centre[2]),
+        friction,
+    )
+    .unwrap()
+}
+
+/// Smallest distance from any vertex of `a` to any triangle of `b` (brute force, tests only).
+fn layer_gap(a: &ClothSolver, b: &ClothSolver) -> f64 {
+    use parry_ccd::{math::Point, query::PointQuery, shape::Triangle};
+    let p = |v: DVec3| Point::new(v.x, v.y, v.z);
+    let mut best = f64::INFINITY;
+    for v in &a.positions {
+        for t in &b.triangles {
+            let tri = Triangle::new(p(b.positions[t[0]]), p(b.positions[t[1]]), p(b.positions[t[2]]));
+            best = best.min(tri.distance_to_local_point(&p(*v), true));
+        }
+    }
+    best
+}
+
+fn max_deviation(a: &ClothSolver, b: &ClothSolver) -> f64 {
+    a.positions.iter().zip(&b.positions).map(|(p, q)| p.distance(*q)).fold(0., f64::max)
+}
+
+#[test]
+fn gpu_sheet_drapes_over_a_box_like_the_cpu_reference() {
+    let floor = [box_collider([0.3, 0.1, 0.3], [0., -0.1, 0.], 0.7)];
+    let mut cpu = grid(21, 1., 0.1, sheet_params(24));
+    let mut gpu = grid(21, 1., 0.1, sheet_params(24));
+    let Some(mut gbatch) = gpu_batch(&[&gpu]) else { return };
+    let mut cbatch = ClothBatch::new(&[&cpu]).unwrap();
+    let mut worst_ms = 0f64;
+    for _ in 0..120 {
+        for (batch_cpu, solver) in [(true, &mut cpu), (false, &mut gpu)] {
+            let mut layers = [ClothLayerStep { solver, colliders: &floor, grips: &mut [] }];
+            if batch_cpu {
+                cbatch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+            } else {
+                gbatch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+                worst_ms = worst_ms.max(gbatch.last.frame_ms);
+            }
+        }
+    }
+    let report = serde_json::json!({
+        "max_deviation_m": max_deviation(&cpu, &gpu),
+        "mean_height_cpu": cpu.positions.iter().map(|p| p.y).sum::<f64>() / cpu.positions.len() as f64,
+        "mean_height_gpu": gpu.positions.iter().map(|p| p.y).sum::<f64>() / gpu.positions.len() as f64,
+        "penetration_cpu": cpu.max_particle_penetration(&floor),
+        "penetration_gpu": gpu.max_particle_penetration(&floor),
+        "stretch_cpu": cpu.max_edge_stretch_ratio(), "stretch_gpu": gpu.max_edge_stretch_ratio(),
+        "gpu_worst_frame_ms": worst_ms, "gpu": gbatch.last,
+    });
+    println!("GPU_PARITY_DRAPE {report}");
+    assert!(gpu.max_particle_penetration(&floor) < 1e-5, "{report}");
+    assert!(gpu.max_edge_stretch_ratio() < 1.1, "{report}");
+    // The drape's buckles need not fold the same way; its height and contact must agree.
+    let mean_y = |s: &ClothSolver| s.positions.iter().map(|p| p.y).sum::<f64>() / s.positions.len() as f64;
+    assert!((mean_y(&cpu) - mean_y(&gpu)).abs() < 0.005, "{report}");
+}
+
+#[test]
+fn gpu_layers_stack_at_their_radii_without_crossing() {
+    let params = |thickness: f32| ClothParameters { thickness_m: thickness, ..sheet_params(24) };
+    let mut layers = [grid(9, 0.8, 0.02, params(0.001)), grid(9, 0.8, 0.05, params(0.003)), grid(9, 0.8, 0.1, params(0.012))];
+    let floor = [box_collider([2., 0.1, 2.], [0., -0.1, 0.], 0.5)];
+    let Some(mut batch) = gpu_batch(&layers.iter().collect::<Vec<_>>()) else { return };
+    let mut worst_gap_deficit = 0f64;
+    let mut flags = (0u32, 0u32);
+    for tick in 0..180 {
+        let mut steps: Vec<_> = layers
+            .iter_mut()
+            .map(|solver| ClothLayerStep { solver, colliders: &floor, grips: &mut [] })
+            .collect();
+        batch.step(&mut steps, 1. / 60., -DVec3::Y * 9.81).unwrap();
+        flags.0 += batch.last.substep_motion_exceeded;
+        flags.1 += batch.last.margin_exceeded;
+        if tick % 10 == 9 {
+            for pair in layers.windows(2) {
+                let gap = (pair[0].parameters.thickness_m + pair[1].parameters.thickness_m) as f64 * 0.5;
+                worst_gap_deficit = worst_gap_deficit.max(gap - layer_gap(&pair[1], &pair[0]));
+            }
+        }
+    }
+    let heights: Vec<f64> = layers.iter().map(|l| l.positions.iter().map(|p| p.y).sum::<f64>() / l.positions.len() as f64).collect();
+    let report = serde_json::json!({"mean_heights": heights, "expected": [0.0005, 0.0025, 0.010],
+        "worst_gap_deficit_m": worst_gap_deficit, "tunnel_flags": flags, "resting": batch.resting()});
+    println!("GPU_STACK {report}");
+    // f32 positions and averaged contact: the stack holds its gaps to within 50 um.
+    assert!(worst_gap_deficit < 5e-5, "{report}");
+    for (h, e) in heights.iter().zip([0.0005, 0.0025, 0.010]) {
+        assert!((h - e).abs() < 1e-4, "{report}");
+    }
+}
+
+#[test]
+fn gpu_grip_holds_a_hanging_sheet_like_the_cpu_reference() {
+    let clamp = ClampMaterial { compliance_m_n: 0.0002, damping_ratio: 1.0, capacity_n: 40. };
+    let make = || {
+        let s = grid(11, 0.5, 1.0, sheet_params(24));
+        let pose = Isometry::translation(-0.25 + 0.03, 1.0 + 0.015, -0.25 + 0.03);
+        let grip = ClothGrip::capture(s.surface(), &Ball::new(0.015), &pose, 0, clamp).unwrap().unwrap();
+        (s, grip, pose)
+    };
+    let (mut cpu, cpu_grip, pose) = make();
+    let (mut gpu, gpu_grip, _) = make();
+    let Some(mut gbatch) = gpu_batch(&[&gpu]) else { return };
+    let mut cbatch = ClothBatch::new(&[&cpu]).unwrap();
+    let mut grips = [vec![cpu_grip], vec![gpu_grip]];
+    let mut deviation = Vec::new();
+    for frame in 0..90 {
+        if frame % 10 == 0 {
+            deviation.push(max_deviation(&cpu, &gpu));
+        }
+        // The hand rises 20 cm over the first second, then holds.
+        let lift = 0.2 * (frame as f32 / 60.).min(1.);
+        let p = Isometry::translation(pose.translation.x, pose.translation.y + lift, pose.translation.z);
+        for (k, solver) in [&mut cpu, &mut gpu].into_iter().enumerate() {
+            grips[k][0].observe_pose(&p).unwrap();
+            let mut layers = [ClothLayerStep { solver, colliders: &[], grips: &mut grips[k] }];
+            if k == 0 {
+                cbatch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+            } else {
+                gbatch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+            }
+        }
+    }
+    let report = serde_json::json!({
+        "max_deviation_m": max_deviation(&cpu, &gpu), "deviation_every_10": deviation,
+        "centroid_gap_m": (cpu.positions.iter().sum::<DVec3>() - gpu.positions.iter().sum::<DVec3>()).length() / cpu.positions.len() as f64,
+        "state": [format!("{:?}", grips[0][0].state()), format!("{:?}", grips[1][0].state())],
+        "force_n": [grips[0][0].peak_applied_force_n(), grips[1][0].peak_applied_force_n()],
+        "stretch": [cpu.max_edge_stretch_ratio(), gpu.max_edge_stretch_ratio()],
+    });
+    println!("GPU_PARITY_GRIP {report}");
+    assert_eq!(grips[1][0].state(), crate::cc_render::cloth_grip::ClampState::Held, "{report}");
+    let (fc, fg) = (grips[0][0].peak_applied_force_n(), grips[1][0].peak_applied_force_n());
+    assert!((fc - fg).abs() < 0.1 * fc.max(0.1), "{report}");
+    // Spring order differs (coloured batches vs sequential Gauss-Seidel), so a freely swinging
+    // sheet's vertices drift apart over seconds; its body motion must not.
+    let centroid = |s: &ClothSolver| s.positions.iter().sum::<DVec3>() / s.positions.len() as f64;
+    assert!(centroid(&cpu).distance(centroid(&gpu)) < 0.02, "{report}");
+}
+
+/// Largest depth of any particle inside a capsule along local y (after the cloth radius).
+fn capsule_penetration(s: &ClothSolver, centre: DVec3, rotation: DQuat, half_height: f64, radius: f64) -> f64 {
+    let r = s.parameters.thickness_m as f64 * 0.5;
+    s.positions
+        .iter()
+        .map(|p| {
+            let l = rotation.inverse() * (*p - centre);
+            let d = (l - DVec3::new(0., l.y.clamp(-half_height, half_height), 0.)).length();
+            (radius + r - d).max(0.)
+        })
+        .fold(0., f64::max)
+}
+
+#[test]
+fn gpu_sheet_drapes_over_a_static_capsule() {
+    // A horizontal bar (capsule along x) 30 cm above a floor; a sheet falls onto it.
+    let rotation = DQuat::from_rotation_z(std::f64::consts::FRAC_PI_2);
+    let centre = DVec3::new(0., 0.3, 0.);
+    let bar = KinematicCollider {
+        shape: KinematicShape::Capsule { half_height: 0.4, radius: 0.05 },
+        start: (centre, rotation),
+        end: (centre, rotation),
+        friction: 0.5,
+    };
+    let floor = [box_collider([2., 0.1, 2.], [0., -0.1, 0.], 0.7)];
+    let mut sheet = grid(21, 0.8, 0.45, sheet_params(24));
+    let Some(mut batch) = gpu_batch(&[&sheet]) else { return };
+    let mut worst = 0f64;
+    for _ in 0..180 {
+        let mut layers = [ClothLayerStep { solver: &mut sheet, colliders: &floor, grips: &mut [] }];
+        batch.step_with_kinematic(&mut layers, 1. / 60., -DVec3::Y * 9.81, &[bar]).unwrap();
+        worst = worst.max(capsule_penetration(&sheet, centre, rotation, 0.4, 0.05));
+    }
+    let top = sheet.positions.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+    let report = serde_json::json!({"worst_capsule_penetration_m": worst, "highest_point_m": top,
+        "floor_penetration_m": sheet.max_particle_penetration(&floor), "gpu": batch.last});
+    println!("GPU_CAPSULE_STATIC {report}");
+    assert!(worst < 1e-4, "{report}");
+    // Hanging over the bar: the middle rests on top of it, the sides reach the floor.
+    assert!((top - 0.351).abs() < 0.01, "{report}");
+    assert!(sheet.max_particle_penetration(&floor) < 1e-5, "{report}");
+}
+
+#[test]
+fn gpu_moving_capsule_ploughs_a_sheet_without_passing_through() {
+    // A sheet resting on a table; an upright capsule (a forearm standing on the table) sweeps
+    // 0.6 m along +x through the sheet's edge in one second and pushes the cloth ahead of it.
+    let floor = [box_collider([1., 0.1, 1.], [0., -0.1, 0.], 0.3)];
+    let mut sheet = grid(21, 0.6, 0.001, sheet_params(24));
+    let Some(mut batch) = gpu_batch(&[&sheet]) else { return };
+    let (radius, half_height) = (0.04, 0.1);
+    let pose = |t: f64| DVec3::new(-0.5 + 0.6 * t.min(1.), half_height - 0.02, 0.);
+    let start_centre: f64 = sheet.positions.iter().map(|p| p.x).sum::<f64>() / sheet.positions.len() as f64;
+    let mut worst = 0f64;
+    let mut flags = (0u32, 0u32);
+    for frame in 0..90 {
+        let (t0, t1) = (frame as f64 / 60., (frame + 1) as f64 / 60.);
+        let capsule = KinematicCollider {
+            shape: KinematicShape::Capsule { half_height, radius },
+            start: (pose(t0), DQuat::IDENTITY),
+            end: (pose(t1), DQuat::IDENTITY),
+            friction: 0.5,
+        };
+        let mut layers = [ClothLayerStep { solver: &mut sheet, colliders: &floor, grips: &mut [] }];
+        batch.step_with_kinematic(&mut layers, 1. / 60., -DVec3::Y * 9.81, &[capsule]).unwrap();
+        worst = worst.max(capsule_penetration(&sheet, pose(t1), DQuat::IDENTITY, half_height, radius));
+        flags.0 += batch.last.substep_motion_exceeded;
+        flags.1 += batch.last.margin_exceeded;
+    }
+    let centre: f64 = sheet.positions.iter().map(|p| p.x).sum::<f64>() / sheet.positions.len() as f64;
+    let report = serde_json::json!({"worst_capsule_penetration_m": worst, "sheet_centre_shift_m": centre - start_centre,
+        "floor_penetration_m": sheet.max_particle_penetration(&floor), "stretch": sheet.max_edge_stretch_ratio(),
+        "tunnel_flags": flags, "gpu": batch.last});
+    println!("GPU_CAPSULE_MOVING {report}");
+    assert!(worst < 1e-4, "{report}");
+    assert!(sheet.max_particle_penetration(&floor) < 1e-5, "{report}");
+    assert!(sheet.max_edge_stretch_ratio() < 1.1, "{report}");
+    // The capsule ends 0.3 m inside the sheet's original edge: the cloth ahead was pushed along.
+    assert!(centre - start_centre > 0.05, "{report}");
+}
+
+/// Release cost and contact flags of the moving authored bedding on the GPU (CC_CLOTH_BENCH_*
+/// as for the CPU bench). Run: `--release -- --ignored --nocapture`.
+#[test]
+#[ignore = "benchmark: run in release with --nocapture"]
+fn bench_gpu_cloth_ticks() {
+    let scene = std::env::var("CC_CLOTH_BENCH_SCENE").unwrap_or_else(|_| "scene-bedding.json".into());
+    let ticks: usize = std::env::var("CC_CLOTH_BENCH_TICKS").unwrap_or_else(|_| "300".into()).parse().unwrap();
+    let (mut solvers, colliders) = super::batch::bench::authored_layers(&scene);
+    let Some(mut batch) = gpu_batch(&solvers.iter().collect::<Vec<_>>()) else { return };
+    println!("GPU_ADAPTER {}", gpu_adapter().unwrap_or("none"));
+    let mut window = Vec::new();
+    let mut flags = (0u32, 0u32);
+    let mut published_speed = 0f64;
+    for tick in 1..=ticks {
+        let before: Vec<Vec<DVec3>> = solvers.iter().map(|s| s.positions.clone()).collect();
+        let mut layers: Vec<_> = solvers
+            .iter_mut()
+            .zip(&colliders)
+            .map(|(solver, colliders)| ClothLayerStep { solver, colliders, grips: &mut [] })
+            .collect();
+        batch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+        published_speed = published_speed.max(solvers.iter().zip(&before)
+            .flat_map(|(s, b)| s.positions.iter().zip(b).map(|(p, q)| p.distance(*q) * 60.)).fold(0., f64::max));
+        window.push(batch.last.frame_ms);
+        flags.0 += batch.last.substep_motion_exceeded;
+        flags.1 += batch.last.margin_exceeded;
+        if tick % 30 == 0 {
+            window.sort_by(f64::total_cmp);
+            println!("GPU_BENCH {}", serde_json::json!({
+                "scene": scene, "tick": tick, "median_ms": window[window.len() / 2], "max_ms": window[window.len() - 1],
+                "candidates": batch.last.candidates, "contacts": batch.last.contacts, "resting": batch.resting(),
+                "max_published_speed": published_speed,
+                "tunnel_flags_substep_motion": flags.0, "tunnel_flags_margin": flags.1,
+                "max_stretch": solvers.iter().map(|s| s.max_edge_stretch_ratio()).fold(0., f64::max),
+                "max_penetration_m": solvers.iter().zip(&colliders).map(|(s, c)| s.max_particle_penetration(c)).fold(0., f64::max),
+                "max_speed": solvers.iter().map(|s| s.max_speed()).fold(0., f64::max),
+                "worst": solvers.iter().map(|s| {
+                    let (ratio, at) = s.springs.iter().filter(|e| e.stretch).map(|e| {
+                        let [a, b] = e.vertices.map(|i| s.positions[i]);
+                        (a.distance(b) / e.rest, ((a + b) * 0.5).to_array().map(|x| (x * 100.).round() / 100.))
+                    }).fold((0., [0.; 3]), |m, x| if x.0 > m.0 { x } else { m });
+                    let fast = s.velocities.iter().zip(&s.positions).fold((0., [0.; 3]), |m, (v, p)| {
+                        let sp = v.length();
+                        if sp > m.0 { (sp, p.to_array().map(|x| (x * 100.).round() / 100.)) } else { m }
+                    });
+                    serde_json::json!({"stretch": ratio, "at": at, "speed": fast.0, "fast_at": fast.1})
+                }).collect::<Vec<_>>(),
+            }));
+            window.clear();
+            published_speed = 0.;
+        }
+    }
+}
+
+#[test]
+fn gpu_shader_is_valid_wgsl() {
+    use wgpu_pin::naga;
+    let module = naga::front::wgsl::parse_str(include_str!("cloth_gpu.wgsl"))
+        .unwrap_or_else(|e| panic!("{}", e.emit_to_string(include_str!("cloth_gpu.wgsl"))));
+    naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+        .validate(&module)
+        .unwrap_or_else(|e| panic!("{}", e.emit_to_string(include_str!("cloth_gpu.wgsl"))));
+}

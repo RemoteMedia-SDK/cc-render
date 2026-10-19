@@ -25,11 +25,7 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue, String)> {
         .unwrap_or(adapters.len().saturating_sub(1));
     let adapter = adapters.into_iter().nth(index)?;
     let info = format!("{:?}", adapter.get_info());
-    let limits = wgpu::Limits {
-        max_compute_invocations_per_workgroup: 1024,
-        max_compute_workgroup_size_x: 1024,
-        ..wgpu::Limits::default()
-    };
+    let limits = adapter.limits();
     let (device, queue) = pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
             label: None,
@@ -83,6 +79,9 @@ fn gpu_frame_structure_probe() {
         return;
     };
     println!("GPU_PROBE adapter {info}");
+    println!("GPU_PROBE limits workgroup_storage {} push_constants {} storage_buffers {}",
+        device.limits().max_compute_workgroup_storage_size, device.limits().max_push_constant_size,
+        device.limits().max_storage_buffers_per_shader_stage);
     let bytes = (PARTICLES as u64) * 16;
     let buffer = |label| {
         device.create_buffer(&wgpu::BufferDescriptor {

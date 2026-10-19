@@ -30,14 +30,14 @@ struct Layout {
 ///
 /// Wake: any grip, a different gravity or fixed-collider snapshot, or a layer
 /// surface published outside this batch.
-struct Rest {
-    asleep: bool,
+pub(super) struct Rest {
+    pub(super) asleep: bool,
     /// Adopt the first tick's inputs as a rest state instead of simulating.
-    adopt_on_first_tick: bool,
+    pub(super) adopt_on_first_tick: bool,
     quiet_seconds: f64,
     anchor: Vec<DVec3>,
-    inputs: u64,
-    revisions: Vec<u64>,
+    pub(super) inputs: u64,
+    pub(super) revisions: Vec<u64>,
 }
 
 const REST_SECONDS: f64 = 0.5;
@@ -45,7 +45,7 @@ const REST_DRIFT_M: f64 = 5e-3;
 const REST_SPEED_M_S: f64 = 0.05;
 
 impl Rest {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             asleep: false,
             adopt_on_first_tick: false,
@@ -56,7 +56,7 @@ impl Rest {
         }
     }
 
-    fn inputs(layers: &[ClothLayerStep<'_>], gravity: DVec3) -> u64 {
+    pub(super) fn inputs(layers: &[ClothLayerStep<'_>], gravity: DVec3) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         gravity.to_array().map(f64::to_bits).hash(&mut hasher);
@@ -76,7 +76,7 @@ impl Rest {
     }
 
     /// A disturbed batch needs a whole new quiet window before resting.
-    fn wake(&mut self) {
+    pub(super) fn wake(&mut self) {
         if self.asleep {
             self.asleep = false;
             self.quiet_seconds = 0.;
@@ -84,7 +84,7 @@ impl Rest {
         }
     }
 
-    fn holds(&self, layers: &[ClothLayerStep<'_>], inputs: u64) -> bool {
+    pub(super) fn holds(&self, layers: &[ClothLayerStep<'_>], inputs: u64) -> bool {
         self.asleep
             && inputs == self.inputs
             && layers.iter().all(|l| l.grips.is_empty())
@@ -94,7 +94,7 @@ impl Rest {
                 .eq(self.revisions.iter().copied())
     }
 
-    fn observe(
+    pub(super) fn observe(
         &mut self,
         layers: &mut [ClothLayerStep<'_>],
         tick_start: &[DVec3],

@@ -707,3 +707,8 @@ mod self_tests;
 #[path = "cloth_batch.rs"]
 mod batch;
 pub(crate) use batch::{ClothBatch, ClothLayerStep};
+
+#[path = "cloth_gpu.rs"]
+mod gpu;
+#[allow(unused_imports)]
+pub(crate) use gpu::{gpu_adapter, GpuClothBatch, GpuReport, KinematicCollider, KinematicShape};

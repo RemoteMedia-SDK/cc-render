@@ -162,6 +162,22 @@ impl ClothGrip {
         self.peak_applied_force_n
     }
 
+    /// Material vertices, barycentric weights and clamp material (GPU solver upload).
+    pub(super) fn gpu_view(&self) -> ([usize; 3], [f64; 3], ClampMaterial) {
+        (self.vertices, self.weights, self.material)
+    }
+
+    /// Result of a GPU frame: state code (0 held, 1 released, 2 overloaded) and peak forces.
+    pub(super) fn gpu_result(&mut self, state: u32, required_n: f64, applied_n: f64) {
+        self.state = match state {
+            0 => ClampState::Held,
+            1 => ClampState::Released,
+            _ => ClampState::Overloaded,
+        };
+        self.peak_required_force_n = required_n;
+        self.peak_applied_force_n = applied_n;
+    }
+
     pub(crate) fn anchor(&self, fraction: f64) -> DVec3 {
         self.previous_frame
             .translation
