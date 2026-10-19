@@ -81,9 +81,17 @@ pub(crate) struct ClothGrip {
     observed_frame: ColliderFrame,
     material: ClampMaterial,
     state: ClampState,
+    /// (elapsed, duration) seconds while the hand is still letting go (see `let_go`).
+    letting_go_s: Option<(f64, f64)>,
     peak_required_force_n: f64,
     peak_applied_force_n: f64,
 }
+
+/// While letting go (`let_go`), the clamp keeps acting with its compliance rising by
+/// `RELEASE_SOFTENING` (exponentially) over the given time, as fingers open, so stretch the hand
+/// held in the cloth relaxes through it instead of being dropped in one substep. Dropped at once,
+/// a duvet corner laid under 10-40 N snapped back off its fold at 1.5-5 m/s.
+const RELEASE_SOFTENING: f64 = 1000.;
 
 pub(super) struct GripParticles<'a> {
     pub positions: &'a mut [DVec3],
@@ -131,6 +139,7 @@ impl ClothGrip {
             observed_frame: frame,
             material,
             state: ClampState::Held,
+            letting_go_s: None,
             peak_required_force_n: 0.0,
             peak_applied_force_n: 0.0,
         }))
@@ -143,10 +152,36 @@ impl ClothGrip {
         Ok(())
     }
 
+    /// The hand opens at once: the clamp stops acting this tick.
     pub(crate) fn release(&mut self) {
         if self.state == ClampState::Held {
             self.state = ClampState::Released;
         }
+    }
+
+    /// The hand opens over `seconds`: the state is Released at once; the clamp fades out.
+    pub(crate) fn let_go(&mut self, seconds: f64) {
+        if self.state == ClampState::Held && seconds > 0. {
+            self.state = ClampState::Released;
+            self.letting_go_s = Some((0.0, seconds));
+        } else {
+            self.release();
+        }
+    }
+
+    /// Whether the clamp acts this tick: held, or still letting go.
+    pub(super) fn clamping(&self) -> bool {
+        self.state == ClampState::Held
+            || (self.state == ClampState::Released && self.letting_go_s.is_some())
+    }
+
+    /// The clamp material this tick (compliance rising while letting go).
+    pub(super) fn acting_material(&self) -> ClampMaterial {
+        let mut material = self.material;
+        if let (ClampState::Released, Some((t, duration))) = (self.state, self.letting_go_s) {
+            material.compliance_m_n *= RELEASE_SOFTENING.powf(t / duration);
+        }
+        material
     }
 
     pub(crate) fn state(&self) -> ClampState {
@@ -162,18 +197,17 @@ impl ClothGrip {
         self.peak_applied_force_n
     }
 
-    /// Material vertices, barycentric weights and clamp material (GPU solver upload).
+    /// Material vertices, barycentric weights and the acting clamp material (GPU solver upload).
     pub(super) fn gpu_view(&self) -> ([usize; 3], [f64; 3], ClampMaterial) {
-        (self.vertices, self.weights, self.material)
+        (self.vertices, self.weights, self.acting_material())
     }
 
-    /// Result of a GPU frame: state code (0 held, 1 released, 2 overloaded) and peak forces.
+    /// Result of a GPU frame: state code (0 clamping, 1 not, 2 overloaded) and peak forces.
     pub(super) fn gpu_result(&mut self, state: u32, required_n: f64, applied_n: f64) {
-        self.state = match state {
-            0 => ClampState::Held,
-            1 => ClampState::Released,
-            _ => ClampState::Overloaded,
-        };
+        if state == 2 {
+            self.state = ClampState::Overloaded;
+            self.letting_go_s = None;
+        }
         self.peak_required_force_n = required_n;
         self.peak_applied_force_n = applied_n;
     }
@@ -198,8 +232,11 @@ impl ClothGrip {
         Ok(())
     }
 
-    pub(super) fn finish(&mut self) {
+    pub(super) fn finish(&mut self, dt: f64) {
         self.previous_frame = self.observed_frame;
+        if let Some((t, duration)) = self.letting_go_s {
+            self.letting_go_s = (t + dt < duration).then_some((t + dt, duration));
+        }
     }
 
     fn weighted_point(&self, positions: &[DVec3]) -> DVec3 {
@@ -215,9 +252,10 @@ impl ClothGrip {
         p: &mut GripParticles<'_>,
         interval: [f64; 2],
     ) -> Result<(), ClothError> {
-        if self.state != ClampState::Held {
+        if !self.clamping() {
             return Ok(());
         }
+        let material = self.acting_material();
         let mass = self
             .vertices
             .iter()
@@ -230,18 +268,19 @@ impl ClothGrip {
             value - self.weighted_point(p.previous) - (anchor - self.anchor(interval[0]));
         // Vector form of Small Steps Eq. 8, lambda reset each substep.
         let gamma =
-            2.0 * self.material.damping_ratio * (self.material.compliance_m_n / mass).sqrt() / p.h;
+            2.0 * material.damping_ratio * (material.compliance_m_n / mass).sqrt() / p.h;
         let lambda = -(value - anchor + gamma * relative)
-            / ((1.0 + gamma) * mass + self.material.compliance_m_n / (p.h * p.h));
+            / ((1.0 + gamma) * mass + material.compliance_m_n / (p.h * p.h));
         let force = lambda.length() / (p.h * p.h);
         if !force.is_finite() {
             return Err(ClothError::NonfiniteState);
         }
         self.peak_required_force_n = self.peak_required_force_n.max(force);
-        if force > self.material.capacity_n {
+        if force > material.capacity_n {
             // Break before applying an over-capacity correction; no sticky
             // follower, forced snap or automatic reacquisition after failure.
             self.state = ClampState::Overloaded;
+            self.letting_go_s = None;
             return Ok(());
         }
         self.peak_applied_force_n = self.peak_applied_force_n.max(force);

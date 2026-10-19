@@ -635,3 +635,36 @@ fn gpu_held_sheet_rests_after_the_hand_stops_and_wakes_when_it_moves() {
     assert!(!step(&mut sheet, &mut grips, 0.21), "the hand moved and the sheet stayed asleep");
     println!("held sheet rested {rest_frame} frames after the hand stopped");
 }
+
+/// Diagnostic: static friction of cloth on cloth. A 0.6 m duvet-like layer rests on a sheet on
+/// a floor box (0.7) with gravity tilted by atan(CC_TILT) (default 0.3, below the 0.6/0.45
+/// cotton friction): it must not slide over the sheet; above, it must.
+#[test]
+#[ignore = "diagnostic: release, --nocapture"]
+fn gpu_cloth_static_friction_on_a_tilt() {
+    let tilt: f64 = std::env::var("CC_TILT").ok().and_then(|v| v.parse().ok()).unwrap_or(0.3);
+    let cotton = |mass: f64, thickness: f32| ClothParameters {
+        total_mass_kg: mass, thickness_m: thickness, cloth_static_friction: 0.6, cloth_kinetic_friction: 0.45,
+        bend_compliance: 2.0, ..sheet_params(24)
+    };
+    let n: usize = std::env::var("CC_TILT_N").ok().and_then(|v| v.parse().ok()).unwrap_or(13);
+    let mut layers = [grid(17, 1.0, 0.0005, cotton(0.3, 0.001)), grid(n, 0.6, 0.0075, cotton(0.6, 0.012))];
+    let floor = [box_collider([2., 0.1, 2.], [0., -0.1, 0.], 0.7)];
+    let Some(mut batch) = gpu_batch(&layers.iter().collect::<Vec<_>>()) else { return };
+    let gravity = DVec3::new(tilt, -1., 0.).normalize() * 9.81;
+    let centroid = |s: &ClothSolver| s.positions.iter().sum::<DVec3>() / s.positions.len() as f64;
+    let mut start = None;
+    for tick in 0..240 {
+        let mut steps: Vec<_> = layers.iter_mut()
+            .map(|solver| ClothLayerStep { solver, colliders: &floor, grips: &mut [] }).collect();
+        batch.step(&mut steps, 1. / 60., gravity).unwrap();
+        if tick == 29 {
+            start = Some((centroid(&layers[0]), centroid(&layers[1])));
+        }
+        if tick % 30 == 29 {
+            let (s0, s1) = start.unwrap();
+            println!("GPU_TILT tilt {tilt} tick {tick} sheet {:.4} m, duvet {:.4} m (x), resting {}",
+                centroid(&layers[0]).x - s0.x, centroid(&layers[1]).x - s1.x, batch.resting());
+        }
+    }
+}

@@ -40,7 +40,8 @@ struct Params {
     edges: u32,
     edge_slot_capacity: u32,
     propagate_supports: u32,
-    _pad1: u32,
+    // Edge-edge contact within a layer (0: between layers only).
+    self_edges: u32,
 }
 
 struct Step {
@@ -145,6 +146,21 @@ struct Counters {
 // from taking (FIXED units), consumed by the next collider pass as extra normal load for
 // friction (see solve_pair, collide_vertex).
 @group(0) @binding(29) var<storage, read_write> load: array<atomic<i32>>;
+// Positions after the material stage of this substep (before any contact), for the inelastic
+// contact velocity in `finish`.
+@group(0) @binding(30) var<storage, read_write> mat_pos: array<vec4<f32>>;
+// Rest-shape positions (relative to the batch origin's rest frame; only distances are used).
+@group(0) @binding(31) var<storage, read_write> rest: array<vec4<f32>>;
+
+// Contact within a layer is skipped between material points closer than this in the rest shape:
+// neighbours across a fold crease, not collisions. A folded 12 mm duvet with 4-5 cm triangles
+// puts elements one or two rows apart inside each other's gap at the crease, where contact fought
+// the stretch and bend springs, pried folds open and (edge-edge) added energy.
+const SELF_REST_SKIP_M: f32 = 0.07;
+
+fn rest_near(a: u32, b: u32) -> bool {
+    return distance(rest[a].xyz, rest[b].xyz) < SELF_REST_SKIP_M;
+}
 
 var<push_constant> step: Step;
 
@@ -381,7 +397,31 @@ fn materials(@builtin(local_invocation_index) lid: u32) {
     }
     for (var i = lid; i < params.vertices; i += ONE_GROUP) {
         pos[i] = vec4<f32>(wpos(i), pos[i].w);
+        mat_pos[i] = vec4<f32>(wpos(i), 0.0);
     }
+}
+
+// Separating speed a contact correction may give a particle beyond what it had before contact:
+// a moving body collider carries the cloth it pushes.
+const CONTACT_SEPARATION_ALLOWANCE: f32 = 0.5;
+
+// Velocity of particle i from its substep motion, with the contact corrections inelastic: along
+// the direction contacts moved it, it keeps at most the speed it had there before contact (plus
+// the allowance), so a contact that stops a particle stops it and a correction pushing it out of
+// a penetration or back across a crossed layer (24 mm through a duvet in a few substeps, tens of
+// m/s if taken as velocity) does not launch it.
+fn contact_velocity(i: u32, h: f32) -> vec3<f32> {
+    var v = (pos[i].xyz - prev[i].xyz) / h;
+    let dc = pos[i].xyz - mat_pos[i].xyz;
+    let len = length(dc);
+    if (len > 1e-9) {
+        let d = dc / len;
+        let before = dot(mat_pos[i].xyz - prev[i].xyz, d) / h;
+        let cap = max(before, 0.0) + CONTACT_SEPARATION_ALLOWANCE;
+        let along = dot(v, d);
+        if (along > cap) { v -= d * (along - cap); }
+    }
+    return v;
 }
 
 // ---- spatial hash and candidates ----
@@ -694,6 +734,7 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
 
 fn vertex_face(v: u32, t: u32) {
     let tri = tris[t];
+    if (vlayer[v] == tri.w && (rest_near(v, tri.x) || rest_near(v, tri.y) || rest_near(v, tri.z))) { return; }
     let pv = pos[v];
     let pa = pos[tri.x];
     let pb = pos[tri.y];
@@ -790,12 +831,16 @@ fn segment_params(p0: vec3<f32>, p1: vec3<f32>, q0: vec3<f32>, q1: vec3<f32>) ->
     return vec2<f32>(s, t);
 }
 
+const EDGE_CROSSING_MIN_SIN: f32 = 0.3;
+
 // Edge-edge contact: edges can pass through each other without any vertex crossing a face
 // (two coarse sheets bending over the mattress's rounded edges). The side comes from the same
 // segment parameters at the substep start; an edge pair that swapped sides is returned.
 fn edge_edge(e: u32, f: u32) {
     let ea = edges[e];
     let fa = edges[f];
+    if (ea.z == fa.z && (params.self_edges == 0u || rest_near(ea.x, fa.x) || rest_near(ea.x, fa.y)
+        || rest_near(ea.y, fa.x) || rest_near(ea.y, fa.y))) { return; }
     let p0 = pos[ea.x].xyz;
     let p1 = pos[ea.y].xyz;
     let q0 = pos[fa.x].xyz;
@@ -807,7 +852,15 @@ fn edge_edge(e: u32, f: u32) {
     if (dist >= gap + 2.0 * params.margin) { return; }
     let d0 = mix(prev[ea.x].xyz, prev[ea.y].xyz, st.x) - mix(prev[fa.x].xyz, prev[fa.y].xyz, st.y);
     let d0_len = length(d0);
-    let inner = st.x > 1e-4 && st.x < 1.0 - 1e-4 && st.y > 1e-4 && st.y < 1.0 - 1e-4;
+    // A crossing is judged only between edges far enough from parallel that their closest points
+    // are well defined: for nearly parallel edges (stacked and folded grids) the closest points
+    // can slide along both edges, and comparing them with the same parameters at the substep
+    // start could report a crossing that never happened. A guard: in the two-cover turndown it
+    // changed nothing measurable (the energy there came from contact between crease neighbours,
+    // see SELF_REST_SKIP_M).
+    let sin_angle = length(cross(p1 - p0, q1 - q0)) / max(length(p1 - p0) * length(q1 - q0), 1e-12);
+    let inner = st.x > 1e-4 && st.x < 1.0 - 1e-4 && st.y > 1e-4 && st.y < 1.0 - 1e-4
+        && sin_angle > EDGE_CROSSING_MIN_SIN;
     var start_dir = d0;
     if (inner && d0_len < 1e-7) {
         // Touching at the substep start: the edges came from the sides they are moving away
@@ -986,14 +1039,14 @@ fn finish(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (length(motion) > 2.0 * radius) { atomicAdd(&counters.substep_motion_exceeded, 1u); }
     if (length(p.xyz - built[i].xyz) > 0.5 * params.margin) { atomicAdd(&counters.margin_exceeded, 1u); }
     if (any(p.xyz != p.xyz) || any(abs(p.xyz) > vec3<f32>(1e4))) { atomicAdd(&counters.nonfinite, 1u); }
-    let v = motion / h;
+    let v = contact_velocity(i, h);
     var damped = v;
     let wi = p.w;
     for (var k = adjacency[i]; k < adjacency[i + 1u]; k++) {
         let j = neighbours[k];
         let wj = pos[j].w;
         if (wi + wj <= 0.0) { continue; }
-        let vj = (pos[j].xyz - prev[j].xyz) / h;
+        let vj = contact_velocity(j, h);
         damped -= (v - vj) * (keep * wi / (wi + wj));
     }
     vel[i] = vec4<f32>(damped, 0.0);

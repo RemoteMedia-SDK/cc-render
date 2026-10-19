@@ -18,9 +18,12 @@ struct Layout {
 /// A settled batch costs nothing until something can disturb it.
 ///
 /// Sleep: for `REST_SECONDS` of simulated time, every particle stays within
-/// `REST_DRIFT_M` of where the quiet window began, and moves less than
-/// `REST_SPEED_M_S` times the tick between consecutive published ticks. The
-/// coupled layers rest together.
+/// `REST_DRIFT_M` of where the quiet window began, and all but
+/// `REST_SPEED_EXCEPTIONS` of them move less than `REST_SPEED_M_S` times the
+/// tick between consecutive published ticks. The coupled layers rest
+/// together. A particle bouncing in place on a rounded collider corner
+/// (~1 mm a tick, forever, while the rest of the drape is still) stays
+/// within the drift bound and no longer keeps the whole batch awake.
 ///
 /// Motion is measured between published tick positions, not with the last
 /// substep's velocity: where stacked layers press on the mattress's rounded
@@ -31,11 +34,13 @@ struct Layout {
 ///
 /// Settle: once something has moved the cloth from outside (see `disturbed`),
 /// the batch also sleeps `SETTLE_SECONDS` after the last such movement, as
-/// soon as nothing moves faster than `SETTLE_SPEED_M_S`, even if it has not
-/// met the quiet window. Stacked covers kept awake keep creeping slowly
-/// (millimetres to centimetres per second where they hang over sharp edges);
-/// this ends the simulation of a disturbance instead of the creep. A cloth
-/// still visibly falling or sliding is never frozen. The authored drape,
+/// soon as `SETTLE_SHARE` of its particles move slower than
+/// `SETTLE_SPEED_M_S`, even if it has not met the quiet window. Stacked
+/// covers kept awake keep creeping (millimetres to centimetres per second,
+/// a folded flap flattening over seconds) while a few particles jitter at
+/// 0.2-1 m/s in unconverged contact; this ends the simulation of a
+/// disturbance instead of the creep. A cloth still visibly falling or
+/// sliding moves most of its particles and is never frozen. The authored drape,
 /// never disturbed, rests only by the quiet window.
 ///
 /// Wake: anything that disturbs it, or a layer surface published outside
@@ -59,8 +64,10 @@ pub(super) struct Rest {
 const REST_SECONDS: f64 = 0.5;
 const REST_DRIFT_M: f64 = 5e-3;
 const REST_SPEED_M_S: f64 = 0.05;
+const REST_SPEED_EXCEPTIONS: f64 = 0.005;
 const SETTLE_SECONDS: f64 = 1.5;
 const SETTLE_SPEED_M_S: f64 = 0.3;
+const SETTLE_SHARE: f64 = 0.95;
 /// A held grip's hand moving less than this over a tick holds still.
 const GRIP_STILL_M: f64 = 1e-5;
 
@@ -147,11 +154,14 @@ impl Rest {
         self.asleep = false;
         self.since_disturbed = if disturbed { Some(0.) } else { self.since_disturbed.map(|t| t + dt) };
         let positions = layers.iter().flat_map(|l| l.solver.positions.iter());
-        let settled = self.since_disturbed.is_some_and(|t| t + 1e-9 >= SETTLE_SECONDS)
-            && positions
+        let settled = self.since_disturbed.is_some_and(|t| t + 1e-9 >= SETTLE_SECONDS) && {
+            let slow = positions
                 .clone()
                 .zip(tick_start)
-                .all(|(p, a)| p.distance_squared(*a) <= (SETTLE_SPEED_M_S * dt).powi(2));
+                .filter(|(p, a)| p.distance_squared(**a) <= (SETTLE_SPEED_M_S * dt).powi(2))
+                .count();
+            slow as f64 >= SETTLE_SHARE * tick_start.len() as f64
+        };
         let quiet = self.anchor.len()
             == layers
                 .iter()
@@ -165,7 +175,9 @@ impl Rest {
             && positions
                 .clone()
                 .zip(tick_start)
-                .all(|(p, a)| p.distance_squared(*a) <= (REST_SPEED_M_S * dt).powi(2));
+                .filter(|(p, a)| p.distance_squared(**a) > (REST_SPEED_M_S * dt).powi(2))
+                .count() as f64
+                <= REST_SPEED_EXCEPTIONS * tick_start.len() as f64;
         if !quiet && !settled {
             self.anchor = positions.copied().collect();
             self.quiet_seconds = 0.;
@@ -275,6 +287,7 @@ impl ClothBatch {
         positions: &[DVec3],
         velocities: &[DVec3],
         constraints: &mut [PendingConstraints],
+        dt: f64,
     ) -> Result<(), ClothError> {
         // Validate every render surface and revision before publishing any one.
         let surfaces = layers
@@ -304,7 +317,7 @@ impl ClothBatch {
                 .velocities
                 .copy_from_slice(&velocities[layout.range.clone()]);
             layer.solver.surface = surface;
-            pending.commit(layer.grips);
+            pending.commit(layer.grips, dt);
         }
         Ok(())
     }
@@ -475,7 +488,7 @@ impl ClothBatch {
         }
         profiled!(
             "commit",
-            self.commit_layers(layers, &positions, &velocities, &mut constraints)
+            self.commit_layers(layers, &positions, &velocities, &mut constraints, dt)
         )?;
         self.rest.observe(layers, &tick_start, dt, inputs, disturbed);
         #[cfg(test)]

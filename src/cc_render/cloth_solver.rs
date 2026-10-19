@@ -358,9 +358,9 @@ impl PendingConstraints {
         )
     }
 
-    fn commit(&mut self, grips: &mut [ClothGrip]) {
+    fn commit(&mut self, grips: &mut [ClothGrip], dt: f64) {
         for grip in &mut self.grips {
-            grip.finish();
+            grip.finish(dt);
         }
         grips.clone_from_slice(&self.grips);
     }
@@ -375,6 +375,8 @@ pub struct ClothSolver {
     self_collision: self_collision::SelfCollisionTopology,
     springs: Vec<DistanceSpring>,
     parameters: ClothParameters,
+    /// The material's rest shape (GPU self-contact skips pairs that are neighbours in it).
+    rest: Vec<DVec3>,
 }
 
 impl ClothSolver {
@@ -409,6 +411,7 @@ impl ClothSolver {
             .map(|mass| 1.0 / mass)
             .collect();
         let springs = material_springs(&rest, &triangles, parameters)?;
+        let rest_shape = rest.clone();
         let velocities = vec![DVec3::ZERO; initial.len()];
         let triangles: Vec<_> = triangles.iter().map(|t| t.map(|i| i as usize)).collect();
         let self_collision = self_collision::SelfCollisionTopology::new(&triangles);
@@ -421,7 +424,12 @@ impl ClothSolver {
             self_collision,
             springs,
             parameters,
+            rest: rest_shape,
         })
+    }
+
+    pub(crate) fn rest_positions(&self) -> &[DVec3] {
+        &self.rest
     }
 
     pub fn surface(&self) -> &DeformedSurface {
@@ -565,7 +573,7 @@ impl ClothSolver {
             .update_positions(positions.iter().map(|v| v.as_vec3()).collect())?;
         self.positions = positions;
         self.velocities = velocities;
-        constraints.commit(grips);
+        constraints.commit(grips, dt);
         Ok(())
     }
 }
