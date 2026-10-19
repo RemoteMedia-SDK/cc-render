@@ -557,3 +557,40 @@ fn gpu_bedding_quality_trace() {
         speed = 0.;
     }
 }
+
+/// Two covers on the authored bed, a top sheet under a duvet (cotton friction, no fitted
+/// sheet). The sheet carries the duvet's weight into its mattress friction, so the pair rests
+/// instead of gliding toward the foot under its hanging ends: with friction from the sheet's own
+/// weight alone, both glided together at ~4 mm/s and never rested.
+#[test]
+fn gpu_two_covers_rest_on_the_mattress() {
+    let (mut solvers, colliders) = super::batch::bench::authored_layers("scene-bedding-two-covers.json");
+    let Some(mut batch) = gpu_batch(&solvers.iter().collect::<Vec<_>>()) else { return };
+    let mut rest_tick = None;
+    let mut at_3s = Vec::new();
+    for tick in 1..=300 {
+        let mut layers: Vec<_> = solvers.iter_mut().zip(&colliders)
+            .map(|(solver, colliders)| ClothLayerStep { solver, colliders, grips: &mut [] }).collect();
+        batch.step(&mut layers, 1. / 60., -DVec3::Y * 9.81).unwrap();
+        if batch.resting() && rest_tick.is_none() {
+            rest_tick = Some(tick);
+        }
+        if tick == 180 {
+            at_3s = solvers.iter().map(|s| s.positions.clone()).collect();
+        }
+    }
+    assert!(rest_tick.is_some(), "the covers did not rest within 5 s");
+    for ((s, before), cs) in solvers.iter().zip(&at_3s).zip(&colliders) {
+        // On the mattress top, from 3 s to 5 s.
+        let drift = s.positions.iter().zip(before).filter(|(_, b)| b.y > 0.6)
+            .map(|(p, b)| p.distance(*b)).fold(0f64, f64::max);
+        let stretch = s.springs.iter().filter(|e| e.stretch)
+            .map(|e| s.positions[e.vertices[0]].distance(s.positions[e.vertices[1]]) / e.rest)
+            .fold(0f64, f64::max);
+        println!("two covers: rest tick {rest_tick:?}, drift 3-5 s {:.2} mm, stretch {stretch:.3}", drift * 1e3);
+        assert!(drift < 0.003, "covers still moving on the mattress: {:.1} mm in 2 s", drift * 1e3);
+        assert!(stretch < 1.1, "stretch {stretch}");
+        assert!(s.max_particle_penetration(cs) < 1e-6);
+    }
+    assert_eq!(layer_intersections(&solvers[0], &solvers[1]).0, 0);
+}

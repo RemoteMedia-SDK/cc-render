@@ -141,6 +141,10 @@ struct Counters {
 @group(0) @binding(27) var<storage, read_write> neighbours: array<u32>;
 // Support normals propagated by this contact pass (4 per particle; see solve_pair).
 @group(0) @binding(28) var<storage, read_write> propagate: array<atomic<i32>>;
+// Cloth load on a particle resting on a collider: the contact displacement its support kept it
+// from taking (FIXED units), consumed by the next collider pass as extra normal load for
+// friction (see solve_pair, collide_vertex).
+@group(0) @binding(29) var<storage, read_write> load: array<atomic<i32>>;
 
 var<push_constant> step: Step;
 
@@ -477,14 +481,18 @@ fn find_candidates(@builtin(global_invocation_id) gid: vec3<u32>) {
 fn collide_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= params.vertices) { return; }
-    collide_vertex(i);
+    collide_vertex(i, 0.0);
 }
 
-fn collide_vertex(i: u32) {
+// `extra`: normal displacement the cloth above pressed this particle towards its collider, which
+// the support absorbed. It loads the contact like the particle's own depth, so a sheet holds the
+// duvet lying on it with the friction of both weights instead of its own alone.
+fn collide_vertex(i: u32, extra: f32) {
     var p = pos[i];
     if (p.w <= 0.0) { return; }
     let layer = vlayer[i];
     let radius = layers[layer].radius;
+    var pressed = extra;
     for (var k = 0u; k < params.colliders; k++) {
         let c = colliders[k];
         if ((c.mask & (1u << layer)) == 0u) { continue; }
@@ -495,10 +503,13 @@ fn collide_vertex(i: u32) {
         let sd = shape_distance(c, l);
         let depth = radius - sd.w;
         // Resting within a micrometre of the collider counts as supported by it.
-        if (depth > -1e-6) { support[i] = vec4<f32>(quat_rotate(q1, sd.xyz), 1.0); }
-        if (depth <= 0.0) { continue; }
+        let touching = depth > -1e-6;
+        if (touching) { support[i] = vec4<f32>(quat_rotate(q1, sd.xyz), 1.0); }
+        let normal_load = max(depth, 0.0) + select(0.0, pressed, touching);
+        if (normal_load <= 0.0) { continue; }
+        if (touching) { pressed = 0.0; }
         let n = quat_rotate(q1, sd.xyz);
-        var x = p.xyz + n * depth;
+        var x = p.xyz + n * max(depth, 0.0);
         let q0 = pose_q(c, step.s0);
         let o0 = mix(c.p0.xyz, c.p1.xyz, step.s0);
         let surface_motion = (o1 + quat_rotate(q1, l)) - (o0 + quat_rotate(q0, l));
@@ -506,7 +517,7 @@ fn collide_vertex(i: u32) {
         let tangent = slip_vec - n * dot(slip_vec, n);
         let slip = length(tangent);
         if (slip > 0.0) {
-            x -= tangent * min(c.friction * depth / slip, 1.0);
+            x -= tangent * min(c.friction * normal_load / slip, 1.0);
         }
         p = vec4<f32>(x, p.w);
     }
@@ -596,7 +607,8 @@ fn apply_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (length(n) > 0.0 && support[i].w == 0.0) { support[i] = vec4<f32>(normalize(n), 2.0); }
         for (var k = 0u; k < 4u; k++) { atomicStore(&propagate[i * 4u + k], 0); }
     }
-    collide_vertex(i);
+    let pressed = f32(atomicExchange(&load[i], 0)) * step.relax / FIXED;
+    collide_vertex(i, pressed);
 }
 
 // ---- cloth-cloth contact ----
@@ -615,6 +627,7 @@ fn apply_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
 // supported particle and is unaffected.
 fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick: f32, slide: f32) {
     var dirs: array<vec3<f32>, 4>;
+    var pressed = vec4<f32>(0.0);
     var w = 0.0;
     var wf = 0.0;
     var rel = vec3<f32>(0.0);
@@ -622,7 +635,13 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
         let im = pos[ids[k]].w;
         var dk = normal * (im * g[k]);
         let sup = support[ids[k]];
-        if (sup.w > 0.0) { dk -= sup.xyz * min(dot(dk, sup.xyz), 0.0); }
+        if (sup.w > 0.0) {
+            let into = min(dot(dk, sup.xyz), 0.0);
+            dk -= sup.xyz * into;
+            // Only a collider (w = 1) takes the load; a propagated support passes it on as a
+            // position correction of the layer beneath.
+            if (sup.w == 1.0) { pressed[k] = -into; }
+        }
         dirs[k] = dk;
         w += dot(dk, normal) * g[k];
         wf += im * g[k] * g[k];
@@ -653,6 +672,7 @@ fn solve_pair(ids: vec4<u32>, g: vec4<f32>, normal: vec3<f32>, depth: f32, stick
     }
     for (var k = 0u; k < 4u; k++) {
         add_acc(ids[k], dirs[k] * l - back * (pos[ids[k]].w * g[k]));
+        if (pressed[k] > 0.0) { atomicAdd(&load[ids[k]], i32(round(pressed[k] * l * FIXED))); }
         if (params.propagate_supports != 0u && abs(g[k]) >= 0.05 && ((g[k] > 0.0 && b_held) || (g[k] < 0.0 && a_held))) {
             let n = normal * sign(g[k]);
             atomicAdd(&propagate[ids[k] * 4u], i32(round(n.x * 1e6)));

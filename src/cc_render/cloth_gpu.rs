@@ -182,7 +182,7 @@ impl Pipelines {
     }
 }
 
-const BINDINGS: u32 = 29;
+const BINDINGS: u32 = 30;
 /// Particles the one-workgroup stages hold in workgroup memory (cloth_gpu.wgsl `wx`).
 const MAX_VERTICES: usize = 4096;
 
@@ -548,6 +548,7 @@ impl GpuClothBatch {
         let adjacency = storage("adjacency", &bytes_u32(&adjacency), wgpu::BufferUsages::empty());
         let neighbours = storage("neighbours", &bytes_u32(&neighbour_ids), wgpu::BufferUsages::empty());
         let propagate = zeroed("propagate", vertices as u64 * 16);
+        let load = zeroed("load", vertices as u64 * 4);
         let readback = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
             size: vertices as u64 * 32 + 64 * 64 + COUNTER_WORDS as u64 * 4,
@@ -558,7 +559,7 @@ impl GpuClothBatch {
             &params, &pos, &prev, &vel, &vlayer, &layers, &springs, &colour_start, &lambda,
             &tri_buffer, &cell_count, &cell_start, &sorted, &cand, &acc, &colliders, &grips,
             &anchors, &counters, &built, &support, &edges, &ecount, &estart, &eslots, &ecand,
-            &adjacency, &neighbours, &propagate,
+            &adjacency, &neighbours, &propagate, &load,
         ];
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("cloth"),
