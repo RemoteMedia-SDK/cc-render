@@ -28,7 +28,7 @@ POSE = LAB/'standing-pose.json'
 BINARY = ROOT/'target/debug/examples/tissue_lab'
 GLB = ROOT.parent/'remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb'
 ARKIT = ROOT.parent/'remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json'
-ASSET = ROOT/'assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json'
+ASSET = ROOT/'assets/tissue/beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json'
 FPS = 60
 # Packet-space pivot relative to the pelvis: between the breasts, so the chest
 # views keep them framed through any rotation.

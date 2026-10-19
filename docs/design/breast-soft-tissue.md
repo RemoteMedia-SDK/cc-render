@@ -34,8 +34,18 @@ agents' worktrees are untouched.
 
 ## Current simulation
 
-Current candidate: `assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
-The reviewed original remains `beautiful_assistant.base-boundary-nodal-volume-prototype.json`.
+Current default (owner-accepted 2026-10-19 on the jump review):
+`assets/tissue/beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json`,
+the quality-stabilized cage with calibrated material (shear 40 Pa, strain
+stiffening 32, shear viscosity 4 Pa s), displayed through the smooth MLS skin
+embedding with 4 Taubin passes (now the runtime default;
+`CC_AVATAR_TISSUE_SURFACE_EMBEDDING=linear` and
+`CC_AVATAR_TISSUE_SURFACE_SMOOTHING=0` restore the earlier display). See
+`artifacts/soft-tissue/calibration/README.md` and
+`artifacts/soft-tissue/live120-01/`. The previous candidate,
+`beautiful_assistant.base-quality-stabilized-volume-prototype.json`, remains the
+material of the contact checkpoints below; the reviewed original remains
+`beautiful_assistant.base-boundary-nodal-volume-prototype.json`.
 The left/right cages have 241/233 nodes, 657/605 tetrahedra and 130/128 fixed chest
 attachments. An offline fit supplies the unloaded reference coordinates.
 

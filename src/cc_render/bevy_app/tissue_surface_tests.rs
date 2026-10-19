@@ -79,7 +79,10 @@ fn tissue_surface_matches_world_displacement_and_preserves_zero_deformation() {
         inverse_bindposes: Handle::default(),
         joints: vec![joint],
     };
-    let surface = TissueSurface::capture(&mesh, &binding, &skin, &[Mat4::IDENTITY]).unwrap();
+    let mut surface = TissueSurface::capture(&mesh, &binding, &skin, &[Mat4::IDENTITY]).unwrap();
+    // The exact per-tetrahedron mapping, without the default display smoothing
+    // (covered by tissue_smoothing's own tests).
+    surface.smoothing = None;
     let matrix = Mat4::from_scale_rotation_translation(
         Vec3::new(1.1, 0.9, 1.0),
         Quat::from_rotation_y(0.4),

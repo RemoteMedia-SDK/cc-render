@@ -124,6 +124,8 @@ fn configure(args: &[String], out: &Path, settings: CaptureSettings) -> anyhow::
         "uncapped_scheduler":std::env::var("CC_RENDER_FAST").as_deref() == Ok("1"),
         "tissue_hz":std::env::var("CC_AVATAR_TISSUE_HZ").unwrap_or_else(|_| "120".into()),
         "tissue_iterations":std::env::var("CC_AVATAR_TISSUE_ITERATIONS").unwrap_or_else(|_| "32".into()),
+        "tissue_surface_embedding":std::env::var("CC_AVATAR_TISSUE_SURFACE_EMBEDDING").unwrap_or_else(|_| "mls".into()),
+        "tissue_surface_smoothing":std::env::var("CC_AVATAR_TISSUE_SURFACE_SMOOTHING").unwrap_or_else(|_| "4".into()),
         "scene":if synthetic {"empty studio, office runtime off"} else {"empty studio"},"motion":motion}))?)?;
     Ok(())
 }

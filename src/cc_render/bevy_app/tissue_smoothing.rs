@@ -1,9 +1,10 @@
-//! Opt-in smoothing of the embedded skin displacement. Skin follows each cage
+//! Smoothing of the embedded skin displacement. Skin follows each cage
 //! tetrahedron linearly, so a large swing creases it along cage faces (2-3 cm
 //! apart). Taubin-smoothing the displacement over the welded skin graph removes
 //! those kinks; skin outside the tissue stays fixed and tissue nodes, contacts
 //! and physics are unchanged. `CC_AVATAR_TISSUE_SURFACE_SMOOTHING` sets the
-//! number of Taubin passes (default 0: off).
+//! number of Taubin passes (default 4, accepted with the MLS embedding; 0 is
+//! off).
 use bevy::prelude::*;
 use std::collections::{BTreeSet, HashMap};
 
@@ -23,7 +24,7 @@ impl DisplacementSmoothing {
     pub fn from_env(base: &[Vec3], triangles: &[[usize; 3]], affected: &BTreeSet<usize>) -> anyhow::Result<Option<Self>> {
         let passes = match std::env::var("CC_AVATAR_TISSUE_SURFACE_SMOOTHING") {
             Ok(value) => value.parse::<usize>().map_err(|_| anyhow::anyhow!("tissue surface smoothing must be a pass count"))?,
-            Err(_) => 0,
+            Err(_) => 4,
         };
         anyhow::ensure!(passes <= 256, "tissue surface smoothing passes exceed 256");
         Ok((passes > 0).then(|| Self::new(passes, base, triangles, affected)))

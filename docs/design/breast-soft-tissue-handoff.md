@@ -21,8 +21,12 @@ the final rebuild passed. Other worktrees were not modified.
 - [Review page](../../artifacts/soft-tissue/volume-audit/index.html).
 
 The lab uses the base `beautiful_assistant.smpl_aligned.glb`, a focused camera
-and native ARDY motion, without clothing or condo geometry. Selected asset:
-`assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
+and native ARDY motion, without clothing or condo geometry. Default asset
+(owner-accepted 2026-10-19):
+`assets/tissue/beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json`,
+with the MLS skin embedding and 4 smoothing passes now the runtime default.
+The contact checkpoints below used the previous
+`beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
 See [the design record](breast-soft-tissue.md) for input paths, hashes and solver
 parameters. ARDY retains sole ownership of body/root/joint motion; preserve
 unchanged packets and the [motion ownership contract](model-owned-motion.md).
@@ -161,7 +165,10 @@ smoothing 4 is the lab candidate. See `orientation-lab/jump-03/`.
    skin layer adds ~0.15 ms per output frame and the material solves slightly
    faster. Live playback is still short of smooth 30 FPS (~210 of ~239
    readbacks) for every setup. Cap and clamp are still unmeasured live.
-   Next: decide whether the candidate becomes the lab default.
+   The owner made it the default (asset in the orientation lab and docs;
+   embedding and smoothing in the runtime). Next: re-run the seed-739 chest
+   contact with the new default; contact with the softer material is
+   unmeasured.
 3. Default enablement still needs anatomical calibration and broader clips.
 
 Run from this worktree:

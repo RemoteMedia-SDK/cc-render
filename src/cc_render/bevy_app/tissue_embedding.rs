@@ -5,8 +5,9 @@
 //! it reproduces any affine displacement (including large rigid rotations)
 //! exactly, and fixed nodes carry zero displacement, so skin still fades into
 //! the attached rim. Weights are computed once; the coarse physics cage and
-//! its contacts are unchanged. `CC_AVATAR_TISSUE_SURFACE_EMBEDDING=mls`
-//! selects it (default `linear`).
+//! its contacts are unchanged. Default since the owner accepted it on the
+//! jump review; `CC_AVATAR_TISSUE_SURFACE_EMBEDDING=linear` restores the
+//! per-tetrahedron embedding.
 use crate::cc_render::soft_tissue::TissueAsset;
 use bevy::math::{DMat4, DVec3, DVec4};
 
@@ -22,8 +23,8 @@ pub(super) struct SmoothEmbedding {
 
 pub(super) fn requested() -> anyhow::Result<bool> {
     match std::env::var("CC_AVATAR_TISSUE_SURFACE_EMBEDDING").as_deref() {
-        Err(_) | Ok("linear") => Ok(false),
-        Ok("mls") => Ok(true),
+        Err(_) | Ok("mls") => Ok(true),
+        Ok("linear") => Ok(false),
         Ok(other) => anyhow::bail!("tissue surface embedding must be linear or mls, not {other}"),
     }
 }
