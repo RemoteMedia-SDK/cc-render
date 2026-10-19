@@ -49,6 +49,7 @@ pub(super) struct TissueSurface {
     affected: Vec<usize>,
     sampled: BTreeSet<usize>,
     binding: SurfaceBinding,
+    smoothing: Option<super::tissue_smoothing::DisplacementSmoothing>,
 }
 
 /// Linear-blend skinning of selected vertices of one surface, unmorphed.
@@ -277,6 +278,8 @@ impl TissueSurface {
             .filter(|t| t.iter().all(|i| !affected.contains(i)))
             .map(|t| [t[0], t[1], t[2]])
             .collect();
+        let base: Vec<Vec3> = base.iter().copied().map(Vec3::from).collect();
+        let smoothing = super::tissue_smoothing::DisplacementSmoothing::from_env(&base, &triangles, &affected)?;
         let sampled = triangles
             .iter()
             .flatten()
@@ -288,7 +291,7 @@ impl TissueSurface {
             mesh: Handle::default(),
             joints: skin.joints.clone(),
             inverse_bind: inverse_bind.to_vec(),
-            base: base.iter().copied().map(Vec3::from).collect(),
+            base,
             morph_geometry: None,
             normals: normals.iter().copied().map(Vec3::from).collect(),
             tangents,
@@ -299,6 +302,7 @@ impl TissueSurface {
             affected: affected.into_iter().collect(),
             sampled,
             binding: binding.clone(),
+            smoothing,
         })
     }
 
@@ -316,6 +320,9 @@ impl TissueSurface {
                 })
                 .sum();
             delta[binding.vertex] += (movement * binding.influence).as_vec3();
+        }
+        if let Some(smoothing) = &self.smoothing {
+            smoothing.apply(&mut delta);
         }
         delta
     }

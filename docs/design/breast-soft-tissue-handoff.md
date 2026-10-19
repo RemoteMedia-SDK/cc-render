@@ -131,6 +131,13 @@ nipple travel from 17 to 36 mm and prone–supine from 8 to 22 mm, at 5.2 Hz and
 damping ratio 0.08, but hard shakes dent the skin where the coarse cage meets
 fixed skin. The selected asset is unchanged; the seam is the next blocker.
 
+The creases turned out to be the linear embedding in the coarse cage, not the
+seam: opt-in `CC_AVATAR_TISSUE_SURFACE_SMOOTHING=8` (Taubin smoothing of the
+skin displacement) removes the kinks and inverted skin triangles in the rig.
+On the ARDY jump, s40-k32 + smoothing doubles motion and is clean until the
+final frame, where the outer right breast edge distorts. Next: a finer, more
+uniform cage. Details in `artifacts/soft-tissue/calibration/README.md`.
+
 ## Resume
 
 1. Owner review of the finger-conformance and pressure-cap videos; choose the

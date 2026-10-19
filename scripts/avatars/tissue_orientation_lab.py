@@ -138,6 +138,9 @@ def capture(source, view, out, asset):
     environment = dict(CC_RENDER_FAST='0', CC_AVATAR_TISSUE_HZ='240', CC_AVATAR_TISSUE_ITERATIONS='32',
                        CC_TISSUE_LAB_FPS='60', CC_TISSUE_LAB_CLOCK='fixed', CC_TISSUE_LAB_TRACE_ONLY='0',
                        CC_AVATAR_TISSUE_TRACE_NODES='0', RUST_LOG='info')
+    for key in ['CC_AVATAR_TISSUE_SURFACE_SMOOTHING']:
+        if key in os.environ:
+            environment[key] = os.environ[key]
     command = [str(BINARY), str(GLB), str(ARKIT), str(source), str(asset), view, str(out)]
     with out.with_suffix('.log').open('x') as log:
         result = subprocess.run(command, cwd=ROOT, env={**os.environ, **environment},

@@ -49,3 +49,33 @@ s40-k32 a smaller dent. The selected asset is unchanged.
 
 Next: the seam. The coarse cage (about 240 nodes per breast, more than half
 attached) cannot spread large motion across the boundary.
+
+## Surface creases and displacement smoothing
+
+The squashed elements in the shakes are interior free tetrahedra, not the
+attachment seam. The visible creases come from the embedding: skin follows
+each cage tetrahedron linearly, so large swings kink it along cage faces (and
+the unsmoothed s40-k32 flips skin triangles upside-down and in the tumble,
+face alignment -0.28/-0.31). `bevy_app/tissue_smoothing.rs` Taubin-smooths the
+displacement over the welded skin graph (fixed skin stays put, UV seams move
+together, nodes/contacts/physics unchanged); opt-in via
+`CC_AVATAR_TISSUE_SURFACE_SMOOTHING=<passes>`, default off.
+
+| s40-k32 | no smoothing | 8 passes |
+|---|---|---|
+| upside-down / tumble face alignment | -0.28 / -0.31 | 0.30 / 0.28 |
+| shake side / bounce | 0.32 / 0.29 | 0.59 / 0.57 |
+
+Evidence: `orientation-lab/smooth8-s40-01`, `smooth24-s40-01` (8 is as good as
+24), `smooth8-s40-k32-01`; traces in `smoothing-traces.tar.gz`. The s40
+side-shake crease that survives is a real fold from a ~9 cm swing into fixed
+side skin.
+
+ARDY jump (`orientation-lab/jump-01`, `jump-front-side-comparison.mp4`):
+s40-k32 + smoothing doubles peak skin motion (33 -> 58 mm) and stays at face
+alignment >= 0.85 until the final frame (8000 ms), where the outer edge of her
+right breast distorts while rising with arms out (alignment 0.30, J 0.27).
+The chest cameras are fixed and only suit the orientation rig.
+
+Next: a finer, more uniform cage (element volumes span about 70-7,600 mm3,
+p5-p95) to remove the side-edge distortion; live 120 Hz cost unmeasured.

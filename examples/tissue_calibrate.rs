@@ -82,6 +82,7 @@ fn shake(standing: &Tissue, axis: DVec3) -> anyhow::Result<serde_json::Value> {
     let rate = 240.;
     let mut solver = standing.clone();
     let (mut volume, mut offset): ((f64, f64), f64) = ((1., 1.), 0.);
+    let mut worst: Vec<[f64; 3]> = Vec::new();
     for step in 1..=(4.0 * rate) as usize {
         let t = step as f64 / rate;
         let edge = (t.min(3. - t).min(0.5) / 0.5).max(0.);
@@ -89,11 +90,15 @@ fn shake(standing: &Tissue, axis: DVec3) -> anyhow::Result<serde_json::Value> {
         let frame = Frame { translation: axis * if t < 3. { wave } else { 0. }, rotation: bevy::math::DQuat::IDENTITY };
         solver.step(1. / rate, frame, DVec3::NEG_Y * G)?;
         let metrics = solver.metrics();
+        if metrics.minimum_volume_ratio < volume.0 {
+            worst = solver.positions().iter().map(|p| (*p - frame.translation).to_array()).collect();
+        }
         volume = (volume.0.min(metrics.minimum_volume_ratio), volume.1.max(metrics.maximum_volume_ratio));
         offset = solver.positions().iter().zip(standing.positions())
             .map(|(p, rest)| (*p - frame.translation - *rest).length()).fold(offset, f64::max);
     }
-    Ok(serde_json::json!({"volume_ratio": [volume.0, volume.1], "peak_node_mm": offset * 1e3}))
+    let dump = std::env::var("CAL_DUMP").is_ok().then_some(worst);
+    Ok(serde_json::json!({"volume_ratio": [volume.0, volume.1], "peak_node_mm": offset * 1e3, "worst_positions": dump}))
 }
 
 fn mm(v: DVec3) -> [f64; 3] {

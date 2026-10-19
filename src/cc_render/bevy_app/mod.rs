@@ -15,6 +15,7 @@ mod tissue;
 mod tissue_collision;
 mod tissue_motion;
 mod tissue_morph;
+mod tissue_smoothing;
 mod tissue_surface;
 mod visibility;
 mod environment;
