@@ -86,7 +86,7 @@ fn authored_bedding_layers_drape_together_in_the_live_scene() {
 /// The live GPU solver: same drape, contact and rest checks; its proximity contact does not
 /// certify gaps, so inter-layer separation is measured and reported (see cloth_gpu.rs).
 #[test]
-#[ignore = "known GPU gap: as the duvet lands (tick 20) the fitted sheet stretches to 1.156 (limit 1.15)"]
+#[ignore = "known GPU gap: the fitted sheet stretches to 1.159 as the duvet lands (tick 20) and to 1.46 as the duvet slides over the foot corners (ticks 165-200; limit 1.15)"]
 fn authored_bedding_drapes_on_the_live_gpu_solver() {
     drape_in_the_live_scene(false);
 }

@@ -472,6 +472,8 @@ fn gpu_bedding_quality_trace() {
     let every: usize = std::env::var("CC_TRACE_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
     let mut window_ms = Vec::new();
     let mut window_gpu_ms = Vec::new();
+    let mut rest_tick: Option<usize> = None;
+    let mut fastest = (0usize, [0f64; 3]);
     let mut flags = (0u64, 0u64);
     let mut speed = 0f64;
     for tick in 1..=ticks {
@@ -484,10 +486,20 @@ fn gpu_bedding_quality_trace() {
         }
         window_ms.push(batch.last.frame_ms);
         window_gpu_ms.push(batch.last.gpu_ms);
+        if batch.resting() && rest_tick.is_none() {
+            rest_tick = Some(tick);
+        }
         flags.0 += batch.last.substep_motion_exceeded as u64;
         flags.1 += batch.last.margin_exceeded as u64;
-        speed = speed.max(solvers.iter().zip(&before)
-            .flat_map(|(s, b)| s.positions.iter().zip(b).map(|(p, q)| p.distance(*q) * 60.)).fold(0., f64::max));
+        for (layer, (s, b)) in solvers.iter().zip(&before).enumerate() {
+            for (p, q) in s.positions.iter().zip(b) {
+                let v = p.distance(*q) * 60.;
+                if v > speed {
+                    speed = v;
+                    fastest = (layer, p.to_array().map(|x| (x * 100.).round() / 100.));
+                }
+            }
+        }
         if let Ok(path) = std::env::var("CC_TRACE_DUMP") {
             use std::io::Write;
             let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
@@ -503,6 +515,25 @@ fn gpu_bedding_quality_trace() {
                 pairs.push(serde_json::json!({"pair": [a, b], "intersections": n, "at": at}));
             }
         }
+        // Collider penetration per layer, millimetres beyond the half-thickness: particles, and
+        // faces by the exact triangle witness (where on the face it is deepest).
+        let penetration: Vec<_> = solvers.iter().zip(&colliders).map(|(s, cs)| {
+            let radius = s.parameters.thickness_m as f64 * 0.5;
+            let mut face = (0f64, [0f64; 3]);
+            for t in &s.triangles {
+                let v = t.map(|i| s.positions[i]);
+                for c in cs.iter() {
+                    if let Ok(Some((w, depth, _))) = c.triangle_contact(v, radius) {
+                        if depth > face.0 {
+                            let at = v[0] * w[0] + v[1] * w[1] + v[2] * w[2];
+                            face = (depth, at.to_array().map(|x| (x * 100.).round() / 100.));
+                        }
+                    }
+                }
+            }
+            serde_json::json!({"particle_mm": (s.max_particle_penetration(cs) * 1e4).round() / 10.,
+                "face_mm": (face.0 * 1e4).round() / 10., "face_at": face.1})
+        }).collect();
         let stretch: Vec<_> = solvers.iter().map(|s| {
             let (r, at) = s.springs.iter().filter(|e| e.stretch).map(|e| {
                 let [x, y] = e.vertices.map(|i| s.positions[i]);
@@ -515,8 +546,9 @@ fn gpu_bedding_quality_trace() {
         println!("GPU_QUALITY {}", serde_json::json!({
             "gpu_median_ms": window_gpu_ms[window_gpu_ms.len() / 2],
             "profile_ms": batch.profile.iter().map(|(l, ms)| (l, (ms * 1e3).round() / 1e3)).collect::<Vec<_>>(),
-            "tick": tick, "resting": batch.resting(), "intersections": pairs, "stretch": stretch,
-            "published_speed": speed, "median_ms": window_ms[window_ms.len() / 2],
+            "tick": tick, "resting": batch.resting(), "rest_tick": rest_tick, "intersections": pairs,
+            "stretch": stretch, "penetration": penetration,
+            "published_speed": speed, "fastest": fastest, "median_ms": window_ms[window_ms.len() / 2],
             "p95_ms": window_ms[(window_ms.len() * 95 / 100).min(window_ms.len() - 1)],
             "max_ms": window_ms[window_ms.len() - 1], "flags": [flags.0, flags.1],
         }));

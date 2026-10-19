@@ -4,9 +4,10 @@
 //   materials (1 workgroup)      integrate, coloured spring passes and grips on positions held
 //                                in workgroup memory
 //   hash_* + find_candidates     spatial hash of particles and vertex-triangle candidates
+//   collide_faces, apply_acc     face samples on the colliders, once per substep, before
+//                                the cloth-cloth contact (see cloth_gpu.rs)
 //   contact_pairs, apply_acc     cloth-cloth contact with friction; applying the averaged
 //                                corrections re-projects each particle on the colliders
-//   collide_faces, apply_acc     face samples on the colliders, once per substep
 //   finish (all particles)       velocities, motion bounds (tunnelling flags), finiteness, and
 //                                edge dashpots
 //

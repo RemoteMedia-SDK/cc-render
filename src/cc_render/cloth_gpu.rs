@@ -814,6 +814,20 @@ impl GpuClothBatch {
                     }
                 }
                 run(&mut pass, &p.collide_vertices, vg, 1.);
+                // Face samples once per substep, before the cloth-cloth contact passes. Repeating
+                // them in every averaged pass (each with its own static friction) kept the
+                // bedding pumping energy at the mattress's rounded corners (0.1-0.9 m/s after
+                // 7 s). After the passes, their push lands where no contact pass follows: the
+                // averaged passes leave stacked pairs short of their gap, and the fitted sheet's
+                // corner faces, pushed off the mattress's rounded foot corners, carried their
+                // vertices through the top sheet resting 1 mm above; the next substep took that
+                // crossed side as the side to keep (176-196 fitted/top triangle pairs locked
+                // in from the landing). Before the passes, a vertex a face sample pushes across
+                // a layer is a crossing of this substep, which the passes return.
+                if !o.skip_faces {
+                    run(&mut pass, &p.collide_faces, tg, 1.);
+                    run(&mut pass, &p.apply_acc, vg, 1.);
+                }
                 for iteration in 0..o.contact_iterations {
                     // Edge-edge pairs once per substep (first pass): undoing a crossing needs one
                     // pass; at rest they mostly duplicate the vertex-face contacts of stacked
@@ -821,14 +835,6 @@ impl GpuClothBatch {
                     let edges_on = iteration < o.edge_passes.min(o.contact_iterations);
                     run_with(&mut pass, &p.contact_pairs, 128, o.relaxation, edges_on);
                     run(&mut pass, &p.apply_acc, vg, o.relaxation);
-                }
-                // Face samples once per substep, after the contact passes: repeating them in
-                // every averaged pass (each with its own static friction) kept the bedding
-                // pumping energy at the mattress's rounded corners (published motion 0.1-0.9 m/s
-                // after 7 s); once per substep it rests by tick ~170, as the CPU reference does.
-                if !o.skip_faces {
-                    run(&mut pass, &p.collide_faces, tg, 1.);
-                    run(&mut pass, &p.apply_acc, vg, 1.);
                 }
                 run(&mut pass, &p.finish, vg, 1.);
             }
