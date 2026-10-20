@@ -1,0 +1,14 @@
+[project]
+name = "cc5-shape"
+version = "0.1.0"
+description = "Apply Character Creator 5 shaping sliders to a character GLB without CC5"
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["python"]
+module-name = "cc5_shape"
+python-source = "python"

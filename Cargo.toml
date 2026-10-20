@@ -8,6 +8,8 @@ publish = false
 # bevy / wgpu / bevy_rapier3d deps don't unify against the host's, and
 # heavy renderer stack compiles in isolation.
 [workspace]
+# `cc5-shape` (CC5 shaping sliders; Rust + Python) is the only member crate.
+members = ["crates/cc5-shape"]
 
 [profile.release]
 opt-level = 3
@@ -67,3 +69,9 @@ crossbeam-channel = "0.5"
 # a few regexes — bring in `regex` directly.
 regex = "1"
 tempfile = "3.27.0"
+# CC5 shaping sliders (avatar editor); also a standalone crate + Python module.
+cc5-shape = { path = "crates/cc5-shape" }
+
+[dev-dependencies]
+# `examples/avatar_editor.rs` UI; 0.32 is the Bevy 0.15 line.
+bevy_egui = "0.32"
