@@ -50,7 +50,8 @@ tracing = "0.1"
 # explicitly carry that default set here so the standalone-workspace
 # build doesn't drop `x11`, `multi_threaded`, etc. and break under
 # winit / wgpu.
-bevy = { version = "0.15", features = ["jpeg", "tonemapping_luts", "ktx2", "zstd"] }
+# experimental_pbr_pcss: soft (PCSS) directional shadows for the avatar editor's studio key light.
+bevy = { version = "0.15", features = ["jpeg", "tonemapping_luts", "ktx2", "zstd", "experimental_pbr_pcss"] }
 # bevy_rapier3d shipped unconditionally — no nested cargo features.
 bevy_rapier3d = { version = "=0.28.0", default-features = false, features = ["dim3", "async-collider"] }
 # wgpu pinned to the version Bevy 0.15.3 bundles. Aliased to `wgpu_pin`
