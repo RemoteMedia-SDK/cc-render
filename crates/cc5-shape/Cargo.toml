@@ -1,0 +1,25 @@
+[package]
+name = "cc5-shape"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Apply Character Creator 5 shaping sliders to a character GLB without CC5 (Rust core + optional CPython bindings)."
+
+[lib]
+name = "cc5_shape"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+# CPython extension module `cc5_shape` (build with maturin; see pyproject.toml).
+python = ["dep:pyo3"]
+
+[dependencies]
+anyhow = "1"
+# 0.29 = the glam Bevy 0.15 uses, so cc-render's types unify with ours.
+glam = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+pyo3 = { version = "0.26", features = ["abi3-py310", "extension-module"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
