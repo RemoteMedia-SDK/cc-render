@@ -713,7 +713,6 @@ fn snapshot(
     mut skin: ResMut<SkinEdit>,
     cc5_scene: Option<Res<Cc5Scene>>,
     mut projections: Query<&mut Projection>,
-    windows: Query<&Window>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if !rig.ready || hair.as_ref().is_some_and(|h| !h.settled()) || hair_edit.as_ref().is_some_and(|e| e.busy()) || !skin.ready() {
@@ -759,10 +758,11 @@ fn snapshot(
                 // batch jobs offset yaw from here
                 snap.base_yaw = Some(o.yaw);
             }
-            let aspect = windows.get_single().map(|w| w.width() / w.height()).unwrap_or(16.0 / 9.0);
+            // CC5 fits its 36 x 24 mm film gate's height to the image (square pixels):
+            // the vertical angle is the gate's, whatever the image's aspect
             for mut p in &mut projections {
                 if let Projection::Perspective(pp) = &mut *p {
-                    pp.fov = 2.0 * ((v.hfov * 0.5).tan() / aspect).atan();
+                    pp.fov = 2.0 * ((v.hfov * 0.5).tan() / 1.5).atan();
                 }
             }
             let _ = std::fs::remove_file(&snap.path);
