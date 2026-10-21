@@ -22,7 +22,12 @@
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     forward_io::{VertexOutput, FragmentOutput},
-    mesh_view_bindings::lights,
+    mesh_view_bindings::{view, lights, clusterable_objects},
+    mesh_view_types::POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT,
+    mesh_view_types::POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE,
+    clustered_forward as clustering,
+    lighting::getDistanceAttenuation,
+    shadows::{fetch_point_shadow, fetch_spot_shadow},
 }
 #import cc5::common::{PI, data, luminance, to_srgb, to_linear, cotangent_frame, view_z, directional_shadow, directional_radiance}
 #import cc5::hair_types::{
@@ -38,11 +43,10 @@ const SPEC: u32 = 3u;
 // Weight of the root/tip tint in the soft-light blend (calibrated against CC5's
 // viewport: its baked colour stays close to the diffuse map's).
 const ROOT_TIP_TINT: f32 = 0.5;
-// Diffuse albedo scale and occlusion towards the roots (inner layers of the hair
-// volume, which CC5 shades darker than single cards lit in isolation): calibrated
-// against CC5's viewport.
+// Diffuse albedo scale (calibrated against CC5's viewport). The occlusion towards
+// the roots (inner layers of the hair volume, which CC5 shades darker than single
+// cards lit in isolation) is hair.tint.w (Cc5Materials::hair_root_occlusion).
 const DIFFUSE_SCALE: f32 = 0.55;
-const ROOT_OCCLUSION: f32 = 0.55;
 // Strand highlights: CC5's are broad and soft, never crisp white strands.
 const MIN_ROUGHNESS: f32 = 0.3;
 const MAX_EXPONENT: f32 = 160.0;
@@ -98,6 +102,20 @@ fn dye_weight(range: vec4<f32>, id: f32, root: f32) -> f32 {
 
 // Kajiya-Kay strand highlight: the tangent shifted along the normal, a lobe
 // around the cone of mirror directions, normalised like Blinn-Phong for its exponent.
+// One light's strand highlights (primary, hair-coloured TRT, transmission) per
+// unit radiance.
+fn strand_light(L: vec3<f32>, V: vec3<f32>, N: vec3<f32>, T: vec3<f32>, jitter: f32, e1: f32, e2: f32, spec_mask: f32, tint: vec3<f32>, col: vec3<f32>) -> vec3<f32> {
+    let H = normalize(L + V);
+    // cards: light the strand, not the card's side (soft wrap on the card normal)
+    let facing = clamp(dot(N, L) * 0.5 + 0.5, 0.0, 1.0);
+    // hair's Fresnel reflectance at the cuticle
+    let f0 = 0.046;
+    let r = strand_lobe(T, N, H, hair.lobes.x + jitter, e1) * f0 * hair.light.y * spec_mask * PRIMARY_SCALE;
+    let trt = strand_lobe(T, N, H, hair.lobes.y - jitter, e2) * f0 * hair.light.z * spec_mask * 0.5;
+    let tt = pow(clamp(dot(-L, V), 0.0, 1.0), 6.0) * 0.3 * hair.light.w;
+    return facing * (vec3(r) + tint * trt) + tint * col * tt;
+}
+
 fn strand_lobe(T: vec3<f32>, N: vec3<f32>, H: vec3<f32>, shift: f32, exponent: f32) -> f32 {
     let Ts = normalize(T + N * shift);
     let th = dot(Ts, H);
@@ -185,27 +203,47 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // thin strand edges (partial coverage) and occluded strands highlight less: no
     // sub-pixel glitter on lashes and wisps
     let spec_ao = mix(mix(1.0, ao, 0.5), ao, hair.maps.w) * alpha * hair.tangent.w
-        * mix(1.0 - ROOT_OCCLUSION, 1.0, smoothstep(0.0, 0.7, root));
-    // hair's Fresnel reflectance at the cuticle
-    let f0 = 0.046;
+        * mix(1.0 - hair.tint.w, 1.0, smoothstep(0.0, 0.7, root));
     let z = view_z(in.world_position);
     var spec = vec3(0.0);
     for (var i = 0u; i < lights.n_directional_lights; i = i + 1u) {
         let L = lights.directional_lights[i].direction_to_light;
-        let H = normalize(L + V);
-        // cards: light the strand, not the card's side (soft wrap on the card normal)
-        let facing = clamp(dot(N, L) * 0.5 + 0.5, 0.0, 1.0);
         let shadow = directional_shadow(i, in.world_position, in.world_normal, z);
-        let radiance = directional_radiance(i) * shadow;
-        let r = strand_lobe(T, N, H, hair.lobes.x + jitter, e1) * f0 * hair.light.y * spec_mask * PRIMARY_SCALE;
-        let trt = strand_lobe(T, N, H, hair.lobes.y - jitter, e2) * f0 * hair.light.z * spec_mask * 0.5;
-        let tt = pow(clamp(dot(-L, V), 0.0, 1.0), 6.0) * 0.3 * hair.light.w;
-        spec += radiance * (facing * (vec3(r) + tint * trt) + tint * col * tt);
+        spec += directional_radiance(i) * shadow * strand_light(L, V, N, T, jitter, e1, e2, spec_mask, tint, col);
+    }
+    // the same for point and spot lights (CC5's lights are spot lights)
+    let cluster = clustering::fragment_cluster_index(pbr_input.frag_coord.xy, z, pbr_input.is_orthographic);
+    let oc = clustering::unpack_offset_and_counts(cluster);
+    for (var i = oc[0]; i < oc[0] + oc[1] + oc[2]; i = i + 1u) {
+        let lid = clustering::get_clusterable_object_id(i);
+        let light = &clusterable_objects.data[lid];
+        let to_light = (*light).position_radius.xyz - in.world_position.xyz;
+        let L = normalize(to_light);
+        var radiance = (*light).color_inverse_square_range.rgb
+            * getDistanceAttenuation(dot(to_light, to_light), (*light).color_inverse_square_range.w);
+        let is_spot = i >= oc[0] + oc[1];
+        if is_spot {
+            var spot_dir = vec3((*light).light_custom_data.x, 0.0, (*light).light_custom_data.y);
+            spot_dir.y = sqrt(max(0.0, 1.0 - spot_dir.x * spot_dir.x - spot_dir.z * spot_dir.z));
+            if ((*light).flags & POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE) != 0u {
+                spot_dir.y = -spot_dir.y;
+            }
+            let a = saturate(dot(-spot_dir, L) * (*light).light_custom_data.z + (*light).light_custom_data.w);
+            radiance *= a * a;
+        }
+        if ((*light).flags & POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u {
+            if is_spot {
+                radiance *= fetch_spot_shadow(lid, in.world_position, in.world_normal, (*light).shadow_map_near_z);
+            } else {
+                radiance *= fetch_point_shadow(lid, in.world_position, in.world_normal);
+            }
+        }
+        spec += radiance * view.exposure * strand_light(L, V, N, T, jitter, e1, e2, spec_mask, tint, col);
     }
 
     // --- diffuse plus a broad sheen: Bevy's lighting (environment included) with a
     // rough isotropic specular; the strand lobes above add the anisotropic highlights ---
-    let volume = mix(1.0 - ROOT_OCCLUSION, 1.0, smoothstep(0.0, 0.7, root));
+    let volume = mix(1.0 - hair.tint.w, 1.0, smoothstep(0.0, 0.7, root));
     pbr_input.material.base_color = vec4(col * hair.light.x * DIFFUSE_SCALE * volume, 1.0);
     pbr_input.material.reflectance = SHEEN * hair.light.y * spec_mask;
     pbr_input.material.metallic = 0.0;

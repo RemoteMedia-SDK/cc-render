@@ -35,6 +35,10 @@ pub const HAIR_GAIN: [f32; 2] = [2.0, 1.0];
 /// Scalp hair's colour multiplier with CC5's lights: the light tint's inverse
 /// (its magenta reads on neutral hair; CC5's hair stays ash).
 pub const HAIR_TINT: [f32; 3] = [1.0, 1.0 / 0.94, 1.0 / 1.10];
+/// Hair's occlusion towards the roots with CC5's lights (studio: 0.55, fitted
+/// on CC5's viewport): its renders' hair is lighter at the crown. Fitted on the
+/// two hair faces (hair_metric.py): hair dE 10.0 -> 9.55, dL -6.6 -> -5.2.
+pub const HAIR_ROOT_OCCLUSION: f32 = 0.3;
 pub const EXPOSURE: f32 = 0.9;
 pub const SHARPENING: f32 = 0.15;
 /// Per-light corrections by CC5 light name: fitted against CC5's renders of the

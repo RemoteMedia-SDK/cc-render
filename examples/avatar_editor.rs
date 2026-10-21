@@ -305,6 +305,10 @@ fn hair_gain(cc5_lights: bool) -> [f32; 2] {
     [v.first().copied().unwrap_or(d[0]), v.get(1).copied().unwrap_or(d[1])]
 }
 
+fn knob_f32(name: &str, default: f32) -> f32 {
+    std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+}
+
 /// Scalp hair's colour multiplier: `CC5_HAIR_TINT` ("r,g,b"), else with CC5's
 /// lights [`cc5_scene::HAIR_TINT`], else 1.
 fn hair_tint(cc5_lights: bool) -> [f32; 3] {
@@ -524,6 +528,7 @@ fn main() -> anyhow::Result<()> {
             // CC5_HAIR_GAIN: "diffuse,specular" (with --cc5-lights: calibrated against CC5)
             hair_gain: hair_gain(cc5_lights_flag),
             hair_tint: hair_tint(cc5_lights_flag),
+            hair_root_occlusion: knob_f32("CC5_HAIR_ROOT_OCC", if cc5_lights_flag { cc5_scene::HAIR_ROOT_OCCLUSION } else { 0.55 }),
             ..default()
         })
         .insert_resource(skin_edit)
