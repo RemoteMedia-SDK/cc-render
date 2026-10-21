@@ -116,7 +116,7 @@ impl Conform {
             let ext = hi0 - lo0;
             let s = DVec3::select(ext.cmpgt(DVec3::splat(1e-9)), (hi1 - lo1) / ext, DVec3::ONE);
             let t = lo1 - s * lo0;
-            return self.asset_bind.iter().map(|p| (*p * s + t - *p).as_vec3().to_array()).collect();
+            return self.asset_bind.par_iter().map(|p| (*p * s + t - *p).as_vec3().to_array()).collect();
         }
         let (global, residual): (Option<Similarity>, Vec<DVec3>) = if self.opts.similarity && d.iter().any(|v| *v != DVec3::ZERO) {
             let moved: Vec<DVec3> = self.anchor_bind.iter().zip(&d).map(|(p, d)| *p + *d).collect();
@@ -128,7 +128,7 @@ impl Conform {
         };
         let k = self.opts.k;
         self.asset_bind
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(v, p)| {
                 let mut acc = global.as_ref().map_or(DVec3::ZERO, |s| s.apply(*p) - *p);

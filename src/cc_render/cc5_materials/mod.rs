@@ -20,7 +20,9 @@
 //! CC5's `Program/Assets/Share/Shaders/**/*.shader` declarations):
 //!   - RLHead, RLSkin: [`Cc5SkinMaterial`], `skin.wgsl`;
 //!   - RLHair: [`Cc5HairMaterial`], `hair.wgsl` (+ `hair_types.wgsl`, `hair_prepass.wgsl`:
-//!     dithered strand coverage for the camera's TAA, translucent shadows);
+//!     dithered strand coverage for the camera's TAA, translucent shadows;
+//!     `hair_vertex.wgsl`: strands expanded into camera-facing ribbons on the GPU
+//!     for materials with `extras.cc5.ribbons`, see [`Cc5Hair::ribbons`]);
 //!   - RLEye (on the cornea, which then draws the whole eye): [`Cc5EyeMaterial`], `eye.wgsl`;
 //!   - RLEyeOcclusion(_Plus), RLEyeTearline(_Plus): [`Cc5EyeOverlayMaterial`], `eye_overlay.wgsl`;
 //!   - RLTeethGum, RLTongue: [`Cc5MouthMaterial`], `mouth.wgsl`.
@@ -30,9 +32,12 @@ use bevy::asset::{load_internal_asset, AssetPath};
 use bevy::ecs::system::EntityCommands;
 use bevy::gltf::{GltfMaterialExtras, GltfMaterialName};
 use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
-use bevy::pbr::{ExtendedMaterial, MaterialExtension};
+use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
 use bevy::prelude::*;
-use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
+use bevy::render::mesh::MeshVertexBufferLayoutRef;
+use bevy::render::render_resource::{
+    AsBindGroup, RenderPipelineDescriptor, ShaderDefVal, ShaderRef, ShaderType, SpecializedMeshPipelineError,
+};
 use serde_json::Value;
 
 mod mipmaps;
@@ -46,6 +51,7 @@ const MOUTH_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8
 const COMMON_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b809);
 const HAIR_PREPASS_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b80a);
 const HAIR_TYPES_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b80b);
+const HAIR_VERTEX_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b80c);
 
 /// CC5 RLHead / RLSkin: StandardMaterial plus [`Cc5Skin`].
 pub type Cc5SkinMaterial = ExtendedMaterial<StandardMaterial, Cc5Skin>;
@@ -184,7 +190,13 @@ impl MaterialExtension for Cc5Skin {
 /// The RLHair extension. Texture slots, in `hair.wgsl` bit order: root map,
 /// ID map, flow map, specular mask.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[bind_group_data(Cc5HairKey)]
 pub struct Cc5Hair {
+    /// Strand meshes drawn as GPU ribbons (`hair_vertex.wgsl`): each strand point
+    /// is two vertices at the point, TANGENT = (strand direction, signed
+    /// half-width); the vertex shaders move them apart, facing the view. Meshes
+    /// without tangents draw as they are.
+    pub ribbons: bool,
     #[uniform(100)]
     pub params: Cc5HairParams,
     #[texture(101)]
@@ -222,6 +234,18 @@ pub struct Cc5HairParams {
     pub _pad1: u32,
 }
 
+/// Pipeline key of [`Cc5Hair`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Cc5HairKey {
+    ribbons: bool,
+}
+
+impl From<&Cc5Hair> for Cc5HairKey {
+    fn from(h: &Cc5Hair) -> Self {
+        Self { ribbons: h.ribbons }
+    }
+}
+
 impl MaterialExtension for Cc5Hair {
     fn fragment_shader() -> ShaderRef {
         HAIR_SHADER.into()
@@ -229,6 +253,42 @@ impl MaterialExtension for Cc5Hair {
 
     fn prepass_fragment_shader() -> ShaderRef {
         HAIR_PREPASS_SHADER.into()
+    }
+
+    fn specialize(
+        _pipeline: &MaterialExtensionPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        key: MaterialExtensionKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        if !key.bind_group_data.ribbons || !layout.0.contains(Mesh::ATTRIBUTE_TANGENT) {
+            return Ok(());
+        }
+        let has = |d: &str| descriptor.vertex.shader_defs.iter().any(|v| matches!(v, ShaderDefVal::Bool(n, true) if n == d));
+        if has("PREPASS_PIPELINE") {
+            // Bevy's prepass layout (prepass/mod.rs) plus the normal and tangent,
+            // which the ribbon expansion needs in every prepass (depth, shadows, motion)
+            let mut attrs = vec![Mesh::ATTRIBUTE_POSITION.at_shader_location(0)];
+            if has("VERTEX_UVS_A") {
+                attrs.push(Mesh::ATTRIBUTE_UV_0.at_shader_location(1));
+            }
+            if has("VERTEX_UVS_B") {
+                attrs.push(Mesh::ATTRIBUTE_UV_1.at_shader_location(2));
+            }
+            attrs.push(Mesh::ATTRIBUTE_NORMAL.at_shader_location(3));
+            attrs.push(Mesh::ATTRIBUTE_TANGENT.at_shader_location(4));
+            if has("SKINNED") {
+                attrs.push(Mesh::ATTRIBUTE_JOINT_INDEX.at_shader_location(5));
+                attrs.push(Mesh::ATTRIBUTE_JOINT_WEIGHT.at_shader_location(6));
+            }
+            if has("VERTEX_COLORS") {
+                attrs.push(Mesh::ATTRIBUTE_COLOR.at_shader_location(7));
+            }
+            descriptor.vertex.buffers = vec![layout.0.get_layout(&attrs)?];
+        }
+        descriptor.vertex.shader = HAIR_VERTEX_SHADER;
+        descriptor.vertex.shader_defs.push("HAIR_RIBBONS".into());
+        Ok(())
     }
 }
 
@@ -352,6 +412,7 @@ impl Plugin for Cc5MaterialsPlugin {
         load_internal_asset!(app, HAIR_SHADER, "hair.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, HAIR_TYPES_SHADER, "hair_types.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, HAIR_PREPASS_SHADER, "hair_prepass.wgsl", Shader::from_wgsl);
+        load_internal_asset!(app, HAIR_VERTEX_SHADER, "hair_vertex.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, EYE_SHADER, "eye.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, EYE_OVERLAY_SHADER, "eye_overlay.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, MOUTH_SHADER, "mouth.wgsl", Shader::from_wgsl);
@@ -417,6 +478,8 @@ struct Cc5Info {
     vars: Value,
     sss: Value,
     maps: HashMap<String, Handle<Image>>,
+    /// `extras.cc5.ribbons`: strands drawn as GPU ribbons ([`Cc5Hair::ribbons`]).
+    ribbons: bool,
 }
 
 /// The textures of `slots` (absent slots: `None`), with bit masks of which are
@@ -591,6 +654,7 @@ fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer) 
     let (dye2, dye2_range, dye2_mode) = dye("2nd");
     let [root, id, flow, spec_mask] = tex;
     Some(Cc5Hair {
+        ribbons: info.ribbons,
         params: Cc5HairParams {
             root_color: color_var(v, "RootColor", [1.0; 3]).extend(var_or(v, "RootColorStrength", 1.0) * active),
             tip_color: color_var(v, "TipColor", [1.0; 3]).extend(var_or(v, "TipColorStrength", 1.0) * active),
@@ -896,6 +960,7 @@ fn parse_cc5(
         vars: cc5.get("vars").cloned().unwrap_or(Value::Null),
         sss: cc5.get("sss").cloned().unwrap_or(Value::Null),
         maps,
+        ribbons: cc5.get("ribbons").and_then(Value::as_bool).unwrap_or(false),
     })
 }
 

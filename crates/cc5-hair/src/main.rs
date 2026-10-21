@@ -1,13 +1,14 @@
 //! `cc5-hair`: build hair library parts for cc-render's avatar editor.
 //!
-//!   cc5-hair bake <spec.json> --head <head.glb> --lib <dir> [--settings <json>]
-//!   cc5-hair smart-hair --src <smart_hair dir> --head <head.glb> --lib <dir>
-//!                       --config <smart_hair.json> [--only <group>[,<group>...]]
+//!   cc5-hair bake <spec.json> --head <head.glb|fbx> --lib <dir> [--settings <json>] [--ribbons]
+//!   cc5-hair smart-hair --src <smart_hair dir> --head <head.glb|fbx> --lib <dir>
+//!                       --config <smart_hair.json> [--only <group>[,<group>...]] [--ribbons]
 //!
 //! `bake`: one part from a spec (e.g. specs/cc5_converted.json, the character's
-//! own hair). `smart-hair`: every CC5 Smart Hair group export (`<group>/character.glb`)
-//! with the per-kind / per-group settings of smart_hair.json; catalog.json and
-//! styles.json ("CC5 <group>") are updated.
+//! own hair). `smart-hair`: every CC5 Smart Hair group export (`<group>/character.glb`
+//! or `.fbx`) with the per-kind / per-group settings of smart_hair.json; catalog.json
+//! and styles.json ("CC5 <group>") are updated. Strands are written as centre lines
+//! the editor expands into ribbons on the GPU; `--ribbons`: as triangle ribbons.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -44,6 +45,7 @@ struct Library {
     dir: PathBuf,
     catalog: Value,
     styles: Value,
+    output: glb_out::Output,
 }
 
 impl Library {
@@ -54,6 +56,7 @@ impl Library {
             dir: dir.to_path_buf(),
             catalog: if cat.exists() { read_json(&cat)? } else { json!({"parts": []}) },
             styles: if sty.exists() { read_json(&sty)? } else { json!({"styles": []}) },
+            output: glb_out::Output::default(),
         })
     }
 
@@ -80,7 +83,7 @@ fn bake_one(spec: &Spec, head: &Source, body: &Body, lib: &mut Library) -> Resul
     let t = Instant::now();
     let built = part::build(spec, head, body, &lib.dir)?;
     let t_build = t.elapsed().as_secs_f32();
-    glb_out::write(&built, head, &lib.dir.join(format!("{}.glb", spec.id)))?;
+    glb_out::write(&built, head, &lib.dir.join(format!("{}.glb", spec.id)), lib.output)?;
     glb_out::copy_files(&built, &lib.dir)?;
     let size = std::fs::metadata(lib.dir.join(format!("{}.glb", spec.id)))?.len();
     println!(
@@ -108,6 +111,7 @@ fn main() -> Result<()> {
     let body = Body::from_source(&head)?;
     println!("head {} loaded in {:.1} s", head_path.display(), t.elapsed().as_secs_f32());
     let mut lib = Library::open(&lib_dir)?;
+    lib.output.triangles = args.iter().any(|a| a == "--ribbons");
     match cmd.as_str() {
         "bake" => {
             let spec_path = PathBuf::from(args.get(1).ok_or_else(|| anyhow!("bake <spec.json>"))?);

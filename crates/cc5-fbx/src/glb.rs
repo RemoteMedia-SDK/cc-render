@@ -1,4 +1,4 @@
-﻿//! The GLB writer.
+//! The GLB writer.
 
 use std::path::{Path, PathBuf};
 
