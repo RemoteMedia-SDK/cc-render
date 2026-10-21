@@ -268,9 +268,15 @@ fn shift_out(a: &[f32], w: u32, h: u32, dx: i32) -> Vec<f32> {
 /// with an `s` suffix blurred 4.
 fn feature(chs: &[(&str, &[f32])], w: u32, h: u32, name: &str) -> Vec<f32> {
     let (ch, op) = name.split_once('.').expect("feature: <channel>.<op>");
-    let m = chs.iter().find(|c| c.0 == ch).unwrap_or_else(|| panic!("feature: no channel {ch}")).1;
+    let get = |ch: &str| chs.iter().find(|c| c.0 == ch).unwrap_or_else(|| panic!("feature: no channel {ch}")).1;
     let s = w as f32 / 1024.0;
     let b = |a: &[f32], r: f32| blur(a, w, h, (r * s).round() as u32, 3);
+    // "a*b.p<r>": the border of two regions, both blurred by r, 1 where each is 0.5
+    if let Some((ca, cb)) = ch.split_once('*') {
+        let r: f32 = op.strip_prefix('p').and_then(|r| r.parse().ok()).unwrap_or_else(|| panic!("feature: {name}"));
+        return b(get(ca), r).iter().zip(b(get(cb), r)).map(|(x, y)| (4.0 * x * y).clamp(0.0, 1.0)).collect();
+    }
+    let m = get(ch);
     match op {
         "b3" => b(m, 3.0),
         "b6" => b(m, 6.0),
@@ -307,19 +313,21 @@ fn fitted(chs: &[(&str, &[f32])], w: u32, h: u32, shape: &[(&str, f32)]) -> Vec<
 
 /// Shapes fitted to CC5's SkinGen presets (`gen_shape_fit.py`: the CC5 layer's
 /// opacity as a weighted sum of [`feature`]s of the region masks; the preset in
-/// the comment, soft IoU against it).
-/// blush_round, IoU 0.591
-const SHAPE_BLUSH: &[(&str, f32)] = &[("cheek.dx24", 0.2046), ("cheek.dy-48", 0.0401)];
+/// the comment, soft IoU against it). Stubble, contour, blush and freckles use
+/// the region-border features ("a*b.p<r>"); eyeshadow and highlight keep their
+/// earlier fits, which render closer to CC5 (gen_validate.py change error).
+/// blush_round, IoU 0.601
+const SHAPE_BLUSH: &[(&str, f32)] = &[("inner_lid*ear.p24", 27547131013629.965), ("inner_lid*neck.p24", 1843519202873.1365), ("upper_lid*neck.p24", 13787982385.9988), ("cheek*ear.p24", 11.7386), ("cheek.dx24", 0.1947), ("cheek.dy-48", 0.0434), ("cheek.dy-24", 0.002)];
 /// eyeshadow_smoky, IoU 0.773
 const SHAPE_EYESHADOW: &[(&str, f32)] = &[("inner_lid.out", 6.0932), ("upper_lid.out", 5.4479), ("upper_lid.dx24", 5.2087), ("inner_lid.dx-24", 3.4349), ("upper_lid.dy-24", 2.0685), ("inner_lid.dy12s", 1.5726), ("upper_lid.dx-24", 1.4144), ("inner_lid.dy-24", 1.0936), ("upper_lid.dx-12s", 0.9085), ("inner_lid.dx-12s", 0.7209), ("inner_lid.in", 0.0753), ("forehead.out", 0.0692), ("forehead.dy48", 0.0027)];
-/// contour_basic, IoU 0.475
-const SHAPE_CONTOUR: &[(&str, f32)] = &[("inner_lid.dy-24", 0.9212), ("forehead.out", 0.406), ("upper_lid.dx-24", 0.3988), ("upper_lid.dx24", 0.312), ("cheek.out", 0.2517), ("ear.out", 0.1833), ("mouth.dy-48", 0.1241), ("neck.dy-48", 0.0963), ("forehead.in", 0.0953), ("nose.dx12s", 0.0866), ("chin.dy-48", 0.0856), ("cheek.dx24", 0.0849), ("upper_lid.dy-12s", 0.0783), ("chin.dy48", 0.0586), ("forehead.dx24", 0.0526), ("neck.in", 0.0489), ("ear.dx-24", 0.0356), ("neck.out", 0.033), ("cheek.dy48", 0.0321), ("nose.dx24", 0.0309), ("nose.out", 0.0174), ("neck.dx-24", 0.0073)];
+/// contour_basic, IoU 0.543
+const SHAPE_CONTOUR: &[(&str, f32)] = &[("inner_lid*ear.p24", 5818392643414.9375), ("upper_lid*neck.p24", 14363600469.6478), ("upper_lid*ear.p24", 261368211.1423), ("nose*neck.p24", 5954975.3667), ("forehead*neck.p24", 29029.6708), ("forehead*inner_lid.p10", 1007.4827), ("forehead*upper_lip.p24", 791.508), ("cheek*ear.p24", 131.555), ("nose*upper_lid.p10", 34.5744), ("chin*mouth.p10", 8.9215), ("nose*inner_lid.p24", 2.4931), ("cheek*forehead.p24", 2.2078), ("cheek*neck.p24", 1.6546), ("inner_lid.dy-24", 0.702), ("forehead.out", 0.3291), ("upper_lip*nose.p10", 0.1981), ("cheek.out", 0.1546), ("ear.out", 0.1528), ("forehead.in", 0.0927), ("neck.dy-48", 0.0907), ("nose.dx12s", 0.0867), ("cheek.dx24", 0.0832), ("upper_lid.dx-24", 0.078), ("mouth.dy-48", 0.07), ("chin.dy48", 0.0653), ("cheek*nose.p10", 0.0638), ("forehead.dx24", 0.0535), ("neck.in", 0.0501), ("upper_lid.dx24", 0.0392), ("ear.dx-24", 0.031), ("chin.dy-48", 0.0272), ("neck.out", 0.0261), ("cheek.dy48", 0.0205), ("neck.dx-24", 0.0116)];
 /// highlight_basic, IoU 0.276
 const SHAPE_HIGHLIGHT: &[(&str, f32)] = &[("upper_lid.dy-48", 0.301), ("inner_lid.dy48", 0.2626), ("upper_lid.dy48", 0.1033), ("chin.dy-12s", 0.0807), ("nose.dx-24", 0.0783), ("nose.dy-48", 0.0288), ("upper_lid.dy-24", 0.0263), ("forehead.dy48", 0.0225), ("cheek.dy-24", 0.0151), ("chin.dy-24", 0.0081), ("forehead.in", 0.0057), ("nose.dx-12s", 0.0051), ("cheek.dx24", 0.0028), ("cheek.dx-12s", 0.0024), ("forehead.dx-24", 0.0017)];
-/// freckle_01, IoU 0.682
-const SHAPE_FRECKLES: &[(&str, f32)] = &[("inner_lid.dy48", 10.5913), ("inner_lid.dy24", 2.0273), ("inner_lid.dy12", 1.1606), ("nose.dy-24", 0.3314), ("chin.dx-24", 0.3044), ("mouth.dy48", 0.2687), ("nose.dx24", 0.2651), ("cheek.dx-24", 0.2373), ("nose.dx-12s", 0.2324), ("chin.dx24", 0.2157), ("chin.dy-12s", 0.1055), ("upper_lip.dy-12", 0.0989), ("upper_lip.dy-12s", 0.0627), ("chin.dy-12", 0.0534), ("chin.b3", 0.0278), ("upper_lid.dy-48", 0.0263), ("chin.dy12s", 0.0255), ("inner_lid.dx-12s", 0.0153), ("inner_lid.dy-12s", 0.0136), ("cheek.dy-48", 0.0101), ("mouth.dy-12s", 0.0096), ("inner_lid.dy-24", 0.0087), ("forehead.dx-24", 0.002)];
-/// beard_stubble, IoU 0.545
-const SHAPE_STUBBLE: &[(&str, f32)] = &[("chin.dx-24", 2.6286), ("chin.dx24", 1.179), ("cheek.out", 0.987), ("cheek.dy48", 0.6643), ("chin.dy48", 0.6328), ("neck.out", 0.4581), ("mouth.dy48", 0.4293), ("chin.out", 0.4202), ("neck.dy-48", 0.3845), ("upper_lip.dy48", 0.2932), ("upper_lip.dx-24", 0.2465), ("mouth.dy-24", 0.0943), ("mouth.out", 0.081), ("upper_lip.dx-12s", 0.0632), ("mouth.dy-48", 0.0365), ("chin.dx-12s", 0.0304), ("ear.dy-48", 0.0017)];
+/// freckle_01, IoU 0.721
+const SHAPE_FRECKLES: &[(&str, f32)] = &[("forehead*mouth.p24", 3090685.8117), ("upper_lid*ear.p24", 1992205.6961), ("cheek*chin.p10", 678118.019), ("upper_lip*chin.p10", 207565.1497), ("forehead*upper_lip.p24", 14794.6705), ("mouth*ear.p24", 3485.3992), ("forehead*neck.p24", 78.7555), ("cheek*inner_lid.p10", 23.8259), ("nose*upper_lid.p10", 22.5836), ("inner_lid.dy48", 8.5088), ("cheek*chin.p24", 3.0278), ("cheek*nose.p24", 1.1413), ("chin.dx-24", 0.33), ("cheek*upper_lip.p24", 0.283), ("chin.dy-24", 0.1828), ("nose.dx-12s", 0.1827), ("mouth.dy48", 0.1606), ("nose.dy-48", 0.1565), ("chin.dx24", 0.1564), ("cheek.dx-24", 0.1147), ("nose.dy-24", 0.0583), ("cheek.dy-48", 0.0532), ("chin.dy12s", 0.0402), ("chin.b3", 0.0361), ("upper_lid.dy-48", 0.0332), ("upper_lip.dx-12s", 0.0318), ("nose.dy12s", 0.0275), ("upper_lip.dy-12s", 0.0213), ("chin.dx12s", 0.0123), ("mouth.dy-24", 0.006), ("chin.in", 0.0021)];
+/// beard_stubble, IoU 0.631
+const SHAPE_STUBBLE: &[(&str, f32)] = &[("upper_lid*neck.p24", 26737177123.0119), ("nose*ear.p24", 168666262.8338), ("nose*neck.p24", 13087484.4309), ("upper_lip*ear.p24", 99220.9333), ("cheek*ear.p24", 266.3405), ("mouth*neck.p24", 256.6833), ("cheek*chin.p24", 163.2607), ("cheek*neck.p24", 33.4906), ("chin*mouth.p10", 7.6709), ("forehead*ear.p24", 5.7518), ("chin*neck.p24", 2.9792), ("chin*mouth.p24", 2.0412), ("cheek*mouth.p24", 1.9366), ("nose*mouth.p24", 1.377), ("cheek.out", 0.4791), ("chin.dx24", 0.4472), ("cheek.dy48", 0.3559), ("neck.dy-48", 0.347), ("neck.out", 0.2611), ("chin.dy-24", 0.1527), ("cheek.dx24", 0.1037), ("mouth.dy-24", 0.0945), ("upper_lip.dx-12s", 0.0595), ("upper_lip.dy12s", 0.052), ("upper_lip.dx-24", 0.0419), ("neck.in", 0.0171), ("ear.dy-48", 0.0012)];
 
 /// Hairs: short soft strokes of half-width `r` and length `len` (texels) at
 /// density `d` (per texel), pointing down the texture (hair grows down the face)
