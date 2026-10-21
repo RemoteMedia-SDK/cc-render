@@ -1138,10 +1138,12 @@ fn build_material(
     let handle = match info.shader.as_str() {
         "RLHead" | "RLSkin" => {
             let ext = skin_extension(info, images, assets, settings.sss_strength, settings.skin_tune)?;
-            // CC5's skin normal maps are DirectX-style (green down); glTF's, which the
-            // loader's generated tangents assume, OpenGL-style: unflipped, every UV
-            // seam (the philtrum, the nose) shows as a lighting step CC5 does not have
-            base.flip_normal_map_y = true;
+            // CC5's skin normal maps read as authored (green up) on the loader's
+            // generated tangents: flipped, the large-scale relief of SkinGen's full
+            // skins (cheeks, nasolabial folds) shades as dark blotches CC5 does not
+            // have (patch dE 3.50 -> 2.79 unflipped on the five check faces).
+            // CC5_NORMAL_FLIP_Y=1 flips it.
+            base.flip_normal_map_y = std::env::var("CC5_NORMAL_FLIP_Y").is_ok_and(|v| v == "1");
             info!("cc5 materials: {}: maps {:#b}, srgb-decoded {:#b}", info.shader, ext.params.present, ext.params.srgb);
             Cc5Handle::Skin(out.skins.add(ExtendedMaterial { base, extension: ext }))
         }
