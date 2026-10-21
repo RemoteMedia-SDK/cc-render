@@ -10,7 +10,7 @@
 //! as a whole, and only the anchors' residual moves are blended. That keeps long
 //! hair in proportion when the head scales or turns.
 //!
-//! Calibrated against CC5 itself (`check_conform_cc5.py`: the 14 Smart Hair
+//! Calibrated against CC5 itself (`cc5-hair check`: the 14 Smart Hair
 //! groups with whole recipes applied by CC5): scalp hair that deforms (hair caps,
 //! short styles) anchored to the whole head + similarity: p50 0.4 mm, p99 3–4.7
 //! mm; beards and brows on the face: p50 0.3–0.6 mm.

@@ -2,7 +2,7 @@
 //! evaluate a weighted mix into per-vertex deltas.
 //!
 //! A CC5 HD character has ~400 facial morphs per face mesh; Bevy loads at most 64
-//! morph targets per mesh, so they are kept out of the GLB (`fbx_to_glb.py` drops
+//! morph targets per mesh, so they are kept out of the GLB (`cc5-fbx` drops
 //! them) and applied here instead, like the shaping sliders. The pack is built
 //! from the reference FBX's shape keys by `build_expression_pack.py`:
 //!

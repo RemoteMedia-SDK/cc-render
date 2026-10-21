@@ -7,7 +7,7 @@
 //!   Strands are centre lines (glTF LINES), drawn as GPU ribbons ([`Ribbon`]);
 //! - `styles.json` (optional): `{"styles": [{"name", "parts": [part ids]}]}`;
 //! - `regions.json`: CC_Base_Body anchor vertices (`head`, `face`, `head_box`;
-//!   `hair_regions.py`).
+//!   `cc5-hair regions`).
 //!
 //! One part per slot. A chosen part is spawned, its skin re-bound to our joints
 //! by name (as `--style` assets are) and every mesh bound with a
@@ -36,7 +36,7 @@ pub struct PartInfo {
     #[serde(default)]
     pub painted_layers: bool,
     /// meshes conformed otherwise than by `kind`: `"head_box"` for hair layers
-    /// CC5 moves rigidly with the head (`cc5_layer_follow.py`),
+    /// CC5 moves rigidly with the head (cc5-hair's `follow`),
     /// `"bone:<joint>@x,y,z"` for layers CC5 attaches to a bone at that world
     /// point (needs `bone_xf.json`)
     #[serde(default)]

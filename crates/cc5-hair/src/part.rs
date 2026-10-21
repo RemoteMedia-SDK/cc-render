@@ -121,6 +121,22 @@ fn mask_tint(vars: &Map<String, Value>) -> Option<[f32; 3]> {
     Some(std::array::from_fn(|i| (crate::srgb_to_linear((rc[i] / 255.0) as f32) + crate::srgb_to_linear((tc[i] / 255.0) as f32)) / 2.0))
 }
 
+/// RLHair variables of strand parts without CC5 settings (a library without
+/// `atlas/<atlas>/atlas.json`): a mid brown with lighter tips.
+pub fn default_vars() -> Value {
+    json!({
+        "TangentVectorColor": [255.0, 0.0, 0.0], "TangentMapFlipGreen": 1.0, "Diffuse Strength": 1.0,
+        "Hair Roughness Map Strength": 0.5, "Hair Specular Map Strength": 0.3, "Specular Strength": 0.8,
+        "Secondary Specular Strength": 1.0, "Transmission Strength": 0.15, "VertexColorStrength": 0.875,
+        "ActiveChangeHairColor": 1.0, "BaseColorMapStrength": 1.0, "UseRootTipColor": 1.0,
+        "RootColor": [48.0, 28.0, 18.0], "TipColor": [120.0, 80.0, 52.0], "RootTipBlendMode": 2.0,
+        "RootColorStrength": 1.0, "TipColorStrength": 1.0, "InvertRootTip": 0.0,
+        "_1st Dye Color": [150.0, 105.0, 70.0], "_1st Dye Strength": 0.35,
+        "_1st Dye Distribution from Grayscale": [25.5, 76.5, 127.5], "_1st BlendMode": 0.0,
+        "Mask 1st Dye by RootMap": 1.0, "Invert 1st Dye RootMap Mask": 1.0, "_2nd Dye Strength": 0.0
+    })
+}
+
 fn merge_vars(base: Option<&Value>, over: &Map<String, Value>) -> Value {
     let mut v = base.and_then(|v| v.as_object()).cloned().unwrap_or_default();
     for (k, x) in over {
@@ -130,8 +146,8 @@ fn merge_vars(base: Option<&Value>, over: &Map<String, Value>) -> Value {
 }
 
 /// Build `spec` with `head` (the reference character: body, skeleton) into a
-/// part for library `lib` (its `atlas/<spec.atlas>/atlas.json` gives the
-/// default RLHair variables).
+/// part for library `lib` (its `atlas/<spec.atlas>/atlas.json`, if any, gives the
+/// default RLHair variables; else [`default_vars`]).
 pub fn build(spec: &Spec, head: &Source, body: &Body, lib: &Path) -> Result<BuiltPart> {
     build_with(spec, head, body, lib, None)
 }
@@ -192,7 +208,12 @@ pub fn build_with(spec: &Spec, head: &Source, body: &Body, lib: &Path, group: Op
         .map(|m| m.materials.iter().filter_map(|x| x.cc5.clone().map(|c| (base_name(&x.name).to_string(), c))).collect())
         .unwrap_or_default();
     let base_dir = mat_glb.as_ref().and_then(|p| p.parent().map(Path::to_path_buf)).unwrap_or_default();
-    let atlas: Value = serde_json::from_str(&std::fs::read_to_string(lib.join("atlas").join(&spec.atlas).join("atlas.json")).with_context(|| format!("{}: atlas {}", lib.display(), spec.atlas))?)?;
+    let atlas_json = lib.join("atlas").join(&spec.atlas).join("atlas.json");
+    let atlas: Value = if atlas_json.exists() {
+        serde_json::from_str(&std::fs::read_to_string(&atlas_json)?).with_context(|| format!("{}", atlas_json.display()))?
+    } else {
+        json!({"vars": default_vars()})
+    };
     let maps = strand_maps(lib)?;
     let default_vars = merge_vars(atlas.get("vars"), &spec.vars);
     let default_cc5 = json!({"shader": "RLHair", "srgb": [], "vars": default_vars, "maps": maps});

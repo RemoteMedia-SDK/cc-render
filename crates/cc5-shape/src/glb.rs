@@ -1,7 +1,7 @@
 //! Write a shaped copy of a GLB: apply a [`ShapeDelta`] to the bind mesh and skeleton.
 //!
 //! The GLB must carry the `_CCIDX` vertex attribute (CC5 vertex index per glTF
-//! vertex, written by `fbx_to_glb.py`) so seam-split glTF vertices map back to
+//! vertex, written by `cc5-fbx`) so seam-split glTF vertices map back to
 //! the pack's global vertex space.
 //!
 //! - Vertex positions: `bind + delta`, with the world-space delta taken into each

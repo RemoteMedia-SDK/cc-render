@@ -146,7 +146,8 @@ impl HairEdit {
                 for (k, v) in o {
                     if k == "vars" {
                         vars.extend(v.as_object().cloned().unwrap_or_default());
-                    } else {
+                    } else if k != "group" {
+                        // ("group": which group a scripted edit is for, not a setting)
                         conv[k] = v.clone();
                     }
                 }
@@ -307,10 +308,14 @@ pub fn hair_edit_run(
                 Ok(built) => {
                     if let Err(e) = install(ed, built, &mut commands, &mut lib, &rig, &mut meshes, &mut materials, &mut images, &mut ibms) {
                         ed.status = format!("{e:#}");
+                        error!("hair edit: {}", ed.status);
                     }
                     editor.dirty = true; // shape the new part
                 }
-                Err(e) => ed.status = format!("build failed: {e:#}"),
+                Err(e) => {
+                    ed.status = format!("build failed: {e:#}");
+                    error!("hair edit: {}", ed.status);
+                }
             }
         }
     }
@@ -452,7 +457,7 @@ fn install(
 }
 
 /// Save the part on screen into the library and its settings into the config.
-fn save(ed: &mut HairEdit, lib: &mut HairLib) -> anyhow::Result<String> {
+pub(crate) fn save(ed: &mut HairEdit, lib: &mut HairLib) -> anyhow::Result<String> {
     let (Some(part), Some(g), Some(head)) = (ed.last.clone(), ed.group.clone(), ed.head.clone()) else {
         anyhow::bail!("nothing built yet");
     };

@@ -1,14 +1,19 @@
 //! `cc5-hair`: build hair library parts for cc-render's avatar editor.
 //!
-//!   cc5-hair bake <spec.json> --head <head.glb|fbx> --lib <dir> [--settings <json>] [--ribbons]
+//!   cc5-hair bake <spec.json> --head <head.glb|fbx> --lib <dir> [--settings <json>] [--style <name>] [--ribbons]
 //!   cc5-hair smart-hair --src <smart_hair dir> --head <head.glb|fbx> --lib <dir>
 //!                       --config <smart_hair.json> [--only <group>[,<group>...]] [--ribbons]
+//!   cc5-hair regions <character.fbx | cc5-fbx dump.json> --lib <dir>
+//!   cc5-hair check --src <smart_hair dir> <group> [<group> ...]
 //!
 //! `bake`: one part from a spec (e.g. specs/cc5_converted.json, the character's
 //! own hair). `smart-hair`: every CC5 Smart Hair group export (`<group>/character.glb`
 //! or `.fbx`) with the per-kind / per-group settings of smart_hair.json; catalog.json
 //! and styles.json ("CC5 <group>") are updated. Strands are written as centre lines
 //! the editor expands into ribbons on the GPU; `--ribbons`: as triangle ribbons.
+//! `--style`: also a style of that one part. `regions`: the library's
+//! regions.json (conform anchors) from the reference character. `check`: the
+//! conform against CC5's own reshaped hair (the groups' shape_*.obj).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -103,6 +108,27 @@ fn bake_one(spec: &Spec, head: &Source, body: &Body, lib: &mut Library) -> Resul
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = args.first().cloned().unwrap_or_default();
+    match cmd.as_str() {
+        "regions" => {
+            let src = PathBuf::from(args.get(1).ok_or_else(|| anyhow!("regions <character.fbx | dump.json> --lib <dir>"))?);
+            let lib_dir = need(&args, "--lib")?;
+            std::fs::create_dir_all(&lib_dir)?;
+            let r = cc5_hair::regions::regions(&cc5_hair::regions::body_points(&src)?);
+            std::fs::write(lib_dir.join("regions.json"), serde_json::to_string(&r.to_json())?)?;
+            println!("regions.json: scalp {}, face {}, head_box {}, head {} anchors", r.scalp.len(), r.face.len(), r.head_box.len(), r.head.len());
+            return Ok(());
+        }
+        "check" => {
+            let src = need(&args, "--src")?;
+            let groups: Vec<&String> = args[1..].iter().filter(|a| !a.starts_with("--") && **a != src.to_string_lossy()).collect();
+            anyhow::ensure!(!groups.is_empty(), "check --src <dir> <group> [<group> ...]");
+            for g in groups {
+                cc5_hair::check::check(&src, g)?;
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
     let head_path = need(&args, "--head")?;
     let lib_dir = need(&args, "--lib")?;
     std::fs::create_dir_all(&lib_dir)?;
@@ -122,6 +148,9 @@ fn main() -> Result<()> {
             }
             let spec: Spec = serde_json::from_value(v)?;
             bake_one(&spec, &head, &body, &mut lib)?;
+            if let Some(name) = arg(&args, "--style") {
+                lib.put_style(&name, vec![spec.id.clone()]);
+            }
         }
         "smart-hair" => {
             let src = need(&args, "--src")?;
@@ -169,7 +198,7 @@ fn main() -> Result<()> {
                 lib.put_style(&format!("CC5 {g}"), parts);
             }
         }
-        _ => bail!("usage: cc5-hair bake <spec.json> | smart-hair --src <dir> --config <json>   (--head <glb> --lib <dir>)"),
+        _ => bail!("usage: cc5-hair bake <spec.json> | smart-hair --src <dir> --config <json>   (--head <glb|fbx> --lib <dir>) | regions | check"),
     }
     lib.save()?;
     println!("done in {:.1} s", t.elapsed().as_secs_f32());
