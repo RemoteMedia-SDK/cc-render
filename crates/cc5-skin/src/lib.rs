@@ -221,6 +221,75 @@ impl Xf {
     }
 }
 
+/// SkinGen's "Adjust Color" of a layer's colour: hue turn (degrees), and
+/// saturation, brightness and contrast (-1..1, 0 = as it is).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Adjust {
+    #[serde(default)]
+    pub hue: f32,
+    #[serde(default)]
+    pub saturation: f32,
+    #[serde(default)]
+    pub brightness: f32,
+    #[serde(default)]
+    pub contrast: f32,
+}
+
+impl Adjust {
+    pub fn is_identity(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The adjusted colour (sRGB 0..255).
+    pub fn apply(&self, c: [f32; 3]) -> [f32; 3] {
+        if self.is_identity() {
+            return c;
+        }
+        let mut v = c.map(|x| x / 255.0);
+        if self.hue != 0.0 {
+            // rotation about the grey axis
+            let (sn, cs) = self.hue.to_radians().sin_cos();
+            let k = (1.0 - cs) / 3.0;
+            let q = sn / 3f32.sqrt();
+            let m = [[cs + k, k - q, k + q], [k + q, cs + k, k - q], [k - q, k + q, cs + k]];
+            v = [0, 1, 2].map(|r| m[r][0] * v[0] + m[r][1] * v[1] + m[r][2] * v[2]);
+        }
+        let l = 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+        let sat = 1.0 + self.saturation;
+        let bright = 2f32.powf(self.brightness * 1.5);
+        let con = 1.0 + self.contrast;
+        [0, 1, 2].map(|i| (((l + (v[i] - l) * sat) * bright - 0.5) * con + 0.5).clamp(0.0, 1.0) * 255.0)
+    }
+}
+
+/// A layer mask over a material's whole texture (0..1 per texel, any size):
+/// multiplies the layer's opacity where the layer lands (SkinGen's "Layer Mask").
+#[derive(Clone, Debug)]
+pub struct Mask {
+    pub w: u32,
+    pub h: u32,
+    pub v: Vec<f32>,
+}
+
+impl Mask {
+    /// At texture coordinates `u`, `v` (0..1), bilinear.
+    pub fn at(&self, u: f32, v: f32) -> f32 {
+        let x = (u * self.w as f32 - 0.5).clamp(0.0, self.w as f32 - 1.0);
+        let y = (v * self.h as f32 - 0.5).clamp(0.0, self.h as f32 - 1.0);
+        let (x0, y0) = (x.floor() as u32, y.floor() as u32);
+        let (x1, y1) = ((x0 + 1).min(self.w - 1), (y0 + 1).min(self.h - 1));
+        let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+        let g = |x: u32, y: u32| self.v[(y * self.w + x) as usize];
+        (g(x0, y0) * (1.0 - fx) + g(x1, y0) * fx) * (1.0 - fy) + (g(x0, y1) * (1.0 - fx) + g(x1, y1) * fx) * fy
+    }
+
+    /// 1 − the mask.
+    pub fn inverted(mut self) -> Self {
+        self.v.iter_mut().for_each(|x| *x = 1.0 - *x);
+        self
+    }
+}
+
 /// One layer to lay over a texture.
 pub struct Apply<'a> {
     pub image: &'a LayerImage,
@@ -233,12 +302,23 @@ pub struct Apply<'a> {
     /// through the layer's colour (generated lipstick: the lips' texture)
     pub detail: f32,
     pub xf: Xf,
+    /// colour adjustment (after the tint)
+    pub adjust: Adjust,
+    /// opacity mask over the texture
+    pub mask: Option<&'a Mask>,
 }
 
-/// Runs `f(texel, sample, cos/sin of the rotation)` for every texel of a
-/// `w` x `h` RGBA8 texture the placed layer covers, in parallel; `sample` is the
-/// layer's bilinear RGBA there.
-fn each_texel(buf: &mut [u8], w: u32, h: u32, li: &LayerImage, xf: Xf, f: impl Fn(&mut [u8], [f32; 4]) + Sync) {
+impl<'a> Apply<'a> {
+    /// `image` as it is: full strength, no tint, adjustment or mask.
+    pub fn new(image: &'a LayerImage) -> Self {
+        Self { image, strength: 1.0, tint: None, detail: 0.0, xf: Xf::default(), adjust: Adjust::default(), mask: None }
+    }
+}
+
+/// Runs `f(texel, sample, mask)` for every texel of a `w` x `h` RGBA8 texture the
+/// placed layer covers, in parallel; `sample` is the layer's bilinear RGBA there
+/// and `mask` the mask's value at the texel (1 without one).
+fn each_texel(buf: &mut [u8], w: u32, h: u32, li: &LayerImage, xf: Xf, mask: Option<&Mask>, f: impl Fn(&mut [u8], [f32; 4], f32) + Sync) {
     let k = w as f32 / li.size as f32;
     let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
     let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
@@ -268,20 +348,23 @@ fn each_texel(buf: &mut [u8], w: u32, h: u32, li: &LayerImage, xf: Xf, f: impl F
             }
             let lx = ((ux - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
             let ly = ((uy - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
-            f(&mut row[x as usize * 4..x as usize * 4 + 4], bilinear(li, lx, ly));
+            let m = mask.map_or(1.0, |m| m.at((x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32));
+            if m > 0.0 {
+                f(&mut row[x as usize * 4..x as usize * 4 + 4], bilinear(li, lx, ly), m);
+            }
         }
     });
 }
 
 /// Lays layers' roughness (their maps' R, at their opacity x strength) over the
 /// G channel of a glTF metallic-roughness texture (RGBA8, `w` x `h`), in place.
-pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf)]) {
-    for (li, strength, xf) in layers {
+pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf, Option<&Mask>)]) {
+    for (li, strength, xf, mask) in layers {
         if *strength <= 0.0 {
             continue;
         }
-        each_texel(mr, w, h, li, *xf, |p, s| {
-            let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
+        each_texel(mr, w, h, li, *xf, *mask, |p, s, m| {
+            let a = (s[3] / 255.0 * strength * m).clamp(0.0, 1.0);
             p[1] = (p[1] as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
         });
     }
@@ -290,14 +373,14 @@ pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, 
 /// Lays layers' normals over a normal map (RGBA8, `w` x `h`), in place: the
 /// unpacked normals (turned with the layer's rotation) blend by the layers'
 /// opacity x strength and renormalize.
-pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf)]) {
-    for (li, strength, xf) in layers {
+pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf, Option<&Mask>)]) {
+    for (li, strength, xf, mask) in layers {
         if *strength <= 0.0 {
             continue;
         }
         let (sn, cs) = xf.rotation.to_radians().sin_cos();
-        each_texel(nm, w, h, li, *xf, |p, s| {
-            let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
+        each_texel(nm, w, h, li, *xf, *mask, |p, s, m| {
+            let a = (s[3] / 255.0 * strength * m).clamp(0.0, 1.0);
             if a <= 0.0 {
                 return;
             }
@@ -313,7 +396,8 @@ pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32
 }
 
 /// Lays `layers` over `base` (RGBA8 sRGB, `w` x `h`, any size: rects scale) in
-/// order, in place, each by its [`Blend`]. CC5 blends layers in sRGB.
+/// order, in place, each by its [`Blend`] (colour tinted, then adjusted; opacity
+/// masked). CC5 blends layers in sRGB.
 pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
     let lum = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     for a in layers {
@@ -322,20 +406,21 @@ pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
         }
         let tint = a.tint.map(|(to, from)| (to, 1.0 / lum(from).max(1.0)));
         for li in std::iter::once(a.image).chain(&a.image.parts) {
-            each_texel(base, w, h, li, a.xf, |p, s| {
-                let alpha = (s[3] / 255.0 * a.strength).clamp(0.0, 1.0);
+            each_texel(base, w, h, li, a.xf, a.mask, |p, s, m| {
+                let alpha = (s[3] / 255.0 * a.strength * m).clamp(0.0, 1.0);
                 if alpha <= 0.0 {
                     return;
                 }
                 let rel = tint.map(|(_, k)| lum([s[0], s[1], s[2]]) * k);
+                let col = [0, 1, 2].map(|c| match (tint, rel) {
+                    (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
+                    _ => s[c],
+                });
+                let col = a.adjust.apply(col);
                 // the skin's shading through the colour (relative to a mid skin tone)
                 let shade = 1.0 + a.detail * (lum([p[0] as f32, p[1] as f32, p[2] as f32]) / 115.0 - 1.0);
                 for c in 0..3 {
-                    let col = match (tint, rel) {
-                        (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
-                        _ => s[c],
-                    } * shade;
-                    let v = li.blend.apply(p[c] as f32 / 255.0, col.min(255.0) / 255.0, alpha);
+                    let v = li.blend.apply(p[c] as f32 / 255.0, (col[c] * shade).min(255.0) / 255.0, alpha);
                     p[c] = (v * 255.0).round().clamp(0.0, 255.0) as u8;
                 }
             });
@@ -377,10 +462,10 @@ mod tests {
     fn compose_over_with_strength_and_tint() {
         let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4), blend: Blend::Normal, parts: Vec::new() };
         let mut base = [100u8, 100, 100, 255].repeat(4);
-        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None, detail: 0.0, xf: Xf::default() }]);
+        compose(&mut base, 2, 2, &[Apply { strength: 0.5, ..Apply::new(&li) }]);
         assert_eq!(&base[0..3], &[150, 50, 50]);
         let mut base = [100u8, 100, 100, 255].repeat(4);
-        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 1.0, tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])), detail: 0.0, xf: Xf::default() }]);
+        compose(&mut base, 2, 2, &[Apply { tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])), ..Apply::new(&li) }]);
         assert_eq!(&base[0..3], &[0, 0, 200]);
     }
 
@@ -390,9 +475,22 @@ mod tests {
         let li = LayerImage { rect: [0, 0, 2, 2], size: 8, w: 2, h: 2, rgba: [255, 0, 0, 255].repeat(4), blend: Blend::Normal, parts: Vec::new() };
         let mut base = [0u8, 0, 0, 255].repeat(64);
         let xf = Xf { offset: [0.5, 0.5], scale: 1.0, rotation: 0.0 };
-        compose(&mut base, 8, 8, &[Apply { image: &li, strength: 1.0, tint: None, detail: 0.0, xf }]);
+        compose(&mut base, 8, 8, &[Apply { xf, ..Apply::new(&li) }]);
         let px = |x: usize, y: usize| base[(y * 8 + x) * 4];
         assert_eq!((px(0, 0), px(4, 4), px(5, 5)), (0, 255, 255));
+    }
+
+    #[test]
+    fn mask_and_adjust() {
+        // a red layer over grey, masked to the left half; the adjustment turns it blue-ish
+        let li = LayerImage { rect: [0, 0, 2, 1], size: 2, w: 2, h: 1, rgba: [200, 0, 0, 255].repeat(2), blend: Blend::Normal, parts: Vec::new() };
+        let mask = Mask { w: 2, h: 1, v: vec![1.0, 0.0] };
+        let mut base = [100u8, 100, 100, 255].repeat(2);
+        compose(&mut base, 2, 1, &[Apply { mask: Some(&mask), ..Apply::new(&li) }]);
+        assert_eq!((base[0], base[4]), (200, 100), "masked half untouched");
+        let turned = Adjust { hue: 240.0, ..Default::default() }.apply([200.0, 0.0, 0.0]);
+        assert!(turned[2] > 150.0 && turned[0] < 50.0, "{turned:?}");
+        assert_eq!(Adjust::default().apply([10.0, 20.0, 30.0]), [10.0, 20.0, 30.0]);
     }
 
     #[test]
@@ -400,7 +498,7 @@ mod tests {
         // flat normal (0, 0, 1) blended halfway towards (1, 0, 0)
         let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255], blend: Blend::Normal, parts: Vec::new() };
         let mut nm = vec![128u8, 128, 255, 255];
-        compose_normal(&mut nm, 1, 1, &[(&li, 0.5, Xf::default())]);
+        compose_normal(&mut nm, 1, 1, &[(&li, 0.5, Xf::default(), None)]);
         let n: Vec<f32> = nm[..3].iter().map(|&v| v as f32 / 255.0 * 2.0 - 1.0).collect();
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
         assert!((len - 1.0).abs() < 0.02 && (n[0] - n[2]).abs() < 0.03, "{n:?}");

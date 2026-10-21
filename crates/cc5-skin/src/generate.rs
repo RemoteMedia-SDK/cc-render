@@ -49,23 +49,50 @@ impl Kind {
         }
     }
 
-    /// A starting colour (sRGB 0..255) and strength.
+    /// A starting colour (sRGB 0..255) and strength: fitted through the shape to
+    /// the CC5 preset it stands for (`gen_fit.py`; the fitted shapes carry its
+    /// opacity, so mostly strength 1; contour lower: its shape spreads wider than
+    /// CC5's, and 0.35 matches CC5's render best).
     pub fn default_look(self) -> ([u8; 3], f32) {
         match self {
-            Kind::Lipstick => ([160, 48, 58], 0.7),
-            Kind::Blush => ([214, 106, 112], 0.3),
-            Kind::Eyeshadow => ([96, 62, 70], 0.55),
-            Kind::Contour => ([110, 72, 56], 0.35),
-            Kind::Highlight => ([255, 236, 220], 0.25),
-            Kind::Freckles => ([126, 74, 48], 0.6),
-            Kind::Stubble => ([42, 32, 28], 0.8),
+            Kind::Lipstick => ([164, 41, 40], 0.95),
+            Kind::Blush => ([189, 91, 82], 1.0),
+            Kind::Eyeshadow => ([96, 38, 25], 0.73),
+            Kind::Contour => ([135, 52, 20], 0.35),
+            Kind::Highlight => ([220, 162, 140], 1.0),
+            Kind::Freckles => ([117, 17, 5], 0.15),
+            Kind::Stubble => ([132, 121, 108], 0.6),
             Kind::Spot => ([120, 76, 52], 0.9),
         }
+    }
+
+    /// Its starting pattern: stubble denser than freckles' default.
+    pub fn default_pattern(self) -> Pattern {
+        match self {
+            Kind::Stubble => Pattern { density: 3.0, ..Pattern::default() },
+            _ => Pattern::default(),
+        }
+    }
+
+    /// How it blends, as the CC5 preset it is fitted to does.
+    pub fn default_blend(self) -> crate::Blend {
+        match self {
+            Kind::Contour | Kind::Freckles => crate::Blend::Multiply,
+            Kind::Highlight => crate::Blend::Screen,
+            _ => crate::Blend::Normal,
+        }
+    }
+
+    /// Roughness it lays down (0..1), if any: lipstick's satin finish.
+    pub fn default_roughness(self) -> Option<f32> {
+        (self == Kind::Lipstick).then_some(150.0 / 255.0)
     }
 }
 
 /// Freckle / stubble pattern controls: dot size and density (1 = default) and
-/// how much dots vary in size and darkness (0 = all alike, 1 = very uneven).
+/// how much dots vary in size and darkness (0 = all alike, 1 = very uneven); and
+/// SkinGen's Range controls of the shape: expansion (grow / shrink), blur
+/// (feather) and contrast, -1..1 (0 = as fitted; blur 0..1).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Pattern {
     pub size: f32,
@@ -74,6 +101,12 @@ pub struct Pattern {
     /// [`Kind::Spot`]: where (UV, 0..1)
     #[serde(default = "centre")]
     pub at: [f32; 2],
+    #[serde(default)]
+    pub expansion: f32,
+    #[serde(default)]
+    pub blur: f32,
+    #[serde(default)]
+    pub contrast: f32,
 }
 
 fn centre() -> [f32; 2] {
@@ -82,7 +115,7 @@ fn centre() -> [f32; 2] {
 
 impl Default for Pattern {
     fn default() -> Self {
-        Self { size: 1.0, density: 1.0, variation: 0.5, at: centre() }
+        Self { size: 1.0, density: 1.0, variation: 0.5, at: centre(), expansion: 0.0, blur: 0.0, contrast: 0.0 }
     }
 }
 
@@ -91,6 +124,28 @@ impl Default for Pattern {
 pub struct Generated {
     pub color: LayerImage,
     pub roughness: Option<LayerImage>,
+}
+
+/// The head's named regions, in [`Masks`]' channels: (name, which map, channel).
+pub const REGIONS: [(&str, usize, usize); 10] = [
+    ("cheek", 0, 0),
+    ("forehead", 0, 1),
+    ("upper_lip", 0, 2),
+    ("chin", 0, 3),
+    ("nose", 1, 0),
+    ("mouth", 1, 1),
+    ("upper_lid", 1, 2),
+    ("inner_lid", 1, 3),
+    ("neck", 2, 0),
+    ("ear", 2, 1),
+];
+
+impl Masks {
+    /// A named region (see [`REGIONS`]), 0..1 per texel.
+    pub fn region(&self, name: &str) -> Option<Vec<f32>> {
+        let &(_, map, c) = REGIONS.iter().find(|r| r.0 == name)?;
+        Some(channel([&self.cfulc, &self.nmuil, &self.en][map], c, self.w, self.h))
+    }
 }
 
 fn channel(m: &[u8], c: usize, w: u32, h: u32) -> Vec<f32> {
@@ -266,6 +321,36 @@ const SHAPE_FRECKLES: &[(&str, f32)] = &[("inner_lid.dy48", 10.5913), ("inner_li
 /// beard_stubble, IoU 0.545
 const SHAPE_STUBBLE: &[(&str, f32)] = &[("chin.dx-24", 2.6286), ("chin.dx24", 1.179), ("cheek.out", 0.987), ("cheek.dy48", 0.6643), ("chin.dy48", 0.6328), ("neck.out", 0.4581), ("mouth.dy48", 0.4293), ("chin.out", 0.4202), ("neck.dy-48", 0.3845), ("upper_lip.dy48", 0.2932), ("upper_lip.dx-24", 0.2465), ("mouth.dy-24", 0.0943), ("mouth.out", 0.081), ("upper_lip.dx-12s", 0.0632), ("mouth.dy-48", 0.0365), ("chin.dx-12s", 0.0304), ("ear.dy-48", 0.0017)];
 
+/// SkinGen's Range controls on a shape (0..1): blur feathers it (radius up to 24
+/// texels at 1024), expansion grows (> 0) or shrinks (< 0) it (a power curve),
+/// contrast hardens (> 0) or softens (< 0) its edge.
+fn range(a: Vec<f32>, w: u32, h: u32, p: &Pattern) -> Vec<f32> {
+    let s = w as f32 / 1024.0;
+    let a = if p.blur > 0.0 { blur(&a, w, h, (p.blur.min(1.0) * 24.0 * s).round().max(1.0) as u32, 2) } else { a };
+    if p.expansion == 0.0 && p.contrast == 0.0 {
+        return a;
+    }
+    let g = 2f32.powf(-2.0 * p.expansion.clamp(-1.0, 1.0));
+    let k = if p.contrast >= 0.0 { 1.0 + 4.0 * p.contrast } else { 1.0 + p.contrast.max(-0.9) };
+    a.into_iter()
+        .map(|v| {
+            let v = v.clamp(0.0, 1.0).powf(g);
+            if p.contrast == 0.0 {
+                v
+            } else {
+                ((v - 0.5) * k + 0.5).clamp(0.0, 1.0)
+            }
+        })
+        .collect()
+}
+
+/// A roughness layer for `color`'s opacity at `value` (0..1): R = roughness, A = opacity.
+pub fn roughness_layer(color: &LayerImage, value: f32) -> LayerImage {
+    let r = (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let rgba = color.rgba.chunks(4).flat_map(|p| [r, r, r, p[3]]).collect();
+    LayerImage { rgba, blend: crate::Blend::Normal, parts: Vec::new(), ..color.clone() }
+}
+
 /// The generator `kind` at colour `rgb`; `seed` varies freckles and stubble.
 pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern) -> Generated {
     let (psize, pdens, pvar) = (pattern.size.max(0.05), pattern.density.max(0.01), pattern.variation);
@@ -300,7 +385,7 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
         Kind::Contour => fitted(&chs, w, h, SHAPE_CONTOUR),
         Kind::Highlight => fitted(&chs, w, h, SHAPE_HIGHLIGHT),
         Kind::Freckles => {
-            let region = fitted(&chs, w, h, SHAPE_FRECKLES);
+            let region = range(fitted(&chs, w, h, SHAPE_FRECKLES), w, h, &pattern);
             let dots = speckle(w, h, 1.1 * s * psize, 0.006 * pdens / (s * s), pvar, seed);
             region.iter().zip(&dots).map(|(r, d)| r * d).collect()
         }
@@ -317,19 +402,17 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
                 .collect()
         }
         Kind::Stubble => {
-            let region = fitted(&chs, w, h, SHAPE_STUBBLE);
+            let region = range(fitted(&chs, w, h, SHAPE_STUBBLE), w, h, &pattern);
             let dots = speckle(w, h, 0.55 * s * psize, 0.09 * pdens / (s * s), pvar, seed);
             region.iter().zip(&dots).map(|(r, d)| r * d).collect()
         }
     };
 
+    let alpha = if matches!(kind, Kind::Freckles | Kind::Stubble) { alpha } else { range(alpha, w, h, &pattern) };
     let rgba: Vec<u8> = alpha.iter().flat_map(|a| [rgb[0], rgb[1], rgb[2], (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
-    let color = LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: crate::Blend::Normal, parts: Vec::new() };
+    let color = LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: kind.default_blend(), parts: Vec::new() };
     // lipstick: a satin finish (rougher than bare lips' wet sheen is CC5's matte look)
-    let roughness = (kind == Kind::Lipstick).then(|| {
-        let rgba = alpha.iter().flat_map(|a| [150u8, 150, 150, (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
-        LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: crate::Blend::Normal, parts: Vec::new() }
-    });
+    let roughness = kind.default_roughness().map(|r| roughness_layer(&color, r));
     Generated { color, roughness }
 }
 
@@ -346,6 +429,18 @@ mod tests {
         assert_eq!((o[1], o[6], o[3], o[4]), (1.0, 1.0, 0.0, 0.0));
         let d = shift_y(&a, 8, 2, 1);
         assert_eq!((d[8 + 3], d[3]), (1.0, 0.0));
+    }
+
+    #[test]
+    fn range_grows_shrinks_and_hardens() {
+        let a: Vec<f32> = (0..16).map(|i| i as f32 / 15.0).collect();
+        let p = |e: f32, c: f32| Pattern { expansion: e, contrast: c, ..Pattern::default() };
+        let sum = |v: &[f32]| v.iter().sum::<f32>();
+        assert_eq!(range(a.clone(), 16, 1, &Pattern::default()), a);
+        assert!(sum(&range(a.clone(), 16, 1, &p(0.5, 0.0))) > sum(&a), "expansion grows");
+        assert!(sum(&range(a.clone(), 16, 1, &p(-0.5, 0.0))) < sum(&a), "and shrinks");
+        let hard = range(a.clone(), 16, 1, &p(0.0, 1.0));
+        assert!(hard[2] < a[2] && hard[13] > a[13], "contrast hardens the edge");
     }
 
     #[test]
