@@ -546,8 +546,10 @@ pub(crate) fn save(ed: &mut HairEdit, lib: &mut HairLib) -> anyhow::Result<Strin
     Ok(format!("saved {} ({:.0} MB)", path.display(), std::fs::metadata(&path)?.len() as f64 / 1048576.0))
 }
 
-fn num(ui: &mut egui::Ui, v: &mut Value, key: &str, range: std::ops::RangeInclusive<f64>, label: &str, log: bool) -> bool {
-    let mut x = v.get(key).and_then(Value::as_f64).unwrap_or(*range.start());
+/// A slider for `v[key]`; a key the settings leave out shows cc5-hair's default
+/// (`defaults[key]`), not the slider's end.
+fn num(ui: &mut egui::Ui, v: &mut Value, defaults: &Value, key: &str, range: std::ops::RangeInclusive<f64>, label: &str, log: bool) -> bool {
+    let mut x = v.get(key).and_then(Value::as_f64).or_else(|| defaults.get(key).and_then(Value::as_f64)).unwrap_or(*range.start());
     let changed = ui.add(egui::Slider::new(&mut x, range).logarithmic(log).text(label)).changed();
     if changed {
         v[key] = json!(x);
@@ -613,28 +615,32 @@ pub fn hair_edit_ui(ui: &mut egui::Ui, ed: &mut HairEdit, lib: &mut HairLib) {
         let mut changed = false;
         let c = &mut ed.conv;
         ui.label("Look");
-        changed |= num(ui, c, "strands_per_cm2", 1.0..=150.0, "density (strands / cm²)", true);
+        // cc5-hair's defaults for keys the settings leave out (shape length: 1)
+        let dconv = serde_json::to_value(cc5_hair::settings::Convert::default()).unwrap_or_default();
+        let mut dshape = dconv.get("shape").cloned().unwrap_or_else(|| json!({}));
+        dshape["length"] = json!(1.0);
+        changed |= num(ui, c, &dconv, "strands_per_cm2", 1.0..=150.0, "density (strands / cm²)", true);
         changed |= pair(ui, c, "width", 0.00002..=0.0005, "strand width (m)", [0.00008, 0.00013]);
-        changed |= num(ui, c, "points", 3.0..=24.0, "points per strand", false);
-        changed |= num(ui, c, "clumps_per_cm", 0.0..=20.0, "clumps per cm", false);
-        changed |= num(ui, c, "clump_spread", 0.02..=0.5, "clump spread", false);
+        changed |= num(ui, c, &dconv, "points", 3.0..=24.0, "points per strand", false);
+        changed |= num(ui, c, &dconv, "clumps_per_cm", 0.0..=20.0, "clumps per cm", false);
+        changed |= num(ui, c, &dconv, "clump_spread", 0.02..=0.5, "clump spread", false);
         changed |= pair(ui, c, "clump_shade", 0.2..=1.6, "clump shade", [0.75, 1.15]);
         changed |= pair(ui, c, "shade", 0.2..=1.6, "strand shade", [0.82, 1.08]);
         changed |= pair(ui, c, "depth_shade", 0.0..=1.0, "depth shade (darkest, curve)", [1.0, 0.8]);
-        changed |= num(ui, c, "thickness", 0.0..=0.01, "layer thickness (m)", false);
-        changed |= num(ui, c, "root_fade", 0.0..=0.5, "root fade", false);
+        changed |= num(ui, c, &dconv, "thickness", 0.0..=0.01, "layer thickness (m)", false);
+        changed |= num(ui, c, &dconv, "root_fade", 0.0..=0.5, "root fade", false);
         changed |= pair(ui, c, "accept", 0.0..=1.0, "texture acceptance", [0.05, 0.6]);
         ui.label("Shape");
         if !c.get("shape").is_some_and(Value::is_object) {
             c["shape"] = json!({"length": 1.0});
         }
         let sh = &mut c["shape"];
-        changed |= num(ui, sh, "length", 0.2..=2.0, "length", false);
-        changed |= num(ui, sh, "gravity", -0.05..=0.05, "gravity", false);
-        changed |= num(ui, sh, "curl_radius", 0.0..=0.01, "curl radius (m)", false);
-        changed |= num(ui, sh, "curl_period", 0.005..=0.1, "curl period (m)", false);
-        changed |= num(ui, sh, "frizz", 0.0..=0.005, "frizz (m)", false);
-        changed |= num(ui, sh, "comb_strength", 0.0..=1.0, "comb strength", false);
+        changed |= num(ui, sh, &dshape, "length", 0.2..=2.0, "length", false);
+        changed |= num(ui, sh, &dshape, "gravity", -0.05..=0.05, "gravity", false);
+        changed |= num(ui, sh, &dshape, "curl_radius", 0.0..=0.01, "curl radius (m)", false);
+        changed |= num(ui, sh, &dshape, "curl_period", 0.005..=0.1, "curl period (m)", false);
+        changed |= num(ui, sh, &dshape, "frizz", 0.0..=0.005, "frizz (m)", false);
+        changed |= num(ui, sh, &dshape, "comb_strength", 0.0..=1.0, "comb strength", false);
         ui.horizontal(|ui| {
             let mut d: [f64; 3] = serde_json::from_value(sh.get("comb").cloned().unwrap_or(Value::Null)).unwrap_or([0.0, -1.0, 0.0]);
             let mut ch = false;
