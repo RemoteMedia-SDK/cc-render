@@ -9,7 +9,7 @@ publish = false
 # heavy renderer stack compiles in isolation.
 [workspace]
 # `cc5-shape`: CC5 shaping sliders (Rust + Python); `cc5-hair`: CC5 hair -> strand parts.
-members = ["crates/cc5-shape", "crates/cc5-hair", "crates/cc5-fbx"]
+members = ["crates/cc5-shape", "crates/cc5-hair", "crates/cc5-fbx", "crates/cc5-skin"]
 
 [profile.release]
 opt-level = 3
@@ -77,5 +77,7 @@ cc5-shape = { path = "crates/cc5-shape" }
 bevy_egui = "0.32"
 # live hair editing in the avatar editor (CC5 hair -> strands)
 cc5-hair = { path = "crates/cc5-hair" }
+# avatar editor: skin layers / skins captured from CC5
+cc5-skin = { path = "crates/cc5-skin" }
 # avatar editor: GPU-ribbon hair expansion in parallel (already in the tree via cc5-shape)
 rayon = "1"

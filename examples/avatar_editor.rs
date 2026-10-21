@@ -82,6 +82,14 @@ mod hair;
 mod hair_edit;
 use hair::{hair_bind, hair_shape, hair_sync, hair_ui, HairLib};
 use hair_edit::{hair_edit_run, hair_edit_ui, HairEdit};
+#[path = "avatar_editor/skin.rs"]
+mod skin;
+#[path = "avatar_editor/cc5_scene.rs"]
+mod cc5_scene;
+#[path = "avatar_editor/ibl.rs"]
+mod ibl;
+use cc5_scene::{cc5_lights, Cc5Scene};
+use skin::{skin_layers, skin_sync, skin_ui, SkinEdit};
 
 const ATTRIBUTE_CCIDX: MeshVertexAttribute = MeshVertexAttribute::new("CcIdx", 0x0CC5_1D_E7, VertexFormat::Float32);
 
@@ -109,6 +117,9 @@ struct Editor {
     out_path: PathBuf,
     recipe_path: String,
     status: String,
+    /// `--hide-hair` / a job's `hide_hair`: the character's own hair, brows and
+    /// earrings hidden (as in CC5 while SkinGen edits: its skin renders lack them).
+    hide_hair: bool,
     /// Framing requested by the UI: (joints whose midpoint to aim at, camera distance);
     /// no joints = whole body.
     focus_request: Option<(&'static [&'static str], f32)>,
@@ -194,6 +205,12 @@ struct SnapJob {
     /// Save the edited part into the library (as the panel's Save) before the shot.
     #[serde(default)]
     save: bool,
+    /// Skin recipe (absent: the character's skin).
+    #[serde(default)]
+    skin: Option<PathBuf>,
+    /// Hide the character's own hair, brows and earrings.
+    #[serde(default)]
+    hide_hair: bool,
     #[serde(default = "head_view")]
     view: String,
     #[serde(default = "one")]
@@ -290,6 +307,10 @@ fn main() -> anyhow::Result<()> {
     let style_arg = opt("--style")?.map(std::fs::canonicalize).transpose()?;
     let expr = opt("--expressions")?.map(|d| ExpressionPack::load(std::path::Path::new(&d))).transpose()?;
     let hd = opt("--hd")?.map(|d| SubdivMap::load(std::path::Path::new(&d))).transpose()?;
+    let cc5_scene_arg = opt("--cc5-scene")?;
+    let cc5_ibl_arg = opt("--cc5-ibl")?.map(PathBuf::from);
+    let skin_recipe = opt("--skin")?.map(PathBuf::from).or_else(|| first_job.as_ref().and_then(|j| j.skin.clone()));
+    let skin_pack_arg = opt("--skin-pack")?.map(PathBuf::from);
     let mut hair_lib = opt("--hair-lib")?.map(|d| HairLib::load(std::path::Path::new(&d))).transpose()?;
     if let Some(name) = opt("--hair-style")?.or_else(|| first_job.as_ref().and_then(|j| j.style.clone()).filter(|s| !s.is_empty())) {
         hair_lib.as_mut().ok_or_else(|| anyhow::anyhow!("--hair-style needs --hair-lib"))?.apply_style(&name)?;
@@ -335,6 +356,11 @@ fn main() -> anyhow::Result<()> {
         }
         None => false,
     };
+    let hide_hair = args.iter().any(|a| a == "--hide-hair") || first_job.as_ref().is_some_and(|j| j.hide_hair);
+    args.retain(|a| a != "--hide-hair");
+    let cc5_lights_flag = args.iter().any(|a| a == "--cc5-lights");
+    args.retain(|a| a != "--cc5-lights");
+    let cc5_scene = cc5_scene_arg.map(|p| Cc5Scene::load(std::path::Path::new(&p), cc5_lights_flag, cc5_ibl_arg.clone())).transpose()?;
     if args.len() == 1 {
         // no character given: the default editor folder's character and pack
         let (glb, pack) = default_inputs();
@@ -343,6 +369,7 @@ fn main() -> anyhow::Result<()> {
     }
     anyhow::ensure!(args.len() == 3 || args.len() == 4, "[character.glb pack_dir [shaped_out.glb]] [--recipe recipe.json] ...");
     let glb_path = std::fs::canonicalize(&args[1]).map_err(|e| anyhow::anyhow!("{}: {e}", args[1]))?;
+    let skin_edit = SkinEdit::new(skin_recipe, Some(skin_pack_arg.unwrap_or_else(|| glb_path.parent().unwrap().join("skin"))))?;
     let pack = ShapePack::load(std::path::Path::new(&args[2]))?;
     let out_path = args.get(3).map(PathBuf::from).unwrap_or_else(|| glb_path.with_extension("shaped.glb"));
     let (base, base_label) = resolve_base(&pack, base_arg.as_deref())?;
@@ -378,6 +405,7 @@ fn main() -> anyhow::Result<()> {
         search: String::new(),
         glb_path: glb_path.clone(),
         focus_request: None,
+        hide_hair,
         ev100,
         recipe_path: recipe_arg.unwrap_or_else(|| out_path.with_extension("recipe.json").to_string_lossy().into_owned()),
         out_path,
@@ -444,7 +472,8 @@ fn main() -> anyhow::Result<()> {
         .init_resource::<Rig>()
         .insert_resource(Style { path: style_arg, ..default() })
         .insert_resource(Cc5Materials { enabled: !no_cc5, ..default() })
-        .add_systems(Startup, setup)
+        .insert_resource(skin_edit)
+        .add_systems(Startup, (setup, cc5_lights.run_if(resource_exists::<Cc5Scene>)).chain())
         .add_systems(
             Update,
             (
@@ -455,6 +484,8 @@ fn main() -> anyhow::Result<()> {
                 style_apply,
                 (hair_sync, hair_bind).chain().run_if(resource_exists::<HairLib>),
                 hair_edit_run.run_if(resource_exists::<HairEdit>),
+                (skin_sync, skin_layers).chain(),
+                hide_own_hair,
                 apply_shape,
                 snapshot.run_if(resource_exists::<Snapshot>),
                 orbit_camera,
@@ -463,6 +494,9 @@ fn main() -> anyhow::Result<()> {
                 .after(Cc5MaterialsSet),
         );
     if let Some(s) = snap {
+        app.insert_resource(s);
+    }
+    if let Some(s) = cc5_scene {
         app.insert_resource(s);
     }
     if let Some(h) = hair_lib {
@@ -649,9 +683,13 @@ fn snapshot(
     mut exit: EventWriter<AppExit>,
     mut hair: Option<ResMut<HairLib>>,
     mut hair_edit: Option<ResMut<HairEdit>>,
+    mut skin: ResMut<SkinEdit>,
+    cc5_scene: Option<Res<Cc5Scene>>,
+    mut projections: Query<&mut Projection>,
+    windows: Query<&Window>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-    if !rig.ready || hair.as_ref().is_some_and(|h| !h.settled()) || hair_edit.as_ref().is_some_and(|e| e.busy()) {
+    if !rig.ready || hair.as_ref().is_some_and(|h| !h.settled()) || hair_edit.as_ref().is_some_and(|e| e.busy()) || !skin.ready() {
         return;
     }
     let n = cc5.iter().count();
@@ -677,6 +715,31 @@ fn snapshot(
         snap.framed += time.delta_secs();
     }
     match snap.step {
+        // `cc5:<view>`: CC5's camera from --cc5-scene
+        1 if snap.view.starts_with("cc5:") => {
+            let name = &snap.view[4..];
+            let Some(v) = cc5_scene.as_ref().and_then(|s| s.view(name)) else {
+                error!("--view {}: needs --cc5-scene with that view", snap.view);
+                exit.send(AppExit::error());
+                return;
+            };
+            let fwd = v.transform.forward();
+            if let Ok(mut o) = orbit.get_single_mut() {
+                o.dist = 1.0;
+                o.focus = v.transform.translation + *fwd;
+                o.yaw = (-fwd.x).atan2(-fwd.z);
+                o.pitch = (-fwd.y).asin();
+                // batch jobs offset yaw from here
+                snap.base_yaw = Some(o.yaw);
+            }
+            let aspect = windows.get_single().map(|w| w.width() / w.height()).unwrap_or(16.0 / 9.0);
+            for mut p in &mut projections {
+                if let Projection::Perspective(pp) = &mut *p {
+                    pp.fov = 2.0 * ((v.hfov * 0.5).tan() / aspect).atan();
+                }
+            }
+            let _ = std::fs::remove_file(&snap.path);
+        }
         1 => match view_preset(&snap.view) {
             Some(p) => {
                 editor.focus_request = Some(p);
@@ -709,7 +772,7 @@ fn snapshot(
                 exit.send(AppExit::Success);
                 return;
             };
-            if let Err(e) = start_job(&job, &mut editor, hair.as_deref_mut(), hair_edit.as_deref_mut()) {
+            if let Err(e) = start_job(&job, &mut editor, hair.as_deref_mut(), hair_edit.as_deref_mut(), &mut skin) {
                 error!("snapshot batch: {}: {e:#}", job.out.display());
             }
             snap.save = job.save;
@@ -727,7 +790,12 @@ fn snapshot(
 }
 
 /// Show a batch job: its hair style, shape recipe and hair edit.
-fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edit: Option<&mut HairEdit>) -> anyhow::Result<()> {
+fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edit: Option<&mut HairEdit>, skin: &mut SkinEdit) -> anyhow::Result<()> {
+    editor.hide_hair = job.hide_hair;
+    match &job.skin {
+        Some(p) => skin.apply(&serde_json::from_slice(&std::fs::read(p)?)?)?,
+        None => skin.reset(),
+    }
     editor.weights = match &job.recipe {
         Some(r) => editor.pack.weights_from_recipe(&serde_json::from_slice(&std::fs::read(r)?)?)?,
         None => editor.base.clone(),
@@ -961,6 +1029,30 @@ fn capture_rig(
     editor.dirty = true;
 }
 
+/// `Editor::hide_hair`: hides our own hair, brows and earrings (after the hair
+/// library's own visibility choices).
+fn hide_own_hair(
+    editor: Res<Editor>,
+    hair: Option<Res<HairLib>>,
+    prims: Query<(Entity, &Name), With<Mesh3d>>,
+    parents: Query<&Parent>,
+    ours: Query<(), With<OurCharacter>>,
+    mut commands: Commands,
+) {
+    if !editor.hide_hair && (hair.is_some() || !editor.is_changed()) {
+        return;
+    }
+    for (e, name) in &prims {
+        let n = name.as_str().to_lowercase();
+        if n.starts_with("cc_base_") || !ours.contains(root_of(e, &parents)) {
+            continue;
+        }
+        if n.contains("hair") || n.contains("bang") || n.contains("brow") || n.contains("earring") {
+            commands.entity(e).insert(if editor.hide_hair { Visibility::Hidden } else { Visibility::Inherited });
+        }
+    }
+}
+
 fn root_of(mut e: Entity, parents: &Query<&Parent>) -> Entity {
     while let Ok(p) = parents.get(e) {
         e = p.get();
@@ -1098,6 +1190,7 @@ fn ui(
     mut exposure: Query<(&mut Exposure, Option<&mut Skybox>)>,
     mut hair: Option<ResMut<HairLib>>,
     mut hair_edit: Option<ResMut<HairEdit>>,
+    mut skin: ResMut<SkinEdit>,
 ) {
     let ed = &mut *editor;
     egui::SidePanel::left("sliders").default_width(420.0).show(contexts.ctx_mut(), |ui| {
@@ -1200,6 +1293,7 @@ fn ui(
         ui.separator();
         let needle = ed.search.to_lowercase();
         egui::ScrollArea::vertical().show(ui, |ui| {
+            skin_ui(ui, &mut skin);
             if let Some(h) = hair.as_deref_mut() {
                 hair_ui(ui, h);
                 if let Some(e) = hair_edit.as_deref_mut() {
