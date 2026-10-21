@@ -314,6 +314,10 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             // the bake ignored gives the same texture twice and no opacity.
             let same = l1.iter().zip(&l2).all(|(a, b)| (0..3).all(|c| (a[c] - b[c]).abs() < 1.0 / 255.0));
             anyhow::ensure!(!same, "{id} {m}: the bake on the second base equals the one on the character (the base was ignored)");
+            // a preset CC5 did not apply on the second base (e.g. over its layer limit)
+            let changed = |b: &[[f32; 3]], l: &[[f32; 3]]| b.iter().zip(l).filter(|(b, l)| (0..3).any(|c| (b[c] - l[c]).abs() > 3.0 / 255.0)).count();
+            let (n1, n2) = (changed(&b1, &l1), changed(&b2, &l2));
+            anyhow::ensure!(n1 < 100 || n2 * 20 > n1, "{id} {m}: changes {n1} texels on the character but {n2} on the second base (not applied there?)");
             pack.size = pack.size.max(w);
             let s = solve(&b1, &l1, &b2, &l2, w, h);
             let Some((img, rect, mean)) = crop(&s, opt.min_alpha) else { continue };
