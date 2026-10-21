@@ -61,7 +61,7 @@ impl Kind {
             Kind::Contour => ([135, 52, 20], 0.35),
             Kind::Highlight => ([220, 162, 140], 1.0),
             Kind::Freckles => ([117, 17, 5], 0.15),
-            Kind::Stubble => ([132, 121, 108], 0.6),
+            Kind::Stubble => ([132, 121, 108], 0.8),
             Kind::Spot => ([120, 76, 52], 0.9),
         }
     }
@@ -358,6 +358,9 @@ pub fn roughness_layer(color: &LayerImage, value: f32) -> LayerImage {
     LayerImage { rgba, blend: crate::Blend::Normal, parts: Vec::new(), ..color.clone() }
 }
 
+/// Stubble's haze between the hairs, as a share of the hairs' opacity.
+const STUBBLE_HAZE: f32 = 0.25;
+
 /// The generator `kind` at colour `rgb`; `seed` varies freckles and stubble.
 pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern) -> Generated {
     let (psize, pdens, pvar) = (pattern.size.max(0.05), pattern.density.max(0.01), pattern.variation);
@@ -409,9 +412,12 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
                 .collect()
         }
         Kind::Stubble => {
+            // as CC5's stubble: a faint haze over the beard area (shaved hair under
+            // the skin) with the hairs' dots on it (its layer: opacity ~0.1 between
+            // hairs, ~0.45 on them)
             let region = range(fitted(&chs, w, h, SHAPE_STUBBLE), w, h, &pattern);
             let dots = speckle(w, h, 0.55 * s * psize, 0.09 * pdens / (s * s), pvar, seed);
-            region.iter().zip(&dots).map(|(r, d)| r * d).collect()
+            region.iter().zip(&dots).map(|(r, d)| r * (STUBBLE_HAZE + (1.0 - STUBBLE_HAZE) * d)).collect()
         }
     };
 
