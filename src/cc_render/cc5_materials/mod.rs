@@ -76,11 +76,15 @@ pub struct Cc5Materials {
     /// The skin shader's calibration ([`SkinTune`]); read when a character's
     /// materials are built.
     pub skin_tune: SkinTune,
+    /// Scalp hair's diffuse and specular gains over CC5's Diffuse / Specular
+    /// Strength (1 = as calibrated in the studio light; CC5's lights need more);
+    /// read when a character's materials are built.
+    pub hair_gain: [f32; 2],
 }
 
 impl Default for Cc5Materials {
     fn default() -> Self {
-        Self { enabled: true, sss_strength: 1.0, skin_tune: SkinTune::default() }
+        Self { enabled: true, sss_strength: 1.0, skin_tune: SkinTune::default(), hair_gain: [1.0, 1.0] }
     }
 }
 
@@ -110,6 +114,11 @@ pub struct SkinTune {
     pub cavity: f32,
     /// scale of the wrapped (subsurface) light
     pub sss: f32,
+    /// strength of the normal map (0: the surface's own normal, 1: as authored)
+    pub normal: f32,
+    /// the diffuse's normal map blurred over this UV radius (subsurface
+    /// scattering softens creases; the specular keeps the detail); 0: unblurred
+    pub diffuse_blur: f32,
 }
 
 impl Default for SkinTune {
@@ -125,6 +134,8 @@ impl Default for SkinTune {
             transmission: 4.0,
             cavity: 1.0,
             sss: 1.0,
+            normal: 1.0,
+            diffuse_blur: 0.0,
         }
     }
 }
@@ -146,6 +157,8 @@ impl SkinTune {
             transmission: g(7, d.transmission),
             cavity: g(8, d.cavity),
             sss: g(9, d.sss),
+            normal: g(10, d.normal),
+            diffuse_blur: g(11, d.diffuse_blur),
         }
     }
 }
@@ -535,7 +548,7 @@ impl Plugin for Cc5MaterialsPlugin {
             MaterialPlugin::<Cc5MouthMaterial>::default(),
         ))
         .init_resource::<Cc5Materials>()
-        .add_systems(Update, (build_cc5_materials, sync_cc5_materials, mipmaps::hair_mipmaps).chain().in_set(Cc5MaterialsSet));
+        .add_systems(Update, (build_cc5_materials, sync_cc5_materials, mipmaps::hair_mipmaps, mipmaps::skin_mipmaps).chain().in_set(Cc5MaterialsSet));
     }
 }
 
@@ -738,7 +751,7 @@ fn skin_params(src: &Cc5SkinSource, present: u32, srgb: u32) -> Cc5SkinParams {
         ),
         tune_a: Vec4::new(src.tune.diffuse_detail, src.tune.micro_normal_scale, src.tune.sss_desaturate, src.tune.extra_wrap),
         tune_b: Vec4::new(src.tune.specular, src.tune.broad_weight, src.tune.direct_ao, src.tune.transmission),
-        tune_c: Vec4::new(src.tune.cavity, src.tune.sss, 0.0, 0.0),
+        tune_c: Vec4::new(src.tune.cavity, src.tune.sss, src.tune.normal, src.tune.diffuse_blur),
         color: {
             let human_on = var(v, "_Active Human Color") > 0.5;
             let blend = if human_on && var(v, "_Active Blend Map") > 0.5 { var(v, "_Blend Map Strength").clamp(0.0, 1.0) } else { 0.0 };
@@ -759,7 +772,7 @@ fn fine_hair(info: &Cc5Info) -> bool {
     info.name.contains("lash") || info.name.contains("brow")
 }
 
-fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer) -> Option<Cc5Hair> {
+fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, gain: [f32; 2]) -> Option<Cc5Hair> {
     let v = &info.vars;
     let slots = ["Hair Root Map", "Hair ID Map", "Hair Flow Map", "Hair Specular Mask Map"];
     let (tex, present, srgb) = resolve_maps(info, images, assets, slots)?;
@@ -799,10 +812,11 @@ fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer) 
                 var_or(v, "BaseColorMapStrength", 1.0),
                 dye1_mode + 8.0 * dye2_mode,
             ),
+            // lashes / brows keep the studio calibration (the gains are for scalp hair)
             light: Vec4::new(
-                var_or(v, "Diffuse Strength", 0.8),
-                var_or(v, "Specular Strength", 1.0),
-                var_or(v, "Secondary Specular Strength", 1.0),
+                var_or(v, "Diffuse Strength", 0.8) * if fine_hair(info) { 1.0 } else { gain[0] },
+                var_or(v, "Specular Strength", 1.0) * if fine_hair(info) { 1.0 } else { gain[1] },
+                var_or(v, "Secondary Specular Strength", 1.0) * if fine_hair(info) { 1.0 } else { gain[1] },
                 var_or(v, "Transmission Strength", 1.0),
             ),
             maps: Vec4::new(
@@ -1127,7 +1141,7 @@ fn build_material(
             Cc5Handle::Skin(out.skins.add(ExtendedMaterial { base, extension: ext }))
         }
         "RLHair" => {
-            let ext = hair_extension(info, images, assets)?;
+            let ext = hair_extension(info, images, assets, settings.hair_gain)?;
             // Opaque pass, alpha-tested at 0.5: hair.wgsl / hair_prepass.wgsl turn the
             // opacity into keep / drop themselves (dithered for scalp hair).
             if matches!(base.alpha_mode, AlphaMode::Mask(_) | AlphaMode::Blend | AlphaMode::AlphaToCoverage) {

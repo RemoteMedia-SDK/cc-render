@@ -27,6 +27,10 @@ pub const LUMENS_FLAT: f32 = 1000.0;
 /// dE 39.8 summed (AgX + saturation 1.6: 52.5), error in the layers' and skins'
 /// change from the base 12.1 (21.6), detail 1.01.
 pub const SATURATION: f32 = 1.0;
+/// Scalp hair's diffuse / specular gains with CC5's lights: against CC5's render
+/// of HD Neutral F with the character's hair, hair regions' mean dE 11.8 -> 7.9
+/// (crown L 5.5 -> 11.8, CC5 16.7; bangs within ~3 L).
+pub const HAIR_GAIN: [f32; 2] = [2.0, 1.0];
 pub const EXPOSURE: f32 = 0.9;
 pub const SHARPENING: f32 = 0.15;
 /// Per-light corrections by CC5 light name (calibrated on the flat grey skin).

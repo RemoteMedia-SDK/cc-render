@@ -33,7 +33,7 @@ use bevy_egui::egui;
 use cc5_skin::generate::{roughness_layer, Kind as GenKind, Masks, Pattern, REGIONS};
 use cc5_skin::{compose, compose_normal, compose_roughness, Adjust, Apply, Blend, LayerImage, Mask, SkinPack, Xf};
 use serde::{Deserialize, Serialize};
-use cc_render_plugin::cc_render::cc5_materials::{Cc5Handle, Cc5Material, Cc5SkinMaterial};
+use cc_render_plugin::cc_render::cc5_materials::{generate_mips, Cc5Handle, Cc5Material, Cc5SkinMaterial};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -807,12 +807,19 @@ pub fn skin_layers(
             skin.layers_dirty = false;
             return;
         }
-        skin.bases[i] = Some(Arc::new((img.width(), img.height(), img.data.clone())));
+        // the top level (the skin's textures carry mip chains)
+        let n = (img.width() * img.height() * 4) as usize;
+        skin.bases[i] = Some(Arc::new((img.width(), img.height(), img.data[..n.min(img.data.len())].to_vec())));
     }
     // and its metallic-roughness and normal texels (for layers that change them), when loaded
     for i in 0..skin.mats.len() {
         let texels = |h: Option<Handle<Image>>| {
-            h.and_then(|h| images.get(&h).filter(|im| im.data.len() == (im.width() * im.height() * 4) as usize).map(|im| Arc::new((im.width(), im.height(), im.data.clone()))))
+            h.and_then(|h| {
+                images.get(&h).filter(|im| im.data.len() >= (im.width() * im.height() * 4) as usize).map(|im| {
+                    // the top level (the skin's textures carry mip chains)
+                    Arc::new((im.width(), im.height(), im.data[..(im.width() * im.height() * 4) as usize].to_vec()))
+                })
+            })
         };
         if skin.mr_bases[i].is_none() {
             skin.mr_bases[i] = texels(skin.originals[i].as_ref().and_then(|o| o.mr.clone()));
@@ -825,11 +832,13 @@ pub fn skin_layers(
     let region_masks = skin.layers.iter().map(|l| &l.mask).chain(skin.generated.iter().map(|g| &g.mask)).chain(skin.decals.iter().map(|d| &d.mask)).any(|m| m.region.is_some());
     if (!skin.generated.is_empty() || region_masks) && skin.masks.is_none() {
         let head = skin.mats.iter().find(|m| m.name.contains("Head")).and_then(|m| mats.get(&m.handle));
-        let tex = |h: &Option<Handle<Image>>| h.as_ref().and_then(|h| images.get(h)).filter(|im| im.data.len() == (im.width() * im.height() * 4) as usize);
+        let tex = |h: &Option<Handle<Image>>| h.as_ref().and_then(|h| images.get(h)).filter(|im| im.data.len() >= (im.width() * im.height() * 4) as usize);
+        // the top level (the skin's textures carry mip chains)
+        let top = |im: &Image| im.data[..(im.width() * im.height() * 4) as usize].to_vec();
         if let Some(e) = head.map(|m| &m.extension) {
             match (tex(&e.mask_a), tex(&e.mask_b), tex(&e.mask_c)) {
                 (Some(a), Some(b), Some(c)) if a.size() == b.size() && b.size() == c.size() => {
-                    skin.masks = Some(Arc::new(Masks { w: a.width(), h: a.height(), cfulc: a.data.clone(), nmuil: b.data.clone(), en: c.data.clone() }));
+                    skin.masks = Some(Arc::new(Masks { w: a.width(), h: a.height(), cfulc: top(a), nmuil: top(b), en: top(c) }));
                 }
                 _ => {
                     if e.mask_a.is_none() || e.mask_b.is_none() || e.mask_c.is_none() {
@@ -1193,12 +1202,17 @@ fn xf_ui(ui: &mut egui::Ui, xf: &mut Xf) -> bool {
 
 /// Writes texels into `slot`'s image (made on first use, replaced when the size changes).
 fn put_image(images: &mut Assets<Image>, slot: &mut Option<Handle<Image>>, w: u32, h: u32, data: Vec<u8>, format: TextureFormat) -> Handle<Image> {
+    // with a mip chain (the skin's maps are seen far smaller than their size)
     if let Some(hd) = slot.clone().filter(|hd| images.get(hd).is_some_and(|im| im.width() == w && im.height() == h)) {
-        images.get_mut(&hd).unwrap().data = data;
+        let img = images.get_mut(&hd).unwrap();
+        img.data = data;
+        img.texture_descriptor.mip_level_count = 1;
+        generate_mips(img, false);
         return hd;
     }
     let mut img = Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, data, format, RenderAssetUsages::default());
     img.sampler = ImageSampler::linear();
+    generate_mips(&mut img, false);
     let hd = images.add(img);
     *slot = Some(hd.clone());
     hd
