@@ -10,7 +10,7 @@
 //! least error over both bases is kept. Normal: (1−α) = (L1−L2)/(B1−B2) over the
 //! channels and C = (L1 − B1·(1−α)) / α; multiply and screen: a per-channel
 //! effect (B·M, 1−(1−B)(1−S)), split into the least opacity and a colour.
-use crate::{Blend, Layer, LayerMap, Skin, SkinPack};
+use crate::{Blend, Layer, LayerMap, LayerPart, Skin, SkinPack};
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use rayon::prelude::*;
@@ -46,9 +46,14 @@ pub struct Solved {
     /// sRGB colour 0..1 and opacity per texel
     pub c: Vec<[f32; 3]>,
     pub a: Vec<f32>,
+    /// the main blend mode, and each texel's (parts in other modes)
     pub blend: Blend,
+    pub modes: Vec<Blend>,
     /// how well the solve explains both bases: mean |L − pred| (0..255)
     pub err_alt: f32,
+    /// per texel: that error (0..1), and how much the layer changes it (0 untouched)
+    pub e: Vec<f32>,
+    pub d: Vec<f32>,
     /// mean |L1 − B1| over the layer's texels (0..255): how visible it is
     pub size: f32,
 }
@@ -136,15 +141,52 @@ pub fn solve(blend: Blend, b1: &[[f32; 3]], l1: &[[f32; 3]], b2: &[[f32; 3]], l2
         w,
         h,
         blend,
+        modes: vec![blend; n],
         err_alt: touched.iter().map(|r| r.2).sum::<f32>() / m * 255.0,
         size: touched.iter().map(|r| r.3).sum::<f32>() / m * 255.0,
         c: res.iter().map(|r| r.0).collect(),
         a: res.iter().map(|r| r.1).collect(),
+        e: res.iter().map(|r| r.2).collect(),
+        d: res.iter().map(|r| r.3).collect(),
     }
 }
 
-/// Crop to where the layer shows; RGBA8 + rect.
-fn crop(s: &Solved, min_alpha: f32) -> Option<(RgbaImage, [u32; 4], [f32; 3])> {
+/// One solve from fits of the same layer in each blend mode: the best mode
+/// overall, and per texel another mode where it explains the texel clearly better
+/// (by over a level and at least twice as well): presets made of layers in
+/// several modes (full makeup: its lipstick multiplies, the rest is normal).
+pub fn merge(fits: Vec<Solved>) -> Solved {
+    let k = (0..fits.len()).min_by(|&a, &b| fits[a].err_alt.total_cmp(&fits[b].err_alt)).unwrap();
+    let f = &fits[k];
+    let mut out = Solved { w: f.w, h: f.h, blend: f.blend, modes: f.modes.clone(), err_alt: f.err_alt, e: f.e.clone(), d: f.d.clone(), size: f.size, c: f.c.clone(), a: f.a.clone() };
+    for i in 0..out.a.len() {
+        if out.d[i] <= 0.0 {
+            continue;
+        }
+        for f in &fits {
+            if f.a[i] > 0.0 && f.e[i] < out.e[i] - 1.0 / 255.0 && f.e[i] * 2.0 < out.e[i] {
+                (out.modes[i], out.c[i], out.a[i], out.e[i]) = (f.blend, f.c[i], f.a[i], f.e[i]);
+            }
+        }
+    }
+    // parts of a few texels are noise: back to the main mode
+    for f in &fits {
+        if f.blend != out.blend && out.modes.iter().filter(|&&m| m == f.blend).count() < 500 {
+            for i in 0..out.a.len() {
+                if out.modes[i] == f.blend {
+                    (out.modes[i], out.c[i], out.a[i], out.e[i]) = (fits[k].blend, fits[k].c[i], fits[k].a[i], fits[k].e[i]);
+                }
+            }
+        }
+    }
+    let touched: Vec<usize> = (0..out.d.len()).filter(|&i| out.d[i] > 0.0).collect();
+    out.err_alt = touched.iter().map(|&i| out.e[i]).sum::<f32>() / touched.len().max(1) as f32 * 255.0;
+    out
+}
+
+/// Crop to where the layer shows: RGBA8 in the main blend mode, the parts in
+/// other modes (same rect), the rect and the opacity-weighted mean colour.
+fn crop(s: &Solved, min_alpha: f32) -> Option<(RgbaImage, Vec<(Blend, RgbaImage)>, [u32; 4], [f32; 3])> {
     let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
     let mut mean = [0.0f64; 3];
     let mut aw = 0.0f64;
@@ -169,14 +211,22 @@ fn crop(s: &Solved, min_alpha: f32) -> Option<(RgbaImage, [u32; 4], [f32; 3])> {
     }
     // one texel of margin for bilinear sampling
     let (x0, y0, x1, y1) = (x0.saturating_sub(1), y0.saturating_sub(1), (x1 + 1).min(s.w), (y1 + 1).min(s.h));
-    let img = RgbaImage::from_fn(x1 - x0, y1 - y0, |x, y| {
-        let i = ((y + y0) * s.w + x + x0) as usize;
-        let a = if s.a[i] >= min_alpha { s.a[i] } else { 0.0 };
-        let c = s.c[i];
-        image::Rgba([(c[0] * 255.0).round() as u8, (c[1] * 255.0).round() as u8, (c[2] * 255.0).round() as u8, (a * 255.0).round() as u8])
-    });
+    let image = |mode: Blend| {
+        RgbaImage::from_fn(x1 - x0, y1 - y0, |x, y| {
+            let i = ((y + y0) * s.w + x + x0) as usize;
+            let a = if s.a[i] >= min_alpha && s.modes[i] == mode { s.a[i] } else { 0.0 };
+            let c = s.c[i];
+            image::Rgba([(c[0] * 255.0).round() as u8, (c[1] * 255.0).round() as u8, (c[2] * 255.0).round() as u8, (a * 255.0).round() as u8])
+        })
+    };
+    let parts = [Blend::Normal, Blend::Multiply, Blend::Screen]
+        .into_iter()
+        .filter(|&b| b != s.blend)
+        .map(|b| (b, image(b)))
+        .filter(|(_, img)| img.pixels().any(|p| p[3] > 0))
+        .collect();
     let mean = [0, 1, 2].map(|c| (mean[c] / aw.max(1e-9) * 255.0) as f32);
-    Some((img, [x0, y0, x1 - x0, y1 - y0], mean))
+    Some((image(s.blend), parts, [x0, y0, x1 - x0, y1 - y0], mean))
 }
 
 /// CC5's shader variables per material from an export's JSON.
@@ -211,7 +261,7 @@ fn channel_key(c: &str) -> String {
 /// Held-out check: the layer laid over `opt.check`'s image ([`crate::compose`])
 /// against CC5's texture of the layer on that image: (mean abs error, mean
 /// change), 0..255, over the layer's rect; None without that capture.
-fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 4], blend: Blend, w: u32, h: u32) -> Result<Option<(f32, f32)>> {
+fn validate(opt: &BuildOptions, id: &str, m: &str, li: &crate::LayerImage, w: u32, h: u32) -> Result<Option<(f32, f32)>> {
     let Some((pb, suffix)) = &opt.check else { return Ok(None) };
     let Some(pl) = diffuse_path(&opt.capture, &format!("{id}{suffix}"), m) else { return Ok(None) };
     let base = image::open(&pb)?.to_rgba8();
@@ -219,9 +269,9 @@ fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 
     if base.dimensions() != (w, h) || cc5.dimensions() != (w, h) {
         return Ok(None);
     }
-    let li = crate::LayerImage { rect, size: w, w: img.width(), h: img.height(), rgba: img.as_raw().clone(), blend };
+    let rect = li.rect;
     let mut ours = base.as_raw().clone();
-    crate::compose(&mut ours, w, h, &[crate::Apply { image: &li, strength: 1.0, tint: None, detail: 0.0, xf: crate::Xf::default() }]);
+    crate::compose(&mut ours, w, h, &[crate::Apply { image: li, strength: 1.0, tint: None, detail: 0.0, xf: crate::Xf::default() }]);
     let (mut err, mut size, mut n) = (0.0f64, 0.0f64, 0u64);
     for y in rect[1]..rect[1] + rect[3] {
         for x in rect[0]..rect[0] + rect[2] {
@@ -358,18 +408,33 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             anyhow::ensure!(n1 < 100 || n2 * 20 > n1, "{id} {m}: changes {n1} texels on the character but {n2} on the second base (not applied there?)");
             pack.size = pack.size.max(w);
             // the blend mode that explains both bases best
-            let s = [Blend::Normal, Blend::Multiply, Blend::Screen]
-                .map(|b| solve(b, &b1, &l1, &b2, &l2, w, h))
-                .into_iter()
-                .min_by(|a, b| a.err_alt.total_cmp(&b.err_alt))
-                .unwrap();
-            let Some((img, rect, mean)) = crop(&s, opt.min_alpha) else { continue };
+            let s = merge([Blend::Normal, Blend::Multiply, Blend::Screen].map(|b| solve(b, &b1, &l1, &b2, &l2, w, h)).into());
+            let Some((img, part_imgs, rect, mean)) = crop(&s, opt.min_alpha) else { continue };
             let file = format!("layers/{id}.{m}.png");
             img.save(opt.out.join(&file))?;
-            let cover = img.pixels().filter(|p| p[3] > 0).count() as f32;
-            let check = validate(opt, id, m, &img, rect, s.blend, w, h)?;
+            let mut parts = Vec::new();
+            for (blend, pi) in &part_imgs {
+                let f = format!("layers/{id}.{m}.{}.png", format!("{blend:?}").to_lowercase());
+                pi.save(opt.out.join(&f))?;
+                parts.push(LayerPart { diffuse: f, blend: *blend });
+            }
+            let cover = s.a.iter().filter(|&&a| a >= opt.min_alpha).count() as f32;
+            let li = crate::LayerImage {
+                rect,
+                size: w,
+                w: img.width(),
+                h: img.height(),
+                rgba: img.as_raw().clone(),
+                blend: s.blend,
+                parts: part_imgs
+                    .iter()
+                    .map(|(b, pi)| crate::LayerImage { rect, size: w, w: pi.width(), h: pi.height(), rgba: pi.as_raw().clone(), blend: *b, parts: Vec::new() })
+                    .collect(),
+            };
+            let check = validate(opt, id, m, &li, w, h)?;
+            let mix: String = part_imgs.iter().map(|(b, pi)| format!(" +{} {}", format!("{b:?}").to_lowercase(), pi.pixels().filter(|p| p[3] > 0).count())).collect();
             println!(
-                "{id:24} {m:14} {:8} rect {rect:?} size {:.1} err {:.2} ({cover} texels){}",
+                "{id:24} {m:14} {:8} rect {rect:?} size {:.1} err {:.2} ({cover} texels{mix}){}",
                 format!("{:?}", s.blend).to_lowercase(),
                 s.size,
                 s.err_alt,
@@ -381,7 +446,7 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             }
             let roughness = layer_roughness(opt, id, m, &s, rect)?;
             let normal = layer_normal(opt, id, m)?;
-            maps.insert(m.clone(), LayerMap { diffuse: file, rect, blend: s.blend, roughness, normal });
+            maps.insert(m.clone(), LayerMap { diffuse: file, rect, blend: s.blend, parts, roughness, normal });
         }
         if !maps.is_empty() {
             pack.layers.push(Layer { id: id.clone(), name: name.clone(), group: group.clone(), color, maps, source: String::new() });

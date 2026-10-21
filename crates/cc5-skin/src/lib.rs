@@ -72,6 +72,9 @@ pub struct LayerMap {
     /// how its colour combines with the skin under it
     #[serde(default, skip_serializing_if = "Blend::is_normal")]
     pub blend: Blend,
+    /// parts in other blend modes, laid after it (same rect)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<LayerPart>,
     /// roughness the layer lays down (R) with the same opacity (A), when it
     /// changes roughness (lipstick, sweat, ...); same rect
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -81,6 +84,13 @@ pub struct LayerMap {
     /// (scars, wrinkles, acne)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub normal: Option<(String, [u32; 4])>,
+}
+
+/// Part of a layer map in another blend mode than the map's (RGBA PNG like it).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LayerPart {
+    pub diffuse: String,
+    pub blend: Blend,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -147,7 +157,11 @@ impl SkinPack {
     /// A layer's map for `material`, decoded.
     pub fn layer_image(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
         let Some(m) = layer.maps.get(material) else { return Ok(None) };
-        self.decode(&m.diffuse, m.rect, m.blend).map(Some)
+        let mut li = self.decode(&m.diffuse, m.rect, m.blend)?;
+        for p in &m.parts {
+            li.parts.push(self.decode(&p.diffuse, m.rect, p.blend)?);
+        }
+        Ok(Some(li))
     }
 
     /// A layer's roughness map for `material`, decoded (R = roughness, A = opacity).
@@ -166,7 +180,7 @@ impl SkinPack {
 
     fn decode(&self, file: &str, rect: [u32; 4], blend: Blend) -> Result<LayerImage> {
         let img = image::open(self.dir.join(file)).with_context(|| file.to_string())?.to_rgba8();
-        Ok(LayerImage { rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw(), blend })
+        Ok(LayerImage { rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw(), blend, parts: Vec::new() })
     }
 }
 
@@ -181,6 +195,8 @@ pub struct LayerImage {
     pub rgba: Vec<u8>,
     /// how the colour combines with the texel under it (colour maps)
     pub blend: Blend,
+    /// parts in other blend modes (same rect), laid after this one
+    pub parts: Vec<LayerImage>,
 }
 
 /// Where a layer goes, relative to where it was captured or generated: moved
@@ -305,23 +321,25 @@ pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
             continue;
         }
         let tint = a.tint.map(|(to, from)| (to, 1.0 / lum(from).max(1.0)));
-        each_texel(base, w, h, a.image, a.xf, |p, s| {
-            let alpha = (s[3] / 255.0 * a.strength).clamp(0.0, 1.0);
-            if alpha <= 0.0 {
-                return;
-            }
-            let rel = tint.map(|(_, k)| lum([s[0], s[1], s[2]]) * k);
-            // the skin's shading through the colour (relative to a mid skin tone)
-            let shade = 1.0 + a.detail * (lum([p[0] as f32, p[1] as f32, p[2] as f32]) / 115.0 - 1.0);
-            for c in 0..3 {
-                let col = match (tint, rel) {
-                    (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
-                    _ => s[c],
-                } * shade;
-                let v = a.image.blend.apply(p[c] as f32 / 255.0, col.min(255.0) / 255.0, alpha);
-                p[c] = (v * 255.0).round().clamp(0.0, 255.0) as u8;
-            }
-        });
+        for li in std::iter::once(a.image).chain(&a.image.parts) {
+            each_texel(base, w, h, li, a.xf, |p, s| {
+                let alpha = (s[3] / 255.0 * a.strength).clamp(0.0, 1.0);
+                if alpha <= 0.0 {
+                    return;
+                }
+                let rel = tint.map(|(_, k)| lum([s[0], s[1], s[2]]) * k);
+                // the skin's shading through the colour (relative to a mid skin tone)
+                let shade = 1.0 + a.detail * (lum([p[0] as f32, p[1] as f32, p[2] as f32]) / 115.0 - 1.0);
+                for c in 0..3 {
+                    let col = match (tint, rel) {
+                        (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
+                        _ => s[c],
+                    } * shade;
+                    let v = li.blend.apply(p[c] as f32 / 255.0, col.min(255.0) / 255.0, alpha);
+                    p[c] = (v * 255.0).round().clamp(0.0, 255.0) as u8;
+                }
+            });
+        }
     }
 }
 
@@ -357,7 +375,7 @@ mod tests {
 
     #[test]
     fn compose_over_with_strength_and_tint() {
-        let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4), blend: Blend::Normal };
+        let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4), blend: Blend::Normal, parts: Vec::new() };
         let mut base = [100u8, 100, 100, 255].repeat(4);
         compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None, detail: 0.0, xf: Xf::default() }]);
         assert_eq!(&base[0..3], &[150, 50, 50]);
@@ -369,7 +387,7 @@ mod tests {
     #[test]
     fn placement_moves_the_layer() {
         // a 2x2 red patch at the top-left of a 8x8 texture, moved by half the texture
-        let li = LayerImage { rect: [0, 0, 2, 2], size: 8, w: 2, h: 2, rgba: [255, 0, 0, 255].repeat(4), blend: Blend::Normal };
+        let li = LayerImage { rect: [0, 0, 2, 2], size: 8, w: 2, h: 2, rgba: [255, 0, 0, 255].repeat(4), blend: Blend::Normal, parts: Vec::new() };
         let mut base = [0u8, 0, 0, 255].repeat(64);
         let xf = Xf { offset: [0.5, 0.5], scale: 1.0, rotation: 0.0 };
         compose(&mut base, 8, 8, &[Apply { image: &li, strength: 1.0, tint: None, detail: 0.0, xf }]);
@@ -380,7 +398,7 @@ mod tests {
     #[test]
     fn compose_normal_blends_and_renormalizes() {
         // flat normal (0, 0, 1) blended halfway towards (1, 0, 0)
-        let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255], blend: Blend::Normal };
+        let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255], blend: Blend::Normal, parts: Vec::new() };
         let mut nm = vec![128u8, 128, 255, 255];
         compose_normal(&mut nm, 1, 1, &[(&li, 0.5, Xf::default())]);
         let n: Vec<f32> = nm[..3].iter().map(|&v| v as f32 / 255.0 * 2.0 - 1.0).collect();
