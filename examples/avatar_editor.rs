@@ -67,7 +67,10 @@ use std::path::PathBuf;
 
 #[path = "avatar_editor/hair.rs"]
 mod hair;
+#[path = "avatar_editor/hair_edit.rs"]
+mod hair_edit;
 use hair::{hair_bind, hair_shape, hair_sync, hair_ui, HairLib};
+use hair_edit::{hair_edit_run, hair_edit_ui, HairEdit};
 
 const ATTRIBUTE_CCIDX: MeshVertexAttribute = MeshVertexAttribute::new("CcIdx", 0x0CC5_1D_E7, VertexFormat::Float32);
 
@@ -161,7 +164,38 @@ struct Style {
     status: String,
 }
 
-/// `--snapshot`: render a camera preset to a file, then exit.
+/// One `--snapshot-batch` job: what to show and where to save it.
+#[derive(serde::Deserialize, Clone)]
+struct SnapJob {
+    out: PathBuf,
+    /// Hair style to apply ("" or absent: none / own hair).
+    #[serde(default)]
+    style: Option<String>,
+    /// Shape recipe (absent: the character as captured).
+    #[serde(default)]
+    recipe: Option<PathBuf>,
+    /// Live hair edit: {"group": ..., settings...} (needs --hair-src).
+    #[serde(default)]
+    edit: Option<serde_json::Value>,
+    #[serde(default = "head_view")]
+    view: String,
+    #[serde(default = "one")]
+    zoom: f32,
+    #[serde(default)]
+    yaw: f32,
+    #[serde(default)]
+    pitch: f32,
+}
+
+fn head_view() -> String {
+    "head".into()
+}
+fn one() -> f32 {
+    1.0
+}
+
+/// `--snapshot`: render a camera preset to a file, then exit (`--snapshot-batch`:
+/// several, in one process).
 #[derive(Resource)]
 struct Snapshot {
     path: PathBuf,
@@ -178,6 +212,12 @@ struct Snapshot {
     step: u32,
     /// Seconds since the camera preset was applied.
     framed: f32,
+    /// `--snapshot-batch`: the jobs after this one (one process renders them all).
+    queue: std::collections::VecDeque<SnapJob>,
+    /// The camera's yaw before any job's (batch jobs set theirs from it).
+    base_yaw: Option<f32>,
+    /// Shots taken (later ones skip the pipeline warm-up).
+    taken: u32,
 }
 
 #[derive(Component)]
@@ -218,15 +258,42 @@ fn main() -> anyhow::Result<()> {
         }
     };
     let recipe_arg = opt("--recipe")?;
+    // `--snapshot-batch jobs.json`: [{out, style?, recipe?, edit?, view?, zoom?, yaw?, pitch?}]
+    // rendered one after another in this process (no restart, pipelines compiled once)
+    let batch_jobs: Option<Vec<SnapJob>> = opt("--snapshot-batch")?.map(|f| -> anyhow::Result<_> { Ok(serde_json::from_str(&std::fs::read_to_string(&f)?)?) }).transpose()?;
+    let first_job = batch_jobs.as_ref().and_then(|j| j.first().cloned());
+    let recipe_arg = match first_job.as_ref().and_then(|j| j.recipe.clone()) {
+        Some(r) => Some(r.to_string_lossy().into_owned()),
+        None => recipe_arg,
+    };
     let ev100: f32 = opt("--ev100")?.map(|v| v.parse()).transpose()?.unwrap_or(DEFAULT_EV100);
     let style_arg = opt("--style")?.map(std::fs::canonicalize).transpose()?;
     let expr = opt("--expressions")?.map(|d| ExpressionPack::load(std::path::Path::new(&d))).transpose()?;
     let hd = opt("--hd")?.map(|d| SubdivMap::load(std::path::Path::new(&d))).transpose()?;
     let mut hair_lib = opt("--hair-lib")?.map(|d| HairLib::load(std::path::Path::new(&d))).transpose()?;
-    if let Some(name) = opt("--hair-style")? {
+    if let Some(name) = opt("--hair-style")?.or_else(|| first_job.as_ref().and_then(|j| j.style.clone()).filter(|s| !s.is_empty())) {
         hair_lib.as_mut().ok_or_else(|| anyhow::anyhow!("--hair-style needs --hair-lib"))?.apply_style(&name)?;
     }
-    let snapshot_arg = opt("--snapshot")?;
+    // live hair editing: CC5 Smart Hair exports rebuilt with cc5-hair in the background
+    let hair_edit = match opt("--hair-src")? {
+        Some(src) => {
+            anyhow::ensure!(hair_lib.is_some(), "--hair-src needs --hair-lib");
+            let head = opt("--hair-head")?.ok_or_else(|| anyhow::anyhow!("--hair-src needs --hair-head <reference character GLB>"))?;
+            let mut e = HairEdit::new(PathBuf::from(src), PathBuf::from(head), opt("--hair-config")?.map(PathBuf::from))?;
+            let edit_arg = match opt("--hair-edit")? {
+                Some(f) => Some(serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&f)?)?),
+                None => first_job.as_ref().and_then(|j| j.edit.clone()),
+            };
+            if let Some(v) = edit_arg {
+                // {"group": "...", ...settings}: start editing it (scripted checks)
+                let g = v["group"].as_str().ok_or_else(|| anyhow::anyhow!("--hair-edit: no \"group\""))?.to_string();
+                e.select(&g, Some(&v));
+            }
+            Some(e)
+        }
+        None => None,
+    };
+    let snapshot_arg = opt("--snapshot")?.or_else(|| first_job.as_ref().map(|j| j.out.to_string_lossy().into_owned()));
     let view = opt("--view")?.unwrap_or_else(|| "head".into());
     let deg = |v: Option<String>| -> anyhow::Result<f32> { Ok(v.map(|v| v.parse::<f32>()).transpose()?.unwrap_or(0.0).to_radians()) };
     let (yaw, pitch) = (deg(opt("--yaw")?)?, deg(opt("--pitch")?)?);
@@ -291,7 +358,7 @@ fn main() -> anyhow::Result<()> {
     if snapshot_arg.is_some() {
         window.resolution = bevy::window::WindowResolution::new(size.0, size.1).with_scale_factor_override(1.0);
     }
-    let snap = snapshot_arg.map(|p| Snapshot {
+    let mut snap = snapshot_arg.map(|p| Snapshot {
         path: PathBuf::from(p),
         view,
         yaw,
@@ -302,7 +369,31 @@ fn main() -> anyhow::Result<()> {
         cc5_count: 0,
         step: 0,
         framed: 0.0,
+        queue: Default::default(),
+        base_yaw: None,
+        taken: 0,
     });
+    // batch: the first job is set up like --snapshot (style / recipe / edit applied below);
+    // the rest run in the same process, one after another
+    if let Some(jobs) = &batch_jobs {
+        let mut q: std::collections::VecDeque<SnapJob> = jobs.iter().cloned().collect();
+        let first = q.pop_front().ok_or_else(|| anyhow::anyhow!("--snapshot-batch: no jobs"))?;
+        snap = Some(Snapshot {
+            path: first.out.clone(),
+            view: first.view.clone(),
+            yaw: first.yaw.to_radians(),
+            pitch: first.pitch.to_radians(),
+            zoom: first.zoom,
+            pan: Vec2::ZERO,
+            stable: 0.0,
+            cc5_count: 0,
+            step: 0,
+            framed: 0.0,
+            queue: q,
+            base_yaw: None,
+            taken: 0,
+        });
+    }
     let mut app = App::new();
     app.add_plugins(
             DefaultPlugins
@@ -332,6 +423,7 @@ fn main() -> anyhow::Result<()> {
                 ui.run_if(not(resource_exists::<Snapshot>)),
                 style_apply,
                 (hair_sync, hair_bind).chain().run_if(resource_exists::<HairLib>),
+                hair_edit_run.run_if(resource_exists::<HairEdit>),
                 apply_shape,
                 snapshot.run_if(resource_exists::<Snapshot>),
                 orbit_camera,
@@ -344,6 +436,9 @@ fn main() -> anyhow::Result<()> {
     }
     if let Some(h) = hair_lib {
         app.insert_resource(h);
+    }
+    if let Some(e) = hair_edit {
+        app.insert_resource(e);
     }
     app.run();
     Ok(())
@@ -518,10 +613,11 @@ fn snapshot(
     mut orbit: Query<&mut Orbit>,
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
-    hair: Option<Res<HairLib>>,
+    mut hair: Option<ResMut<HairLib>>,
+    mut hair_edit: Option<ResMut<HairEdit>>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-    if !rig.ready || hair.is_some_and(|h| !h.settled()) {
+    if !rig.ready || hair.as_ref().is_some_and(|h| !h.settled()) || hair_edit.as_ref().is_some_and(|e| e.busy()) {
         return;
     }
     let n = cc5.iter().count();
@@ -550,22 +646,63 @@ fn snapshot(
         },
         3 => {
             if let Ok(mut o) = orbit.get_single_mut() {
-                o.yaw += snap.yaw;
+                let base = *snap.base_yaw.get_or_insert(o.yaw);
+                o.yaw = base + snap.yaw;
                 o.pitch += snap.pitch;
                 o.dist /= snap.zoom;
                 let right = Quat::from_rotation_y(o.yaw) * Vec3::X;
                 o.focus += right * snap.pan.x + Vec3::Y * snap.pan.y;
             }
         }
-        _ if snap.framed >= SNAPSHOT_SETTLE_SECS && snap.step != u32::MAX => {
+        // the first shot waits for the render pipelines to compile; later ones only for TAA
+        _ if snap.framed >= if snap.taken == 0 { SNAPSHOT_SETTLE_SECS } else { 2.5 } && snap.step != u32::MAX => {
             commands.spawn(Screenshot::primary_window()).observe(save_to_disk(snap.path.clone()));
             snap.step = u32::MAX; // shot requested
         }
         u32::MAX if snap.path.is_file() || snap.framed > SNAPSHOT_SETTLE_SECS + 30.0 => {
-            exit.send(AppExit::Success);
+            info!("snapshot {} saved", snap.path.display());
+            snap.taken += 1;
+            let Some(job) = snap.queue.pop_front() else {
+                exit.send(AppExit::Success);
+                return;
+            };
+            if let Err(e) = start_job(&job, &mut editor, hair.as_deref_mut(), hair_edit.as_deref_mut()) {
+                error!("snapshot batch: {}: {e:#}", job.out.display());
+            }
+            snap.path = job.out;
+            snap.view = job.view;
+            snap.yaw = job.yaw.to_radians();
+            snap.pitch = job.pitch.to_radians();
+            snap.zoom = job.zoom;
+            snap.stable = 0.0;
+            snap.step = 0;
+            snap.framed = 0.0;
         }
         _ => {}
     }
+}
+
+/// Show a batch job: its hair style, shape recipe and hair edit.
+fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edit: Option<&mut HairEdit>) -> anyhow::Result<()> {
+    editor.weights = match &job.recipe {
+        Some(r) => editor.pack.weights_from_recipe(&serde_json::from_slice(&std::fs::read(r)?)?)?,
+        None => editor.pack.base_weights(),
+    };
+    editor.dirty = true;
+    if let Some(h) = hair {
+        match job.style.as_deref() {
+            Some(s) if !s.is_empty() => h.apply_style(s)?,
+            _ => {
+                h.chosen.clear();
+                h.bald = false;
+            }
+        }
+    }
+    if let (Some(e), Some(v)) = (edit, &job.edit) {
+        let g = v["group"].as_str().ok_or_else(|| anyhow::anyhow!("edit: no \"group\""))?.to_string();
+        e.select(&g, Some(v));
+    }
+    Ok(())
 }
 
 fn orbit_transform(o: &Orbit) -> Transform {
@@ -890,6 +1027,7 @@ fn ui(
     mut cc5: ResMut<Cc5Materials>,
     mut exposure: Query<(&mut Exposure, Option<&mut Skybox>)>,
     mut hair: Option<ResMut<HairLib>>,
+    mut hair_edit: Option<ResMut<HairEdit>>,
 ) {
     let ed = &mut *editor;
     egui::SidePanel::left("sliders").default_width(420.0).show(contexts.ctx_mut(), |ui| {
@@ -993,6 +1131,9 @@ fn ui(
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some(h) = hair.as_deref_mut() {
                 hair_ui(ui, h);
+                if let Some(e) = hair_edit.as_deref_mut() {
+                    hair_edit_ui(ui, e, h);
+                }
             }
             if let Some(x) = &ed.expr {
                 // Expressions that move nothing (CC5 exports some empty correctives) are hidden.

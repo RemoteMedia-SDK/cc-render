@@ -1,0 +1,26 @@
+[package]
+name = "cc5-hair"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Convert Character Creator 5 hair (Smart Hair cards) into strand hair parts for cc-render, in Rust."
+
+[lib]
+name = "cc5_hair"
+
+[[bin]]
+name = "cc5-hair"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+# 0.29 = the glam Bevy 0.15 uses
+glam = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+gltf = { version = "1.4", default-features = false, features = ["names", "extras", "utils"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# nearest point on the body (rapier's version: one copy in the tree)
+parry3d = "0.17"
+rand = "0.8"
+rayon = "1"

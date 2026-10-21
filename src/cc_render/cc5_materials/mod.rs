@@ -811,9 +811,18 @@ fn mouth_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer)
     Some(Cc5Mouth { params, micro_normal, gradient_ao, gums_mask })
 }
 
-/// The glTF file a scene entity was spawned from (its nearest `SceneRoot` ancestor).
-fn gltf_path(mut e: Entity, parents: &Query<&Parent>, roots: &Query<&SceneRoot>) -> Option<AssetPath<'static>> {
+/// For meshes built in memory (no glTF scene): the asset path their
+/// `extras.cc5` map paths are relative to, e.g. `<hair lib>/<part>.glb`.
+#[derive(Component, Clone)]
+pub struct Cc5MapBase(pub AssetPath<'static>);
+
+/// The glTF file a scene entity was spawned from (its nearest `SceneRoot`
+/// ancestor), or the nearest [`Cc5MapBase`].
+fn gltf_path(mut e: Entity, parents: &Query<&Parent>, roots: &Query<&SceneRoot>, bases: &Query<&Cc5MapBase>) -> Option<AssetPath<'static>> {
     loop {
+        if let Ok(base) = bases.get(e) {
+            return Some(base.0.clone());
+        }
         if let Ok(root) = roots.get(e) {
             return root.0.path().map(|p| p.without_label().into_owned());
         }
@@ -967,6 +976,7 @@ fn build_cc5_materials(
     children: Query<&Children>,
     names: Query<&GltfMaterialName>,
     roots: Query<&SceneRoot>,
+    bases: Query<&Cc5MapBase>,
     assets: Res<AssetServer>,
     images: Res<Assets<Image>>,
     standard: Res<Assets<StandardMaterial>>,
@@ -977,7 +987,7 @@ fn build_cc5_materials(
     for (e, mat, extras, name) in &prims {
         let id = mat.0.id();
         if !cache.contains_key(&id) {
-            let Some(path) = gltf_path(e, &parents, &roots) else { continue };
+            let Some(path) = gltf_path(e, &parents, &roots, &bases) else { continue };
             let built = parse_cc5(extras, name, &path, &assets).map_or(Built::No, Built::Pending);
             cache.insert(id, built);
         }
