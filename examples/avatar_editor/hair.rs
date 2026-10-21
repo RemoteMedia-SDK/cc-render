@@ -66,8 +66,8 @@ struct Styles {
     styles: Vec<StyleInfo>,
 }
 
-#[derive(Deserialize)]
-struct Regions {
+#[derive(Deserialize, Clone)]
+pub(crate) struct Regions {
     scalp: Vec<u32>,
     face: Vec<u32>,
     #[serde(default)]
@@ -81,7 +81,7 @@ struct Regions {
 /// world rotation and scale of CC5's bones per slider state, which the pack
 /// (joint translations only) lacks. Mixed like the pack mixes translations.
 #[derive(Deserialize, Default)]
-struct BoneXf {
+pub(crate) struct BoneXf {
     /// bone -> [qx, qy, qz, qw, sx, sy, sz] at the captured shape
     base: HashMap<String, [f32; 7]>,
     /// slider id -> "min" | "max" -> bone -> [rotation vector, scale ratio - 1]
@@ -116,7 +116,7 @@ impl BoneXf {
 /// A mesh CC5 attaches to a bone (the Viking braid rides the jaw): moved
 /// rigidly by the bone's rotation about `pivot` (its attach point, world),
 /// which follows the bone's full transform (scale included).
-struct BoneFollow {
+pub(crate) struct BoneFollow {
     joint: String,
     /// our rig's joint (its bind position and pack delta)
     rig: usize,
@@ -124,12 +124,39 @@ struct BoneFollow {
     world: Vec<Vec3>,
 }
 
-struct PartMesh {
-    handle: Handle<Mesh>,
-    base: Vec<[f32; 3]>,
-    to_mesh: Mat3,
-    conform: Conform,
-    bone: Option<BoneFollow>,
+pub(crate) struct PartMesh {
+    pub(crate) handle: Handle<Mesh>,
+    pub(crate) base: Vec<[f32; 3]>,
+    pub(crate) to_mesh: Mat3,
+    pub(crate) conform: Conform,
+    pub(crate) bone: Option<BoneFollow>,
+}
+
+/// The conform of a part mesh (world bind positions): by the part's kind, or
+/// its `follow` mode ("head_box"; "bone:" meshes keep the kind's conform for
+/// expressions).
+pub(crate) fn conform_for(regions: &Regions, kind: &str, follow: Option<&str>, body: &[[f32; 3]], world: &[[f32; 3]]) -> anyhow::Result<Conform> {
+    let (anchors, opts) = match (follow, kind) {
+        (Some("head_box"), _) if !regions.head_box.is_empty() => (&regions.head_box, ConformOptions::HEAD_BOX),
+        (_, "scalp") if !regions.head.is_empty() => (&regions.head, ConformOptions::SCALP),
+        (_, "scalp") => (&regions.scalp, ConformOptions::SCALP),
+        _ => (&regions.face, ConformOptions::SKIN),
+    };
+    Conform::bind(body, anchors, world, opts)
+}
+
+/// "bone:<joint>@x,y,z": the mesh rides that joint for shape (needs the joint on
+/// our rig and `bone_xf.json`).
+pub(crate) fn bone_follow(follow: Option<&str>, rig: &Rig, bones: Option<&BoneXf>, world: &[[f32; 3]]) -> Option<BoneFollow> {
+    let (joint, at) = follow?.strip_prefix("bone:")?.split_once('@')?;
+    let p: Vec<f32> = at.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+    let rig_i = rig.joints.iter().position(|j| j.name == joint)?;
+    (p.len() == 3 && bones.is_some_and(|b| b.base.contains_key(joint))).then(|| BoneFollow {
+        joint: joint.to_string(),
+        rig: rig_i,
+        pivot: Vec3::new(p[0], p[1], p[2]),
+        world: world.iter().map(|w| Vec3::from(*w)).collect(),
+    })
 }
 
 struct Spawned {
@@ -142,25 +169,25 @@ struct Spawned {
 
 #[derive(Resource)]
 pub struct HairLib {
-    dir: PathBuf,
+    pub(crate) dir: PathBuf,
     pub parts: Vec<PartInfo>,
     pub styles: Vec<StyleInfo>,
-    regions: Regions,
+    pub(crate) regions: Regions,
     /// per-slider bone rotation / scale (optional `bone_xf.json`): `bone:` follows
-    bones: Option<BoneXf>,
+    pub(crate) bones: Option<BoneXf>,
     /// slot -> chosen part (index into `parts`)
     pub chosen: HashMap<String, usize>,
     /// the applied style hides our own hair (`StyleInfo::bald`)
     pub bald: bool,
     spawned: HashMap<usize, Spawned>,
     /// CC_Base_Body bind positions (world), mesh-local (pack) order; from the rig.
-    body: Option<Vec<[f32; 3]>>,
+    pub(crate) body: Option<Vec<[f32; 3]>>,
     pub status: String,
 }
 
 /// Root of a spawned hair part (index into `HairLib::parts`).
 #[derive(Component)]
-pub struct HairPartRoot(usize);
+pub struct HairPartRoot(pub(crate) usize);
 
 impl HairLib {
     pub fn load(dir: &std::path::Path) -> anyhow::Result<Self> {
@@ -213,6 +240,30 @@ impl HairLib {
 
     fn kind_chosen(&self, kind: &str) -> bool {
         self.chosen.values().any(|&i| self.parts[i].kind == kind)
+    }
+}
+
+impl HairLib {
+    /// The catalog index of part `entry` (a `catalog.json` entry), added if new.
+    pub(crate) fn part_index(&mut self, entry: &serde_json::Value) -> anyhow::Result<usize> {
+        let info: PartInfo = serde_json::from_value(entry.clone())?;
+        Ok(match self.parts.iter().position(|p| p.id == info.id) {
+            Some(i) => {
+                self.parts[i] = info;
+                i
+            }
+            None => {
+                self.parts.push(info);
+                self.parts.len() - 1
+            }
+        })
+    }
+
+    /// Install a part built in memory as part `i` (spawned under `root`, already
+    /// bound): replaces a spawned copy, whose root is returned for despawning.
+    pub(crate) fn put_built(&mut self, i: usize, root: Entity, meshes: Vec<PartMesh>, skins: Vec<SkinRec>) -> Option<Entity> {
+        let old = self.spawned.insert(i, Spawned { root, frames: 3, ready: true, meshes, skins });
+        old.map(|s| s.root)
     }
 }
 
@@ -332,22 +383,17 @@ pub fn hair_bind(
             continue; // let the part's scene finish spawning and propagate transforms
         }
         let part = &lib.parts[i];
-        let by_kind = match part.kind.as_str() {
-            "scalp" if !lib.regions.head.is_empty() => (&lib.regions.head, ConformOptions::SCALP),
-            "scalp" => (&lib.regions.scalp, ConformOptions::SCALP),
-            _ => (&lib.regions.face, ConformOptions::SKIN),
-        };
         let mut unbound = 0;
         let started = std::time::Instant::now();
         for e in ents {
             let Ok((_, mesh3d, mut skin, name)) = prims.get_mut(e) else { continue };
             // primitive entities are named `<mesh>` or `<mesh>.<primitive>`
             let mesh_name = name.map(|n| n.as_str()).unwrap_or("");
-            let follow = part.follow.iter().find(|(m, _)| mesh_name == m.as_str() || mesh_name.strip_prefix(m.as_str()).is_some_and(|r| r.starts_with('.')));
-            let (anchors, opts) = match follow.map(|(_, f)| f.as_str()) {
-                Some("head_box") if !lib.regions.head_box.is_empty() => (&lib.regions.head_box, ConformOptions::HEAD_BOX),
-                _ => by_kind,
-            };
+            let follow = part
+                .follow
+                .iter()
+                .find(|(m, _)| mesh_name == m.as_str() || mesh_name.strip_prefix(m.as_str()).is_some_and(|r| r.starts_with('.')))
+                .map(|(_, f)| f.as_str());
             let old = ibms.get(&skin.inverse_bindposes).unwrap().to_vec();
             let Ok((_, j0)) = joints.get(skin.joints[0]) else { continue };
             let bind_space = j0.compute_matrix() * old[0];
@@ -377,22 +423,12 @@ pub fn hair_bind(
             };
             let world: Vec<[f32; 3]> = pos.iter().map(|p| bind_space.transform_point3(Vec3::from(*p)).into()).collect();
             // "bone:<joint>@x,y,z": rigid with that bone for shape (the conform
-            // above still carries expressions)
-            let bone = follow.and_then(|(_, f)| f.strip_prefix("bone:")).and_then(|f| {
-                let (joint, at) = f.split_once('@')?;
-                let p: Vec<f32> = at.split(',').filter_map(|v| v.trim().parse().ok()).collect();
-                let rig_i = rig.joints.iter().position(|j| j.name == joint)?;
-                (p.len() == 3 && lib.bones.as_ref().is_some_and(|b| b.base.contains_key(joint))).then(|| BoneFollow {
-                    joint: joint.to_string(),
-                    rig: rig_i,
-                    pivot: Vec3::new(p[0], p[1], p[2]),
-                    world: world.iter().map(|w| Vec3::from(*w)).collect(),
-                })
-            });
-            if follow.is_some_and(|(_, f)| f.starts_with("bone:")) && bone.is_none() {
+            // still carries expressions)
+            let bone = bone_follow(follow, &rig, lib.bones.as_ref(), &world);
+            if follow.is_some_and(|f| f.starts_with("bone:")) && bone.is_none() {
                 lib.status = format!("{}: {mesh_name}: bone follow needs its joint and bone_xf.json; conformed instead", part.id);
             }
-            match Conform::bind(body, anchors, &world, opts) {
+            match conform_for(&lib.regions, &part.kind, follow, body, &world) {
                 Ok(conform) => s.meshes.push(PartMesh {
                     handle: mesh3d.0.clone(),
                     base: pos.clone(),

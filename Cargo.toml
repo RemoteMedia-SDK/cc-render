@@ -8,8 +8,8 @@ publish = false
 # bevy / wgpu / bevy_rapier3d deps don't unify against the host's, and
 # heavy renderer stack compiles in isolation.
 [workspace]
-# `cc5-shape` (CC5 shaping sliders; Rust + Python) is the only member crate.
-members = ["crates/cc5-shape"]
+# `cc5-shape`: CC5 shaping sliders (Rust + Python); `cc5-hair`: CC5 hair -> strand parts.
+members = ["crates/cc5-shape", "crates/cc5-hair"]
 
 [profile.release]
 opt-level = 3
@@ -75,3 +75,5 @@ cc5-shape = { path = "crates/cc5-shape" }
 [dev-dependencies]
 # `examples/avatar_editor.rs` UI; 0.32 is the Bevy 0.15 line.
 bevy_egui = "0.32"
+# live hair editing in the avatar editor (CC5 hair -> strands)
+cc5-hair = { path = "crates/cc5-hair" }
