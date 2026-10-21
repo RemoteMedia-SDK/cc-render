@@ -77,6 +77,126 @@ fn soft_shadows(shaders: &mut Assets<Shader>) {
     shaders.insert(&bevy::pbr::SHADOW_SAMPLING_HANDLE, Shader::from_wgsl(src, "examples/avatar_editor/shadow_sampling.wgsl"));
 }
 
+/// A camera whose skybox is CC5's screen-space backdrop: [`cc5_backdrop_follow`]
+/// keeps it fixed on screen.
+#[derive(Component)]
+pub struct Cc5Backdrop;
+
+/// Bevy's ACES fitted tone mapping (tonemapping_shared.wgsl) inverted: the
+/// linear scene colour that maps to linear display colour `out`.
+fn aces_fitted_inverse(out: Vec3) -> Vec3 {
+    let rgb_to_rrt = Mat3::from_cols_array(&[0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777]);
+    let odt_to_rgb = Mat3::from_cols_array(&[1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602]);
+    let fitted = odt_to_rgb.inverse() * out;
+    // RRTAndODTFit(v) = (v (v + 0.0245786) - 0.000090537) / (v (0.983729 v + 0.432951) + 0.238081) = y
+    let inv = |y: f32| {
+        let (a, b, c) = (1.0 - 0.983729 * y, 0.0245786 - 0.432951 * y, -(0.000090537 + 0.238081 * y));
+        ((-b + (b * b - 4.0 * a * c).max(0.0).sqrt()) / (2.0 * a)).max(0.0)
+    };
+    rgb_to_rrt.inverse() * Vec3::new(inv(fitted.x), inv(fitted.y), inv(fitted.z))
+}
+
+/// CC5's backdrop image as a skybox cubemap in view space (for a camera at
+/// FOV_DEG and the image's aspect looking down -Z), its texels pre-inverted
+/// through the CC5 mode's grading (ACES, EXPOSURE) and the studio backdrop's
+/// brightness (0.4 of the exposure-neutral luminance) so they show as the image.
+fn backdrop_cubemap(path: &Path, images: &mut Assets<Image>) -> anyhow::Result<Handle<Image>> {
+    use bevy::render::render_asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension};
+    let src = image::open(path)?.to_rgb8();
+    let (w, h) = (src.width() as f32, src.height() as f32);
+    let sample = |u: f32, v: f32| {
+        let (x, y) = ((u * (w - 1.0)).clamp(0.0, w - 1.0), (v * (h - 1.0)).clamp(0.0, h - 1.0));
+        let (x0, y0) = (x.floor() as u32, y.floor() as u32);
+        let (x1, y1) = ((x0 + 1).min(src.width() - 1), (y0 + 1).min(src.height() - 1));
+        let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+        let p = |x: u32, y: u32| {
+            let c = src.get_pixel(x, y).0;
+            Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32) / 255.0
+        };
+        p(x0, y0).lerp(p(x1, y0), fx).lerp(p(x0, y1).lerp(p(x1, y1), fx), fy)
+    };
+    let tan_v = (crate::FOV_DEG.to_radians() * 0.5).tan();
+    let tan_h = tan_v * w / h;
+    let scale = 1.0 / (0.4 * 2f32.powf(EXPOSURE));
+    const N: usize = 256;
+    let mut data: Vec<u8> = Vec::with_capacity(N * N * 6 * 8);
+    for face in 0..6 {
+        for y in 0..N {
+            for x in 0..N {
+                let s = (x as f32 + 0.5) / N as f32 * 2.0 - 1.0;
+                let t = (y as f32 + 0.5) / N as f32 * 2.0 - 1.0;
+                // cube face order +X -X +Y -Y +Z -Z, t pointing down the face (as studio_backdrop)
+                let d = match face {
+                    0 => Vec3::new(1.0, -t, -s),
+                    1 => Vec3::new(-1.0, -t, s),
+                    2 => Vec3::new(s, 1.0, t),
+                    3 => Vec3::new(s, -1.0, -t),
+                    4 => Vec3::new(s, -t, 1.0),
+                    _ => Vec3::new(-s, -t, -1.0),
+                };
+                // screen position of the view direction (clamped to the image's edge);
+                // Bevy's cubemaps are left-handed: the view's -Z is the +Z face
+                let z = d.z.max(1e-3);
+                let (nx, ny) = (d.x / z / tan_h, d.y / z / tan_v);
+                let srgb = sample((nx + 1.0) * 0.5, (1.0 - ny) * 0.5);
+                let lin = Vec3::new(to_linear(srgb.x), to_linear(srgb.y), to_linear(srgb.z));
+                let c = aces_fitted_inverse(lin) * scale;
+                for v in [c.x, c.y, c.z, 1.0] {
+                    data.extend_from_slice(&f16_bits(v).to_le_bytes());
+                }
+            }
+        }
+    }
+    let mut image = Image::new(
+        Extent3d { width: N as u32, height: N as u32, depth_or_array_layers: 6 },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba16Float,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    image.texture_view_descriptor = Some(TextureViewDescriptor { dimension: Some(TextureViewDimension::Cube), ..default() });
+    Ok(images.add(image))
+}
+
+/// f32 -> IEEE half bits (round to nearest; values here are finite, >= 0, < 65504).
+fn f16_bits(v: f32) -> u16 {
+    let b = v.to_bits();
+    let sign = ((b >> 16) & 0x8000) as u16;
+    let exp = ((b >> 23) & 0xff) as i32 - 127 + 15;
+    let man = b & 0x7f_ffff;
+    if exp <= 0 {
+        if exp < -10 {
+            return sign;
+        }
+        let m = (man | 0x80_0000) >> (1 - exp);
+        return sign | ((m + 0x1000) >> 13) as u16;
+    }
+    if exp >= 31 {
+        return sign | 0x7c00;
+    }
+    sign | (((exp as u32) << 10) + ((man + 0x1000) >> 13)) as u16
+}
+
+fn to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Keeps CC5's backdrop fixed on screen: the skybox turned with the camera.
+pub fn cc5_backdrop_follow(mut cams: Query<(&Transform, &mut bevy::core_pipeline::Skybox), With<Cc5Backdrop>>) {
+    for (t, mut s) in &mut cams {
+        // Bevy turns the view ray by the inverse of the skybox rotation
+        let r = t.rotation;
+        if s.rotation != r {
+            s.rotation = r;
+        }
+    }
+}
+
 /// CC5's IBL → Bevy environment map intensity (cd/m² per unit radiance).
 pub const IBL_INTENSITY: f32 = 5.0;
 pub const DEFAULT_IBL: &str = r"C:\Program Files\Reallusion\Character Creator 5\Image\Default_IBL.hdr";
@@ -136,6 +256,9 @@ pub struct Cc5Scene {
     pub use_lights: bool,
     /// `--cc5-ibl`
     pub ibl: PathBuf,
+    /// CC5's render backdrop (a screen-space gradient, sRGB PNG at its render's
+    /// aspect): `backdrop.png` next to the scene file (backdrop_fit.py)
+    pub backdrop: Option<PathBuf>,
 }
 
 /// CC5 (Z up, cm) → editor (Y up, m).
@@ -206,7 +329,9 @@ impl Cc5Scene {
         }
         let a = |i: usize| s["ambient"][i].as_f64().unwrap_or(0.0) as f32;
         let ibl = ibl.unwrap_or_else(|| PathBuf::from(DEFAULT_IBL));
-        Ok(Self { views, lights, ambient: Color::linear_rgb(a(0), a(1), a(2)), use_lights, ibl })
+        let backdrop = path.with_file_name("backdrop.png");
+        let backdrop = backdrop.exists().then_some(backdrop);
+        Ok(Self { views, lights, ambient: Color::linear_rgb(a(0), a(1), a(2)), use_lights, ibl, backdrop })
     }
 
     pub fn view(&self, name: &str) -> Option<&Cc5View> {
@@ -348,6 +473,19 @@ pub fn cc5_lights(
         return;
     }
     soft_shadows(&mut shaders);
+    if let Some(p) = &scene.backdrop {
+        match backdrop_cubemap(p, &mut images) {
+            Ok(image) => {
+                for c in &cams {
+                    // the studio backdrop's brightness (exposure neutral) is kept
+                    commands.entity(c).insert(Cc5Backdrop);
+                    let image = image.clone();
+                    commands.entity(c).entry::<bevy::core_pipeline::Skybox>().and_modify(move |mut s| s.image = image);
+                }
+            }
+            Err(e) => warn!("cc5 backdrop {}: {e:#}", p.display()),
+        }
+    }
     // grading (calibrated against CC5's renders of skins and SkinGen layers):
     // ACES, as CC5's response to colour changes (makeup, beards) matches it best;
     // knobs CC5_TONEMAP = aces | agx | tony | blender | reinhard | none,
