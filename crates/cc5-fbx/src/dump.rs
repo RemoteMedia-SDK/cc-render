@@ -1,5 +1,6 @@
-//! `fbx_to_glb.py`'s dump, for the pack builders (build_editor_pack.py,
-//! build_hd_map.py, hair_regions.py). In Blender's frame (Z up, metres):
+//! The joints / weights / rest-position dump (as Blender's fbx_to_glb.py wrote
+//! it), for the pack builders (build_editor_pack.py, build_hd_map.py) and
+//! `cc5-hair regions`. In Blender's frame (Z up, metres):
 //!
 //! ```json
 //! {"joints": {name: [x, y, z]},          // bind-pose joint positions

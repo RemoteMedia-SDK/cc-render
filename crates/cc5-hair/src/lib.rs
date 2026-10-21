@@ -11,10 +11,12 @@
 //! Frame: glTF (metres, Y up), the CC5 GLBs' mesh space.
 
 pub mod cards;
+pub mod check;
 pub mod follow;
 pub mod glb_out;
 pub mod head;
 pub mod part;
+pub mod regions;
 pub mod settings;
 pub mod shade;
 pub mod shape;

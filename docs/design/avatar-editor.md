@@ -22,8 +22,8 @@ character (`remotemedia-sdk/scripts/avatars/cc5_capture_sliders.py`):
 ([`cc5_shape::ShapePack`](../../crates/cc5-shape/src/pack.rs); the
 [`cc5-shape`](../../crates/cc5-shape/README.md) crate is also a Python module,
 `import cc5_shape`): sparse vertex and joint
-deltas in the glTF frame. The reference GLB (Blender conversion of CC5's FBX
-export, `fbx_to_glb.py`) carries a `_CCIDX` vertex attribute, the CC5 vertex
+deltas in the glTF frame. The reference GLB (CC5's FBX export converted by
+`cc5-fbx`, ufbx) carries a `_CCIDX` vertex attribute, the CC5 vertex
 index of every glTF vertex, so seam-split vertices map back exactly.
 
 A slider mix is `bind + Σ tᵢ·Δᵢ` for vertices and joints, `tᵢ` linear on each
@@ -77,7 +77,7 @@ For scale, the slider moves vertices up to 12.3 cm and joints up to 11.8 cm.
 
 A CC5 HD character carries ~400 facial morph targets per face mesh (body 349,
 brows/lashes 395, tear line 437...). Bevy 0.15 refuses meshes with more than 64
-(`MAX_MORPH_WEIGHTS`), so the reference GLB has none (`fbx_to_glb.py` drops them)
+(`MAX_MORPH_WEIGHTS`), so the reference GLB has none (`cc5-fbx` drops them)
 and the expressions live in a sidecar *expression pack*, applied on the CPU like
 the shaping sliders:
 
@@ -140,7 +140,6 @@ avoids the CPU upload but needs a forked skinning/morph pipeline in Bevy 0.15.
 
 - The reference GLB drops CC5's ~400 facial morph targets (Bevy loads at most
   64); they are applied on the CPU from the expression pack instead (above).
-  `fbx_to_glb.py --keep-morphs` keeps them for other consumers.
 - Joint *rotations* are not captured; sliders are applied as joint translations.
 - Normals are not recomputed after reshaping.
 - The pack is specific to the character it was captured from.

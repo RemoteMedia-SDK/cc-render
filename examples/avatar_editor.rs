@@ -4,7 +4,7 @@
 //! Usage: avatar_editor character.glb pack_dir [shaped_out.glb] [--recipe recipe.json]
 //!                      [--style other_character.glb] [--expressions expressions_dir]
 //!
-//! `character.glb` is the CC5 reference export converted with `fbx_to_glb.py`
+//! `character.glb` is the CC5 reference export converted with `cc5-fbx`
 //! (it carries the `_CCIDX` vertex attribute); `pack_dir` holds `pack.json` and
 //! `pack.bin` from `build_editor_pack.py`. Every slider change re-evaluates the
 //! mix and rewrites the bind mesh, joint translations and inverse bind matrices
@@ -177,6 +177,9 @@ struct SnapJob {
     /// Live hair edit: {"group": ..., settings...} (needs --hair-src).
     #[serde(default)]
     edit: Option<serde_json::Value>,
+    /// Save the edited part into the library (as the panel's Save) before the shot.
+    #[serde(default)]
+    save: bool,
     #[serde(default = "head_view")]
     view: String,
     #[serde(default = "one")]
@@ -218,6 +221,8 @@ struct Snapshot {
     base_yaw: Option<f32>,
     /// Shots taken (later ones skip the pipeline warm-up).
     taken: u32,
+    /// Save the live hair edit before this shot (`SnapJob::save`).
+    save: bool,
 }
 
 #[derive(Component)]
@@ -372,6 +377,7 @@ fn main() -> anyhow::Result<()> {
         queue: Default::default(),
         base_yaw: None,
         taken: 0,
+        save: false,
     });
     // batch: the first job is set up like --snapshot (style / recipe / edit applied below);
     // the rest run in the same process, one after another
@@ -392,6 +398,7 @@ fn main() -> anyhow::Result<()> {
             queue: q,
             base_yaw: None,
             taken: 0,
+            save: first.save,
         });
     }
     let mut app = App::new();
@@ -629,6 +636,15 @@ fn snapshot(
     if snap.stable < 1.5 {
         return; // materials still building / textures still loading
     }
+    if std::mem::take(&mut snap.save) {
+        match (hair_edit.as_deref_mut(), hair.as_deref_mut()) {
+            (Some(e), Some(h)) => match hair_edit::save(e, h) {
+                Ok(msg) => info!("snapshot: {msg}"),
+                Err(err) => error!("snapshot: hair save: {err:#}"),
+            },
+            _ => error!("snapshot: save needs --hair-src"),
+        }
+    }
     snap.step = snap.step.saturating_add(1);
     if snap.step > 3 {
         snap.framed += time.delta_secs();
@@ -669,6 +685,7 @@ fn snapshot(
             if let Err(e) = start_job(&job, &mut editor, hair.as_deref_mut(), hair_edit.as_deref_mut()) {
                 error!("snapshot batch: {}: {e:#}", job.out.display());
             }
+            snap.save = job.save;
             snap.path = job.out;
             snap.view = job.view;
             snap.yaw = job.yaw.to_radians();
