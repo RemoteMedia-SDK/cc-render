@@ -33,8 +33,10 @@ pub const SATURATION: f32 = 1.0;
 pub const HAIR_GAIN: [f32; 2] = [2.0, 1.0];
 pub const EXPOSURE: f32 = 0.9;
 pub const SHARPENING: f32 = 0.15;
-/// Per-light corrections by CC5 light name (calibrated on the flat grey skin).
-const LIGHT_GAINS: [(&str, f32); 1] = [("Top", 2.5)];
+/// Per-light corrections by CC5 light name: fitted against CC5's renders of the
+/// bare skin and three skins at CC5's framing under ACES (`calib_gains.py`;
+/// mean patch dE 4.09 -> 3.76; was Top 2.5 alone, from the flat grey skin).
+const LIGHT_GAINS: [(&str, f32); 4] = [("Key Light - Up", 1.15), ("Left_Rim", 1.3), ("Top", 1.6), ("Key Light - Down", 1.3)];
 /// Where CC5's lights aim: the head (m, editor space).
 const HEAD: Vec3 = Vec3::new(0.0, 1.6, 0.0);
 /// CC5 ambient colour → Bevy ambient brightness.
