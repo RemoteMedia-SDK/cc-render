@@ -4,8 +4,9 @@
 //!
 //! `--cc5-scene scene.json` makes snapshot views `cc5:<view>` (e.g. `cc5:face`)
 //! put the camera where CC5's was: CC5's angle of view is horizontal over a
-//! 36x24 mm film gate, which its render stretches to the viewport's size; render
-//! ours at width x width/1.5 (e.g. `--size 1651x1101`) and resize to compare.
+//! 36x24 mm film gate, and its render fits the gate's height to the image with
+//! square pixels; render ours at CC5's size (e.g. `--size 1651x961`) to compare
+//! pixel for pixel.
 //! `--cc5-lights` also replaces the studio lights with CC5's, and the
 //! environment map with CC5's IBL (`--cc5-ibl file.hdr`, default CC5's
 //! `Image/Default_IBL.hdr`). Calibration knobs (env vars): CC5_LUMENS (lm per
