@@ -403,6 +403,22 @@ impl SkinEdit {
         self.pending.is_none() && !self.dirty && !self.layers_dirty && !self.skin_dirty && self.task.is_none()
     }
 
+    /// The materials show the current composite: each skin material's diffuse is
+    /// its composited image (where a skin preset or a layer gives it one). False
+    /// while the swap is pending: snapshots wait for it.
+    pub fn applied(&self, mats: &Assets<Cc5SkinMaterial>) -> bool {
+        if self.albedo.is_some() || (self.layers.is_empty() && self.generated.is_empty() && self.decals.is_empty() && self.skin.is_none()) {
+            return true;
+        }
+        let preset = self.skin.as_ref().and_then(|id| self.pack.as_ref()?.skin(id));
+        self.mats.iter().enumerate().all(|(i, m)| match (self.composed.get(i).cloned().flatten(), mats.get(&m.handle)) {
+            (Some(c), Some(mat)) => mat.base.base_color_texture.as_ref() == Some(&c),
+            // no composite yet: fine only where the preset has no diffuse for it
+            (None, _) => preset.and_then(|p| p.maps.get(&m.name)).is_none_or(|mm| !mm.contains_key("Diffuse")),
+            (Some(_), None) => false,
+        })
+    }
+
     /// Settings that differ from the character's (per material), the skin preset and layers.
     pub fn recipe(&self) -> Value {
         let mut mats = Map::new();

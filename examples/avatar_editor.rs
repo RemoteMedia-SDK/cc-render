@@ -725,9 +725,20 @@ fn snapshot(
     mut skin: ResMut<SkinEdit>,
     cc5_scene: Option<Res<Cc5Scene>>,
     mut projections: Query<&mut Projection>,
+    skin_mats: Res<Assets<cc_render_plugin::cc_render::cc5_materials::Cc5SkinMaterial>>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if !rig.ready || hair.as_ref().is_some_and(|h| !h.settled()) || hair_edit.as_ref().is_some_and(|e| e.busy()) || !skin.ready() {
+        return;
+    }
+    // the skin's composite on the materials (a frame could show the character's
+    // own diffuse after a preset): wait, and settle again once it is there
+    if !skin.applied(&skin_mats) {
+        if snap.stable > 0.0 {
+            warn!("snapshot: the skin composite is not on the materials yet; waiting");
+        }
+        snap.stable = 0.0;
+        snap.framed = 0.0;
         return;
     }
     let n = cc5.iter().count();
