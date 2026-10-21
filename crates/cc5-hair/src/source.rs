@@ -1,4 +1,4 @@
-//! A character GLB as the converter reads it: mesh objects (one per mesh node,
+//! A character GLB (or CC5 FBX export) as the converter reads it: mesh objects (one per mesh node,
 //! primitives per material), materials with their CC5 settings
 //! (`extras.cc5`, glb_cc5_materials.py) and embedded images, and the skin.
 //!
@@ -49,8 +49,24 @@ pub struct Material {
 }
 
 impl Source {
+    /// A GLB, or a CC5 FBX export (converted in memory by cc5-fbx; CC5's
+    /// material settings from the sidecar `<name>.json`, maps written to
+    /// `<name>.cc5maps/`).
     pub fn load(path: &Path) -> Result<Self> {
-        let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+        let is_fbx = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("fbx"));
+        let bytes = if is_fbx {
+            let json = path.with_extension("json");
+            let opts = cc5_fbx::GlbOptions { cc5_json: json.exists().then_some(json), maps_dir: Some(path.with_extension("cc5maps")) };
+            cc5_fbx::Character::load(path)?.to_glb(&opts)?
+        } else {
+            std::fs::read(path).with_context(|| format!("reading {}", path.display()))?
+        };
+        Self::from_bytes(path, bytes)
+    }
+
+    /// A GLB already in memory (`path`: where it came from; relative map paths
+    /// in `extras.cc5` resolve against its folder).
+    pub fn from_bytes(path: &Path, bytes: Vec<u8>) -> Result<Self> {
         let g = gltf::Gltf::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))?;
         let blob = g.blob.clone().ok_or_else(|| anyhow!("{}: no binary chunk", path.display()))?;
         let doc = g.document;
