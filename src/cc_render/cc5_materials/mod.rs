@@ -80,11 +80,13 @@ pub struct Cc5Materials {
     /// Strength (1 = as calibrated in the studio light; CC5's lights need more);
     /// read when a character's materials are built.
     pub hair_gain: [f32; 2],
+    /// Scalp hair's diffuse colour multiplier (1 = as is); read when built.
+    pub hair_tint: [f32; 3],
 }
 
 impl Default for Cc5Materials {
     fn default() -> Self {
-        Self { enabled: true, sss_strength: 1.0, skin_tune: SkinTune::default(), hair_gain: [1.0, 1.0] }
+        Self { enabled: true, sss_strength: 1.0, skin_tune: SkinTune::default(), hair_gain: [1.0, 1.0], hair_tint: [1.0; 3] }
     }
 }
 
@@ -352,6 +354,7 @@ pub struct Cc5HairParams {
     pub tangent: Vec4,
     pub lobes: Vec4,
     pub alpha: Vec4,
+    pub tint: Vec4,
     pub present: u32,
     pub srgb: u32,
     pub _pad0: u32,
@@ -772,7 +775,7 @@ fn fine_hair(info: &Cc5Info) -> bool {
     info.name.contains("lash") || info.name.contains("brow")
 }
 
-fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, gain: [f32; 2]) -> Option<Cc5Hair> {
+fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, gain: [f32; 2], tint: [f32; 3]) -> Option<Cc5Hair> {
     let v = &info.vars;
     let slots = ["Hair Root Map", "Hair ID Map", "Hair Flow Map", "Hair Specular Mask Map"];
     let (tex, present, srgb) = resolve_maps(info, images, assets, slots)?;
@@ -838,6 +841,8 @@ fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, 
             // scalp hair blends into CC5's soft mass (the negative bias keeps single
             // strands resolved; TAA smooths them); lashes / brows stay crisp clumps
             alpha: if fine_hair(info) { Vec4::new(0.3, 0.1, 0.0, 0.0) } else { Vec4::new(0.38, 0.3, -1.0, 1.0) },
+            // lashes / brows keep their colour
+            tint: if fine_hair(info) { Vec4::ONE } else { Vec3::from(tint).extend(1.0) },
             present,
             srgb,
             _pad0: 0,
@@ -1141,7 +1146,7 @@ fn build_material(
             Cc5Handle::Skin(out.skins.add(ExtendedMaterial { base, extension: ext }))
         }
         "RLHair" => {
-            let ext = hair_extension(info, images, assets, settings.hair_gain)?;
+            let ext = hair_extension(info, images, assets, settings.hair_gain, settings.hair_tint)?;
             // Opaque pass, alpha-tested at 0.5: hair.wgsl / hair_prepass.wgsl turn the
             // opacity into keep / drop themselves (dithered for scalp hair).
             if matches!(base.alpha_mode, AlphaMode::Mask(_) | AlphaMode::Blend | AlphaMode::AlphaToCoverage) {
