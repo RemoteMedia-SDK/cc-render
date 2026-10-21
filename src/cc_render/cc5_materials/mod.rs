@@ -128,6 +128,9 @@ pub struct Cc5Material {
 /// mouth cavity AO, specular mask.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct Cc5Skin {
+    /// The CC5 settings `params` were made from; edit them with [`Cc5Skin::set_vars`].
+    #[reflect(ignore)]
+    pub source: Cc5SkinSource,
     #[uniform(100)]
     pub params: Cc5SkinParams,
     #[texture(101)]
@@ -157,6 +160,29 @@ pub struct Cc5Skin {
     #[texture(117)]
     #[sampler(118)]
     pub specular: Option<Handle<Image>>,
+}
+
+/// What a [`Cc5Skin`] was built from: CC5's shader variables (`extras.cc5.vars`,
+/// names as in CC5's material panel and `RLHead.shader` / `RLSkin.shader`) and
+/// subsurface settings (`extras.cc5.sss`).
+#[derive(Debug, Clone, Default)]
+pub struct Cc5SkinSource {
+    /// RLHead (else RLSkin).
+    pub head: bool,
+    pub vars: Value,
+    pub sss: Value,
+    /// [`Cc5Materials::sss_strength`] when built.
+    pub sss_strength: f32,
+}
+
+impl Cc5Skin {
+    /// Rebuilds the uniform from edited CC5 variables / SSS settings (live edits).
+    pub fn set_vars(&mut self, vars: Value, sss: Value) {
+        self.source.vars = vars;
+        self.source.sss = sss;
+        let (present, srgb) = (self.params.present, self.params.srgb);
+        self.params = skin_params(&self.source, present, srgb);
+    }
 }
 
 /// Uniform of [`Cc5Skin`]; field meanings in `skin.wgsl`.
@@ -512,7 +538,6 @@ fn resolve_maps<const N: usize>(
 }
 
 fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, sss_strength: f32) -> Option<Cc5Skin> {
-    let v = &info.vars;
     let head = info.shader == "RLHead";
     let (slot_a, slot_b, slot_c) = if head {
         ("Cheek Fore UpperLip Chin Mask", "Nose Mouth UpperInnerLid Mask", "Ear Neck Mask")
@@ -531,6 +556,28 @@ fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, 
         "Specular Mask",
     ];
     let (tex, present, srgb) = resolve_maps(info, images, assets, slots)?;
+    let source = Cc5SkinSource { head, vars: info.vars.clone(), sss: info.sss.clone(), sss_strength };
+    let params = skin_params(&source, present, srgb);
+    let [micro_normal, micro_mask, sss, transmission, mask_a, mask_b, mask_c, mouth_ao, specular] = tex;
+    Some(Cc5Skin {
+        source,
+        params,
+        micro_normal,
+        micro_mask,
+        sss,
+        transmission,
+        mask_a,
+        mask_b,
+        mask_c,
+        mouth_ao,
+        specular,
+    })
+}
+
+/// The skin uniform from CC5's settings; `present` / `srgb`: the maps' bits.
+fn skin_params(src: &Cc5SkinSource, present: u32, srgb: u32) -> Cc5SkinParams {
+    let v = &src.vars;
+    let head = src.head;
     let rough = |keys: [&str; 4]| vec4_of(v, keys);
     let (rough_a, rough_b, rough_c, scatter_a, scatter_b, scatter_c) = if head {
         let r = |n: &str| format!("{n} Roughness Scale");
@@ -564,7 +611,7 @@ fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, 
             Vec4::ZERO,
         )
     };
-    let falloff = info
+    let falloff = src
         .sss
         .get("Falloff")
         .and_then(Value::as_array)
@@ -574,53 +621,41 @@ fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, 
         })
         .unwrap_or(Vec3::new(1.0, 0.11, 0.07));
     // CC5's SSS radius (mm-ish, ~2 for skin) widens the wrap of light past the terminator.
-    let radius = info.sss.get("Radius").and_then(Value::as_f64).unwrap_or(2.0) as f32;
-    let [micro_normal, micro_mask, sss, transmission, mask_a, mask_b, mask_c, mouth_ao, specular] = tex;
+    let radius = src.sss.get("Radius").and_then(Value::as_f64).unwrap_or(2.0) as f32;
     let keep_rough = var(v, "Keep Original Roughness") > 0.5;
-    Some(Cc5Skin {
-        params: Cc5SkinParams {
-            rough_a,
-            rough_b,
-            rough_c,
-            scatter_a,
-            scatter_b,
-            scatter_c,
-            falloff: falloff.extend(0.35 * sss_strength),
-            micro: Vec4::new(
-                var(v, "MicroNormal Tiling").max(1.0),
-                var(v, "MicroNormal Strength"),
-                var(v, "Flip MicroNormal Y"),
-                if keep_rough { 0.0 } else { var(v, "Micro Roughness Scale") },
-            ),
-            misc: Vec4::new(
-                if v.get("_Specular").is_some() { var(v, "_Specular") } else { 0.5 },
-                if keep_rough { 0.0 } else { var(v, "Unmasked Roughness Scale") },
-                var_or(v, "Unmasked Scatter Scale", 1.0),
-                0.4,
-            ),
-            // the mask's channels: R mouth cavity, G mouth / lips gap, B nostrils
-            ao: Vec4::new(var(v, "Inner Mouth Ao"), var(v, "Lips Gap Ao"), var(v, "Nostril Ao"), 0.25 + 0.15 * radius),
-            rough: Vec4::new(
-                if keep_rough { 1.0 } else { var_or(v, "Original Roughness Strength", 0.85) },
-                var(v, "Edge Roughness Multiplier"),
-                if keep_rough { 0.0 } else { 1.0 },
-                0.0,
-            ),
-            present,
-            srgb,
-            mask_c_channels: if head { 0b0011 } else { 0b1111 },
-            _pad1: 0,
-        },
-        micro_normal,
-        micro_mask,
-        sss,
-        transmission,
-        mask_a,
-        mask_b,
-        mask_c,
-        mouth_ao,
-        specular,
-    })
+    Cc5SkinParams {
+        rough_a,
+        rough_b,
+        rough_c,
+        scatter_a,
+        scatter_b,
+        scatter_c,
+        falloff: falloff.extend(0.35 * src.sss_strength),
+        micro: Vec4::new(
+            var(v, "MicroNormal Tiling").max(1.0),
+            var(v, "MicroNormal Strength"),
+            var(v, "Flip MicroNormal Y"),
+            if keep_rough { 0.0 } else { var(v, "Micro Roughness Scale") },
+        ),
+        misc: Vec4::new(
+            if v.get("_Specular").is_some() { var(v, "_Specular") } else { 0.5 },
+            if keep_rough { 0.0 } else { var(v, "Unmasked Roughness Scale") },
+            var_or(v, "Unmasked Scatter Scale", 1.0),
+            0.4,
+        ),
+        // the mask's channels: R mouth cavity, G mouth / lips gap, B nostrils
+        ao: Vec4::new(var(v, "Inner Mouth Ao"), var(v, "Lips Gap Ao"), var(v, "Nostril Ao"), 0.25 + 0.15 * radius),
+        rough: Vec4::new(
+            if keep_rough { 1.0 } else { var_or(v, "Original Roughness Strength", 0.85) },
+            var(v, "Edge Roughness Multiplier"),
+            if keep_rough { 0.0 } else { 1.0 },
+            0.0,
+        ),
+        present,
+        srgb,
+        mask_c_channels: if head { 0b0011 } else { 0b1111 },
+        _pad1: 0,
+    }
 }
 
 /// Brows and lashes: thin strands (sharper alpha edges, faint highlights).

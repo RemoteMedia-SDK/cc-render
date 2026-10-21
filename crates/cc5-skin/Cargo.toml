@@ -1,0 +1,20 @@
+[package]
+name = "cc5-skin"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Character Creator 5 skin customization for cc-render: SkinGen layers and skins captured from CC5, composited in Rust."
+
+[lib]
+name = "cc5_skin"
+
+[[bin]]
+name = "cc5-skin"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+rayon = "1"
