@@ -136,6 +136,8 @@ struct Rig {
     meshes: Vec<MeshRec>,
     joints: Vec<JointRec>,
     skins: Vec<SkinRec>,
+    /// Smooth normals of the base meshes per global vertex (`cc5_shape::normals`).
+    base_smooth: Vec<Vec3>,
 }
 
 struct MeshRec {
@@ -144,6 +146,10 @@ struct MeshRec {
     handle: Handle<Mesh>,
     base: Vec<[f32; 3]>,
     global: Vec<u32>,
+    /// Triangle list (empty: not triangles, normals left alone).
+    tris: Vec<u32>,
+    base_normals: Option<Vec<[f32; 3]>>,
+    base_tangents: Option<Vec<[f32; 4]>>,
     /// mesh (bind) space -> world at bind
     bind_space: Mat4,
     to_mesh: Mat3,
@@ -1026,16 +1032,31 @@ fn capture_rig(
             missing += 1;
             continue;
         };
+        let tris = match (mesh.primitive_topology(), mesh.indices()) {
+            (bevy::render::mesh::PrimitiveTopology::TriangleList, Some(ix)) => ix.iter().map(|i| i as u32).collect(),
+            (bevy::render::mesh::PrimitiveTopology::TriangleList, None) => (0..pos.len() as u32).collect(),
+            _ => Vec::new(),
+        };
         meshes_out.push(MeshRec {
             name: mesh_name.to_string(),
             handle: mesh3d.0.clone(),
             base: pos.clone(),
             global: cc.iter().map(|&c| offset + c as u32).collect(),
+            tris,
+            base_normals: match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+                Some(VertexAttributeValues::Float32x3(n)) => Some(n.clone()),
+                _ => None,
+            },
+            base_tangents: match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
+                Some(VertexAttributeValues::Float32x4(t)) => Some(t.clone()),
+                _ => None,
+            },
             bind_space,
             to_mesh: Mat3::from_mat4(bind_space.inverse()),
         });
     }
     let (nj, np) = (joints.iter().filter(|j| j.pack.is_some()).count(), meshes_out.len());
+    rig.base_smooth = smooth_normals(&meshes_out, meshes_out.iter().map(|m| &m.base[..]));
     rig.joints = joints;
     rig.skins = skins;
     rig.meshes = meshes_out;
@@ -1439,16 +1460,42 @@ fn apply_shape(
         }
         None => verts,
     };
-    for m in &rig.meshes {
+    let shaped: Vec<Vec<[f32; 3]>> = rig
+        .meshes
+        .iter()
+        .map(|m| {
+            m.base
+                .iter()
+                .zip(&m.global)
+                .map(|(b, &g)| (Vec3::from(*b) + m.to_mesh * Vec3::from(verts[g as usize])).into())
+                .collect()
+        })
+        .collect();
+    // Normals turned with the surface (seam copies welded by global vertex).
+    let shaped_smooth = smooth_normals(&rig.meshes, shaped.iter().map(|p| &p[..]));
+    for (m, pos) in rig.meshes.iter().zip(shaped) {
         let Some(mesh) = meshes.get_mut(&m.handle) else { continue };
-        let pos: Vec<[f32; 3]> = m
-            .base
-            .iter()
-            .zip(&m.global)
-            .map(|(b, &g)| (Vec3::from(*b) + m.to_mesh * Vec3::from(verts[g as usize])).into())
-            .collect();
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+        if let (Some(n), false) = (&m.base_normals, m.tris.is_empty()) {
+            let mut n = n.clone();
+            let mut t = m.base_tangents.clone();
+            cc5_shape::normals::reorient(&rig.base_smooth, &shaped_smooth, &m.global, &mut n, t.as_deref_mut());
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, n);
+            if let Some(t) = t {
+                mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, t);
+            }
+        }
     }
+}
+
+/// Smooth normals per global vertex of the rig's meshes at positions `pos` (one
+/// slice per mesh, in order).
+fn smooth_normals<'a>(meshes: &'a [MeshRec], pos: impl Iterator<Item = &'a [[f32; 3]]>) -> Vec<Vec3> {
+    let count = meshes.iter().flat_map(|m| m.global.iter()).max().map_or(0, |&g| g as usize + 1);
+    cc5_shape::normals::welded_normals(
+        count,
+        meshes.iter().zip(pos).filter(|(m, _)| !m.tris.is_empty()).map(|(m, p)| (&m.global[..], p, &m.tris[..])),
+    )
 }
 
 /// Joint translations and inverse bind matrices for a shape delta; returns each

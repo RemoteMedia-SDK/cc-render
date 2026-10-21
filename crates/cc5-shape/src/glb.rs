@@ -11,6 +11,8 @@
 //!   a node's local translation changes by `parent_linear⁻¹ · (Δnode − Δparent)`.
 //! - Inverse bind matrices: `IBM' = W'⁻¹ · W · IBM`, so the new bind mesh renders
 //!   exactly as written in the bind pose.
+//! - Normals and tangents: turned with the surface ([`crate::normals`]); kept
+//!   exactly where it did not move.
 
 use std::collections::HashMap;
 
@@ -18,6 +20,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use glam::{Mat3, Mat4, Quat, Vec3};
 use serde_json::Value;
 
+use crate::normals;
 use crate::pack::{ShapeDelta, ShapePack};
 use crate::subdiv::SubdivMap;
 
@@ -217,6 +220,15 @@ fn shape(glb: &[u8], joints: &[String], mesh_offset: &dyn Fn(&str) -> Option<u32
             skin_of_mesh.insert(m as usize, s as usize);
         }
     }
+    struct Prim {
+        global: Vec<u32>,
+        bind: Vec<[f32; 3]>,
+        pos: Vec<[f32; 3]>,
+        tris: Option<Vec<u32>>,
+        normal: Option<usize>,
+        tangent: Option<usize>,
+    }
+    let mut prims = Vec::new();
     let meshes = g.json["meshes"].as_array().cloned().unwrap_or_default();
     for (m, mesh) in meshes.iter().enumerate() {
         let name = mesh["name"].as_str().unwrap_or_default();
@@ -228,19 +240,69 @@ fn shape(glb: &[u8], joints: &[String], mesh_offset: &dyn Fn(&str) -> Option<u32
                 bail!("mesh {name} primitive {p} lacks POSITION or _CCIDX");
             };
             let ccidx: Vec<[f32; 1]> = read_f32s(&g, idx_acc as usize)?;
-            let mut pos: Vec<[f32; 3]> = read_f32s(&g, pos_acc as usize)?;
+            let bind: Vec<[f32; 3]> = read_f32s(&g, pos_acc as usize)?;
+            let mut pos = bind.clone();
+            let mut global = Vec::with_capacity(pos.len());
             for (v, [ci]) in pos.iter_mut().zip(&ccidx) {
                 let gi = offset as usize + *ci as usize;
                 let d = to_mesh * Vec3::from(*delta.verts.get(gi).ok_or_else(|| anyhow!("{name}: _CCIDX {ci} past pack"))?);
                 *v = (Vec3::from(*v) + d).into();
+                global.push(gi as u32);
             }
             write_f32s(&mut g, pos_acc as usize, &pos)?;
             let (lo, hi) = pos.iter().fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), v| (lo.min(Vec3::from(*v)), hi.max(Vec3::from(*v))));
             g.json["accessors"][pos_acc as usize]["min"] = serde_json::json!([lo.x, lo.y, lo.z]);
             g.json["accessors"][pos_acc as usize]["max"] = serde_json::json!([hi.x, hi.y, hi.z]);
+            let tris = match (prim["mode"].as_u64().unwrap_or(4), prim["indices"].as_u64()) {
+                (4, Some(acc)) => Some(read_indices(&g, acc as usize)?),
+                (4, None) => Some((0..pos.len() as u32).collect()),
+                _ => None, // not a triangle list: normals left as they are
+            };
+            let acc = |k: &str| attrs[k].as_u64().map(|a| a as usize);
+            prims.push(Prim { global, bind, pos, tris, normal: acc("NORMAL"), tangent: acc("TANGENT") });
+        }
+    }
+
+    // Normals (and tangents) turned with the surface; see `normals`.
+    let surface = |shaped: bool| {
+        let it = prims.iter().filter_map(|p| Some((&p.global[..], if shaped { &p.pos[..] } else { &p.bind[..] }, &p.tris.as_ref()?[..])));
+        normals::welded_normals(delta.verts.len(), it)
+    };
+    let (bind_n, shaped_n) = (surface(false), surface(true));
+    for p in prims.iter().filter(|p| p.tris.is_some()) {
+        let Some(n_acc) = p.normal else { continue };
+        let mut n: Vec<[f32; 3]> = read_f32s(&g, n_acc)?;
+        let mut t: Option<Vec<[f32; 4]>> = p.tangent.map(|a| read_f32s(&g, a)).transpose()?;
+        normals::reorient(&bind_n, &shaped_n, &p.global, &mut n, t.as_deref_mut());
+        write_f32s(&mut g, n_acc, &n)?;
+        if let (Some(a), Some(t)) = (p.tangent, t) {
+            write_f32s(&mut g, a, &t)?;
         }
     }
     write(&g)
+}
+
+/// Triangle indices (unsigned byte / short / int accessor).
+fn read_indices(g: &Glb, acc: usize) -> Result<Vec<u32>> {
+    let a = &g.json["accessors"][acc];
+    let size = match a["componentType"].as_u64() {
+        Some(5121) => 1,
+        Some(5123) => 2,
+        Some(5125) => 4,
+        t => bail!("accessor {acc}: index component type {t:?}"),
+    };
+    let bv = &g.json["bufferViews"][a["bufferView"].as_u64().context("sparse accessors unsupported")? as usize];
+    let start = bv["byteOffset"].as_u64().unwrap_or(0) as usize + a["byteOffset"].as_u64().unwrap_or(0) as usize;
+    let count = a["count"].as_u64().context("accessor count")? as usize;
+    let bytes = g.bin.get(start..start + count * size).ok_or_else(|| anyhow!("accessor {acc} past BIN"))?;
+    Ok(bytes
+        .chunks_exact(size)
+        .map(|c| match size {
+            1 => c[0] as u32,
+            2 => u16::from_le_bytes([c[0], c[1]]) as u32,
+            _ => u32::from_le_bytes([c[0], c[1], c[2], c[3]]),
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -321,6 +383,72 @@ mod tests {
         let ibm: Vec<[f32; 16]> = read_f32s(&out, 2).unwrap();
         let m: Vec<Mat4> = world.iter().zip(&ibm).map(|(w, i)| *w * Mat4::from_cols_array(i)).collect();
         assert!(m[0].abs_diff_eq(m[1], 1e-5) && m[0].abs_diff_eq(Mat4::IDENTITY, 1e-5), "{m:?}");
+    }
+
+    /// Unskinned mesh: a unit quad (vertices 0-3, two triangles) and a separate
+    /// triangle (4-6), all facing +Z, with u16 indices and NORMAL.
+    fn normals_glb() -> Vec<u8> {
+        let mut bin = Vec::new();
+        let pos: [[f32; 3]; 7] = [[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.], [5., 0., 0.], [6., 0., 0.], [5., 1., 0.]];
+        for v in pos.iter().flatten().chain([[0f32, 0., 1.]; 7].iter().flatten()).chain((0..7).map(|i| i as f32).collect::<Vec<_>>().iter()) {
+            bin.extend_from_slice(&v.to_le_bytes());
+        }
+        for i in [0u16, 1, 2, 0, 2, 3, 4, 5, 6] {
+            bin.extend_from_slice(&i.to_le_bytes());
+        }
+        bin.extend_from_slice(&[0, 0]);
+        let json = serde_json::json!({
+            "asset": {"version": "2.0"},
+            "nodes": [{"name": "Body", "mesh": 0}],
+            "meshes": [{"name": "CC_Base_Body", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "_CCIDX": 2}, "indices": 3}]}],
+            "buffers": [{"byteLength": bin.len()}],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 84},
+                {"buffer": 0, "byteOffset": 84, "byteLength": 84},
+                {"buffer": 0, "byteOffset": 168, "byteLength": 28},
+                {"buffer": 0, "byteOffset": 196, "byteLength": 18}
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 7, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 7, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5126, "count": 7, "type": "SCALAR"},
+                {"bufferView": 3, "componentType": 5123, "count": 9, "type": "SCALAR"}
+            ]
+        });
+        write(&Glb { json, bin }).unwrap()
+    }
+
+    fn normals_pack(dir: &std::path::Path) -> ShapePack {
+        std::fs::write(dir.join("pack.bin"), []).unwrap();
+        let json = serde_json::json!({"version": 1, "vertex_count": 7,
+            "meshes": [{"name": "CC_Base_Body", "offset": 0, "count": 7}], "joints": [], "sliders": []});
+        std::fs::write(dir.join("pack.json"), serde_json::to_vec(&json).unwrap()).unwrap();
+        ShapePack::load(dir).unwrap()
+    }
+
+    #[test]
+    fn normals_follow_the_reshaped_surface() {
+        let dir = tempfile::tempdir().unwrap();
+        let pack = normals_pack(dir.path());
+        let src = normals_glb();
+        let normals_of = |glb: &[u8]| -> Vec<[f32; 3]> { read_f32s(&parse(glb).unwrap(), 1).unwrap() };
+
+        let still = ShapeDelta { verts: vec![[0.0; 3]; 7], joints: vec![] };
+        assert_eq!(normals_of(&shape_glb(&src, &pack, &still).unwrap()), normals_of(&src));
+
+        // Lift vertex 2: the quad tilts, the separate triangle does not move.
+        let mut verts = vec![[0.0; 3]; 7];
+        verts[2] = [0.0, 0.0, 0.5];
+        let out = shape_glb(&src, &pack, &ShapeDelta { verts, joints: vec![] }).unwrap();
+        let n = normals_of(&out);
+        let pos: Vec<[f32; 3]> = read_f32s(&parse(&out).unwrap(), 0).unwrap();
+        let p = |i: usize| Vec3::from(pos[i]);
+        let (f0, f1) = ((p(1) - p(0)).cross(p(2) - p(0)), (p(2) - p(0)).cross(p(3) - p(0)));
+        // Authored +Z equals the flat bind's smooth normal, so it becomes the new one.
+        for (v, want) in [(0, f0 + f1), (1, f0), (2, f0 + f1), (3, f1)] {
+            assert!(Vec3::from(n[v]).abs_diff_eq(want.normalize(), 1e-6), "vertex {v}: {:?} vs {:?}", n[v], want.normalize());
+        }
+        assert_eq!(&n[4..], &[[0.0, 0.0, 1.0]; 3]);
     }
 
     #[test]

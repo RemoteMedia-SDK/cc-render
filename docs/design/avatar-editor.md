@@ -35,6 +35,18 @@ skinning, so mixes are a close linear approximation there.
 joint translations (rotations unchanged), and inverse bind matrices
 `IBM' = W'⁻¹·W·IBM` so the new bind mesh renders exactly at bind.
 
+Normals follow the shape ([`cc5_shape::normals`](../../crates/cc5-shape/src/normals.rs),
+in `shape_glb` and in the editor, which also covers expressions): per vertex, the
+rotation from the bind mesh's smooth normal to the shaped mesh's turns CC5's
+authored normal (and tangent). Smooth normals are area-weighted and welded by
+CC5 vertex, so seams stay closed; where the surface did not move the normal is
+kept bit for bit. CC5's own normals are these smooth normals (Beautiful's body:
+median 0.00°, p99 0.05° apart), so the turned normals are what the shaped
+surface has. Without this, a large reshape (e.g. the neutral male base on a
+female capture) kept the capture's shading: on the fitted male chest the old
+normals were 24° off the surface (median; up to 88°) and rendered breasts on a
+flat chest.
+
 ## Building the inputs
 
 On the Windows machine with CC5 (5.13), Python and cc-render's `cc5-fbx` built
@@ -136,9 +148,8 @@ mesh it would switch that mesh to the CPU path:
    a few ×10k vertex adds) plus the position upload (~15k body vertices ≈ 180 KB),
    well within a frame. Skip the write when weights are unchanged.
 3. Normals: morph targets in the GLB carry normal deltas; the CPU path would
-   either recompute face normals on the touched region or (simplest first) keep
-   bind normals, as the editor does. Bone-driven parts (jaw, eyes) stay on the
-   skeleton as today.
+   turn the normals of the touched region with `cc5_shape::normals`, as the
+   editor does. Bone-driven parts (jaw, eyes) stay on the skeleton as today.
 4. Keep the GPU morph path for characters with ≤ 64 targets; pick per mesh at
    load (count targets in the glTF, or the presence of an expression pack).
 
@@ -191,7 +202,10 @@ viewport is sharper than TAA (contrast-adaptive sharpening 0.5) and more saturat
 - The reference GLB drops CC5's ~400 facial morph targets (Bevy loads at most
   64); they are applied on the CPU from the expression pack instead (above).
 - Joint *rotations* are not captured; sliders are applied as joint translations.
-- Normals are not recomputed after reshaping.
+- Normals are turned with the surface, not re-authored: a twist of the surface
+  about its own normal does not turn tangents, and hard edges in CC5's normals
+  (rare on the body) are carried as they are. Skin textures are the captured
+  character's (e.g. a female capture's areolae on a neutral male body).
 - The pack is specific to the character it was captured from.
 - The deltas are derived from Reallusion's slider content packs; check the
   Reallusion content licence before distributing packs or shaped characters.
