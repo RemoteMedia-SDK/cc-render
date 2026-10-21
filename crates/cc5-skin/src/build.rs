@@ -2,8 +2,8 @@
 //! `"export": true`: per variant `tex/<material>_<Channel>.png` as CC5 exported
 //! them, and `character.json`).
 //!
-//! Layers: variant `X` is the layer on the character's own skin (`base`), `X@male`
-//! the same layer on a second skin base (`skinbase_male_clean`). Per texel and
+//! Layers: the layer on two bases, e.g. variant `X` on the character's own skin
+//! (`base`) and `X@blue` on a flat blue diffuse (`alt_image`). Per texel and
 //! channel CC5 gives L = B·(1−α) + C·α on both bases, so
 //! (1−α) = (L1−L2)/(B1−B2) (least squares over the channels, weighted by how much
 //! the bases differ) and C = (L1 − B1·(1−α)) / α.
@@ -24,6 +24,11 @@ pub struct BuildOptions {
     pub alt: String,
     pub base_suffix: String,
     pub alt_suffix: String,
+    /// held-out check: the layer laid over this image against CC5's `<layer><suffix>`
+    pub check: Option<(PathBuf, String)>,
+    /// the second base as an image (the flat diffuse CC5 got in place of every
+    /// material's) instead of a variant
+    pub alt_image: Option<PathBuf>,
     /// the character's own variant (layers on it validate the solve)
     pub character: String,
     pub materials: Vec<String>,
@@ -165,11 +170,12 @@ fn channel_key(c: &str) -> String {
     }
 }
 
-/// The layer laid over the character's own diffuse ([`crate::compose`]) against
-/// CC5's texture of the layer on the character: (mean abs error, mean change),
-/// 0..255, over the layer's rect; None without that capture.
+/// Held-out check: the layer laid over `opt.check`'s image ([`crate::compose`])
+/// against CC5's texture of the layer on that image: (mean abs error, mean
+/// change), 0..255, over the layer's rect; None without that capture.
 fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 4], w: u32, h: u32) -> Result<Option<(f32, f32)>> {
-    let (Some(pb), Some(pl)) = (diffuse_path(&opt.capture, &opt.character, m), diffuse_path(&opt.capture, id, m)) else { return Ok(None) };
+    let Some((pb, suffix)) = &opt.check else { return Ok(None) };
+    let Some(pl) = diffuse_path(&opt.capture, &format!("{id}{suffix}"), m) else { return Ok(None) };
     let base = image::open(&pb)?.to_rgba8();
     let cc5 = image::open(&pl)?.to_rgba8();
     if base.dimensions() != (w, h) || cc5.dimensions() != (w, h) {
@@ -208,7 +214,7 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             let paths = [
                 diffuse_path(&opt.capture, &opt.base, m),
                 diffuse_path(&opt.capture, &format!("{id}{}", opt.base_suffix), m),
-                diffuse_path(&opt.capture, &opt.alt, m),
+                opt.alt_image.clone().or_else(|| diffuse_path(&opt.capture, &opt.alt, m)),
                 diffuse_path(&opt.capture, &format!("{id}{}", opt.alt_suffix), m),
             ];
             let [Some(pb1), Some(pl1), Some(pb2), Some(pl2)] = paths else {
@@ -231,7 +237,7 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
                 "{id:24} {m:14} rect {rect:?} size {:.1} alt err {:.2} ({cover} texels){}",
                 s.size,
                 s.err_alt,
-                check.map_or(String::new(), |(err, size)| format!("; on the character: err {err:.2} vs change {size:.2}"))
+                check.map_or(String::new(), |(err, size)| format!("; held-out base: err {err:.2} vs change {size:.2}"))
             );
             if cover > best {
                 best = cover;

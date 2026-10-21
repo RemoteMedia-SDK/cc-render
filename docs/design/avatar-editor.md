@@ -146,6 +146,46 @@ Alternatives considered: splitting a mesh into ≤64-target primitives breaks
 along seams and still caps per primitive; a custom storage-buffer morph shader
 avoids the CPU upload but needs a forked skinning/morph pipeline in Bevy 0.15.
 
+## Skin (CC5's skin settings and SkinGen, outside CC5)
+
+The editor's **Skin** section (`examples/avatar_editor/skin.rs`) customizes the
+character's skin the ways CC5 does:
+
+- **Material settings**: CC5's own RLHead / RLSkin variables (names, ranges and
+  groups of `Program/Assets/Share/Shaders/Human/RLHead.shader` / `RLSkin.shader`):
+  colour (brightness, saturation, human colour: red / yellow / black / range, blend
+  map), roughness per region, specular, subsurface, micro normal. Edits rebuild
+  the skin uniform live (`Cc5Skin::set_vars`); `skin.wgsl` implements them.
+- **Skins**: whole skin presets (CC5's Skin Base / Full Skin / HD skins): their
+  textures and settings swap in.
+- **SkinGen layers**: makeup (lips, eyes, blush, contour, foundation), blemishes,
+  freckles, moles, stubble, scars, tattoos, ... laid over the diffuse in a
+  background task (`cc5_skin::compose`), each at a strength and optionally recoloured.
+
+Skins and layers come from a **skin pack** (`<character dir>/skin`, `--skin-pack`),
+captured from CC5 itself — its presets are encrypted:
+
+1. `remotemedia-sdk/scripts/avatars/cc5_editor/skin/cc5_skin_capture.py` (inside
+   CC5, `run_capture.ps1` restarts CC5 per variant) applies each preset to the
+   character, bakes the SkinGen layers (CC5's "Bake All Skin Textures"; they
+   otherwise exist only on the GPU) and saves the textures, renders a face view
+   and records the camera, lights and IBL (`scene.json`).
+2. `cc5-skin build <capture> <pack> <spec.json>` solves every layer's colour and
+   opacity per texel from the layer on two bases (the character, and a flat
+   diffuse): L = B·(1−α) + C·α.
+
+Recipes (`--skin recipe.json`, Save / Load, snapshot jobs' `skin`) keep the skin,
+the layers and the settings that differ from the character.
+
+**Matching CC5's look.** `--cc5-scene scene.json --cc5-lights` renders with CC5's
+camera (its 36x24 mm film gate: render at width x width/1.5), its lights (rect
+lights without inverse-square falloff, soft tube lights) and its IBL prefiltered
+in memory, so renders compare pixel for pixel with CC5's (`--hide-hair` as CC5
+hides hair while editing SkinGen). Calibrated on a flat grey skin, then on the
+character's own skin; the skin shader's constants are `SkinTune`. Findings:
+CC5's skin normal maps are DirectX-style (flipped for glTF's tangents), its
+viewport is sharper than TAA (contrast-adaptive sharpening 0.5) and more saturated.
+
 ## Limits
 
 - The reference GLB drops CC5's ~400 facial morph targets (Bevy loads at most
