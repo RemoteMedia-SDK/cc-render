@@ -38,7 +38,7 @@ struct Cc5Hair {
     // w: 1 = dithered coverage (soft strands, resolved by TAA), 0 = alpha test
     alpha: vec4<f32>,
     // rgb: colour multiplier of the hair's diffuse colour (CC5 mode: undoes the
-    // light tint's magenta on neutral hair), w: unused
+    // light tint's magenta on neutral hair), w: occlusion towards the roots
     tint: vec4<f32>,
     present: u32,
     srgb: u32,
