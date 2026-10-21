@@ -23,7 +23,7 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use bevy_egui::egui;
-use cc5_skin::{compose, compose_roughness, Apply, LayerImage, SkinPack};
+use cc5_skin::{compose, compose_normal, compose_roughness, Apply, LayerImage, SkinPack};
 use cc_render_plugin::cc_render::cc5_materials::{Cc5Handle, Cc5Material, Cc5SkinMaterial};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -183,7 +183,7 @@ struct Originals {
 /// Per material: the composited diffuse, and the roughness (metallic-roughness
 /// texture) when an active layer changes roughness.
 type Texels = (u32, u32, Vec<u8>);
-type Composed = Vec<(usize, Texels, Option<Texels>)>;
+type Composed = Vec<(usize, Texels, Option<Texels>, Option<Texels>)>;
 
 #[derive(Resource, Default)]
 pub struct SkinEdit {
@@ -216,6 +216,10 @@ pub struct SkinEdit {
     mr_bases: Vec<Option<Arc<Texels>>>,
     composed_mr: Vec<Option<Handle<Image>>>,
     mr_swap: Vec<Option<Handle<Image>>>,
+    /// the same for the normal map
+    nm_bases: Vec<Option<Arc<Texels>>>,
+    composed_nm: Vec<Option<Handle<Image>>>,
+    nm_swap: Vec<Option<Handle<Image>>>,
     cache: Arc<Mutex<HashMap<(String, String), Option<Arc<LayerImage>>>>>,
     task: Option<Task<anyhow::Result<Composed>>>,
     /// what the running task composites (to notice newer edits)
@@ -403,6 +407,9 @@ pub fn skin_sync(
         skin.mr_bases = vec![None; n];
         skin.composed_mr = vec![None; n];
         skin.mr_swap = vec![None; n];
+        skin.nm_bases = vec![None; n];
+        skin.composed_nm = vec![None; n];
+        skin.nm_swap = vec![None; n];
         if let Some(r) = skin.pending.take() {
             match skin.apply(&r) {
                 Ok(()) => skin.status = "skin recipe applied".into(),
@@ -473,6 +480,7 @@ pub fn skin_layers(
                 }))
             };
             mat.base.normal_map_texture = load("Normal").or(o.normal.clone());
+            skin.nm_swap[i] = mat.base.normal_map_texture.clone();
             mat.base.metallic_roughness_texture = load("MetallicRoughness").or(o.mr.clone());
             skin.mr_swap[i] = mat.base.metallic_roughness_texture.clone();
             mat.base.occlusion_texture = load("ao").or(o.occlusion.clone());
@@ -505,7 +513,14 @@ pub fn skin_layers(
             skin.task = None;
             match result {
                 Ok(out) => {
-                    for (i, (w, h, data), mr) in out {
+                    for (i, (w, h, data), mr, nm) in out {
+                        let nm = match nm {
+                            Some((nw, nh, nd)) => Some(put_image(&mut images, &mut skin.composed_nm[i], nw, nh, nd, TextureFormat::Rgba8Unorm)),
+                            None => skin.nm_swap[i].clone().or_else(|| skin.originals[i].as_ref().and_then(|o| o.normal.clone())),
+                        };
+                        if let Some(mat) = mats.get_mut(&skin.mats[i].handle) {
+                            mat.base.normal_map_texture = nm;
+                        }
                         let handle = put_image(&mut images, &mut skin.composed[i], w, h, data, TextureFormat::Rgba8UnormSrgb);
                         let mr = match mr {
                             Some((mw, mh, md)) => Some(put_image(&mut images, &mut skin.composed_mr[i], mw, mh, md, TextureFormat::Rgba8Unorm)),
@@ -555,6 +570,7 @@ pub fn skin_layers(
             if let (Some(o), Some(mat)) = (&skin.originals[i], mats.get_mut(&m.handle)) {
                 mat.base.base_color_texture = o.diffuse.clone();
                 mat.base.metallic_roughness_texture = o.mr.clone();
+                mat.base.normal_map_texture = o.normal.clone();
             }
         }
         skin.layers_dirty = false;
@@ -574,14 +590,16 @@ pub fn skin_layers(
         }
         skin.bases[i] = Some(Arc::new((img.width(), img.height(), img.data.clone())));
     }
-    // and its metallic-roughness texels (for layers that change roughness), when loaded
+    // and its metallic-roughness and normal texels (for layers that change them), when loaded
     for i in 0..skin.mats.len() {
-        if skin.mr_bases[i].is_some() {
-            continue;
+        let texels = |h: Option<Handle<Image>>| {
+            h.and_then(|h| images.get(&h).filter(|im| im.data.len() == (im.width() * im.height() * 4) as usize).map(|im| Arc::new((im.width(), im.height(), im.data.clone()))))
+        };
+        if skin.mr_bases[i].is_none() {
+            skin.mr_bases[i] = texels(skin.originals[i].as_ref().and_then(|o| o.mr.clone()));
         }
-        let Some(h) = skin.originals[i].as_ref().and_then(|o| o.mr.clone()) else { continue };
-        if let Some(img) = images.get(&h).filter(|im| im.data.len() == (im.width() * im.height() * 4) as usize) {
-            skin.mr_bases[i] = Some(Arc::new((img.width(), img.height(), img.data.clone())));
+        if skin.nm_bases[i].is_none() {
+            skin.nm_bases[i] = texels(skin.originals[i].as_ref().and_then(|o| o.normal.clone()));
         }
     }
     skin.layers_dirty = false;
@@ -591,8 +609,10 @@ pub fn skin_layers(
         name: String,
         base: Option<Arc<Texels>>,
         mr_base: Option<Arc<Texels>>,
+        nm_base: Option<Arc<Texels>>,
         preset: Option<PathBuf>,
         preset_mr: Option<PathBuf>,
+        preset_nm: Option<PathBuf>,
     }
     let jobs: Vec<Job> = skin
         .mats
@@ -605,6 +625,8 @@ pub fn skin_layers(
                 name: m.name.clone(),
                 base: skin.bases[i].clone(),
                 mr_base: skin.mr_bases[i].clone(),
+                nm_base: skin.nm_bases[i].clone(),
+                preset_nm: maps.and_then(|mm| mm.get("Normal")).map(|r| pack.dir.join(r)),
                 preset: maps.and_then(|mm| mm.get("Diffuse")).map(|r| pack.dir.join(r)),
                 preset_mr: maps.and_then(|mm| mm.get("MetallicRoughness")).map(|r| pack.dir.join(r)),
             }
@@ -621,7 +643,7 @@ pub fn skin_layers(
             let img = image::open(p).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?.to_rgba8();
             Ok((img.width(), img.height(), img.into_raw()))
         };
-        for Job { i, name, base, mr_base, preset, preset_mr } in jobs {
+        for Job { i, name, base, mr_base, nm_base, preset, preset_mr, preset_nm } in jobs {
             let (w, h, mut data) = match (&preset, &base) {
                 (Some(p), _) => open(p)?,
                 (None, Some(b)) => (b.0, b.1, b.2.clone()),
@@ -665,7 +687,26 @@ pub fn skin_layers(
                 compose_roughness(&mut md, mw, mh, &rl);
                 (mw, mh, md)
             });
-            out.push((i, (w, h, data), mr));
+            // and normals
+            let mut normals = Vec::new();
+            for l in &layers {
+                let Some(layer) = pack2.layer(&l.id) else { continue };
+                if let Some(r) = pack2.layer_normal(layer, &name)? {
+                    normals.push((r, l.strength));
+                }
+            }
+            let nm = match (normals.is_empty(), &preset_nm, &nm_base) {
+                (true, _, _) => None,
+                (false, Some(p), _) => Some(open(p)?),
+                (false, None, Some(b)) => Some((b.0, b.1, b.2.clone())),
+                (false, None, None) => None,
+            };
+            let nm = nm.map(|(nw, nh, mut nd)| {
+                let nl: Vec<(&LayerImage, f32)> = normals.iter().map(|(r, s)| (r, *s)).collect();
+                compose_normal(&mut nd, nw, nh, &nl);
+                (nw, nh, nd)
+            });
+            out.push((i, (w, h, data), mr, nm));
         }
         info!("skin: composited {} layer(s) in {:.0} ms", layers.len(), t0.elapsed().as_secs_f32() * 1000.0);
         Ok(out)

@@ -41,6 +41,11 @@ pub struct LayerMap {
     /// changes roughness (lipstick, sweat, ...); same rect
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub roughness: Option<String>,
+    /// normal map texels the layer lays down (RGB, tangent space as CC5's maps)
+    /// with their opacity (A), and where they sit, when it changes normals
+    /// (scars, wrinkles, acne)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal: Option<(String, [u32; 4])>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -117,6 +122,13 @@ impl SkinPack {
         self.decode(r, m.rect).map(Some)
     }
 
+    /// A layer's normal map for `material`, decoded (RGB = normal, A = opacity).
+    pub fn layer_normal(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
+        let Some(m) = layer.maps.get(material) else { return Ok(None) };
+        let Some((f, rect)) = &m.normal else { return Ok(None) };
+        self.decode(f, *rect).map(Some)
+    }
+
     fn decode(&self, file: &str, rect: [u32; 4]) -> Result<LayerImage> {
         let img = image::open(self.dir.join(file)).with_context(|| file.to_string())?.to_rgba8();
         Ok(LayerImage { rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw() })
@@ -164,6 +176,38 @@ pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, 
                 let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
                 let g = &mut row[x as usize * 4 + 1];
                 *g = (*g as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
+            }
+        });
+    }
+}
+
+/// Lays layers' normals over a normal map (RGBA8, `w` x `h`), in place: the
+/// unpacked normals blend by the layers' opacity x strength and renormalize.
+pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32)]) {
+    for (li, strength) in layers {
+        if *strength <= 0.0 {
+            continue;
+        }
+        let k = w as f32 / li.size as f32;
+        let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
+        let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
+        let (x0, y0) = (rx.floor().max(0.0) as u32, ry.floor().max(0.0) as u32);
+        let (x1, y1) = (((rx + rw).ceil() as u32).min(w), ((ry + rh).ceil() as u32).min(h));
+        nm.par_chunks_mut(w as usize * 4).enumerate().filter(|(y, _)| (*y as u32) >= y0 && (*y as u32) < y1).for_each(|(y, row)| {
+            let ly = ((y as f32 + 0.5 - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
+            for x in x0..x1 {
+                let lx = ((x as f32 + 0.5 - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
+                let s = bilinear(li, lx, ly);
+                let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
+                if a <= 0.0 {
+                    continue;
+                }
+                let p = &mut row[x as usize * 4..x as usize * 4 + 3];
+                let n: [f32; 3] = [0, 1, 2].map(|c| (p[c] as f32 / 255.0 * 2.0 - 1.0) * (1.0 - a) + (s[c] / 255.0 * 2.0 - 1.0) * a);
+                let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+                for c in 0..3 {
+                    p[c] = ((n[c] / len * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8;
+                }
             }
         });
     }
@@ -247,5 +291,16 @@ mod tests {
         let mut base = [100u8, 100, 100, 255].repeat(4);
         compose(&mut base, 2, 2, &[Apply { image: &li, strength: 1.0, tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])) }]);
         assert_eq!(&base[0..3], &[0, 0, 200]);
+    }
+
+    #[test]
+    fn compose_normal_blends_and_renormalizes() {
+        // flat normal (0, 0, 1) blended halfway towards (1, 0, 0)
+        let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255] };
+        let mut nm = vec![128u8, 128, 255, 255];
+        compose_normal(&mut nm, 1, 1, &[(&li, 0.5)]);
+        let n: Vec<f32> = nm[..3].iter().map(|&v| v as f32 / 255.0 * 2.0 - 1.0).collect();
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        assert!((len - 1.0).abs() < 0.02 && (n[0] - n[2]).abs() < 0.03, "{n:?}");
     }
 }

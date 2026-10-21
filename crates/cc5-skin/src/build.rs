@@ -235,6 +235,53 @@ fn layer_roughness(opt: &BuildOptions, id: &str, m: &str, s: &Solved, rect: [u32
     Ok(Some(file))
 }
 
+/// The layer's normals: CC5's exported normal map of the layer on the character
+/// (`<variant>/tex/<material>_Normal.png`, with `"export": true`) where it differs
+/// from the character's own, opacity ramping in over 2..10 levels of change.
+fn layer_normal(opt: &BuildOptions, id: &str, m: &str) -> Result<Option<(String, [u32; 4])>> {
+    let path = |v: &str| opt.capture.join(v).join("tex").join(format!("{m}_Normal.png"));
+    let (pb, pl) = (path(&opt.character), path(&format!("{id}{}", opt.base_suffix)));
+    if !pb.is_file() || !pl.is_file() {
+        return Ok(None);
+    }
+    let b = image::open(&pb)?.to_rgb8();
+    let l = image::open(&pl)?.to_rgb8();
+    if b.dimensions() != l.dimensions() {
+        return Ok(None);
+    }
+    let (w, h) = b.dimensions();
+    let alpha = |x: u32, y: u32| {
+        let (p, q) = (b.get_pixel(x, y), l.get_pixel(x, y));
+        let d = (0..3).map(|c| (p[c] as f32 - q[c] as f32).abs()).fold(0.0, f32::max);
+        ((d - 2.0) / 8.0).clamp(0.0, 1.0)
+    };
+    let (mut x0, mut y0, mut x1, mut y1, mut n) = (u32::MAX, u32::MAX, 0, 0, 0usize);
+    for y in 0..h {
+        for x in 0..w {
+            if alpha(x, y) > 0.0 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
+                n += 1;
+            }
+        }
+    }
+    if n < 64 {
+        return Ok(None);
+    }
+    let rect = [x0, y0, x1 - x0, y1 - y0];
+    let img = RgbaImage::from_fn(rect[2], rect[3], |x, y| {
+        let (x, y) = (x + x0, y + y0);
+        let q = l.get_pixel(x, y);
+        image::Rgba([q[0], q[1], q[2], (alpha(x, y) * 255.0).round() as u8])
+    });
+    let file = format!("layers/{id}.{m}.normal.png");
+    img.save(opt.out.join(&file))?;
+    println!("{id:24} {m:14} normals: {n} texels, rect {rect:?}");
+    Ok(Some((file, rect)))
+}
+
 /// The exported channels a skin swaps (others stay the character's).
 const SKIN_CHANNELS: [&str; 8] = ["Diffuse", "Normal", "roughness", "ao", "SSSMap", "TransMap", "MicroNMask", "SpecMask"];
 
@@ -281,7 +328,8 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
                 color = mean;
             }
             let roughness = layer_roughness(opt, id, m, &s, rect)?;
-            maps.insert(m.clone(), LayerMap { diffuse: file, rect, roughness });
+            let normal = layer_normal(opt, id, m)?;
+            maps.insert(m.clone(), LayerMap { diffuse: file, rect, roughness, normal });
         }
         if !maps.is_empty() {
             pack.layers.push(Layer { id: id.clone(), name: name.clone(), group: group.clone(), color, maps, source: String::new() });
