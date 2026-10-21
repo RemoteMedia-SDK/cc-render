@@ -310,6 +310,10 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             let (_, _, b2) = rgb(&pb2)?;
             let (_, _, l2) = rgb(&pl2)?;
             anyhow::ensure!([l1.len(), b2.len(), l2.len()].iter().all(|&n| n == b1.len()), "{id} {m}: texture sizes differ");
+            // CC5's SkinGen bake composites onto its own base skin: a second base
+            // the bake ignored gives the same texture twice and no opacity.
+            let same = l1.iter().zip(&l2).all(|(a, b)| (0..3).all(|c| (a[c] - b[c]).abs() < 1.0 / 255.0));
+            anyhow::ensure!(!same, "{id} {m}: the bake on the second base equals the one on the character (the base was ignored)");
             pack.size = pack.size.max(w);
             let s = solve(&b1, &l1, &b2, &l2, w, h);
             let Some((img, rect, mean)) = crop(&s, opt.min_alpha) else { continue };
