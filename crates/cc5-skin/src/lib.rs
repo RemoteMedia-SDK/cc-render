@@ -8,10 +8,12 @@
 //! `cc5-skin build`):
 //!
 //! - a **layer** per preset and material: colour `C` and opacity `α` per texel
-//!   (sRGB RGBA PNG, cropped to where it is visible), solved from CC5's textures
-//!   of two skin bases with and without the layer: CC5's texel = base·(1−α) + C·α.
-//!   [`compose`] lays layers over any base at a strength (α·s), optionally
-//!   recoloured (C scaled towards a tint, keeping its pattern);
+//!   (sRGB RGBA PNG, cropped to where it is visible) and a [`Blend`] mode, solved
+//!   from CC5's textures of two skin bases with and without the layer (the mode
+//!   that explains both best: normal base·(1−α) + C·α for makeup colour,
+//!   multiply for tattoos / contour / tans / beards / freckles, screen for
+//!   highlights). [`compose`] lays layers over any base at a strength (α·s),
+//!   optionally recoloured (C scaled towards a tint, keeping its pattern);
 //! - a **skin**: CC5's whole texture set for a skin preset, and its shader settings.
 //!
 //! ```json
@@ -32,12 +34,44 @@ use std::path::{Path, PathBuf};
 pub mod build;
 pub mod generate;
 
+/// How a layer's colour `C` at opacity `α` combines with the texel under it `B`
+/// (sRGB 0..1), as SkinGen's layer blend modes do.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Blend {
+    /// B·(1−α) + C·α (makeup colour)
+    #[default]
+    Normal,
+    /// B·(1 − α + α·C) (tattoos, contour, tans, beards, freckles)
+    Multiply,
+    /// 1 − (1−B)·(1 − α·C) (highlights)
+    Screen,
+}
+
+impl Blend {
+    pub fn is_normal(&self) -> bool {
+        *self == Blend::Normal
+    }
+
+    /// The texel under the layer `b`, with colour `c` at opacity `a` laid over it.
+    pub fn apply(self, b: f32, c: f32, a: f32) -> f32 {
+        match self {
+            Blend::Normal => b * (1.0 - a) + c * a,
+            Blend::Multiply => b * (1.0 - a + a * c),
+            Blend::Screen => 1.0 - (1.0 - b) * (1.0 - a * c),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LayerMap {
     /// RGBA PNG (sRGB colour, opacity), relative to the pack
     pub diffuse: String,
     /// where it sits in the material's texture: x, y, w, h (texels at `size`)
     pub rect: [u32; 4],
+    /// how its colour combines with the skin under it
+    #[serde(default, skip_serializing_if = "Blend::is_normal")]
+    pub blend: Blend,
     /// roughness the layer lays down (R) with the same opacity (A), when it
     /// changes roughness (lipstick, sweat, ...); same rect
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -113,26 +147,26 @@ impl SkinPack {
     /// A layer's map for `material`, decoded.
     pub fn layer_image(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
         let Some(m) = layer.maps.get(material) else { return Ok(None) };
-        self.decode(&m.diffuse, m.rect).map(Some)
+        self.decode(&m.diffuse, m.rect, m.blend).map(Some)
     }
 
     /// A layer's roughness map for `material`, decoded (R = roughness, A = opacity).
     pub fn layer_roughness(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
         let Some(m) = layer.maps.get(material) else { return Ok(None) };
         let Some(r) = &m.roughness else { return Ok(None) };
-        self.decode(r, m.rect).map(Some)
+        self.decode(r, m.rect, Blend::Normal).map(Some)
     }
 
     /// A layer's normal map for `material`, decoded (RGB = normal, A = opacity).
     pub fn layer_normal(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
         let Some(m) = layer.maps.get(material) else { return Ok(None) };
         let Some((f, rect)) = &m.normal else { return Ok(None) };
-        self.decode(f, *rect).map(Some)
+        self.decode(f, *rect, Blend::Normal).map(Some)
     }
 
-    fn decode(&self, file: &str, rect: [u32; 4]) -> Result<LayerImage> {
+    fn decode(&self, file: &str, rect: [u32; 4], blend: Blend) -> Result<LayerImage> {
         let img = image::open(self.dir.join(file)).with_context(|| file.to_string())?.to_rgba8();
-        Ok(LayerImage { rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw() })
+        Ok(LayerImage { rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw(), blend })
     }
 }
 
@@ -145,6 +179,8 @@ pub struct LayerImage {
     pub w: u32,
     pub h: u32,
     pub rgba: Vec<u8>,
+    /// how the colour combines with the texel under it (colour maps)
+    pub blend: Blend,
 }
 
 /// Where a layer goes, relative to where it was captured or generated: moved
@@ -261,7 +297,7 @@ pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32
 }
 
 /// Lays `layers` over `base` (RGBA8 sRGB, `w` x `h`, any size: rects scale) in
-/// order, in place. CC5 blends layers in sRGB.
+/// order, in place, each by its [`Blend`]. CC5 blends layers in sRGB.
 pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
     let lum = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     for a in layers {
@@ -282,7 +318,8 @@ pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
                     (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
                     _ => s[c],
                 } * shade;
-                p[c] = (p[c] as f32 * (1.0 - alpha) + col.min(255.0) * alpha).round().clamp(0.0, 255.0) as u8;
+                let v = a.image.blend.apply(p[c] as f32 / 255.0, col.min(255.0) / 255.0, alpha);
+                p[c] = (v * 255.0).round().clamp(0.0, 255.0) as u8;
             }
         });
     }
@@ -320,7 +357,7 @@ mod tests {
 
     #[test]
     fn compose_over_with_strength_and_tint() {
-        let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4) };
+        let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4), blend: Blend::Normal };
         let mut base = [100u8, 100, 100, 255].repeat(4);
         compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None, detail: 0.0, xf: Xf::default() }]);
         assert_eq!(&base[0..3], &[150, 50, 50]);
@@ -332,7 +369,7 @@ mod tests {
     #[test]
     fn placement_moves_the_layer() {
         // a 2x2 red patch at the top-left of a 8x8 texture, moved by half the texture
-        let li = LayerImage { rect: [0, 0, 2, 2], size: 8, w: 2, h: 2, rgba: [255, 0, 0, 255].repeat(4) };
+        let li = LayerImage { rect: [0, 0, 2, 2], size: 8, w: 2, h: 2, rgba: [255, 0, 0, 255].repeat(4), blend: Blend::Normal };
         let mut base = [0u8, 0, 0, 255].repeat(64);
         let xf = Xf { offset: [0.5, 0.5], scale: 1.0, rotation: 0.0 };
         compose(&mut base, 8, 8, &[Apply { image: &li, strength: 1.0, tint: None, detail: 0.0, xf }]);
@@ -343,7 +380,7 @@ mod tests {
     #[test]
     fn compose_normal_blends_and_renormalizes() {
         // flat normal (0, 0, 1) blended halfway towards (1, 0, 0)
-        let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255] };
+        let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255], blend: Blend::Normal };
         let mut nm = vec![128u8, 128, 255, 255];
         compose_normal(&mut nm, 1, 1, &[(&li, 0.5, Xf::default())]);
         let n: Vec<f32> = nm[..3].iter().map(|&v| v as f32 / 255.0 * 2.0 - 1.0).collect();

@@ -259,11 +259,11 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
     };
 
     let rgba: Vec<u8> = alpha.iter().flat_map(|a| [rgb[0], rgb[1], rgb[2], (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
-    let color = LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba };
+    let color = LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: crate::Blend::Normal };
     // lipstick: a satin finish (rougher than bare lips' wet sheen is CC5's matte look)
     let roughness = (kind == Kind::Lipstick).then(|| {
         let rgba = alpha.iter().flat_map(|a| [150u8, 150, 150, (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
-        LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba }
+        LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: crate::Blend::Normal }
     });
     Generated { color, roughness }
 }
