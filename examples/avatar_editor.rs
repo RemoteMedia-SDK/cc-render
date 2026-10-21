@@ -447,6 +447,9 @@ fn main() -> anyhow::Result<()> {
     if let Some(e) = hair_edit {
         app.insert_resource(e);
     }
+    if std::env::var_os("CC_DEBUG_INPUT").is_some() {
+        app.add_systems(Update, debug_input);
+    }
     app.run();
     Ok(())
 }
@@ -1326,5 +1329,15 @@ fn update_skins(rig: &Rig, skins: &[SkinRec], dworld: &[Vec3], ibms: &mut Assets
         if let Some(asset) = ibms.get_mut(&skin.handle) {
             *asset = SkinnedMeshInverseBindposes::from(new);
         }
+    }
+}
+
+/// `CC_DEBUG_INPUT=1`: log the window's pointer input (scripted UI checks).
+fn debug_input(mut buttons: EventReader<bevy::input::mouse::MouseButtonInput>, mut moved: EventReader<CursorMoved>) {
+    for e in buttons.read() {
+        info!("input: {:?} {:?}", e.button, e.state);
+    }
+    if let Some(e) = moved.read().last() {
+        info!("input: cursor {:?}", e.position);
     }
 }
