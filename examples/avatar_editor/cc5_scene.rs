@@ -13,6 +13,7 @@
 //! light multiplier), CC5_AMBIENT, CC5_IBL_INTENSITY, CC5_IBL_ROT (degrees).
 //! CC5 is Z up in cm, facing −Y; glTF is Y up in m, facing +Z.
 use bevy::prelude::*;
+use cc_render_plugin::cc_render::cc5_materials::{Cc5Materials, Cc5SkinMaterial, SkinTune};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -184,6 +185,126 @@ impl Cc5Scene {
     }
 }
 
+/// The CC5 mode's calibration settings, changeable while running (snapshot jobs'
+/// `"cc5"`: one editor launch renders a whole sweep).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cc5Settings {
+    pub tint: Vec3,
+    pub ambient: f32,
+    pub ibl: f32,
+    pub exposure: f32,
+    pub sat: f32,
+    /// per light of [`Cc5Scene::lights`]
+    pub gains: Vec<f32>,
+    pub skin_tune: SkinTune,
+}
+
+impl Cc5Settings {
+    /// These settings with `v`'s overrides: {"tint": [r, g, b], "ambient", "ibl",
+    /// "exposure", "sat", "gains": {"<light>": gain}, "skin_tune": [SkinTune fields]}.
+    pub fn with(&self, v: &Value, scene: &Cc5Scene) -> Self {
+        let mut s = self.clone();
+        let f = |k: &str| v.get(k).and_then(Value::as_f64).map(|x| x as f32);
+        if let Some(t) = v.get("tint").and_then(Value::as_array).filter(|a| a.len() == 3) {
+            let c = |i: usize| t[i].as_f64().unwrap_or(1.0) as f32;
+            s.tint = Vec3::new(c(0), c(1), c(2));
+        }
+        s.ambient = f("ambient").unwrap_or(s.ambient);
+        s.ibl = f("ibl").unwrap_or(s.ibl);
+        s.exposure = f("exposure").unwrap_or(s.exposure);
+        s.sat = f("sat").unwrap_or(s.sat);
+        if let Some(g) = v.get("gains").and_then(Value::as_object) {
+            for (i, l) in scene.lights.iter().enumerate() {
+                if let Some(x) = g.get(&l.name).and_then(Value::as_f64) {
+                    s.gains[i] = x as f32;
+                }
+            }
+        }
+        if let Some(t) = v.get("skin_tune").and_then(Value::as_array) {
+            s.skin_tune = SkinTune::parse(&t.iter().filter_map(Value::as_f64).map(|x| x.to_string()).collect::<Vec<_>>().join(","));
+        }
+        s
+    }
+}
+
+/// [`Cc5Settings`] wanted and in force; `default` from the constants and the
+/// environment (CC5_* knobs).
+#[derive(Resource)]
+pub struct Cc5Live {
+    pub default: Cc5Settings,
+    pub wanted: Cc5Settings,
+    applied: Cc5Settings,
+    lumens: f32,
+    lumens_flat: f32,
+}
+
+impl Cc5Live {
+    /// The wanted settings are on the scene.
+    pub fn applied(&self) -> bool {
+        self.applied == self.wanted
+    }
+}
+
+/// A CC5 light's index in [`Cc5Scene::lights`].
+#[derive(Component)]
+pub struct Cc5LightIndex(pub usize);
+
+fn light_intensity(l: &Cc5Light, gain: f32, lumens: f32, lumens_flat: f32) -> f32 {
+    gain * if l.inverse_square { l.multiplier * lumens } else { l.multiplier * lumens_flat * l.transform.translation.distance_squared(HEAD) }
+}
+
+/// Puts changed [`Cc5Live`] settings on the scene: grading, IBL (re-prefiltered
+/// when the tint changes), lights, ambient, and the skin materials' calibration.
+#[allow(clippy::too_many_arguments)]
+pub fn cc5_live(
+    live: Option<ResMut<Cc5Live>>,
+    scene: Option<Res<Cc5Scene>>,
+    mut cams: Query<(&mut bevy::render::view::ColorGrading, Option<&mut EnvironmentMapLight>), With<Camera3d>>,
+    mut lights: Query<(&Cc5LightIndex, &mut SpotLight)>,
+    mut ambient: ResMut<AmbientLight>,
+    mut images: ResMut<Assets<Image>>,
+    mut skins: ResMut<Assets<Cc5SkinMaterial>>,
+    mut materials: ResMut<Cc5Materials>,
+) {
+    let (Some(mut live), Some(scene)) = (live, scene) else { return };
+    if live.applied() {
+        return;
+    }
+    let (w, a) = (live.wanted.clone(), live.applied.clone());
+    let maps = if w.tint != a.tint {
+        crate::ibl::environment_maps(&scene.ibl, knob("CC5_IBL_ROT", 0.0).to_radians(), w.tint, &mut images).ok()
+    } else {
+        None
+    };
+    for (mut g, env) in &mut cams {
+        g.global.post_saturation = w.sat;
+        g.global.exposure = w.exposure;
+        if let Some(mut env) = env {
+            env.intensity = w.ibl;
+            if let Some((d, s)) = &maps {
+                env.diffuse_map = d.clone();
+                env.specular_map = s.clone();
+            }
+        }
+    }
+    for (i, mut l) in &mut lights {
+        let c = &scene.lights[i.0];
+        l.intensity = light_intensity(c, w.gains[i.0], live.lumens, live.lumens_flat);
+        l.color = tinted(c.color, w.tint);
+    }
+    ambient.color = tinted(scene.ambient, w.tint);
+    ambient.brightness = w.ambient;
+    if w.skin_tune != a.skin_tune {
+        materials.skin_tune = w.skin_tune;
+        for (_, m) in skins.iter_mut() {
+            m.extension.source.tune = w.skin_tune;
+            let (v, s) = (m.extension.source.vars.clone(), m.extension.source.sss.clone());
+            m.extension.set_vars(v, s);
+        }
+    }
+    live.applied = w;
+}
+
 /// Startup (after `setup`): CC5's lights instead of the studio rig.
 pub fn cc5_lights(
     mut commands: Commands,
@@ -191,6 +312,7 @@ pub fn cc5_lights(
     studio: Query<Entity, With<DirectionalLight>>,
     cams: Query<Entity, With<Camera3d>>,
     mut images: ResMut<Assets<Image>>,
+    materials: Res<Cc5Materials>,
 ) {
     if !scene.use_lights {
         return;
@@ -251,17 +373,14 @@ pub fn cc5_lights(
         .split(',')
         .filter_map(|kv| kv.split_once(':').and_then(|(k, v)| Some((k.trim().to_string(), v.trim().parse().ok()?))))
         .collect();
-    for l in &scene.lights {
-        let gain = gains.iter().find(|(n, _)| *n == l.name).map_or(LIGHT_GAINS.iter().find(|(n, _)| *n == l.name).map_or(1.0, |g| g.1), |g| g.1);
+    let gain_of = |l: &Cc5Light| gains.iter().find(|(n, _)| *n == l.name).map_or(LIGHT_GAINS.iter().find(|(n, _)| *n == l.name).map_or(1.0, |g| g.1), |g| g.1);
+    for (i, l) in scene.lights.iter().enumerate() {
+        let gain = gain_of(l);
         commands.spawn((
+            Cc5LightIndex(i),
             SpotLight {
                 color: tinted(l.color, t),
-                intensity: gain
-                    * if l.inverse_square {
-                        l.multiplier * lumens
-                    } else {
-                        l.multiplier * lumens_flat * l.transform.translation.distance_squared(HEAD)
-                    },
+                intensity: light_intensity(l, gain, lumens, lumens_flat),
                 range: l.range,
                 radius: l.radius,
                 shadows_enabled: l.shadows,
@@ -284,5 +403,15 @@ pub fn cc5_lights(
         ));
     }
     commands.insert_resource(AmbientLight { color: tinted(scene.ambient, t), brightness: knob("CC5_AMBIENT", AMBIENT_BRIGHTNESS) });
+    let default = Cc5Settings {
+        tint: t,
+        ambient: knob("CC5_AMBIENT", AMBIENT_BRIGHTNESS),
+        ibl: knob("CC5_IBL_INTENSITY", IBL_INTENSITY),
+        exposure: knob("CC5_EXPOSURE", EXPOSURE),
+        sat: knob("CC5_SAT", SATURATION),
+        gains: scene.lights.iter().map(gain_of).collect(),
+        skin_tune: materials.skin_tune,
+    };
+    commands.insert_resource(Cc5Live { wanted: default.clone(), applied: default.clone(), default, lumens, lumens_flat });
     info!("cc5 scene: {} lights", scene.lights.len());
 }

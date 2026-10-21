@@ -88,7 +88,7 @@ mod skin;
 mod cc5_scene;
 #[path = "avatar_editor/ibl.rs"]
 mod ibl;
-use cc5_scene::{cc5_lights, Cc5Scene};
+use cc5_scene::{cc5_lights, cc5_live, Cc5Live, Cc5Scene};
 use skin::{skin_layers, skin_sync, skin_ui, SkinEdit};
 
 const ATTRIBUTE_CCIDX: MeshVertexAttribute = MeshVertexAttribute::new("CcIdx", 0x0CC5_1D_E7, VertexFormat::Float32);
@@ -223,6 +223,10 @@ struct SnapJob {
     /// Also hide its brow cards and eyelashes (as CC5 does after a SkinGen preset).
     #[serde(default)]
     hide_brows: bool,
+    /// CC5 mode settings for this shot (`cc5_scene::Cc5Settings::with`): a
+    /// calibration sweep in one launch. Absent: the defaults.
+    #[serde(default)]
+    cc5: Option<serde_json::Value>,
     #[serde(default = "head_view")]
     view: String,
     #[serde(default = "one")]
@@ -520,6 +524,7 @@ fn main() -> anyhow::Result<()> {
                 hide_own_hair,
                 apply_shape,
                 snapshot.run_if(resource_exists::<Snapshot>),
+                cc5_live,
                 orbit_camera,
             )
                 .chain()
@@ -726,9 +731,16 @@ fn snapshot(
     cc5_scene: Option<Res<Cc5Scene>>,
     mut projections: Query<&mut Projection>,
     skin_mats: Res<Assets<cc_render_plugin::cc_render::cc5_materials::Cc5SkinMaterial>>,
+    mut live: Option<ResMut<Cc5Live>>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if !rig.ready || hair.as_ref().is_some_and(|h| !h.settled()) || hair_edit.as_ref().is_some_and(|e| e.busy()) || !skin.ready() {
+        return;
+    }
+    // the job's CC5 settings on the scene
+    if live.as_ref().is_some_and(|l| !l.applied()) {
+        snap.stable = 0.0;
+        snap.framed = 0.0;
         return;
     }
     // the skin's composite on the materials (a frame could show the character's
@@ -824,6 +836,9 @@ fn snapshot(
             };
             if let Err(e) = start_job(&job, &mut editor, hair.as_deref_mut(), hair_edit.as_deref_mut(), &mut skin) {
                 error!("snapshot batch: {}: {e:#}", job.out.display());
+            }
+            if let (Some(l), Some(scene)) = (live.as_deref_mut(), cc5_scene.as_deref()) {
+                l.wanted = job.cc5.as_ref().map_or_else(|| l.default.clone(), |v| l.default.with(v, scene));
             }
             snap.save = job.save;
             snap.path = job.out;
