@@ -170,25 +170,101 @@ fn speckle(w: u32, h: u32, r: f32, d: f32, var: f32, seed: u32) -> Vec<f32> {
     out
 }
 
-/// Blobs of the mask channel `a` grown towards -y (up the face in CC5's head UVs:
-/// eyes are above their lid marks) and feathered: eyeshadow around the lid marks.
-fn eye_area(lid: &[f32], w: u32, h: u32) -> Vec<f32> {
-    let s = w as f32 / 1024.0;
-    // the lid marks are small: grow them into the lid / brow-bone area
-    let grown = blur(lid, w, h, (14.0 * s) as u32, 2);
-    let max = grown.iter().cloned().fold(0.0f32, f32::max).max(1e-6);
-    let mut out = vec![0.0; (w * h) as usize];
-    let shift = (10.0 * s) as usize;
-    for y in 0..h as usize {
-        for x in 0..w as usize {
-            let src = y + shift;
-            if src < h as usize {
-                out[y * w as usize + x] = (grown[src * w as usize + x] / max * 2.2).min(1.0);
+/// `a` moved down by `dy` texels (negative: up), edges zero.
+fn shift_y(a: &[f32], w: u32, h: u32, dy: i32) -> Vec<f32> {
+    let (w, h) = (w as usize, h as usize);
+    let mut out = vec![0.0; w * h];
+    for y in 0..h {
+        let src = y as i64 - dy as i64;
+        if src >= 0 && (src as usize) < h {
+            out[y * w..(y + 1) * w].copy_from_slice(&a[src as usize * w..(src as usize + 1) * w]);
+        }
+    }
+    out
+}
+
+/// Each half of `a` moved away from the face's centre line (u = 0.5) by `dx`
+/// texels (negative: towards it), edges zero.
+fn shift_out(a: &[f32], w: u32, h: u32, dx: i32) -> Vec<f32> {
+    let (w, h) = (w as usize, h as usize);
+    let half = w / 2;
+    let mut out = vec![0.0; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (src, ok) = if x < half {
+                let s = x as i64 + dx as i64;
+                (s, s >= 0 && (s as usize) < half)
+            } else {
+                let s = x as i64 - dx as i64;
+                (s, (s as usize) >= half && (s as usize) < w && s >= 0)
+            };
+            if ok {
+                out[y * w + x] = a[y * w + src as usize];
             }
         }
     }
-    blur(&out, w, h, (4.0 * s) as u32, 2)
+    out
 }
+
+/// A feature of a region mask channel, `<channel>.<op>` (radii and moves in
+/// texels at 1024): `b3` / `b6` / `b20` blurred; `out` the band around the region;
+/// `in` its rim inside; `dy<n>` moved down n (up when negative), `dx<n>` moved
+/// away from the face's centre line n (towards it when negative), blurred 10, or
+/// with an `s` suffix blurred 4.
+fn feature(chs: &[(&str, &[f32])], w: u32, h: u32, name: &str) -> Vec<f32> {
+    let (ch, op) = name.split_once('.').expect("feature: <channel>.<op>");
+    let m = chs.iter().find(|c| c.0 == ch).unwrap_or_else(|| panic!("feature: no channel {ch}")).1;
+    let s = w as f32 / 1024.0;
+    let b = |a: &[f32], r: f32| blur(a, w, h, (r * s).round() as u32, 3);
+    match op {
+        "b3" => b(m, 3.0),
+        "b6" => b(m, 6.0),
+        "b20" => b(m, 20.0),
+        "out" => b(m, 20.0).iter().zip(m).map(|(b, m)| (b - m).clamp(0.0, 1.0)).collect(),
+        "in" => m.iter().zip(&b(m, 20.0)).map(|(m, b)| (m - b).clamp(0.0, 1.0) * 2.0).collect(),
+        _ => {
+            let (op, r) = match op.strip_suffix('s') {
+                Some(o) => (o, 4.0),
+                None => (op, 10.0),
+            };
+            let n = |t: &str| (t.parse::<f32>().unwrap_or_else(|_| panic!("feature: {name}")) * s).round() as i32;
+            if let Some(t) = op.strip_prefix("dy") {
+                b(&shift_y(m, w, h, n(t)), r)
+            } else if let Some(t) = op.strip_prefix("dx") {
+                b(&shift_out(m, w, h, n(t)), r)
+            } else {
+                panic!("feature: unknown op {name}")
+            }
+        }
+    }
+}
+
+/// A fitted shape: the weighted sum of its features, 0..1.
+fn fitted(chs: &[(&str, &[f32])], w: u32, h: u32, shape: &[(&str, f32)]) -> Vec<f32> {
+    let mut out = vec![0.0f32; (w * h) as usize];
+    for (name, k) in shape {
+        for (o, v) in out.iter_mut().zip(feature(chs, w, h, name)) {
+            *o += k * v;
+        }
+    }
+    out.iter().map(|v| v.clamp(0.0, 1.0)).collect()
+}
+
+/// Shapes fitted to CC5's SkinGen presets (`gen_shape_fit.py`: the CC5 layer's
+/// opacity as a weighted sum of [`feature`]s of the region masks; the preset in
+/// the comment, soft IoU against it).
+/// blush_round, IoU 0.591
+const SHAPE_BLUSH: &[(&str, f32)] = &[("cheek.dx24", 0.2046), ("cheek.dy-48", 0.0401)];
+/// eyeshadow_smoky, IoU 0.773
+const SHAPE_EYESHADOW: &[(&str, f32)] = &[("inner_lid.out", 6.0932), ("upper_lid.out", 5.4479), ("upper_lid.dx24", 5.2087), ("inner_lid.dx-24", 3.4349), ("upper_lid.dy-24", 2.0685), ("inner_lid.dy12s", 1.5726), ("upper_lid.dx-24", 1.4144), ("inner_lid.dy-24", 1.0936), ("upper_lid.dx-12s", 0.9085), ("inner_lid.dx-12s", 0.7209), ("inner_lid.in", 0.0753), ("forehead.out", 0.0692), ("forehead.dy48", 0.0027)];
+/// contour_basic, IoU 0.475
+const SHAPE_CONTOUR: &[(&str, f32)] = &[("inner_lid.dy-24", 0.9212), ("forehead.out", 0.406), ("upper_lid.dx-24", 0.3988), ("upper_lid.dx24", 0.312), ("cheek.out", 0.2517), ("ear.out", 0.1833), ("mouth.dy-48", 0.1241), ("neck.dy-48", 0.0963), ("forehead.in", 0.0953), ("nose.dx12s", 0.0866), ("chin.dy-48", 0.0856), ("cheek.dx24", 0.0849), ("upper_lid.dy-12s", 0.0783), ("chin.dy48", 0.0586), ("forehead.dx24", 0.0526), ("neck.in", 0.0489), ("ear.dx-24", 0.0356), ("neck.out", 0.033), ("cheek.dy48", 0.0321), ("nose.dx24", 0.0309), ("nose.out", 0.0174), ("neck.dx-24", 0.0073)];
+/// highlight_basic, IoU 0.276
+const SHAPE_HIGHLIGHT: &[(&str, f32)] = &[("upper_lid.dy-48", 0.301), ("inner_lid.dy48", 0.2626), ("upper_lid.dy48", 0.1033), ("chin.dy-12s", 0.0807), ("nose.dx-24", 0.0783), ("nose.dy-48", 0.0288), ("upper_lid.dy-24", 0.0263), ("forehead.dy48", 0.0225), ("cheek.dy-24", 0.0151), ("chin.dy-24", 0.0081), ("forehead.in", 0.0057), ("nose.dx-12s", 0.0051), ("cheek.dx24", 0.0028), ("cheek.dx-12s", 0.0024), ("forehead.dx-24", 0.0017)];
+/// freckle_01, IoU 0.682
+const SHAPE_FRECKLES: &[(&str, f32)] = &[("inner_lid.dy48", 10.5913), ("inner_lid.dy24", 2.0273), ("inner_lid.dy12", 1.1606), ("nose.dy-24", 0.3314), ("chin.dx-24", 0.3044), ("mouth.dy48", 0.2687), ("nose.dx24", 0.2651), ("cheek.dx-24", 0.2373), ("nose.dx-12s", 0.2324), ("chin.dx24", 0.2157), ("chin.dy-12s", 0.1055), ("upper_lip.dy-12", 0.0989), ("upper_lip.dy-12s", 0.0627), ("chin.dy-12", 0.0534), ("chin.b3", 0.0278), ("upper_lid.dy-48", 0.0263), ("chin.dy12s", 0.0255), ("inner_lid.dx-12s", 0.0153), ("inner_lid.dy-12s", 0.0136), ("cheek.dy-48", 0.0101), ("mouth.dy-12s", 0.0096), ("inner_lid.dy-24", 0.0087), ("forehead.dx-24", 0.002)];
+/// beard_stubble, IoU 0.545
+const SHAPE_STUBBLE: &[(&str, f32)] = &[("chin.dx-24", 2.6286), ("chin.dx24", 1.179), ("cheek.out", 0.987), ("cheek.dy48", 0.6643), ("chin.dy48", 0.6328), ("neck.out", 0.4581), ("mouth.dy48", 0.4293), ("chin.out", 0.4202), ("neck.dy-48", 0.3845), ("upper_lip.dy48", 0.2932), ("upper_lip.dx-24", 0.2465), ("mouth.dy-24", 0.0943), ("mouth.out", 0.081), ("upper_lip.dx-12s", 0.0632), ("mouth.dy-48", 0.0365), ("chin.dx-12s", 0.0304), ("ear.dy-48", 0.0017)];
 
 /// The generator `kind` at colour `rgb`; `seed` varies freckles and stubble.
 pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern) -> Generated {
@@ -203,37 +279,30 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
     let mouth = channel(&m.nmuil, 1, w, h);
     let lid = channel(&m.nmuil, 2, w, h);
     let neck = channel(&m.en, 0, w, h);
+    let inner_lid = channel(&m.nmuil, 3, w, h);
+    let ear = channel(&m.en, 1, w, h);
+    let chs: [(&str, &[f32]); 10] = [
+        ("cheek", &cheek),
+        ("forehead", &fore),
+        ("upper_lip", &upper_lip),
+        ("chin", &chin),
+        ("nose", &nose),
+        ("mouth", &mouth),
+        ("upper_lid", &lid),
+        ("inner_lid", &inner_lid),
+        ("neck", &neck),
+        ("ear", &ear),
+    ];
     let alpha: Vec<f32> = match kind {
         Kind::Lipstick => blur(&mouth, w, h, (1.5 * s).max(1.0) as u32, 1),
-        Kind::Blush => blur(&cheek, w, h, (20.0 * s) as u32, 3).iter().map(|v| v.min(1.0)).collect(),
-        Kind::Eyeshadow => eye_area(&lid, w, h),
-        Kind::Contour => {
-            // under the cheekbones and along the jaw: the cheek mask's lower edge
-            // and the neck mask's top band, soft
-            let low_cheek: Vec<f32> = (0..(w * h) as usize).map(|i| {
-                let y = i / w as usize;
-                let below = cheek.get(i.saturating_sub(w as usize * (24.0 * s) as usize)).copied().unwrap_or(0.0);
-                if y > (24.0 * s) as usize { (below - cheek[i]).max(0.0) } else { 0.0 }
-            }).collect();
-            let jaw: Vec<f32> = (0..(w * h) as usize).map(|i| {
-                let above = if i >= (w as usize) * (30.0 * s) as usize { neck[i - w as usize * (30.0 * s) as usize] } else { 0.0 };
-                (neck[i] - above).max(0.0)
-            }).collect();
-            blur(&low_cheek.iter().zip(&jaw).map(|(a, b)| (a + b * 0.8).min(1.0)).collect::<Vec<_>>(), w, h, (8.0 * s) as u32, 3)
-        }
-        Kind::Highlight => {
-            let high_cheek: Vec<f32> = (0..(w * h) as usize).map(|i| {
-                let above = cheek.get(i + w as usize * (24.0 * s) as usize).copied().unwrap_or(0.0);
-                (above - cheek[i]).max(0.0)
-            }).collect();
-            // the nose bridge, the cheekbones' upper edge and the forehead's middle, faint
-            let a: Vec<f32> = (0..(w * h) as usize).map(|i| (nose[i] * 0.45 + high_cheek[i] * 0.5 + fore[i] * 0.25).min(1.0)).collect();
-            blur(&a, w, h, (14.0 * s) as u32, 3)
-        }
+        Kind::Blush => fitted(&chs, w, h, SHAPE_BLUSH),
+        Kind::Eyeshadow => fitted(&chs, w, h, SHAPE_EYESHADOW),
+        Kind::Contour => fitted(&chs, w, h, SHAPE_CONTOUR),
+        Kind::Highlight => fitted(&chs, w, h, SHAPE_HIGHLIGHT),
         Kind::Freckles => {
-            let region = blur(&(0..(w * h) as usize).map(|i| (cheek[i] + nose[i] + fore[i] * 0.3).min(1.0)).collect::<Vec<_>>(), w, h, (16.0 * s) as u32, 3);
+            let region = fitted(&chs, w, h, SHAPE_FRECKLES);
             let dots = speckle(w, h, 1.1 * s * psize, 0.006 * pdens / (s * s), pvar, seed);
-            region.iter().zip(&dots).map(|(r, d)| (r * 1.4).min(1.0) * d).collect()
+            region.iter().zip(&dots).map(|(r, d)| r * d).collect()
         }
         Kind::Spot => {
             // a soft round spot, radius 1.2 texels at 1024 (a small mole) x size
@@ -248,13 +317,9 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
                 .collect()
         }
         Kind::Stubble => {
-            let jaw_band: Vec<f32> = (0..(w * h) as usize).map(|i| {
-                let above = if i >= (w as usize) * (60.0 * s) as usize { neck[i - w as usize * (60.0 * s) as usize] } else { 0.0 };
-                (neck[i] - above).max(0.0)
-            }).collect();
-            let region = blur(&(0..(w * h) as usize).map(|i| (upper_lip[i] + chin[i] + jaw_band[i]).min(1.0)).collect::<Vec<_>>(), w, h, (6.0 * s) as u32, 2);
+            let region = fitted(&chs, w, h, SHAPE_STUBBLE);
             let dots = speckle(w, h, 0.55 * s * psize, 0.09 * pdens / (s * s), pvar, seed);
-            region.iter().zip(&dots).map(|(r, d)| (r * 1.3).min(1.0) * d).collect()
+            region.iter().zip(&dots).map(|(r, d)| r * d).collect()
         }
     };
 
@@ -273,6 +338,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shifts_move_away_from_the_centre_line_and_down() {
+        // one texel on each side of an 8 x 2 map's centre line
+        let mut a = vec![0.0f32; 16];
+        (a[3], a[4]) = (1.0, 1.0);
+        let o = shift_out(&a, 8, 2, 2);
+        assert_eq!((o[1], o[6], o[3], o[4]), (1.0, 1.0, 0.0, 0.0));
+        let d = shift_y(&a, 8, 2, 1);
+        assert_eq!((d[8 + 3], d[3]), (1.0, 0.0));
+    }
+
+    #[test]
     fn lipstick_follows_the_mouth_mask() {
         let (w, h) = (64u32, 64u32);
         let mut nmuil = vec![0u8; (w * h * 4) as usize];
@@ -287,7 +363,8 @@ mod tests {
         assert!(a(32, 32) > 200 && a(5, 5) == 0);
         assert!(g.roughness.is_some());
         let f = generate(&m, Kind::Freckles, [100, 50, 30], 1, Pattern::default());
-        assert!(f.color.rgba.chunks(4).all(|p| p[3] == 0), "no freckles outside the cheek / nose / forehead regions");
+        let fa = |x: u32, y: u32| f.color.rgba[((y * w + x) * 4 + 3) as usize];
+        assert!((0..8).all(|y| (0..8).all(|x| fa(x, y) == 0)), "no freckles far from the regions");
     }
 
     #[test]
