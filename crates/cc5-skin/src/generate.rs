@@ -344,7 +344,14 @@ fn range(a: Vec<f32>, w: u32, h: u32, p: &Pattern) -> Vec<f32> {
         .collect()
 }
 
+/// A layer of `rgb` with `layer`'s opacity (and place): e.g. a layer's glow.
+pub fn colour_layer(layer: &LayerImage, rgb: [u8; 3]) -> LayerImage {
+    let rgba = layer.rgba.chunks(4).flat_map(|p| [rgb[0], rgb[1], rgb[2], p[3]]).collect();
+    LayerImage { rgba, blend: crate::Blend::Normal, parts: Vec::new(), ..layer.clone() }
+}
+
 /// A roughness layer for `color`'s opacity at `value` (0..1): R = roughness, A = opacity.
+/// (Any value: metallic, occlusion as well.)
 pub fn roughness_layer(color: &LayerImage, value: f32) -> LayerImage {
     let r = (value.clamp(0.0, 1.0) * 255.0).round() as u8;
     let rgba = color.rgba.chunks(4).flat_map(|p| [r, r, r, p[3]]).collect();

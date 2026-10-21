@@ -213,7 +213,9 @@ contour (CC5's change 0.7–2.2), stubble 1.4 of 1.6.
 | Layer Mask (greyscale image) | head region and / or greyscale image, invert |
 | transform (offset, scale, rotation) | move, scale, rotate on every layer; decals: place, size, rotation |
 | Range (expansion, blur, contrast) | generated layers |
-| roughness, normal strength | captured: roughness and normal scales; generated: roughness finish; no metallic, glow, AO or displacement |
+| roughness, normal strength | captured: roughness and normal scales; generated: roughness finish |
+| metallic, AO, glow | every layer: a metallic value, an occlusion (darkening) and a glow colour / strength, through its opacity |
+| displacement | not offered (no tessellation in the renderer) |
 | pattern (tile, scale / rotation / opacity variation, disorder, seed) | freckles / stubble: dot size, density, variation, seed |
 | duplicate | generated: any number of each kind; captured: one each |
 | layer stack order | captured in the order switched on, then generated, then decals; generated and decals reorder among themselves |

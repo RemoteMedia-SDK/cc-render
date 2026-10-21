@@ -380,13 +380,20 @@ fn each_texel(buf: &mut [u8], w: u32, h: u32, li: &LayerImage, xf: Xf, mask: Opt
 /// Lays layers' roughness (their maps' R, at their opacity x strength) over the
 /// G channel of a glTF metallic-roughness texture (RGBA8, `w` x `h`), in place.
 pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf, Option<&Mask>)]) {
+    compose_channel(mr, w, h, layers, 1);
+}
+
+/// Lays layers' values (their maps' R, at their opacity x strength) over one
+/// channel of an RGBA8 texture, in place: metallic (B of a glTF metallic-roughness
+/// map), occlusion (R of an occlusion map), roughness (G).
+pub fn compose_channel(buf: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf, Option<&Mask>)], channel: usize) {
     for (li, strength, xf, mask) in layers {
         if *strength <= 0.0 {
             continue;
         }
-        each_texel(mr, w, h, li, *xf, *mask, |p, s, m| {
+        each_texel(buf, w, h, li, *xf, *mask, |p, s, m| {
             let a = (s[3] / 255.0 * strength * m).clamp(0.0, 1.0);
-            p[1] = (p[1] as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
+            p[channel] = (p[channel] as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
         });
     }
 }
