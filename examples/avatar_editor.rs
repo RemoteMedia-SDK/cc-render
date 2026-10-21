@@ -497,7 +497,9 @@ fn main() -> anyhow::Result<()> {
         // CC5_SKIN_TUNE: the skin shader's calibration (SkinTune fields, comma-separated)
         .insert_resource(Cc5Materials {
             enabled: !no_cc5,
-            skin_tune: std::env::var("CC5_SKIN_TUNE").map(|v| SkinTune::parse(&v)).unwrap_or_default(),
+            skin_tune: std::env::var("CC5_SKIN_TUNE").map(|v| SkinTune::parse(&v)).unwrap_or_else(|_| {
+                if cc5_lights_flag { SkinTune { extra_wrap: cc5_scene::SKIN_WRAP, ..default() } } else { SkinTune::default() }
+            }),
             // CC5_HAIR_GAIN: "diffuse,specular" (with --cc5-lights: calibrated against CC5)
             hair_gain: hair_gain(cc5_lights_flag),
             ..default()

@@ -46,6 +46,11 @@ pub enum Blend {
     Multiply,
     /// 1 − (1−B)·(1 − α·C) (highlights)
     Screen,
+    /// overlay (multiply under mid grey, screen over it), at opacity α
+    Overlay,
+    /// soft light (the W3C / Photoshop curve), at opacity α
+    #[serde(rename = "soft_light")]
+    SoftLight,
 }
 
 impl Blend {
@@ -53,12 +58,28 @@ impl Blend {
         *self == Blend::Normal
     }
 
+    /// Every mode, for pickers.
+    pub const ALL: [Blend; 5] = [Blend::Normal, Blend::Multiply, Blend::Screen, Blend::Overlay, Blend::SoftLight];
+
     /// The texel under the layer `b`, with colour `c` at opacity `a` laid over it.
     pub fn apply(self, b: f32, c: f32, a: f32) -> f32 {
         match self {
             Blend::Normal => b * (1.0 - a) + c * a,
             Blend::Multiply => b * (1.0 - a + a * c),
             Blend::Screen => 1.0 - (1.0 - b) * (1.0 - a * c),
+            Blend::Overlay => {
+                let f = if b < 0.5 { 2.0 * b * c } else { 1.0 - 2.0 * (1.0 - b) * (1.0 - c) };
+                b + (f - b) * a
+            }
+            Blend::SoftLight => {
+                let f = if c <= 0.5 {
+                    b - (1.0 - 2.0 * c) * b * (1.0 - b)
+                } else {
+                    let d = if b <= 0.25 { ((16.0 * b - 12.0) * b + 4.0) * b } else { b.sqrt() };
+                    b + (2.0 * c - 1.0) * (d - b)
+                };
+                b + (f - b) * a
+            }
         }
     }
 }
@@ -478,6 +499,17 @@ mod tests {
         compose(&mut base, 8, 8, &[Apply { xf, ..Apply::new(&li) }]);
         let px = |x: usize, y: usize| base[(y * 8 + x) * 4];
         assert_eq!((px(0, 0), px(4, 4), px(5, 5)), (0, 255, 255));
+    }
+
+    #[test]
+    fn overlay_and_soft_light() {
+        // mid grey leaves both as they are; they darken / lighten towards the colour
+        for m in [Blend::Overlay, Blend::SoftLight] {
+            assert!((m.apply(0.3, 0.5, 1.0) - 0.3).abs() < 1e-6, "{m:?} with grey");
+            assert!(m.apply(0.3, 0.1, 1.0) < 0.3 && m.apply(0.3, 0.9, 1.0) > 0.3, "{m:?}");
+            assert_eq!(m.apply(0.3, 0.9, 0.0), 0.3, "{m:?} at opacity 0");
+        }
+        assert!((Blend::Overlay.apply(0.25, 0.8, 1.0) - 0.4).abs() < 1e-6);
     }
 
     #[test]

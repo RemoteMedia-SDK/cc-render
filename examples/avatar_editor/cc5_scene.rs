@@ -38,7 +38,11 @@ const LIGHT_GAINS: [(&str, f32); 1] = [("Top", 2.5)];
 /// Where CC5's lights aim: the head (m, editor space).
 const HEAD: Vec3 = Vec3::new(0.0, 1.6, 0.0);
 /// CC5 ambient colour → Bevy ambient brightness.
-pub const AMBIENT_BRIGHTNESS: f32 = 80.0;
+pub const AMBIENT_BRIGHTNESS: f32 = 140.0;
+/// The skin shader's extra wrap with CC5's lights (SkinTune extra_wrap). With
+/// AMBIENT_BRIGHTNESS fitted at CC5's framing over the bare skin and three skins
+/// (`calib_fill.py`): mean patch dE 5.04 -> 4.77.
+pub const SKIN_WRAP: f32 = 0.16;
 /// CC5's IBL → Bevy environment map intensity (cd/m² per unit radiance).
 pub const IBL_INTENSITY: f32 = 5.0;
 pub const DEFAULT_IBL: &str = r"C:\Program Files\Reallusion\Character Creator 5\Image\Default_IBL.hdr";
