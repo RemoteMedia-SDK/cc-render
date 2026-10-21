@@ -167,18 +167,15 @@ pub fn cc5_lights(
     if !scene.use_lights {
         return;
     }
-    // grading knobs (calibration): CC5_SAT = post saturation, CC5_TONEMAP = agx | aces | tony | none
+    // grading knobs (calibration): CC5_SAT = post saturation, CC5_EXPOSURE = stops,
+    // CC5_TONEMAP = agx | aces | tony | none
     for c in &cams {
         // CC5's viewport is more saturated than our AgX grading: 1.6 against its renders
-        let sat = std::env::var("CC5_SAT").ok().and_then(|v| v.parse::<f32>().ok()).or(Some(SATURATION));
-        {
-            if let Some(sat) = sat {
-                commands.entity(c).insert(bevy::render::view::ColorGrading {
-                    global: bevy::render::view::ColorGradingGlobal { post_saturation: sat, ..default() },
-                    ..default()
-                });
-            }
-        }
+        let sat = knob("CC5_SAT", SATURATION);
+        commands.entity(c).insert(bevy::render::view::ColorGrading {
+            global: bevy::render::view::ColorGradingGlobal { post_saturation: sat, exposure: knob("CC5_EXPOSURE", 0.0), ..default() },
+            ..default()
+        });
         if let Ok(v) = std::env::var("CC5_CAS") {
             if let Ok(k) = v.parse::<f32>() {
                 commands.entity(c).insert(bevy::core_pipeline::contrast_adaptive_sharpening::ContrastAdaptiveSharpening {
