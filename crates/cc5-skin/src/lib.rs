@@ -37,6 +37,10 @@ pub struct LayerMap {
     pub diffuse: String,
     /// where it sits in the material's texture: x, y, w, h (texels at `size`)
     pub rect: [u32; 4],
+    /// roughness the layer lays down (R) with the same opacity (A), when it
+    /// changes roughness (lipstick, sweat, ...); same rect
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roughness: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -103,8 +107,19 @@ impl SkinPack {
     /// A layer's map for `material`, decoded.
     pub fn layer_image(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
         let Some(m) = layer.maps.get(material) else { return Ok(None) };
-        let img = image::open(self.dir.join(&m.diffuse)).with_context(|| format!("{}", m.diffuse))?.to_rgba8();
-        Ok(Some(LayerImage { rect: m.rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw() }))
+        self.decode(&m.diffuse, m.rect).map(Some)
+    }
+
+    /// A layer's roughness map for `material`, decoded (R = roughness, A = opacity).
+    pub fn layer_roughness(&self, layer: &Layer, material: &str) -> Result<Option<LayerImage>> {
+        let Some(m) = layer.maps.get(material) else { return Ok(None) };
+        let Some(r) = &m.roughness else { return Ok(None) };
+        self.decode(r, m.rect).map(Some)
+    }
+
+    fn decode(&self, file: &str, rect: [u32; 4]) -> Result<LayerImage> {
+        let img = image::open(self.dir.join(file)).with_context(|| file.to_string())?.to_rgba8();
+        Ok(LayerImage { rect, size: self.size, w: img.width(), h: img.height(), rgba: img.into_raw() })
     }
 }
 
@@ -127,6 +142,31 @@ pub struct Apply<'a> {
     /// (new colour, the layer's [`Layer::color`]), sRGB 0..255: recolour the
     /// layer, keeping its pattern (each texel's brightness relative to the mean)
     pub tint: Option<([f32; 3], [f32; 3])>,
+}
+
+/// Lays layers' roughness (their maps' R, at their opacity x strength) over the
+/// G channel of a glTF metallic-roughness texture (RGBA8, `w` x `h`), in place.
+pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32)]) {
+    for (li, strength) in layers {
+        if *strength <= 0.0 {
+            continue;
+        }
+        let k = w as f32 / li.size as f32;
+        let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
+        let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
+        let (x0, y0) = (rx.floor().max(0.0) as u32, ry.floor().max(0.0) as u32);
+        let (x1, y1) = (((rx + rw).ceil() as u32).min(w), ((ry + rh).ceil() as u32).min(h));
+        mr.par_chunks_mut(w as usize * 4).enumerate().filter(|(y, _)| (*y as u32) >= y0 && (*y as u32) < y1).for_each(|(y, row)| {
+            let ly = ((y as f32 + 0.5 - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
+            for x in x0..x1 {
+                let lx = ((x as f32 + 0.5 - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
+                let s = bilinear(li, lx, ly);
+                let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
+                let g = &mut row[x as usize * 4 + 1];
+                *g = (*g as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
+            }
+        });
+    }
 }
 
 /// Lays `layers` over `base` (RGBA8 sRGB, `w` x `h`, any size: rects scale) in
