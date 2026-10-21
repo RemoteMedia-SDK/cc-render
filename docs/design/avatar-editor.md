@@ -37,7 +37,8 @@ joint translations (rotations unchanged), and inverse bind matrices
 
 ## Building the inputs
 
-On the Windows machine with CC5 (5.13), Blender 4.3 and Python:
+On the Windows machine with CC5 (5.13), Python and cc-render's `cc5-fbx` built
+(`cargo build -p cc5-fbx --release --target-dir target-cc5`; no Blender):
 
 ```powershell
 remotemedia-sdk\scripts\avatars\cc5_editor\build_cc5_editor_pack.ps1 `
@@ -46,7 +47,7 @@ remotemedia-sdk\scripts\avatars\cc5_editor\build_cc5_editor_pack.ps1 `
 
 It drives CC5 with no clicks (loads CC5's slider library via "Load CC5 HD
 Neutral Base" — without that step CC5 exposes no head/body sliders to Python —
-opens the project, captures, exports the reference FBX), converts with Blender,
+opens the project, captures, exports the reference FBX), converts it with `cc5-fbx`,
 bakes hair/brow alpha (`bake_alpha.py`) and builds the pack. The first run takes
 hours (bind capture ≈ 3.5 s per slider state); reruns resume. Any running CC5
 is closed first; the project is never saved.
@@ -82,9 +83,7 @@ and the expressions live in a sidecar *expression pack*, applied on the CPU like
 the shaping sliders:
 
 ```powershell
-# Blender headless (re-runs itself under Blender when started with plain Python)
-python remotemedia-sdk\scripts\avatars\cc5_editor\build_expression_pack.py `
-    D:\cc5_editor\beautiful\ref\character.fbx D:\cc5_editor\beautiful\pack D:\cc5_editor\beautiful\expressions
+cc5-fbx expressions D:\cc5_editor\beautiful\ref\character.fbx D:\cc5_editor\beautiful\pack D:\cc5_editor\beautiful\expressions
 cargo run --example avatar_editor -- character.glb pack --expressions expressions
 ```
 

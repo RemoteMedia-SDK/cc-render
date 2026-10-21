@@ -34,7 +34,7 @@ use the id then); values are range-checked.
 
 Facial expressions (CC5's ~400 morph targets; Bevy loads at most 64 per mesh)
 come as an expression pack (`expressions.json` + `expressions.bin`, built by
-`build_expression_pack.py` from the reference FBX) in the same vertex space, for
+`cc5-fbx expressions` from the reference FBX) in the same vertex space, for
 CPU morphing on top of the shape:
 
 ```rust
