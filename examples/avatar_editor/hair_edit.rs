@@ -1,5 +1,5 @@
 //! `--hair-src dir --hair-head glb [--hair-config smart_hair.json] [--hair-edit settings.json]`:
-//! live hair editing. Pick a CC5 Smart Hair export (`<dir>/<group>/character.glb`),
+//! live hair editing. Pick a CC5 Smart Hair export (`<dir>/<group>/character.glb` or `.fbx`),
 //! change its look / shape / colour settings, and the part is rebuilt with
 //! `cc5-hair` in the background (about a second) and swapped into its slot.
 //! Colour changes only rebuild materials. "Save" bakes the part into the hair
@@ -104,7 +104,7 @@ impl HairEdit {
         };
         let mut groups: Vec<String> = std::fs::read_dir(&src)?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().join("character.glb").exists())
+            .filter(|e| cc5_hair::group_source(&e.path()).is_some())
             .map(|e| e.file_name().to_string_lossy().to_string())
             .collect();
         groups.sort();
@@ -154,7 +154,7 @@ impl HairEdit {
             apply(o, &mut conv);
         }
         let dir = self.src.join(group);
-        conv["source_glb"] = json!(dir.join("character.glb"));
+        conv["source_glb"] = json!(cc5_hair::group_source(&dir).unwrap_or_else(|| dir.join("character.glb")));
         if dir.join("shape_base.obj").exists() {
             conv["shape_dir"] = json!(dir);
         }
@@ -324,7 +324,7 @@ pub fn hair_edit_run(
         let g = ed.group.clone().unwrap();
         let group = match ed.sources.get(&g) {
             Some(s) => s.clone(),
-            None => match Source::load(&ed.src.join(&g).join("character.glb")) {
+            None => match Source::load(&cc5_hair::group_source(&ed.src.join(&g)).unwrap_or_default()) {
                 Ok(s) => {
                     let s = Arc::new(s);
                     ed.sources.insert(g.clone(), s.clone());

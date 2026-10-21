@@ -124,7 +124,7 @@ fn main() -> Result<()> {
             let cfg = read_json(&need(&args, "--config")?)?;
             let only: Option<Vec<String>> = arg(&args, "--only").map(|s| s.split(',').map(|x| x.trim().to_string()).collect());
             let beards: Vec<String> = serde_json::from_value(cfg["beards"].clone())?;
-            let mut groups: Vec<_> = std::fs::read_dir(&src)?.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.join("character.glb").exists()).collect();
+            let mut groups: Vec<_> = std::fs::read_dir(&src)?.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| cc5_hair::group_source(p).is_some()).collect();
             groups.sort();
             for gdir in groups {
                 let g = gdir.file_name().unwrap().to_string_lossy().to_string();
@@ -134,7 +134,7 @@ fn main() -> Result<()> {
                 let kind = if beards.contains(&g) { "beard" } else if g.starts_with("Male_") || g.starts_with("Female_") { "brows" } else { "hair" };
                 let k = &cfg["kinds"][kind];
                 let mut conv = k["convert"].clone();
-                conv["source_glb"] = json!(gdir.join("character.glb"));
+                conv["source_glb"] = json!(cc5_hair::group_source(&gdir).unwrap());
                 if gdir.join("shape_base.obj").exists() {
                     conv["shape_dir"] = json!(gdir); // which layers CC5 moves with the head box / a bone
                 }

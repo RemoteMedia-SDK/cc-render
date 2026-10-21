@@ -166,9 +166,14 @@ pub fn build_with(spec: &Spec, head: &Source, body: &Body, lib: &Path, group: Op
         base.sources.clone()
     };
     let from_group = base.source_glb.is_some();
-    // the CC5 material settings: the source GLB's own, or the character's
-    // (the head's: `../character.glb`, else `<head>.cc5mat.glb` beside it)
+    // the CC5 material settings: the source's own, or the character's (the head's
+    // own when it has them (an FBX head with its sidecar JSON), else
+    // `../character.glb`, else `<head>.cc5mat.glb` beside it)
+    let head_has_cc5 = head.materials.iter().any(|m| m.cc5.is_some());
     let mat_glb: Option<PathBuf> = base.material_glb.clone().or_else(|| base.source_glb.clone()).or_else(|| {
+        if head_has_cc5 {
+            return Some(head.path.clone());
+        }
         let char_glb = head.path.parent()?.join("..").join("character.glb");
         let cc5mat = head.path.with_extension("cc5mat.glb");
         [char_glb, cc5mat].into_iter().find(|p| p.exists())
@@ -176,6 +181,7 @@ pub fn build_with(spec: &Spec, head: &Source, body: &Body, lib: &Path, group: Op
     let mat_src_owned;
     let mat_src: Option<&Source> = match &mat_glb {
         Some(p) if *p == src.path => Some(src),
+        Some(p) if *p == head.path => Some(head),
         Some(p) => {
             mat_src_owned = Source::load(p)?;
             Some(&mat_src_owned)

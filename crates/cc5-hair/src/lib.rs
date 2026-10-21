@@ -3,7 +3,7 @@
 //! editor can rebuild hair live).
 //!
 //! Stages (each a plain function, so callers can cache their outputs):
-//! [`source::Source`] (a CC5 character GLB) -> [`cards::cards_to_strands`]
+//! [`source::Source`] (a CC5 character GLB or FBX export) -> [`cards::cards_to_strands`]
 //! (strands following CC5's cards) -> [`shape::finish`] (shape edits, push off
 //! the head) -> [`shade::depth_shade`] -> [`part::build`] (meshes, materials,
 //! catalog entry) -> [`glb_out::write`] (a library part GLB).
@@ -24,6 +24,12 @@ use glam::Vec3;
 use rand::{rngs::StdRng, Rng as _, SeedableRng};
 
 /// Between the eyes of the CC base character (glTF frame).
+/// A CC5 Smart Hair group's export in `dir`: `character.glb` (prepared), else
+/// the raw `character.fbx`.
+pub fn group_source(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    ["character.glb", "character.fbx"].iter().map(|f| dir.join(f)).find(|p| p.exists())
+}
+
 pub const HEAD_CENTER: Vec3 = Vec3::new(0.0, 1.64, 0.005);
 
 /// One strand: a polyline from the root, with per-point linear colour.
