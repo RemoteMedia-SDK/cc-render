@@ -195,6 +195,32 @@ captured from CC5 itself — its presets are encrypted:
 Recipes (`--skin recipe.json`, Save / Load, snapshot jobs' `skin`) keep the skin,
 the layers and the settings that differ from the character.
 
+**Generated layers** (`cc5_skin::generate`, no capture needed): lipstick, blush,
+eyeshadow, contour, highlight, freckles, stubble, spots, from the head's region
+masks. Their shapes are weighted sums of mask features fitted to CC5's presets
+(`gen_shape_fit.py`), their default colour / strength / blend fitted through
+those shapes (`gen_fit.py`); rendered against CC5's presets the change from the
+bare skin is within 0.4–0.7 dE for lipstick, blush, highlight, freckles,
+contour (CC5's change 0.7–2.2), stubble 1.4 of 1.6.
+
+**Controls against SkinGen's** (Appearance Editor, Layer Advanced Settings):
+
+| SkinGen | Here |
+|---|---|
+| layer opacity, show / delete | strength, on / off (captured), remove (generated, decals) |
+| blend mode | captured: CC5's own (solved: normal / multiply / screen, mixed parts); generated, decals: normal / multiply / screen (no overlay / soft light) |
+| colour, Adjust Color (hue, saturation, brightness, contrast) | tint; hue, saturation, brightness, contrast on every layer |
+| Layer Mask (greyscale image) | head region and / or greyscale image, invert |
+| transform (offset, scale, rotation) | move, scale, rotate on every layer; decals: place, size, rotation |
+| Range (expansion, blur, contrast) | generated layers |
+| roughness, normal strength | captured: roughness and normal scales; generated: roughness finish; no metallic, glow, AO or displacement |
+| pattern (tile, scale / rotation / opacity variation, disorder, seed) | freckles / stubble: dot size, density, variation, seed |
+| duplicate | generated: any number of each kind; captured: one each |
+| layer stack order | captured in the order switched on, then generated, then decals |
+| Skin Decal | decal layers: any image on any skin material |
+| skins (Skin Base, Full Skin, HD) | the pack's skins |
+| material: Head / Body / Arm / Leg / Nails | captured layers on every material CC5 put them; decals on any; generated on the head |
+
 **Matching CC5's look.** `--cc5-scene scene.json --cc5-lights` renders with CC5's
 camera (its 36x24 mm film gate: render at width x width/1.5), its lights (rect
 lights without inverse-square falloff, soft tube lights) and its IBL prefiltered
