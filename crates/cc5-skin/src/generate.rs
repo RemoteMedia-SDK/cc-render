@@ -61,7 +61,7 @@ impl Kind {
             Kind::Contour => ([135, 52, 20], 0.35),
             Kind::Highlight => ([220, 162, 140], 1.0),
             Kind::Freckles => ([117, 17, 5], 0.15),
-            Kind::Stubble => ([80, 68, 58], 0.7),
+            Kind::Stubble => ([105, 92, 80], 0.7),
             Kind::Spot => ([120, 76, 52], 0.9),
         }
     }
@@ -69,7 +69,9 @@ impl Kind {
     /// Its starting pattern: stubble denser than freckles' default.
     pub fn default_pattern(self) -> Pattern {
         match self {
-            Kind::Stubble => Pattern { density: 2.0, ..Pattern::default() },
+            // CC5's beard_stubble: fine, dense, pale hairs (with the colour
+            // [105, 92, 80], change error 0.88 -> 0.67, gen_sweep.py)
+            Kind::Stubble => Pattern { density: 3.0, size: 0.7, ..Pattern::default() },
             _ => Pattern::default(),
         }
     }
