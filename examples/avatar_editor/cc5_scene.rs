@@ -32,6 +32,9 @@ pub const SATURATION: f32 = 1.0;
 /// of HD Neutral F with the character's hair, hair regions' mean dE 11.8 -> 7.9
 /// (crown L 5.5 -> 11.8, CC5 16.7; bangs within ~3 L).
 pub const HAIR_GAIN: [f32; 2] = [2.0, 1.0];
+/// Scalp hair's colour multiplier with CC5's lights: the light tint's inverse
+/// (its magenta reads on neutral hair; CC5's hair stays ash).
+pub const HAIR_TINT: [f32; 3] = [1.0, 1.0 / 0.94, 1.0 / 1.10];
 pub const EXPOSURE: f32 = 0.9;
 pub const SHARPENING: f32 = 0.15;
 /// Per-light corrections by CC5 light name: fitted against CC5's renders of the
@@ -41,11 +44,15 @@ const LIGHT_GAINS: [(&str, f32); 4] = [("Key Light - Up", 1.15), ("Left_Rim", 1.
 /// Where CC5's lights aim: the head (m, editor space).
 const HEAD: Vec3 = Vec3::new(0.0, 1.6, 0.0);
 /// CC5 ambient colour → Bevy ambient brightness.
-pub const AMBIENT_BRIGHTNESS: f32 = 140.0;
+pub const AMBIENT_BRIGHTNESS: f32 = 110.0;
 /// The skin shader's extra wrap with CC5's lights (SkinTune extra_wrap). With
 /// AMBIENT_BRIGHTNESS fitted at CC5's framing over the bare skin and three skins
 /// (`calib_fill.py`): mean patch dE 5.04 -> 4.77.
-pub const SKIN_WRAP: f32 = 0.16;
+pub const SKIN_WRAP: f32 = 0.09;
+/// The skin's subsurface falloff colour desaturation with CC5's lights; with
+/// SKIN_WRAP and AMBIENT_BRIGHTNESS refitted on the whole face over five faces
+/// (`calib_batch.py`): CC5's shadows are greyer than our warm wrap.
+pub const SKIN_SSS_DESAT: f32 = 0.41;
 /// Soft radius (m) for CC5's rect lights (area lights; scene.json has no size):
 /// fitted against CC5's renders, patch dE bare skin 4.24 -> 4.12, HD Neutral F
 /// 3.88 -> 3.80, HD Aaron 3.29 -> 3.18 (hard shadows before).

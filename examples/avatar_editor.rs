@@ -305,6 +305,19 @@ fn hair_gain(cc5_lights: bool) -> [f32; 2] {
     [v.first().copied().unwrap_or(d[0]), v.get(1).copied().unwrap_or(d[1])]
 }
 
+/// Scalp hair's colour multiplier: `CC5_HAIR_TINT` ("r,g,b"), else with CC5's
+/// lights [`cc5_scene::HAIR_TINT`], else 1.
+fn hair_tint(cc5_lights: bool) -> [f32; 3] {
+    let v: Vec<f32> = std::env::var("CC5_HAIR_TINT").map(|s| s.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default();
+    if v.len() == 3 {
+        [v[0], v[1], v[2]]
+    } else if cc5_lights {
+        cc5_scene::HAIR_TINT
+    } else {
+        [1.0; 3]
+    }
+}
+
 /// Camera distances below are framed for 45 degrees; scale them to FOV_DEG.
 fn fov_scale() -> f32 {
     (22.5f32.to_radians()).tan() / (FOV_DEG.to_radians() * 0.5).tan()
@@ -502,10 +515,15 @@ fn main() -> anyhow::Result<()> {
         .insert_resource(Cc5Materials {
             enabled: !no_cc5,
             skin_tune: std::env::var("CC5_SKIN_TUNE").map(|v| SkinTune::parse(&v)).unwrap_or_else(|_| {
-                if cc5_lights_flag { SkinTune { extra_wrap: cc5_scene::SKIN_WRAP, ..default() } } else { SkinTune::default() }
+                if cc5_lights_flag {
+                    SkinTune { extra_wrap: cc5_scene::SKIN_WRAP, sss_desaturate: cc5_scene::SKIN_SSS_DESAT, ..default() }
+                } else {
+                    SkinTune::default()
+                }
             }),
             // CC5_HAIR_GAIN: "diffuse,specular" (with --cc5-lights: calibrated against CC5)
             hair_gain: hair_gain(cc5_lights_flag),
+            hair_tint: hair_tint(cc5_lights_flag),
             ..default()
         })
         .insert_resource(skin_edit)

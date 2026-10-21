@@ -149,6 +149,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // per-strand brightness variation
     col *= 1.0 + (id - 0.5) * hair.lobes.w;
     col = mix(vec3(luminance(col)), col, SATURATION);
+    col *= hair.tint.rgb;
 
     // --- strand frame ---
     let N = pbr_input.N;
