@@ -888,6 +888,7 @@ fn orbit_camera(
     mut ray_cast: MeshRayCast,
     mut contexts: EguiContexts,
     mut q: Query<(&mut Orbit, &mut Transform, &Camera, &GlobalTransform)>,
+    snapshot: Option<Res<Snapshot>>,
 ) {
     let Ok((mut o, mut t, camera, cam_g)) = q.get_single_mut() else { return };
     if let Some((names, dist)) = editor.focus_request.take() {
@@ -905,6 +906,12 @@ fn orbit_camera(
             o.pitch = 0.0;
         }
         o.dist = dist * fov_scale();
+        *t = orbit_transform(&o);
+        return;
+    }
+    // snapshots: the jobs place the camera; a stray scroll or drag over the
+    // window (it opens on the user's desktop) must not move it
+    if snapshot.is_some() {
         *t = orbit_transform(&o);
         return;
     }

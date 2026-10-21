@@ -69,8 +69,9 @@ const CORNEA_BULGE: f32 = 1.2;
 // How far the corners darken towards Eye Corner Darkness Color (the occlusion
 // overlay adds the lids' shadow on top).
 const CORNER_SHADE: f32 = 0.6;
-// The iris catches light focused by the cornea: brighter than plain diffuse.
-const IRIS_LIGHT: f32 = 1.9;
+// The iris catches light focused by the cornea: brighter than plain diffuse
+// (against CC5's render of Ariana: iris 0.42 of the sclera's luminance).
+const IRIS_LIGHT: f32 = 6.5;
 // Catch-lights: each light reflected as a softbox disc of this angular radius
 // (cosine) and edge, at this brightness (portrait lights are area lights)...
 const CATCH_COS: f32 = 0.996;
@@ -123,9 +124,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         id *= R * 0.98 / ir;
         ir = R * 0.98;
     }
-    // pupil scale: remap the radius so the pupil grows / shrinks, the iris edge stays
+    // pupil scale: remap the radius so the pupil grows / shrinks, the iris edge
+    // stays; Iris UV Scale (limbus.z) shrinks it too, as CC5 does (Ariana's 0.96 /
+    // 1.161: pupil 0.31 of the iris in CC5's render, 0.375 in the map)
     let p0 = R * PUPIL_FRACTION;
-    let p = p0 * eye.iris.z;
+    let p = p0 * eye.iris.z / max(eye.limbus.z, 0.1);
     var src: f32;
     if ir < p {
         src = ir * p0 / max(p, 1e-4);
