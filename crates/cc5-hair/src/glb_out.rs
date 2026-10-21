@@ -1,8 +1,14 @@
-//! Write a [`BuiltPart`] as a library part GLB (what hair_build.py's export +
-//! `patch_glb` + quantize_glb.py produced): the head's armature and skin
+//! Write a [`BuiltPart`] as a library part GLB: the head's armature and skin
 //! (joints re-bound by name in the editor), one skinned mesh per part mesh,
-//! strands as ribbons, attributes quantized (u8 colours / weights, u16 UVs and
-//! indices, primitives of at most 65 536 vertices).
+//! attributes quantized (u8 colours / weights, u16 UVs and indices, primitives
+//! of at most 65 536 vertices).
+//!
+//! Strands are written as centre lines (glTF LINES, one vertex per strand
+//! point: POSITION, TEXCOORD_0 = (strand ID, t), COLOR_0, TEXCOORD_1.x = the
+//! half-width / [`HALF_WIDTH_MAX`], skin) that the editor draws as camera-facing
+//! ribbons on the GPU; their materials carry `extras.cc5.ribbons`. With
+//! [`Output::triangles`], as fixed triangle ribbons instead (hair_build.py's
+//! `make_strand_object`; for comparison).
 
 use std::path::Path;
 
@@ -13,6 +19,65 @@ use serde_json::{json, Value};
 use crate::part::{BuiltPart, Geometry};
 use crate::source::Source;
 use crate::{Strand, HEAD_CENTER};
+
+/// Largest strand half-width a LINES part stores (metres; TEXCOORD_1.x is the
+/// half-width over this, as u16).
+pub const HALF_WIDTH_MAX: f32 = 0.002;
+
+/// How strands are written.
+#[derive(Clone, Copy, Default)]
+pub struct Output {
+    /// Fixed triangle ribbons (2 vertices per point) instead of centre lines.
+    pub triangles: bool,
+}
+
+/// A strand's width at t (0 root .. 1 tip): tapered towards the tip, faded in at the root.
+fn width_at(s: &Strand, tt: f32, taper: f32, root_fade: f32) -> f32 {
+    let mut w = s.width * (1.0 - taper * tt * tt);
+    if root_fade > 0.0 {
+        let x = (tt / root_fade).clamp(0.0, 1.0);
+        w *= x * x * (3.0 - 2.0 * x);
+    }
+    w
+}
+
+/// Strand centre lines: one vertex per point; UV = (strand ID, t from root 0
+/// to tip 1); colour = texture colour × shade; segments between consecutive points.
+pub struct Lines {
+    pub pos: Vec<Vec3>,
+    pub uv: Vec<Vec2>,
+    pub col: Vec<[f32; 4]>,
+    pub half_width: Vec<f32>,
+    pub skin: Vec<[(u16, f32); 4]>,
+    pub segs: Vec<[u32; 2]>,
+}
+
+pub fn lines(strands: &[Strand], skin: &[[(u16, f32); 4]], taper: f32, root_fade: f32) -> Lines {
+    let n: usize = strands.iter().map(|s| s.pts.len()).sum();
+    let mut l = Lines {
+        pos: Vec::with_capacity(n),
+        uv: Vec::with_capacity(n),
+        col: Vec::with_capacity(n),
+        half_width: Vec::with_capacity(n),
+        skin: Vec::with_capacity(n),
+        segs: Vec::with_capacity(n),
+    };
+    for (s, sk) in strands.iter().zip(skin) {
+        let m = s.pts.len();
+        let o = l.pos.len() as u32;
+        for i in 0..m {
+            let tt = i as f32 / (m - 1) as f32;
+            l.pos.push(s.pts[i]);
+            l.uv.push(Vec2::new(0.02 + 0.96 * s.id, tt));
+            let c = (s.rgb[i] * s.shade).clamp(Vec3::ZERO, Vec3::ONE);
+            l.col.push([c.x, c.y, c.z, 1.0]);
+            l.half_width.push(0.5 * width_at(s, tt, taper, root_fade));
+            l.skin.push(*sk);
+        }
+        l.segs.extend((0..m as u32 - 1).map(|k| [o + k, o + k + 1]));
+    }
+    l
+}
 
 /// Ribbon vertices of strands (hair_build.py `make_strand_object`): two rows per
 /// strand across its width, facing out from the head; UV = (strand ID, t from
@@ -42,11 +107,7 @@ pub fn ribbons(strands: &[Strand], skin: &[[(u16, f32); 4]], taper: f32, root_fa
         for sgn in [-1.0f32, 1.0] {
             for i in 0..m {
                 let tt = i as f32 / (m - 1) as f32;
-                let mut w = s.width * (1.0 - taper * tt * tt);
-                if root_fade > 0.0 {
-                    let x = (tt / root_fade).clamp(0.0, 1.0);
-                    w *= x * x * (3.0 - 2.0 * x);
-                }
+                let w = width_at(s, tt, taper, root_fade);
                 // across the strand, facing out from the head
                 let mut side = d[i].cross(p[i] - HEAD_CENTER);
                 if side.length() < 1e-9 {
@@ -156,12 +217,34 @@ fn primitive(doc: &mut Doc, pos: &[Vec3], nrm: &[Vec3], uv: &[Vec2], col: Option
     json!({"attributes": attrs, "indices": idx, "material": material, "mode": 4})
 }
 
-/// Split triangles into primitives whose vertex ranges fit u16 indices.
-/// Triangles must reference increasing vertex ranges (ribbons, cards are so
-/// laid out; a triangle never spans more than 65 536 vertices).
-fn windows(tris: &[[u32; 3]], nverts: usize) -> Vec<(usize, usize, Vec<[u32; 3]>)> {
+/// A LINES primitive of strand centre lines (a vertex range of [`Lines`]).
+#[allow(clippy::too_many_arguments)]
+fn line_primitive(doc: &mut Doc, pos: &[Vec3], uv: &[Vec2], col: &[[f32; 4]], half: &[f32], skin: &[[(u16, f32); 4]], segs: &[[u32; 2]], material: usize) -> Value {
+    let (lo, hi) = pos.iter().fold((Vec3::MAX, Vec3::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+    let n = pos.len();
+    let unorm16 = |x: f32| ((x.clamp(0.0, 1.0) * 65535.0).round() as u16).to_le_bytes();
+    let p = doc.accessor(&f32_bytes(pos.iter().flat_map(|v| v.to_array())), Some(34962), 5126, n, "VEC3", false, Some((lo, hi)));
+    let t0: Vec<u8> = uv.iter().flat_map(|u| [u.x, u.y]).flat_map(unorm16).collect();
+    let t0 = doc.accessor(&t0, Some(34962), 5123, n, "VEC2", true, None);
+    let t1: Vec<u8> = half.iter().flat_map(|&h| [h / HALF_WIDTH_MAX, 0.0]).flat_map(unorm16).collect();
+    let t1 = doc.accessor(&t1, Some(34962), 5123, n, "VEC2", true, None);
+    let c: Vec<u8> = col.iter().flat_map(|c| c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)).collect();
+    let c = doc.accessor(&c, Some(34962), 5121, n, "VEC4", true, None);
+    let (jb, wb) = skin_bytes(skin);
+    let j = doc.accessor(&jb, Some(34962), 5121, n, "VEC4", false, None);
+    let w = doc.accessor(&wb, Some(34962), 5121, n, "VEC4", true, None);
+    let ib: Vec<u8> = segs.iter().flatten().flat_map(|&i| (i as u16).to_le_bytes()).collect();
+    let idx = doc.accessor(&ib, Some(34963), 5123, segs.len() * 2, "SCALAR", false, None);
+    json!({"attributes": {"POSITION": p, "TEXCOORD_0": t0, "TEXCOORD_1": t1, "COLOR_0": c, "JOINTS_0": j, "WEIGHTS_0": w},
+           "indices": idx, "material": material, "mode": 1})
+}
+
+/// Split triangles (or segments) into primitives whose vertex ranges fit u16
+/// indices. They must reference increasing vertex ranges (ribbons, lines and
+/// cards are so laid out; one never spans more than 65 536 vertices).
+fn windows<const N: usize>(tris: &[[u32; N]], nverts: usize) -> Vec<(usize, usize, Vec<[u32; N]>)> {
     let mut out = Vec::new();
-    let (mut lo, mut cur): (u32, Vec<[u32; 3]>) = (0, Vec::new());
+    let (mut lo, mut cur): (u32, Vec<[u32; N]>) = (0, Vec::new());
     let mut hi = 0u32;
     for t in tris {
         let (tl, th) = (*t.iter().min().unwrap(), *t.iter().max().unwrap());
@@ -186,12 +269,18 @@ fn windows(tris: &[[u32; 3]], nverts: usize) -> Vec<(usize, usize, Vec<[u32; 3]>
 }
 
 /// Write `part` to `path`, with `head`'s armature (nodes + skin).
-pub fn write(part: &BuiltPart, head: &Source, path: &Path) -> Result<()> {
-    write_with(part, &part.materials, head, path)
+pub fn write(part: &BuiltPart, head: &Source, path: &Path, out: Output) -> Result<()> {
+    write_with(part, &part.materials, head, path, out)
 }
 
 /// [`write`] with other materials (same count and order: e.g. edited colours).
-pub fn write_with(part: &BuiltPart, materials: &[crate::part::PartMaterial], head: &Source, path: &Path) -> Result<()> {
+pub fn write_with(part: &BuiltPart, materials: &[crate::part::PartMaterial], head: &Source, path: &Path, out: Output) -> Result<()> {
+    // materials of strand meshes drawn as GPU ribbons
+    let line_mats: std::collections::HashSet<usize> = if out.triangles {
+        Default::default()
+    } else {
+        part.meshes.iter().filter(|m| matches!(m.geom, Geometry::Strands { .. })).map(|m| m.material).collect()
+    };
     let mut doc = Doc {
         json: json!({"asset": {"version": "2.0", "generator": "cc5-hair"}, "scene": 0, "scenes": [{"nodes": []}],
                      "nodes": [], "meshes": [], "materials": [], "accessors": [], "bufferViews": [], "buffers": [],
@@ -230,7 +319,7 @@ pub fn write_with(part: &BuiltPart, materials: &[crate::part::PartMaterial], hea
     doc.json["scenes"][0]["nodes"] = json!(roots);
     doc.push("samplers", json!({"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}));
     // materials
-    for m in materials {
+    for (mi, m) in materials.iter().enumerate() {
         let mut v = json!({"name": m.name, "doubleSided": true,
                            "pbrMetallicRoughness": {"metallicFactor": 0.0, "roughnessFactor": 0.5, "baseColorFactor": m.base_factor}});
         if m.blend {
@@ -246,6 +335,10 @@ pub fn write_with(part: &BuiltPart, materials: &[crate::part::PartMaterial], hea
             v["pbrMetallicRoughness"]["baseColorTexture"] = json!({"index": tex});
         }
         if let Some(c) = &m.cc5 {
+            let mut c = c.clone();
+            if line_mats.contains(&mi) {
+                c["ribbons"] = json!(true);
+            }
             v["extras"] = json!({"cc5": c});
         }
         doc.push("materials", v);
@@ -253,6 +346,16 @@ pub fn write_with(part: &BuiltPart, materials: &[crate::part::PartMaterial], hea
     // meshes, each on a node under the armature
     let mut mesh_node_ids = Vec::new();
     for pm in &part.meshes {
+        if let (Geometry::Strands { strands, skin, taper, root_fade }, false) = (&pm.geom, out.triangles) {
+            let l = lines(strands, skin, *taper, *root_fade);
+            let mut prims = Vec::new();
+            for (a, b, segs) in windows(&l.segs, l.pos.len()) {
+                prims.push(line_primitive(&mut doc, &l.pos[a..b], &l.uv[a..b], &l.col[a..b], &l.half_width[a..b], &l.skin[a..b], &segs, pm.material));
+            }
+            let mi = doc.push("meshes", json!({"name": pm.name, "primitives": prims}));
+            mesh_node_ids.push(doc.push("nodes", json!({"name": pm.name, "mesh": mi, "skin": 0})));
+            continue;
+        }
         let (pos, nrm, uv, col, skin, tris) = match &pm.geom {
             Geometry::Strands { strands, skin, taper, root_fade } => {
                 let r = ribbons(strands, skin, *taper, *root_fade);

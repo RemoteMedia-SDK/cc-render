@@ -22,7 +22,7 @@ use cc5_shape::Conform;
 use cc_render_plugin::cc_render::cc5_materials::{Cc5HairMaterial, Cc5MapBase};
 use serde_json::{json, Map, Value};
 
-use super::hair::{bone_follow, conform_for, HairLib, HairPartRoot, PartMesh, Regions};
+use super::hair::{bone_follow, conform_for, ribbon_mesh, HairLib, HairPartRoot, PartMesh, Regions};
 use super::*;
 
 /// Wait this long after the last change before rebuilding (slider drags).
@@ -68,6 +68,9 @@ struct MeshData {
     /// (head skin joint, weight)
     skin: Vec<[(u16, f32); 4]>,
     idx: Vec<u32>,
+    /// Strand centre lines (GPU ribbons): per-point half-width and the segments;
+    /// `pos` are the points, `nrm` / `idx` unused.
+    lines: Option<(Vec<f32>, Vec<[u32; 2]>)>,
     conform: Conform,
     follow: Option<String>,
 }
@@ -204,10 +207,12 @@ fn build_task(head: Arc<(Source, Body)>, group: Arc<Source>, spec: Spec, lib: Pa
     let follow = |name: &str| built.entry.get("follow").and_then(|f| f.get(name)).and_then(|v| v.as_str()).map(str::to_string);
     let mut meshes = Vec::new();
     for pm in &built.meshes {
+        let mut lines = None;
         let (pos, nrm, uv, col, skin, tris): (Vec<bevy::math::Vec3>, Vec<bevy::math::Vec3>, Vec<bevy::math::Vec2>, Option<Vec<[f32; 4]>>, Vec<[(u16, f32); 4]>, Vec<[u32; 3]>) = match &pm.geom {
             Geometry::Strands { strands, skin, taper, root_fade } => {
-                let r = glb_out::ribbons(strands, skin, *taper, *root_fade);
-                (r.pos, r.nrm, r.uv, Some(r.col), r.skin, r.tris)
+                let l = glb_out::lines(strands, skin, *taper, *root_fade);
+                lines = Some((l.half_width, l.segs));
+                (l.pos, Vec::new(), l.uv, Some(l.col), l.skin, Vec::new())
             }
             Geometry::Cards { pos, nrm, uv, tris, skin } => (pos.clone(), nrm.clone(), uv.clone(), None, skin.clone(), tris.clone()),
         };
@@ -222,6 +227,7 @@ fn build_task(head: Arc<(Source, Body)>, group: Arc<Source>, spec: Spec, lib: Pa
             col,
             skin,
             idx: tris.into_iter().flatten().collect(),
+            lines,
             conform,
             follow: f,
             pos,
@@ -230,9 +236,13 @@ fn build_task(head: Arc<(Source, Body)>, group: Arc<Source>, spec: Spec, lib: Pa
     Ok(Built { part: Arc::new(built), meshes, secs: t.elapsed().as_secs_f32() })
 }
 
-/// `extras.cc5` of material `m` with the edited colour variables over its own.
+/// `extras.cc5` of material `m` with the edited colour variables over its own
+/// (strand materials: drawn as GPU ribbons).
 fn material_extras(part: &BuiltPart, m: usize, vars: &Map<String, Value>) -> Option<String> {
     let mut cc5 = part.materials[m].cc5.clone()?;
+    if part.meshes.iter().any(|pm| pm.material == m && matches!(pm.geom, Geometry::Strands { .. })) {
+        cc5["ribbons"] = json!(true);
+    }
     if let Some(v) = cc5.get_mut("vars").and_then(|v| v.as_object_mut()) {
         for (k, x) in vars {
             v.insert(k.clone(), x.clone());
@@ -386,16 +396,28 @@ fn install(
     let mut part_meshes = Vec::new();
     let mut ents = Vec::new();
     for md in built.meshes {
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, md.pos.clone());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, md.nrm);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, md.uv);
-        if let Some(c) = md.col {
-            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, c);
-        }
-        mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, VertexAttributeValues::Uint16x4(md.skin.iter().map(|s| s.map(|e| to_rig[e.0 as usize])).collect()));
-        mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, md.skin.iter().map(|s| s.map(|e| e.1)).collect::<Vec<[f32; 4]>>());
-        mesh.insert_indices(Indices::U32(md.idx));
+        let joint_idx: Vec<[u16; 4]> = md.skin.iter().map(|s| s.map(|e| to_rig[e.0 as usize])).collect();
+        let weights: Vec<[f32; 4]> = md.skin.iter().map(|s| s.map(|e| e.1)).collect();
+        let (mesh, ribbon) = match md.lines {
+            Some((half, segs)) => {
+                let col = md.col.clone().unwrap_or_else(|| vec![[1.0; 4]; md.pos.len()]);
+                let (mesh, r) = ribbon_mesh(&md.pos, &md.uv, &col, &joint_idx, &weights, half, &segs);
+                (mesh, Some(r))
+            }
+            None => {
+                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, md.pos.clone());
+                mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, md.nrm);
+                mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, md.uv);
+                if let Some(c) = md.col {
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, c);
+                }
+                mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, VertexAttributeValues::Uint16x4(joint_idx));
+                mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, weights);
+                mesh.insert_indices(Indices::U32(md.idx));
+                (mesh, None)
+            }
+        };
         let handle = meshes.add(mesh);
         let mut ec = commands.spawn((
             Mesh3d(handle.clone()),
@@ -410,7 +432,7 @@ fn install(
         ec.set_parent(root);
         ents.push((ec.id(), md.material));
         let bone = bone_follow(md.follow.as_deref(), rig, lib.bones.as_ref(), &md.pos);
-        part_meshes.push(PartMesh { handle, base: md.pos, to_mesh: Mat3::IDENTITY, conform: md.conform, bone });
+        part_meshes.push(PartMesh { handle, base: md.pos, to_mesh: Mat3::IDENTITY, conform: md.conform, bone, ribbon });
     }
     let skins = vec![SkinRec { handle: ibm_handle, joints: (0..rig.joints.len()).collect(), base: ibm }];
     if let Some(old) = lib.put_built(i, root, part_meshes, skins) {
@@ -440,12 +462,13 @@ fn save(ed: &mut HairEdit, lib: &mut HairLib) -> anyhow::Result<String> {
         let mut cc5 = pm.cc5.clone();
         if let (Some(c), Some(x)) = (cc5.as_mut(), material_extras(&part, m, &ed.vars)) {
             *c = serde_json::from_str::<Value>(&x)?["cc5"].clone();
+            c.as_object_mut().map(|o| o.remove("ribbons")); // the writer sets it
         }
         part_owned.materials.push(part::PartMaterial { name: pm.name.clone(), blend: pm.blend, cc5, base_factor: pm.base_factor, base_image: pm.base_image.clone() });
     }
     // geometry: the same build (meshes are borrowed from the live part)
     let path = lib.dir.join(format!("{}.glb", part.id));
-    glb_out::write_with(&part, &part_owned.materials, &head.0, &path)?;
+    glb_out::write_with(&part, &part_owned.materials, &head.0, &path, glb_out::Output::default())?;
     glb_out::copy_files(&part, &lib.dir)?;
     // catalog + style
     let read = |f: &str| -> anyhow::Result<Value> { Ok(serde_json::from_str(&std::fs::read_to_string(lib.dir.join(f))?)?) };

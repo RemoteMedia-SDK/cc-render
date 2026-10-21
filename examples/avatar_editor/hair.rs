@@ -1,9 +1,10 @@
 //! `--hair-lib dir`: Smart-Hair-style hair parts on the edited character.
 //!
-//! The library (`hair_build.py`, `remotemedia-sdk/scripts/avatars/cc5_editor/hair/`):
+//! The library (`cc5-hair`, settings in `remotemedia-sdk/scripts/avatars/cc5_editor/hair/`):
 //! - `catalog.json`: `{"parts": [{"id", "slot", "kind": "scalp"|"beard"|"brow", "file",
 //!   "follow"?: {mesh: "head_box"}}]}`, one GLB per part: card / strand meshes
-//!   skinned to the CC skeleton, `extras.cc5` RLHair materials (maps under `atlas/`);
+//!   skinned to the CC skeleton, `extras.cc5` RLHair materials (maps under `atlas/`).
+//!   Strands are centre lines (glTF LINES), drawn as GPU ribbons ([`Ribbon`]);
 //! - `styles.json` (optional): `{"styles": [{"name", "parts": [part ids]}]}`;
 //! - `regions.json`: CC_Base_Body anchor vertices (`head`, `face`, `head_box`;
 //!   `hair_regions.py`).
@@ -126,10 +127,133 @@ pub(crate) struct BoneFollow {
 
 pub(crate) struct PartMesh {
     pub(crate) handle: Handle<Mesh>,
+    /// Bind positions (mesh space): the vertices, or a ribbon mesh's strand points.
     pub(crate) base: Vec<[f32; 3]>,
     pub(crate) to_mesh: Mat3,
     pub(crate) conform: Conform,
     pub(crate) bone: Option<BoneFollow>,
+    pub(crate) ribbon: Option<Ribbon>,
+}
+
+/// A strand mesh drawn as GPU ribbons (cc5_materials' `Cc5Hair::ribbons`): two
+/// vertices per strand point, both at the point, TANGENT = (strand direction,
+/// -/+ half-width); the hair vertex shaders move them apart facing the view.
+/// The conform moves only the points; [`Ribbon::write`] expands them.
+pub(crate) struct Ribbon {
+    /// Per point: its neighbours along the strand (itself at the ends).
+    prev: Vec<u32>,
+    next: Vec<u32>,
+    half: Vec<f32>,
+}
+
+impl Ribbon {
+    fn new(n: usize, segs: &[[u32; 2]], half: Vec<f32>) -> Self {
+        let mut prev: Vec<u32> = (0..n as u32).collect();
+        let mut next = prev.clone();
+        for &[a, b] in segs {
+            next[a as usize] = b;
+            prev[b as usize] = a;
+        }
+        Self { prev, next, half }
+    }
+
+    fn direction(&self, pts: &[[f32; 3]], i: usize) -> Vec3 {
+        let d = Vec3::from(pts[self.next[i] as usize]) - Vec3::from(pts[self.prev[i] as usize]);
+        d.try_normalize().unwrap_or(Vec3::Y)
+    }
+
+    /// Positions and tangents of the ribbon vertices for strand points `pts`.
+    pub(crate) fn write(&self, mesh: &mut Mesh, pts: &[[f32; 3]]) {
+        use rayon::prelude::*;
+        let n = 2 * pts.len();
+        // in place when the mesh has them (every reshape), else new
+        let mut pos = match mesh.remove_attribute(Mesh::ATTRIBUTE_POSITION) {
+            Some(VertexAttributeValues::Float32x3(v)) if v.len() == n => v,
+            _ => vec![[0.0; 3]; n],
+        };
+        let mut tan = match mesh.remove_attribute(Mesh::ATTRIBUTE_TANGENT) {
+            Some(VertexAttributeValues::Float32x4(v)) if v.len() == n => v,
+            _ => vec![[0.0; 4]; n],
+        };
+        pos.par_chunks_mut(2).zip(tan.par_chunks_mut(2)).enumerate().for_each(|(i, (p, t))| {
+            let d = self.direction(pts, i);
+            p[0] = pts[i];
+            p[1] = pts[i];
+            t[0] = d.extend(-self.half[i]).to_array();
+            t[1] = d.extend(self.half[i]).to_array();
+        });
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tan);
+    }
+}
+
+/// The ribbon render mesh of strand centre lines (mesh space = the part's bind
+/// space, where the lighting normals point out from the head).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ribbon_mesh(
+    pts: &[[f32; 3]],
+    uv: &[[f32; 2]],
+    col: &[[f32; 4]],
+    joints: &[[u16; 4]],
+    weights: &[[f32; 4]],
+    half: Vec<f32>,
+    segs: &[[u32; 2]],
+) -> (Mesh, Ribbon) {
+    let r = Ribbon::new(pts.len(), segs, half);
+    let two = |v: &[[f32; 2]]| v.iter().flat_map(|x| [*x, *x]).collect::<Vec<_>>();
+    let nrm: Vec<[f32; 3]> = (0..pts.len())
+        .flat_map(|i| {
+            // out from the head, across the strand (fixed ribbons showed their back
+            // face, whose flipped normal was this)
+            let d = r.direction(pts, i);
+            let out = Vec3::from(pts[i]) - cc5_hair::HEAD_CENTER;
+            let n = (out - d * d.dot(out)).try_normalize().unwrap_or_else(|| d.any_orthonormal_vector()).to_array();
+            [n, n]
+        })
+        .collect();
+    let mut mesh = Mesh::new(bevy::render::mesh::PrimitiveTopology::TriangleList, bevy::render::render_asset::RenderAssetUsages::default());
+    r.write(&mut mesh, pts);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, two(uv));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col.iter().flat_map(|x| [*x, *x]).collect::<Vec<_>>());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, VertexAttributeValues::Uint16x4(joints.iter().flat_map(|x| [*x, *x]).collect()));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, weights.iter().flat_map(|x| [*x, *x]).collect::<Vec<_>>());
+    // two triangles per segment, front-facing towards the view (see hair_vertex.wgsl)
+    let idx: Vec<u32> = segs.iter().flat_map(|&[a, b]| [2 * a, 2 * b + 1, 2 * b, 2 * a, 2 * a + 1, 2 * b + 1]).collect();
+    mesh.insert_indices(bevy::render::mesh::Indices::U32(idx));
+    (mesh, r)
+}
+
+/// A glTF LINES strand mesh (cc5-hair: TEXCOORD_1.x = half-width over
+/// `HALF_WIDTH_MAX`) as a ribbon mesh; also returns the strand points.
+fn ribbon_from_lines(m: &Mesh) -> Option<(Mesh, Ribbon, Vec<[f32; 3]>)> {
+    use VertexAttributeValues as V;
+    if m.primitive_topology() != bevy::render::mesh::PrimitiveTopology::LineList {
+        return None;
+    }
+    let Some(V::Float32x3(pts)) = m.attribute(Mesh::ATTRIBUTE_POSITION) else { return None };
+    let n = pts.len();
+    let Some(V::Float32x2(uv)) = m.attribute(Mesh::ATTRIBUTE_UV_0) else { return None };
+    let half: Vec<f32> = match m.attribute(Mesh::ATTRIBUTE_UV_1) {
+        Some(V::Float32x2(w)) => w.iter().map(|w| w[0] * cc5_hair::glb_out::HALF_WIDTH_MAX).collect(),
+        _ => vec![5e-5; n],
+    };
+    let col = match m.attribute(Mesh::ATTRIBUTE_COLOR) {
+        Some(V::Float32x4(c)) => c.clone(),
+        _ => vec![[1.0; 4]; n],
+    };
+    let joints = match m.attribute(Mesh::ATTRIBUTE_JOINT_INDEX) {
+        Some(V::Uint16x4(j)) => j.clone(),
+        _ => vec![[0; 4]; n],
+    };
+    let weights = match m.attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT) {
+        Some(V::Float32x4(w)) => w.clone(),
+        _ => vec![[1.0, 0.0, 0.0, 0.0]; n],
+    };
+    let idx: Vec<u32> = m.indices()?.iter().map(|i| i as u32).collect();
+    let segs: Vec<[u32; 2]> = idx.chunks_exact(2).map(|s| [s[0], s[1]]).collect();
+    let (mesh, r) = ribbon_mesh(pts, uv, &col, &joints, &weights, half, &segs);
+    Some((mesh, r, pts.clone()))
 }
 
 /// The conform of a part mesh (world bind positions): by the part's kind, or
@@ -292,7 +416,8 @@ pub fn hair_sync(
     for i in chosen {
         lib.spawned.entry(i).or_insert_with(|| {
             let path = bevy::asset::AssetPath::from_path(&lib.dir.join(&lib.parts[i].file)).into_owned();
-            let root = commands.spawn((SceneRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))), HairPartRoot(i))).id();
+            // hidden until bound (hair_bind): no unshaped hair, no strand lines before their ribbons
+            let root = commands.spawn((SceneRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))), HairPartRoot(i), Visibility::Hidden)).id();
             Spawned { root, frames: 0, ready: false, meshes: Vec::new(), skins: Vec::new() }
         });
     }
@@ -351,12 +476,13 @@ pub fn hair_bind(
     mut lib: ResMut<HairLib>,
     rig: Res<Rig>,
     mut editor: ResMut<Editor>,
-    meshes: Res<Assets<Mesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut ibms: ResMut<Assets<SkinnedMeshInverseBindposes>>,
     mut prims: Query<(Entity, &Mesh3d, &mut SkinnedMesh, Option<&Name>)>,
     joints: Query<(&Name, &GlobalTransform), Without<Mesh3d>>,
     parents: Query<&Parent>,
     roots: Query<&HairPartRoot>,
+    mut commands: Commands,
 ) {
     let lib = &mut *lib;
     let Some(body) = lib.body.as_ref() else { return };
@@ -418,9 +544,21 @@ pub fn hair_bind(
             if rig_joints.len() == skin.joints.len() {
                 s.skins.push(SkinRec { handle, joints: rig_joints, base: new });
             }
-            let Some(VertexAttributeValues::Float32x3(pos)) = meshes.get(&mesh3d.0).and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION)) else {
-                continue;
+            // strand centre lines: drawn as GPU ribbons, shaped by their points
+            let lines = meshes.get(&mesh3d.0).and_then(ribbon_from_lines);
+            let (pos, ribbon) = match lines {
+                Some((mesh, ribbon, pts)) => {
+                    *meshes.get_mut(&mesh3d.0).unwrap() = mesh;
+                    (pts, Some(ribbon))
+                }
+                None => {
+                    let Some(VertexAttributeValues::Float32x3(pos)) = meshes.get(&mesh3d.0).and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION)) else {
+                        continue;
+                    };
+                    (pos.clone(), None)
+                }
             };
+            let pos = &pos;
             let world: Vec<[f32; 3]> = pos.iter().map(|p| bind_space.transform_point3(Vec3::from(*p)).into()).collect();
             // "bone:<joint>@x,y,z": rigid with that bone for shape (the conform
             // still carries expressions)
@@ -435,11 +573,13 @@ pub fn hair_bind(
                     to_mesh: Mat3::from_mat4(bind_space.inverse()),
                     conform,
                     bone,
+                    ribbon,
                 }),
                 Err(e) => lib.status = format!("{}: {e:#}", part.id),
             }
         }
         s.ready = true;
+        commands.entity(s.root).insert(Visibility::Inherited);
         info!("hair: {} bound in {:.1} s", part.id, started.elapsed().as_secs_f32());
         lib.status = format!(
             "{}: {} meshes ({} vertices) bound in {:.1} s{}",
@@ -492,8 +632,12 @@ pub fn hair_shape(
                 _ => m.conform.apply(body),
             };
             max_d = d.iter().fold(max_d, |a, d| a.max(Vec3::from(*d).length()));
-            let pos: Vec<[f32; 3]> = m.base.iter().zip(&d).map(|(b, d)| (Vec3::from(*b) + m.to_mesh * Vec3::from(*d)).into()).collect();
-            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+            use rayon::prelude::*;
+            let pos: Vec<[f32; 3]> = m.base.par_iter().zip(&d).map(|(b, d)| (Vec3::from(*b) + m.to_mesh * Vec3::from(*d)).into()).collect();
+            match &m.ribbon {
+                Some(r) => r.write(mesh, &pos),
+                None => mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos),
+            }
         }
         if let Some(dworld) = dworld {
             update_skins(rig, &s.skins, dworld, ibms);
