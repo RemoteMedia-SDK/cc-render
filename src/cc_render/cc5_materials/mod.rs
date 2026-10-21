@@ -72,11 +72,80 @@ pub struct Cc5Materials {
     /// Scales the subsurface term (1 = default calibration); read when a
     /// character's materials are built.
     pub sss_strength: f32,
+    /// The skin shader's calibration ([`SkinTune`]); read when a character's
+    /// materials are built.
+    pub skin_tune: SkinTune,
 }
 
 impl Default for Cc5Materials {
     fn default() -> Self {
-        Self { enabled: true, sss_strength: 1.0 }
+        Self { enabled: true, sss_strength: 1.0, skin_tune: SkinTune::default() }
+    }
+}
+
+/// How `skin.wgsl` approximates CC5's skin shading (field meanings in
+/// `skin.wgsl`). The defaults are calibrated against CC5's own renders of the
+/// same character, camera and lights (flat grey and textured skin): full
+/// normal-map detail in the diffuse, specular 0.6.
+#[derive(Debug, Clone, Copy, PartialEq, Reflect)]
+pub struct SkinTune {
+    /// share of the normal map's detail in the diffuse normal
+    pub diffuse_detail: f32,
+    /// CC5's micro normal strength -> normal perturbation
+    pub micro_normal_scale: f32,
+    /// the wrapped (subsurface) light's falloff colour, softened towards white
+    pub sss_desaturate: f32,
+    /// extra wrap of light past the terminator on top of the SSS radius
+    pub extra_wrap: f32,
+    /// specular scale
+    pub specular: f32,
+    /// broad specular lobe weight
+    pub broad_weight: f32,
+    /// share of the baked AO applied to direct light
+    pub direct_ao: f32,
+    /// back-light transmission strength
+    pub transmission: f32,
+    /// scale of CC5's mouth cavity / lips gap / nostril occlusion strengths
+    pub cavity: f32,
+    /// scale of the wrapped (subsurface) light
+    pub sss: f32,
+}
+
+impl Default for SkinTune {
+    fn default() -> Self {
+        Self {
+            diffuse_detail: 1.0,
+            micro_normal_scale: 1.0,
+            sss_desaturate: 0.35,
+            extra_wrap: 0.08,
+            specular: 0.6,
+            broad_weight: 0.45,
+            direct_ao: 0.7,
+            transmission: 4.0,
+            cavity: 1.0,
+            sss: 1.0,
+        }
+    }
+}
+
+impl SkinTune {
+    /// From "a,b,c,..." in field order (missing fields keep their default).
+    pub fn parse(s: &str) -> Self {
+        let v: Vec<f32> = s.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        let d = Self::default();
+        let g = |i: usize, x: f32| v.get(i).copied().unwrap_or(x);
+        Self {
+            diffuse_detail: g(0, d.diffuse_detail),
+            micro_normal_scale: g(1, d.micro_normal_scale),
+            sss_desaturate: g(2, d.sss_desaturate),
+            extra_wrap: g(3, d.extra_wrap),
+            specular: g(4, d.specular),
+            broad_weight: g(5, d.broad_weight),
+            direct_ao: g(6, d.direct_ao),
+            transmission: g(7, d.transmission),
+            cavity: g(8, d.cavity),
+            sss: g(9, d.sss),
+        }
     }
 }
 
@@ -173,6 +242,8 @@ pub struct Cc5SkinSource {
     pub sss: Value,
     /// [`Cc5Materials::sss_strength`] when built.
     pub sss_strength: f32,
+    /// [`Cc5Materials::skin_tune`] when built.
+    pub tune: SkinTune,
 }
 
 impl Cc5Skin {
@@ -199,6 +270,12 @@ pub struct Cc5SkinParams {
     pub misc: Vec4,
     pub ao: Vec4,
     pub rough: Vec4,
+    /// [`SkinTune`]: (diffuse detail, micro normal scale, SSS desaturate, extra wrap)
+    pub tune_a: Vec4,
+    /// [`SkinTune`]: (specular, broad weight, direct AO, transmission)
+    pub tune_b: Vec4,
+    /// [`SkinTune`]: (cavity, sss, -, -)
+    pub tune_c: Vec4,
     pub present: u32,
     pub srgb: u32,
     /// Channels of mask C that are regions (bit per channel; RLHead's ear/neck
@@ -537,7 +614,7 @@ fn resolve_maps<const N: usize>(
     Some((tex, present, srgb))
 }
 
-fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, sss_strength: f32) -> Option<Cc5Skin> {
+fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, sss_strength: f32, tune: SkinTune) -> Option<Cc5Skin> {
     let head = info.shader == "RLHead";
     let (slot_a, slot_b, slot_c) = if head {
         ("Cheek Fore UpperLip Chin Mask", "Nose Mouth UpperInnerLid Mask", "Ear Neck Mask")
@@ -556,7 +633,7 @@ fn skin_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer, 
         "Specular Mask",
     ];
     let (tex, present, srgb) = resolve_maps(info, images, assets, slots)?;
-    let source = Cc5SkinSource { head, vars: info.vars.clone(), sss: info.sss.clone(), sss_strength };
+    let source = Cc5SkinSource { head, vars: info.vars.clone(), sss: info.sss.clone(), sss_strength, tune };
     let params = skin_params(&source, present, srgb);
     let [micro_normal, micro_mask, sss, transmission, mask_a, mask_b, mask_c, mouth_ao, specular] = tex;
     Some(Cc5Skin {
@@ -651,6 +728,9 @@ fn skin_params(src: &Cc5SkinSource, present: u32, srgb: u32) -> Cc5SkinParams {
             if keep_rough { 0.0 } else { 1.0 },
             0.0,
         ),
+        tune_a: Vec4::new(src.tune.diffuse_detail, src.tune.micro_normal_scale, src.tune.sss_desaturate, src.tune.extra_wrap),
+        tune_b: Vec4::new(src.tune.specular, src.tune.broad_weight, src.tune.direct_ao, src.tune.transmission),
+        tune_c: Vec4::new(src.tune.cavity, src.tune.sss, 0.0, 0.0),
         present,
         srgb,
         mask_c_channels: if head { 0b0011 } else { 0b1111 },
@@ -1022,7 +1102,11 @@ fn build_material(
     let mut base = base.clone();
     let handle = match info.shader.as_str() {
         "RLHead" | "RLSkin" => {
-            let ext = skin_extension(info, images, assets, settings.sss_strength)?;
+            let ext = skin_extension(info, images, assets, settings.sss_strength, settings.skin_tune)?;
+            // CC5's skin normal maps are DirectX-style (green down); glTF's, which the
+            // loader's generated tangents assume, OpenGL-style: unflipped, every UV
+            // seam (the philtrum, the nose) shows as a lighting step CC5 does not have
+            base.flip_normal_map_y = true;
             info!("cc5 materials: {}: maps {:#b}, srgb-decoded {:#b}", info.shader, ext.params.present, ext.params.srgb);
             Cc5Handle::Skin(out.skins.add(ExtendedMaterial { base, extension: ext }))
         }

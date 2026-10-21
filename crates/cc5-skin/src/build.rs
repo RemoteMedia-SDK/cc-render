@@ -18,8 +18,14 @@ use std::path::{Path, PathBuf};
 pub struct BuildOptions {
     pub capture: PathBuf,
     pub out: PathBuf,
+    /// the two clean skin bases layers are solved on (variants), and the suffixes
+    /// of their layer variants (`<layer><suffix>`)
     pub base: String,
     pub alt: String,
+    pub base_suffix: String,
+    pub alt_suffix: String,
+    /// the character's own variant (layers on it validate the solve)
+    pub character: String,
     pub materials: Vec<String>,
     /// texels of opacity below this (0..1) are dropped
     pub min_alpha: f32,
@@ -44,13 +50,11 @@ fn rgb(path: &Path) -> Result<(u32, u32, Vec<[f32; 3]>)> {
     Ok((w, h, img.pixels().map(|p| [p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0]).collect()))
 }
 
-/// The diffuse map CC5 exported for `material` in a variant.
+/// The diffuse map CC5 baked (`<variant>/<material>_Diffuse.png`) or exported
+/// (`<variant>/tex/`) for `material` in a variant.
 pub fn diffuse_path(capture: &Path, variant: &str, material: &str) -> Option<PathBuf> {
-    let dir = capture.join(variant).join("tex");
-    ["Diffuse", "diffuse", "BaseColor"]
-        .iter()
-        .flat_map(|c| ["png", "jpg"].map(|e| dir.join(format!("{material}_{c}.{e}"))))
-        .find(|p| p.is_file())
+    let d = capture.join(variant);
+    [d.join(format!("{material}_Diffuse.png")), d.join("tex").join(format!("{material}_Diffuse.png"))].into_iter().find(|p| p.is_file())
 }
 
 pub fn solve(b1: &[[f32; 3]], l1: &[[f32; 3]], b2: &[[f32; 3]], l2: &[[f32; 3]], w: u32, h: u32) -> Solved {
@@ -153,6 +157,41 @@ fn export_vars(json: &Path, materials: &[String]) -> BTreeMap<String, Value> {
     out
 }
 
+fn channel_key(c: &str) -> String {
+    if c == "roughness" {
+        "MetallicRoughness".into()
+    } else {
+        c.into()
+    }
+}
+
+/// The layer laid over the character's own diffuse ([`crate::compose`]) against
+/// CC5's texture of the layer on the character: (mean abs error, mean change),
+/// 0..255, over the layer's rect; None without that capture.
+fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 4], w: u32, h: u32) -> Result<Option<(f32, f32)>> {
+    let (Some(pb), Some(pl)) = (diffuse_path(&opt.capture, &opt.character, m), diffuse_path(&opt.capture, id, m)) else { return Ok(None) };
+    let base = image::open(&pb)?.to_rgba8();
+    let cc5 = image::open(&pl)?.to_rgba8();
+    if base.dimensions() != (w, h) || cc5.dimensions() != (w, h) {
+        return Ok(None);
+    }
+    let li = crate::LayerImage { rect, size: w, w: img.width(), h: img.height(), rgba: img.as_raw().clone() };
+    let mut ours = base.as_raw().clone();
+    crate::compose(&mut ours, w, h, &[crate::Apply { image: &li, strength: 1.0, tint: None }]);
+    let (mut err, mut size, mut n) = (0.0f64, 0.0f64, 0u64);
+    for y in rect[1]..rect[1] + rect[3] {
+        for x in rect[0]..rect[0] + rect[2] {
+            let i = ((y * w + x) * 4) as usize;
+            for c in 0..3 {
+                err += (ours[i + c] as f64 - cc5.as_raw()[i + c] as f64).abs();
+                size += (base.as_raw()[i + c] as f64 - cc5.as_raw()[i + c] as f64).abs();
+            }
+            n += 3;
+        }
+    }
+    Ok(Some(((err / n.max(1) as f64) as f32, (size / n.max(1) as f64) as f32)))
+}
+
 /// The exported channels a skin swaps (others stay the character's).
 const SKIN_CHANNELS: [&str; 8] = ["Diffuse", "Normal", "roughness", "ao", "SSSMap", "TransMap", "MicroNMask", "SpecMask"];
 
@@ -168,9 +207,9 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
         for m in &opt.materials {
             let paths = [
                 diffuse_path(&opt.capture, &opt.base, m),
-                diffuse_path(&opt.capture, id, m),
+                diffuse_path(&opt.capture, &format!("{id}{}", opt.base_suffix), m),
                 diffuse_path(&opt.capture, &opt.alt, m),
-                diffuse_path(&opt.capture, &format!("{id}@male"), m),
+                diffuse_path(&opt.capture, &format!("{id}{}", opt.alt_suffix), m),
             ];
             let [Some(pb1), Some(pl1), Some(pb2), Some(pl2)] = paths else {
                 eprintln!("{id} {m}: missing exports {:?}", paths.iter().map(Option::is_some).collect::<Vec<_>>());
@@ -187,7 +226,13 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             let file = format!("layers/{id}.{m}.png");
             img.save(opt.out.join(&file))?;
             let cover = img.pixels().filter(|p| p[3] > 0).count() as f32;
-            println!("{id:24} {m:14} rect {rect:?} size {:.1} alt err {:.2} ({cover} texels)", s.size, s.err_alt);
+            let check = validate(opt, id, m, &img, rect, w, h)?;
+            println!(
+                "{id:24} {m:14} rect {rect:?} size {:.1} alt err {:.2} ({cover} texels){}",
+                s.size,
+                s.err_alt,
+                check.map_or(String::new(), |(err, size)| format!("; on the character: err {err:.2} vs change {size:.2}"))
+            );
             if cover > best {
                 best = cover;
                 color = mean;
@@ -199,36 +244,51 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
         }
     }
     for (id, name) in skins {
-        let src = opt.capture.join(id).join("tex");
+        let d = opt.capture.join(id);
         let dst = opt.out.join("skins").join(id);
         std::fs::create_dir_all(&dst)?;
         let mut maps: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-        for e in std::fs::read_dir(&src).with_context(|| format!("{}", src.display()))? {
-            let p = e?.path();
+        // baked channels (GetImage names) first, then the export's; each against the character's
+        let ch_dir = opt.capture.join(&opt.character);
+        let mut files: Vec<(PathBuf, PathBuf)> = Vec::new();
+        for (dir, orig_dir) in [(d.clone(), ch_dir.clone()), (d.join("tex"), ch_dir.join("tex"))] {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd {
+                let p = e?.path();
+                if p.is_file() {
+                    let f = p.file_name().unwrap().to_owned();
+                    files.push((p, orig_dir.join(f)));
+                }
+            }
+        }
+        for (p, orig) in files {
             let f = p.file_name().unwrap().to_string_lossy().to_string();
             let Some(m) = opt.materials.iter().find(|m| f.starts_with(&format!("{m}_"))) else { continue };
             let stem = p.file_stem().unwrap().to_string_lossy().to_string();
-            let channel = stem[m.len() + 1..].to_string();
-            if !SKIN_CHANNELS.contains(&channel.as_str()) {
+            let channel = match &stem[m.len() + 1..] {
+                "Roughness" => "roughness".to_string(),
+                "AmbientOcclusion" => "ao".to_string(),
+                c => c.to_string(),
+            };
+            if !SKIN_CHANNELS.contains(&channel.as_str()) || maps.get(m).is_some_and(|mm| mm.contains_key(&channel_key(&channel))) {
                 continue;
             }
             // the same as the character's: nothing to swap
-            let same = std::fs::read(opt.capture.join(&opt.base).join("tex").join(&f)).ok() == Some(std::fs::read(&p)?);
-            if same {
+            if std::fs::read(&orig).ok() == Some(std::fs::read(&p)?) {
                 continue;
             }
             if channel == "roughness" {
                 // as a glTF metallic-roughness map (roughness in G, metal 0) for StandardMaterial
                 let r = image::open(&p)?.to_luma8();
                 let mr = image::RgbImage::from_fn(r.width(), r.height(), |x, y| image::Rgb([0, r.get_pixel(x, y)[0], 0]));
-                let out = format!("{stem}_MR.png");
+                let out = format!("{m}_MR.png");
                 mr.save(dst.join(&out))?;
                 maps.entry(m.clone()).or_default().insert("MetallicRoughness".into(), format!("skins/{id}/{out}"));
                 continue;
             }
-            // colour and normal maps as JPEG (q 92), the rest as they are
+            // colour and normal maps as JPEG (q 92), the rest as PNG
             let big = ["Diffuse", "Normal"].contains(&channel.as_str());
-            let out = if big { format!("{stem}.jpg") } else { f.clone() };
+            let out = if big { format!("{m}_{channel}.jpg") } else { format!("{m}_{channel}.png") };
             if big {
                 let img = image::open(&p)?.to_rgb8();
                 let mut w = std::io::BufWriter::new(std::fs::File::create(dst.join(&out))?);
@@ -238,10 +298,33 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             }
             maps.entry(m.clone()).or_default().insert(channel, format!("skins/{id}/{out}"));
         }
-        let vars = export_vars(&opt.capture.join(id).join("character.json"), &opt.materials);
+        let vars = export_vars(&d.join("character.json"), &opt.materials);
         println!("skin {id}: {} materials, vars for {}", maps.len(), vars.len());
         pack.skins.push(Skin { id: id.clone(), name: name.clone(), maps, vars, source: String::new() });
     }
     pack.save()?;
     Ok(pack)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn solve_recovers_colour_and_opacity() {
+        let (c, a) = ([0.8f32, 0.1, 0.2], 0.6f32);
+        let b1 = vec![[0.7f32, 0.5, 0.4], [0.3, 0.3, 0.3]];
+        let b2 = vec![[0.5f32, 0.35, 0.3], [0.6, 0.5, 0.4]];
+        let over = |b: &[f32; 3]| [0, 1, 2].map(|k| b[k] * (1.0 - a) + c[k] * a);
+        let l1: Vec<[f32; 3]> = b1.iter().map(over).collect();
+        let l2: Vec<[f32; 3]> = b2.iter().map(over).collect();
+        let s = solve(&b1, &l1, &b2, &l2, 2, 1);
+        for i in 0..2 {
+            assert!((s.a[i] - a).abs() < 1e-3, "alpha {}", s.a[i]);
+            for k in 0..3 {
+                assert!((s.c[i][k] - c[k]).abs() < 1e-3, "colour {:?}", s.c[i]);
+            }
+        }
+        assert!(s.err_alt < 0.5, "alt err {} (0..255)", s.err_alt);
+    }
 }

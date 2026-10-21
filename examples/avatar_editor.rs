@@ -72,7 +72,7 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use cc_render_plugin::cc_render::shape::{ShapeDelta, ShapePack};
 use cc5_shape::{shape_glb_hd, ExpressionPack, SubdivMap};
 use cc_render_plugin::cc_render::shape_glb::shape_glb;
-use cc_render_plugin::cc_render::cc5_materials::{Cc5Material, Cc5Materials, Cc5MaterialsPlugin, Cc5MaterialsSet};
+use cc_render_plugin::cc_render::cc5_materials::{Cc5Material, Cc5Materials, Cc5MaterialsPlugin, Cc5MaterialsSet, SkinTune};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -117,7 +117,7 @@ struct Editor {
     out_path: PathBuf,
     recipe_path: String,
     status: String,
-    /// `--hide-hair` / a job's `hide_hair`: the character's own hair, brows and
+    /// `--hide-hair` / a job's `hide_hair`: the character's own hair and
     /// earrings hidden (as in CC5 while SkinGen edits: its skin renders lack them).
     hide_hair: bool,
     /// Framing requested by the UI: (joints whose midpoint to aim at, camera distance);
@@ -471,7 +471,12 @@ fn main() -> anyhow::Result<()> {
         .insert_resource(editor)
         .init_resource::<Rig>()
         .insert_resource(Style { path: style_arg, ..default() })
-        .insert_resource(Cc5Materials { enabled: !no_cc5, ..default() })
+        // CC5_SKIN_TUNE: the skin shader's calibration (SkinTune fields, comma-separated)
+        .insert_resource(Cc5Materials {
+            enabled: !no_cc5,
+            skin_tune: std::env::var("CC5_SKIN_TUNE").map(|v| SkinTune::parse(&v)).unwrap_or_default(),
+            ..default()
+        })
         .insert_resource(skin_edit)
         .add_systems(Startup, (setup, cc5_lights.run_if(resource_exists::<Cc5Scene>)).chain())
         .add_systems(
@@ -600,6 +605,13 @@ fn setup(
         Tonemapping::AgX,
         Exposure { ev100: editor.ev100 },
         Bloom { intensity: 0.04, low_frequency_boost: 0.5, high_pass_frequency: 0.95, ..default() },
+        // TAA softens skin pores below CC5's crisp viewport: sharpen back to its detail
+        // (CC5_CAS overrides; calibrated on the face close-up)
+        bevy::core_pipeline::contrast_adaptive_sharpening::ContrastAdaptiveSharpening {
+            enabled: true,
+            sharpening_strength: 0.5,
+            denoise: false,
+        },
         // AgX desaturates skin and hair against CC5's viewport: restore some saturation
         ColorGrading { global: ColorGradingGlobal { post_saturation: 1.3, ..default() }, ..default() },
         // 5 mm near plane: close-ups of the face/eyes must not clip away.
@@ -1047,7 +1059,8 @@ fn hide_own_hair(
         if n.starts_with("cc_base_") || !ours.contains(root_of(e, &parents)) {
             continue;
         }
-        if n.contains("hair") || n.contains("bang") || n.contains("brow") || n.contains("earring") {
+        // (brows stay: CC5 keeps its brow cards when hiding hair)
+        if n.contains("hair") || n.contains("bang") || n.contains("earring") {
             commands.entity(e).insert(if editor.hide_hair { Visibility::Hidden } else { Visibility::Inherited });
         }
     }
@@ -1285,6 +1298,7 @@ fn ui(
                     ed.focus_request = view_preset(name);
                 }
             }
+            ui.checkbox(&mut ed.hide_hair, "Hide own hair").on_hover_text("the character's hair, brows and earrings (as CC5 while editing SkinGen)");
         });
         ui.horizontal(|ui| {
             ui.label("Search");

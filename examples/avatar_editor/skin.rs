@@ -397,6 +397,7 @@ pub fn skin_sync(
                 Ok(()) => skin.status = "skin recipe applied".into(),
                 Err(e) => skin.status = format!("skin recipe: {e:#}"),
             }
+            info!("{} (albedo {:?}, skin {:?}, {} layers)", skin.status, skin.albedo, skin.skin, skin.layers.len());
         }
     }
     if !std::mem::take(&mut skin.dirty) {
@@ -522,17 +523,24 @@ pub fn skin_layers(
             }
         }
     }
-    if !skin.layers_dirty || skin.task.is_some() {
-        return;
-    }
+    // flat albedo: kept on every material (whatever else swaps textures)
     if let Some(a) = skin.albedo {
         for (i, m) in skin.mats.iter().enumerate() {
-            if let (Some(_), Some(mat)) = (&skin.originals[i], mats.get_mut(&m.handle)) {
+            let want = Color::srgb_u8(a[0], a[1], a[2]);
+            if skin.originals[i].is_none() {
+                continue;
+            }
+            let needs = mats.get(&m.handle).is_some_and(|mat| mat.base.base_color_texture.is_some() || mat.base.base_color != want);
+            if let Some(mat) = needs.then(|| mats.get_mut(&m.handle)).flatten() {
+                info!("skin: flat albedo {a:?} on {}", m.name);
                 mat.base.base_color_texture = None;
-                mat.base.base_color = Color::srgb_u8(a[0], a[1], a[2]);
+                mat.base.base_color = want;
             }
         }
         skin.layers_dirty = false;
+        return;
+    }
+    if !skin.layers_dirty || skin.task.is_some() {
         return;
     }
     for (i, m) in skin.mats.iter().enumerate() {

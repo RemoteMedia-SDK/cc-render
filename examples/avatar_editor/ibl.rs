@@ -177,10 +177,14 @@ fn hammersley(i: u32, n: u32) -> Vec2 {
     Vec2::new(i as f32 / n as f32, i.reverse_bits() as f32 * 2.328_306_4e-10)
 }
 
-/// (diffuse, specular) environment maps from `path`, rotated `rot` radians about Y.
-pub fn environment_maps(path: &Path, rot: f32, images: &mut Assets<Image>) -> anyhow::Result<(Handle<Image>, Handle<Image>)> {
+/// (diffuse, specular) environment maps from `path`, rotated `rot` radians about Y,
+/// its radiance scaled per channel by `tint`.
+pub fn environment_maps(path: &Path, rot: f32, tint: Vec3, images: &mut Assets<Image>) -> anyhow::Result<(Handle<Image>, Handle<Image>)> {
     let t0 = std::time::Instant::now();
-    let (w, h, px) = read_hdr(path)?;
+    let (w, h, mut px) = read_hdr(path)?;
+    for p in &mut px {
+        *p *= tint;
+    }
     let eq = Equirect::new(w, h, px);
     // diffuse: 9 SH coefficients from a 256-wide level
     let lvl = eq.levels.iter().position(|l| l.0 <= 256).unwrap_or(eq.levels.len() - 1);
