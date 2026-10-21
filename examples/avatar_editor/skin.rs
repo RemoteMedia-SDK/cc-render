@@ -1031,10 +1031,13 @@ fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                 }
             }
         });
-        let mut remove = None;
+        let (mut remove, mut up) = (None, None);
         let mut changed = false;
         for (n, g) in skin.generated.iter_mut().enumerate() {
             ui.horizontal(|ui| {
+                if n > 0 && ui.small_button("▲").on_hover_text("lay before the one above").clicked() {
+                    up = Some(n);
+                }
                 ui.label(g.kind.name());
                 changed |= ui.add(egui::Slider::new(&mut g.strength, 0.0..=1.0).text("strength")).changed();
                 changed |= ui.color_edit_button_srgb(&mut g.color).changed();
@@ -1081,6 +1084,10 @@ fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
             skin.generated.remove(n);
             changed = true;
         }
+        if let Some(n) = up {
+            skin.generated.swap(n - 1, n);
+            changed = true;
+        }
         if changed {
             skin.layers_dirty = true;
         }
@@ -1101,10 +1108,13 @@ fn decals_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
             }
         });
         let names: Vec<String> = skin.mats.iter().map(|m| m.name.clone()).collect();
-        let mut remove = None;
+        let (mut remove, mut up) = (None, None);
         let mut changed = false;
         for (n, d) in skin.decals.iter_mut().enumerate() {
             ui.horizontal(|ui| {
+                if n > 0 && ui.small_button("▲").on_hover_text("lay before the one above").clicked() {
+                    up = Some(n);
+                }
                 ui.label(std::path::Path::new(&d.path).file_name().map_or(d.path.clone(), |f| f.to_string_lossy().into_owned()));
                 changed |= ui.add(egui::Slider::new(&mut d.strength, 0.0..=1.0).text("strength")).changed();
                 changed |= blend_ui(ui, &mut d.blend, ("decal_blend", n));
@@ -1130,6 +1140,10 @@ fn decals_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
             skin.decals.remove(n);
             changed = true;
         }
+        if let Some(n) = up {
+            skin.decals.swap(n - 1, n);
+            changed = true;
+        }
         if changed {
             skin.layers_dirty = true;
         }
@@ -1140,7 +1154,7 @@ fn decals_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
 fn blend_ui(ui: &mut egui::Ui, b: &mut Blend, id: impl std::hash::Hash) -> bool {
     let mut c = false;
     egui::ComboBox::from_id_salt(id).width(80.0).selected_text(format!("{b:?}").to_lowercase()).show_ui(ui, |ui| {
-        for m in [Blend::Normal, Blend::Multiply, Blend::Screen] {
+        for m in Blend::ALL {
             c |= ui.selectable_value(b, m, format!("{m:?}").to_lowercase()).changed();
         }
     });

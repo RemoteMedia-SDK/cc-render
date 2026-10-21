@@ -91,6 +91,9 @@ fn solve_texel(blend: Blend, b1: [f32; 3], l1: [f32; 3], b2: [f32; 3], l2: [f32;
         })
     };
     let (col, a) = match blend {
+        // not solved: captured layers fit normal / multiply / screen (the editor's
+        // own layers may use these)
+        Blend::Overlay | Blend::SoftLight => return None,
         Blend::Normal => {
             // 1 - alpha, regularized towards "fully covered" where the bases agree
             // (then only an opaque layer explains a change)

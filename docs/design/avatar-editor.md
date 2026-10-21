@@ -208,7 +208,7 @@ contour (CC5's change 0.7–2.2), stubble 1.4 of 1.6.
 | SkinGen | Here |
 |---|---|
 | layer opacity, show / delete | strength, on / off (captured), remove (generated, decals) |
-| blend mode | captured: CC5's own (solved: normal / multiply / screen, mixed parts); generated, decals: normal / multiply / screen (no overlay / soft light) |
+| blend mode | captured: CC5's own (solved: normal / multiply / screen, mixed parts); generated, decals: normal / multiply / screen / overlay / soft light |
 | colour, Adjust Color (hue, saturation, brightness, contrast) | tint; hue, saturation, brightness, contrast on every layer |
 | Layer Mask (greyscale image) | head region and / or greyscale image, invert |
 | transform (offset, scale, rotation) | move, scale, rotate on every layer; decals: place, size, rotation |
@@ -216,7 +216,7 @@ contour (CC5's change 0.7–2.2), stubble 1.4 of 1.6.
 | roughness, normal strength | captured: roughness and normal scales; generated: roughness finish; no metallic, glow, AO or displacement |
 | pattern (tile, scale / rotation / opacity variation, disorder, seed) | freckles / stubble: dot size, density, variation, seed |
 | duplicate | generated: any number of each kind; captured: one each |
-| layer stack order | captured in the order switched on, then generated, then decals |
+| layer stack order | captured in the order switched on, then generated, then decals; generated and decals reorder among themselves |
 | Skin Decal | decal layers: any image on any skin material |
 | skins (Skin Base, Full Skin, HD) | the pack's skins |
 | material: Head / Body / Arm / Leg / Nails | captured layers on every material CC5 put them; decals on any; generated on the head |
