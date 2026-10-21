@@ -35,6 +35,9 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
 use serde_json::Value;
 
+mod mipmaps;
+pub use mipmaps::generate_mips;
+
 const SKIN_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b804);
 const HAIR_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b805);
 const EYE_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b806);
@@ -360,7 +363,7 @@ impl Plugin for Cc5MaterialsPlugin {
             MaterialPlugin::<Cc5MouthMaterial>::default(),
         ))
         .init_resource::<Cc5Materials>()
-        .add_systems(Update, (build_cc5_materials, sync_cc5_materials).chain().in_set(Cc5MaterialsSet));
+        .add_systems(Update, (build_cc5_materials, sync_cc5_materials, mipmaps::hair_mipmaps).chain().in_set(Cc5MaterialsSet));
     }
 }
 
@@ -623,8 +626,9 @@ fn hair_extension(info: &Cc5Info, images: &Assets<Image>, assets: &AssetServer) 
             // primary shift, secondary shift, per-strand shift jitter, ID brightness jitter
             lobes: Vec4::new(-0.06, 0.08, 0.08, 0.12),
             // cutoff, soft coverage ramp, opacity mip bias, dithered (hair_types.wgsl):
-            // scalp hair blends into CC5's soft mass; lashes / brows stay crisp clumps
-            alpha: if fine_hair(info) { Vec4::new(0.3, 0.1, 0.0, 0.0) } else { Vec4::new(0.38, 0.3, 0.0, 1.0) },
+            // scalp hair blends into CC5's soft mass (the negative bias keeps single
+            // strands resolved; TAA smooths them); lashes / brows stay crisp clumps
+            alpha: if fine_hair(info) { Vec4::new(0.3, 0.1, 0.0, 0.0) } else { Vec4::new(0.38, 0.3, -1.0, 1.0) },
             present,
             srgb,
             _pad0: 0,

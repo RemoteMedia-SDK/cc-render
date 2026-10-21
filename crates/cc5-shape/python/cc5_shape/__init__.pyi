@@ -1,4 +1,4 @@
-from os import PathLike
+﻿from os import PathLike
 from typing import TypedDict
 
 class Slider(TypedDict):
@@ -68,3 +68,17 @@ class SubdivMap:
         """`[(mesh name, HD offset, HD count)]`."""
     def expand(self, verts: bytes) -> bytes:
         """Base-space f32 xyz per vertex -> HD-space f32 xyz per vertex."""
+
+class Conform:
+    """Bind an uncaptured mesh (hair cards, a beard) to body anchor vertices so it
+    follows the body's shape. `body` / `asset`: f32 xyz bytes of bind positions in
+    one space; `anchors`: indices into `body` (the head for scalp hair, face for beards);
+    `mode`: "scalp" (wide falloff + whole-head similarity), "skin" or "head_box"
+    (map the anchors' bounding box: hair layers CC5 moves rigidly)."""
+
+    def __init__(self, body: bytes, anchors: list[int], asset: bytes, mode: str = "scalp", k: int | None = None,
+                 sigma_min: float | None = None, sigma_scale: float | None = None,
+                 similarity: bool | None = None) -> None: ...
+    def apply(self, body_delta: bytes) -> bytes:
+        """Body vertex deltas (f32 xyz bytes) -> asset vertex deltas (f32 xyz bytes)."""
+    def __len__(self) -> int: ...

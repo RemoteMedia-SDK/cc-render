@@ -30,6 +30,11 @@
 //! and `map_dir` its `hd_map.json` + `.bin`, which spreads the pack's (level 0)
 //! slider and expression moves over the HD mesh. "Save GLB" writes the HD GLB.
 //!
+//! `--hair-lib dir [--hair-style name]` adds a Hair section: card-hair parts from
+//! a hair library (`remotemedia-sdk/scripts/avatars/cc5_editor/hair/`), one per
+//! slot (Base, Top, Rear, Bangs, Beard, Brows, ...) or a named style, conformed
+//! to the shaped body (see `avatar_editor/hair.rs`).
+//!
 //! Controls: right-drag orbits, middle-drag pans, wheel zooms towards the cursor
 //! (down to 2 cm); Head / Body / Feet buttons frame those parts.
 //!
@@ -59,6 +64,10 @@ use cc_render_plugin::cc_render::shape_glb::shape_glb;
 use cc_render_plugin::cc_render::cc5_materials::{Cc5Material, Cc5Materials, Cc5MaterialsPlugin, Cc5MaterialsSet};
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+#[path = "avatar_editor/hair.rs"]
+mod hair;
+use hair::{hair_bind, hair_shape, hair_sync, hair_ui, HairLib};
 
 const ATTRIBUTE_CCIDX: MeshVertexAttribute = MeshVertexAttribute::new("CcIdx", 0x0CC5_1D_E7, VertexFormat::Float32);
 
@@ -99,9 +108,13 @@ struct Rig {
 }
 
 struct MeshRec {
+    /// glTF mesh name
+    name: String,
     handle: Handle<Mesh>,
     base: Vec<[f32; 3]>,
     global: Vec<u32>,
+    /// mesh (bind) space -> world at bind
+    bind_space: Mat4,
     to_mesh: Mat3,
 }
 
@@ -209,6 +222,10 @@ fn main() -> anyhow::Result<()> {
     let style_arg = opt("--style")?.map(std::fs::canonicalize).transpose()?;
     let expr = opt("--expressions")?.map(|d| ExpressionPack::load(std::path::Path::new(&d))).transpose()?;
     let hd = opt("--hd")?.map(|d| SubdivMap::load(std::path::Path::new(&d))).transpose()?;
+    let mut hair_lib = opt("--hair-lib")?.map(|d| HairLib::load(std::path::Path::new(&d))).transpose()?;
+    if let Some(name) = opt("--hair-style")? {
+        hair_lib.as_mut().ok_or_else(|| anyhow::anyhow!("--hair-style needs --hair-lib"))?.apply_style(&name)?;
+    }
     let snapshot_arg = opt("--snapshot")?;
     let view = opt("--view")?.unwrap_or_else(|| "head".into());
     let deg = |v: Option<String>| -> anyhow::Result<f32> { Ok(v.map(|v| v.parse::<f32>()).transpose()?.unwrap_or(0.0).to_radians()) };
@@ -314,6 +331,7 @@ fn main() -> anyhow::Result<()> {
                 style_setup,
                 ui.run_if(not(resource_exists::<Snapshot>)),
                 style_apply,
+                (hair_sync, hair_bind).chain().run_if(resource_exists::<HairLib>),
                 apply_shape,
                 snapshot.run_if(resource_exists::<Snapshot>),
                 orbit_camera,
@@ -323,6 +341,9 @@ fn main() -> anyhow::Result<()> {
         );
     if let Some(s) = snap {
         app.insert_resource(s);
+    }
+    if let Some(h) = hair_lib {
+        app.insert_resource(h);
     }
     app.run();
     Ok(())
@@ -497,9 +518,10 @@ fn snapshot(
     mut orbit: Query<&mut Orbit>,
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
+    hair: Option<Res<HairLib>>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-    if !rig.ready {
+    if !rig.ready || hair.is_some_and(|h| !h.settled()) {
         return;
     }
     let n = cc5.iter().count();
@@ -558,6 +580,7 @@ fn orbit_camera(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window>,
     mut editor: ResMut<Editor>,
+    rig: Res<Rig>,
     joints: Query<(&Name, &GlobalTransform)>,
     mut ray_cast: MeshRayCast,
     mut contexts: EguiContexts,
@@ -565,7 +588,13 @@ fn orbit_camera(
 ) {
     let Ok((mut o, mut t, camera, cam_g)) = q.get_single_mut() else { return };
     if let Some((names, dist)) = editor.focus_request.take() {
-        let found: Vec<Vec3> = joints.iter().filter(|(n, _)| names.contains(&n.as_str())).map(|(_, g)| g.translation()).collect();
+        // our character's joints only: hair parts bring skeletons of their own
+        // (re-bound to ours, their nodes stay at bind and would drag the focus)
+        let found: Vec<Vec3> = if rig.joints.is_empty() {
+            joints.iter().filter(|(n, _)| names.contains(&n.as_str())).map(|(_, g)| g.translation()).collect()
+        } else {
+            rig.joints.iter().filter(|j| names.contains(&j.name.as_str())).filter_map(|j| joints.get(j.entity).ok()).map(|(_, g)| g.translation()).collect()
+        };
         if names.is_empty() {
             o.focus = Vec3::new(0.0, 0.95, 0.0);
         } else if !found.is_empty() {
@@ -703,9 +732,11 @@ fn capture_rig(
             continue;
         };
         meshes_out.push(MeshRec {
+            name: mesh_name.to_string(),
             handle: mesh3d.0.clone(),
             base: pos.clone(),
             global: cc.iter().map(|&c| offset + c as u32).collect(),
+            bind_space,
             to_mesh: Mat3::from_mat4(bind_space.inverse()),
         });
     }
@@ -858,6 +889,7 @@ fn ui(
     mut style: ResMut<Style>,
     mut cc5: ResMut<Cc5Materials>,
     mut exposure: Query<(&mut Exposure, Option<&mut Skybox>)>,
+    mut hair: Option<ResMut<HairLib>>,
 ) {
     let ed = &mut *editor;
     egui::SidePanel::left("sliders").default_width(420.0).show(contexts.ctx_mut(), |ui| {
@@ -959,6 +991,9 @@ fn ui(
         ui.separator();
         let needle = ed.search.to_lowercase();
         egui::ScrollArea::vertical().show(ui, |ui| {
+            if let Some(h) = hair.as_deref_mut() {
+                hair_ui(ui, h);
+            }
             if let Some(x) = &ed.expr {
                 // Expressions that move nothing (CC5 exports some empty correctives) are hidden.
                 let shown: Vec<usize> = (0..x.len())
@@ -1030,15 +1065,17 @@ fn apply_shape(
     mut meshes: ResMut<Assets<Mesh>>,
     mut ibms: ResMut<Assets<SkinnedMeshInverseBindposes>>,
     mut transforms: Query<&mut Transform>,
+    hair: Option<Res<HairLib>>,
 ) {
     if !rig.ready || !(editor.dirty || editor.expr_dirty) {
         return;
     }
     let ed = &mut *editor;
     ed.expr_dirty = false;
+    let mut dworld = None;
     if std::mem::take(&mut ed.dirty) {
         let delta = ed.pack.evaluate(&ed.weights);
-        apply_joints(&rig, &delta, &mut ibms, &mut transforms);
+        dworld = Some(apply_joints(&rig, &delta, &mut ibms, &mut transforms));
         ed.delta = delta;
     }
 
@@ -1056,6 +1093,9 @@ fn apply_shape(
         }
         _ => &ed.delta.verts,
     };
+    if let Some(h) = &hair {
+        hair_shape(h, ed, verts, dworld.as_deref(), &rig, &mut meshes, &mut ibms);
+    }
     let hd_verts;
     let verts = match &ed.hd {
         Some(h) => {
@@ -1076,13 +1116,14 @@ fn apply_shape(
     }
 }
 
-/// Joint translations and inverse bind matrices for a shape delta.
+/// Joint translations and inverse bind matrices for a shape delta; returns each
+/// rig joint's world translation delta.
 fn apply_joints(
     rig: &Rig,
     delta: &ShapeDelta,
     ibms: &mut Assets<SkinnedMeshInverseBindposes>,
     transforms: &mut Query<&mut Transform>,
-) {
+) -> Vec<Vec3> {
     // World delta per joint: its own, else its parent's (helpers ride along).
     let mut dworld = vec![Vec3::ZERO; rig.joints.len()];
     let mut done = vec![false; rig.joints.len()];
@@ -1106,7 +1147,14 @@ fn apply_joints(
             t.translation = j.base_local + j.parent_lin_inv * (dworld[i] - dp);
         }
     }
-    for skin in &rig.skins {
+    update_skins(rig, &rig.skins, &dworld, ibms);
+    dworld
+}
+
+/// Inverse bind matrices of skins on our joints for the joints' world deltas, so
+/// rewritten bind meshes render as written: `IBM' = (T(Δ)·W)⁻¹ · W · IBM`.
+fn update_skins(rig: &Rig, skins: &[SkinRec], dworld: &[Vec3], ibms: &mut Assets<SkinnedMeshInverseBindposes>) {
+    for skin in skins {
         let new: Vec<Mat4> = skin
             .joints
             .iter()
