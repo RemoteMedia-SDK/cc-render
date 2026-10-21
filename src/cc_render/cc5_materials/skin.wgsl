@@ -19,7 +19,12 @@
 #import bevy_pbr::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, calculate_tbn_mikktspace},
-    mesh_view_bindings::{view, lights},
+    mesh_view_bindings::{view, lights, clusterable_objects},
+    mesh_view_types::POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT,
+    mesh_view_types::POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE,
+    clustered_forward as clustering,
+    lighting::getDistanceAttenuation,
+    shadows::{fetch_point_shadow, fetch_spot_shadow},
 }
 
 #ifdef PREPASS_PIPELINE
@@ -51,6 +56,12 @@ struct Cc5Skin {
     ao: vec4<f32>,
     // x: original roughness strength, y: edge roughness multiplier, z: 1 = remap the map (0: keep it)
     rough: vec4<f32>,
+    // calibration (SkinTune): x diffuse detail, y micro normal scale, z SSS desaturate, w extra wrap
+    tune_a: vec4<f32>,
+    // x specular scale, y broad lobe weight, z direct AO, w transmission
+    tune_b: vec4<f32>,
+    // x cavity occlusion scale, y subsurface (wrapped light) scale
+    tune_c: vec4<f32>,
     // bit i: texture i is present
     present: u32,
     // bit i: texture i was decoded as sRGB by the loader (data maps: undo it)
@@ -89,23 +100,8 @@ const MASK_B: u32 = 5u;
 const MASK_C: u32 = 6u;
 const MNAO: u32 = 7u;
 const SPEC: u32 = 8u;
-// CC5's micro normal strength -> normal perturbation (calibrated: fine pores, no
-// orange peel).
-const MICRO_NORMAL_SCALE: f32 = 0.45;
-// Share of the normal map's detail in the diffuse normal (the rest: geometric
-// normal): light diffused under the skin smooths pores and fine wrinkles away.
-const DIFFUSE_DETAIL: f32 = 0.6;
-// Dual-lobe specular: the broad lobe's roughness (scale, offset) and weight.
+// Dual-lobe specular: the broad lobe's roughness (scale, offset); its weight is SkinTune.broad_weight.
 const BROAD_ROUGHNESS: vec2<f32> = vec2<f32>(1.5, 0.12);
-const BROAD_WEIGHT: f32 = 0.45;
-// Share of the baked ambient occlusion applied to direct light too.
-const DIRECT_AO: f32 = 0.7;
-// The wrapped light is CC5's SSS falloff colour, softened (pure falloff red blotches).
-const SSS_DESATURATE: f32 = 0.35;
-// Extra wrap of light past the terminator on top of the SSS radius.
-const EXTRA_WRAP: f32 = 0.08;
-// Strength of the reddened back-light transmission.
-const TRANSMISSION: f32 = 4.0;
 
 fn has(i: u32) -> bool {
     return (skin.present & (1u << i)) != 0u;
@@ -132,7 +128,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // softened normal for the diffuse term (before the micro normal goes in)
     var n_geo = normalize(in.world_normal);
     if !is_front { n_geo = -n_geo; }
-    let n_diffuse = normalize(mix(n_geo, pbr_input.N, DIFFUSE_DETAIL));
+    let n_diffuse = normalize(mix(n_geo, pbr_input.N, skin.tune_a.x));
 
 #ifdef VERTEX_UVS_A
     let uv = in.uv;
@@ -163,7 +159,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         if skin.micro.z > 0.5 { mn.y = -mn.y; }
         var TBN = calculate_tbn_mikktspace(in.world_normal, in.world_tangent);
         if !is_front { mn = -mn; }
-        let s = skin.micro.y * micro_mask * MICRO_NORMAL_SCALE;
+        let s = skin.micro.y * micro_mask * skin.tune_a.y;
         pbr_input.N = normalize(pbr_input.N + (mn.x * TBN[0] + mn.y * TBN[1]) * s);
     }
 #endif
@@ -176,7 +172,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var cavity = 1.0;
     if has(MNAO) {
         let m = data(MNAO, textureSample(mnao_tex, mnao_smp, uv));
-        let o = clamp(vec3(1.0) - (vec3(1.0) - m.rgb) * skin.ao.xyz, vec3(0.0), vec3(1.0));
+        let o = clamp(vec3(1.0) - (vec3(1.0) - m.rgb) * skin.ao.xyz * skin.tune_c.x, vec3(0.0), vec3(1.0));
         cavity = o.x * o.y * o.z;
         pbr_input.diffuse_occlusion *= cavity;
         pbr_input.specular_occlusion *= cavity;
@@ -218,12 +214,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let broad = apply_pbr_lighting(spec_input);
     // the baked AO (and cavity masks) also shade direct light: nostrils and creases
     // stay dark where shadow-map bias lets the key leak in
-    let direct_occ = mix(vec3(1.0), smoothstep(vec3(0.45), vec3(0.95), pbr_input.diffuse_occlusion), DIRECT_AO);
-    out.color = vec4((lit.rgb + mix(sharp.rgb, broad.rgb, BROAD_WEIGHT)) * direct_occ, lit.a);
+    let direct_occ = mix(vec3(1.0), smoothstep(vec3(0.45), vec3(0.95), pbr_input.diffuse_occlusion), skin.tune_b.z);
+    out.color = vec4((lit.rgb + mix(sharp.rgb, broad.rgb, skin.tune_b.y) * skin.tune_b.x) * direct_occ, lit.a);
 
     // Subsurface scattering: light wraps past the shading terminator, reddened.
     // Transmission: light from behind through thin parts (ears, nostrils), deep red.
-    let w = skin.ao.w + EXTRA_WRAP;
+    let w = skin.ao.w + skin.tune_a.w;
     var sss = vec3(0.0);
     var back = vec3(0.0);
     let z = view_z(in.world_position);
@@ -243,12 +239,59 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             back += l.color.rgb * through * s;
         }
     }
+    // the same for point and spot lights (Bevy's clustered lights, as apply_pbr_lighting walks them)
+    let cluster = clustering::fragment_cluster_index(pbr_input.frag_coord.xy, z, pbr_input.is_orthographic);
+    let oc = clustering::unpack_offset_and_counts(cluster);
+    for (var i = oc[0]; i < oc[0] + oc[1] + oc[2]; i = i + 1u) {
+        let id = clustering::get_clusterable_object_id(i);
+        let light = &clusterable_objects.data[id];
+        let to_light = (*light).position_radius.xyz - in.world_position.xyz;
+        let L = normalize(to_light);
+        var radiance = (*light).color_inverse_square_range.rgb
+            * getDistanceAttenuation(dot(to_light, to_light), (*light).color_inverse_square_range.w);
+        let spot = i >= oc[0] + oc[1];
+        if spot {
+            var spot_dir = vec3((*light).light_custom_data.x, 0.0, (*light).light_custom_data.y);
+            spot_dir.y = sqrt(max(0.0, 1.0 - spot_dir.x * spot_dir.x - spot_dir.z * spot_dir.z));
+            if ((*light).flags & POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE) != 0u {
+                spot_dir.y = -spot_dir.y;
+            }
+            let a = saturate(dot(-spot_dir, L) * (*light).light_custom_data.z + (*light).light_custom_data.w);
+            radiance *= a * a;
+        }
+        let shadows = ((*light).flags & POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u;
+        let ndl = dot(n_diffuse, L);
+        let band = clamp((ndl + w) / (1.0 + w), 0.0, 1.0) - clamp(ndl, 0.0, 1.0);
+        var lit_by = 1.0;
+        if shadows {
+            if spot {
+                lit_by = fetch_spot_shadow(id, in.world_position, in.world_normal, (*light).shadow_map_near_z);
+            } else {
+                lit_by = fetch_point_shadow(id, in.world_position, in.world_normal);
+            }
+        }
+        sss += radiance * max(band, 0.0) * lit_by;
+        if trans > 0.0 {
+            let behind = clamp((0.15 - dot(in.world_normal, L)) / 1.15, 0.0, 1.0);
+            let toward = smoothstep(-0.2, 0.6, dot(pbr_input.V, -L));
+            var s = 1.0;
+            if shadows {
+                let p = in.world_position - vec4(in.world_normal * 0.004, 0.0);
+                if spot {
+                    s = fetch_spot_shadow(id, p, -in.world_normal, (*light).shadow_map_near_z);
+                } else {
+                    s = fetch_point_shadow(id, p, -in.world_normal);
+                }
+            }
+            back += radiance * behind * toward * s;
+        }
+    }
     let diffuse = pbr_input.material.base_color.rgb * (1.0 - pbr_input.material.metallic);
     let red = skin.falloff.rgb * skin.falloff.rgb;
     out.color = vec4(
         out.color.rgb
-            + (sss * mix(skin.falloff.rgb, vec3(1.0), SSS_DESATURATE) * skin.falloff.w * scatter * pbr_input.diffuse_occlusion
-                + back * red * trans * TRANSMISSION) * diffuse * view.exposure / PI,
+            + (sss * mix(skin.falloff.rgb, vec3(1.0), skin.tune_a.z) * skin.falloff.w * skin.tune_c.y * scatter * pbr_input.diffuse_occlusion
+                + back * red * trans * skin.tune_b.w) * diffuse * view.exposure / PI,
         out.color.a,
     );
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);

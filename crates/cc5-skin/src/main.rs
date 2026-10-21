@@ -1,6 +1,7 @@
 //! cc5-skin build <capture_dir> <out_pack_dir> <spec.json>
 //!
-//! spec.json: {"base": "base", "alt": "skinbase_male_clean",
+//! spec.json: {"base": "skinbase_female_clean", "alt": "skinbase_male_clean",
+//!             "base_suffix": "@female", "alt_suffix": "@male", "character": "base",
 //!             "materials": ["Std_Skin_Head", ...],
 //!             "layers": [["lip_rouge", "Rouge", "Lip Makeup"], ...],
 //!             "skins": [["full_default_male", "Default Male"], ...]}
@@ -22,8 +23,11 @@ fn main() -> Result<()> {
             let opt = BuildOptions {
                 capture: PathBuf::from(&args[2]),
                 out: PathBuf::from(&args[3]),
-                base: s("base", "base"),
+                base: s("base", "skinbase_female_clean"),
                 alt: s("alt", "skinbase_male_clean"),
+                base_suffix: s("base_suffix", "@female"),
+                alt_suffix: s("alt_suffix", "@male"),
+                character: s("character", "base"),
                 materials: spec["materials"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_owned)).collect(),
                 min_alpha: spec["min_alpha"].as_f64().unwrap_or(0.02) as f32,
             };
