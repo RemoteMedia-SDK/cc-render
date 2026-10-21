@@ -9,12 +9,14 @@
 //!   follow the body's shape from its anchors (scalp / face).
 //! - [`expr`]: facial expressions (CC5's ~400 morph targets, more than Bevy's 64
 //!   per mesh) as sparse vertex deltas in the same space, for CPU morphing.
+//! - [`normals`]: turn the character's normals with a reshaped surface.
 //!
 //! With the `python` feature this crate is also the CPython module `cc5_shape`.
 
 pub mod conform;
 pub mod expr;
 pub mod glb;
+pub mod normals;
 pub mod pack;
 pub mod subdiv;
 
