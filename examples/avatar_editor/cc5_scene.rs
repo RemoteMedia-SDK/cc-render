@@ -21,8 +21,13 @@ use std::path::{Path, PathBuf};
 /// there as CC5's, which does not fade with distance).
 pub const LUMENS_PER_MULTIPLIER: f32 = 1500.0;
 pub const LUMENS_FLAT: f32 = 1000.0;
-/// Post-saturation with CC5's lights (the studio rig's is 1.3).
-pub const SATURATION: f32 = 1.6;
+/// Grading with CC5's lights (ACES tonemapping): post saturation, exposure
+/// (stops) and sharpening. Against CC5's renders of 2 skins and 7 SkinGen layers:
+/// dE 39.8 summed (AgX + saturation 1.6: 52.5), error in the layers' and skins'
+/// change from the base 12.1 (21.6), detail 1.01.
+pub const SATURATION: f32 = 1.0;
+pub const EXPOSURE: f32 = 0.9;
+pub const SHARPENING: f32 = 0.15;
 /// Per-light corrections by CC5 light name (calibrated on the flat grey skin).
 const LIGHT_GAINS: [(&str, f32); 1] = [("Top", 2.5)];
 /// Where CC5's lights aim: the head (m, editor space).
@@ -167,36 +172,35 @@ pub fn cc5_lights(
     if !scene.use_lights {
         return;
     }
-    // grading knobs (calibration): CC5_SAT = post saturation, CC5_EXPOSURE = stops,
-    // CC5_TONEMAP = agx | aces | tony | none
+    // grading (calibrated against CC5's renders of skins and SkinGen layers):
+    // ACES, as CC5's response to colour changes (makeup, beards) matches it best;
+    // knobs CC5_TONEMAP = aces | agx | tony | blender | reinhard | none,
+    // CC5_EXPOSURE (stops), CC5_SAT (post saturation), CC5_CAS (sharpening)
     for c in &cams {
-        // CC5's viewport is more saturated than our AgX grading: 1.6 against its renders
-        let sat = knob("CC5_SAT", SATURATION);
         commands.entity(c).insert(bevy::render::view::ColorGrading {
-            global: bevy::render::view::ColorGradingGlobal { post_saturation: sat, exposure: knob("CC5_EXPOSURE", 0.0), ..default() },
+            global: bevy::render::view::ColorGradingGlobal {
+                post_saturation: knob("CC5_SAT", SATURATION),
+                exposure: knob("CC5_EXPOSURE", EXPOSURE),
+                ..default()
+            },
             ..default()
         });
-        if let Ok(v) = std::env::var("CC5_CAS") {
-            if let Ok(k) = v.parse::<f32>() {
-                commands.entity(c).insert(bevy::core_pipeline::contrast_adaptive_sharpening::ContrastAdaptiveSharpening {
-                    enabled: k > 0.0,
-                    sharpening_strength: k,
-                    denoise: false,
-                });
-            }
-        }
-        if let Ok(t) = std::env::var("CC5_TONEMAP") {
-            use bevy::core_pipeline::tonemapping::Tonemapping;
-            let tm = match t.as_str() {
-                "aces" => Tonemapping::AcesFitted,
-                "tony" => Tonemapping::TonyMcMapface,
-                "none" => Tonemapping::None,
-                "reinhard" => Tonemapping::ReinhardLuminance,
-                "blender" => Tonemapping::BlenderFilmic,
-                _ => Tonemapping::AgX,
-            };
-            commands.entity(c).insert(tm);
-        }
+        let k = knob("CC5_CAS", SHARPENING);
+        commands.entity(c).insert(bevy::core_pipeline::contrast_adaptive_sharpening::ContrastAdaptiveSharpening {
+            enabled: k > 0.0,
+            sharpening_strength: k,
+            denoise: false,
+        });
+        use bevy::core_pipeline::tonemapping::Tonemapping;
+        let tm = match std::env::var("CC5_TONEMAP").as_deref().unwrap_or("aces") {
+            "agx" => Tonemapping::AgX,
+            "tony" => Tonemapping::TonyMcMapface,
+            "none" => Tonemapping::None,
+            "reinhard" => Tonemapping::ReinhardLuminance,
+            "blender" => Tonemapping::BlenderFilmic,
+            _ => Tonemapping::AcesFitted,
+        };
+        commands.entity(c).insert(tm);
     }
     let lumens = knob("CC5_LUMENS", LUMENS_PER_MULTIPLIER);
     let lumens_flat = knob("CC5_LUMENS_FLAT", LUMENS_FLAT);

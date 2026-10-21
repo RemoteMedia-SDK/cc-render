@@ -182,8 +182,15 @@ captured from CC5 itself — its presets are encrypted:
    otherwise exist only on the GPU) and saves the textures, renders a face view
    and records the camera, lights and IBL (`scene.json`).
 2. `cc5-skin build <capture> <pack> <spec.json>` solves every layer's colour and
-   opacity per texel from the layer on two bases (the character, and a flat
-   diffuse): L = B·(1−α) + C·α.
+   opacity per texel from the layer on two bases: the character, and the
+   character saved with a contrasting skin (CC5's bake composites onto SkinGen's
+   own base skin, so a flat diffuse in the material never reaches it). Each
+   SkinGen blend mode is fitted — normal B·(1−α) + C·α (makeup colour), multiply
+   (tattoos, contour, tans, beards, freckles), screen (highlights) — and the best
+   kept per layer, with parts in other modes where a preset mixes them (full
+   makeup's lipstick multiplies). Layers reproduce CC5's bakes to ~0.15 levels
+   (0..255); free CC5 caps SkinGen at 15 layers, so a preset over the cap on the
+   second skin is skipped.
 
 Recipes (`--skin recipe.json`, Save / Load, snapshot jobs' `skin`) keep the skin,
 the layers and the settings that differ from the character.
@@ -194,8 +201,11 @@ lights without inverse-square falloff, soft tube lights) and its IBL prefiltered
 in memory, so renders compare pixel for pixel with CC5's (`--hide-hair` as CC5
 hides hair while editing SkinGen). Calibrated on a flat grey skin, then on the
 character's own skin; the skin shader's constants are `SkinTune`. Findings:
-CC5's skin normal maps are DirectX-style (flipped for glTF's tangents), its
-viewport is sharper than TAA (contrast-adaptive sharpening 0.5) and more saturated.
+CC5's skin normal maps are DirectX-style (flipped for glTF's tangents), and its
+response to colour changes is ACES-like: with ACES tonemapping (+0.9 EV,
+contrast-adaptive sharpening 0.15) our renders of CC5's own bakes match its
+renders of 8 skins and 25 SkinGen layers at mean dE 4.4, the layers' change from
+the base within 0.6 dE (AgX with a saturation boost: 5.1 and 0.9).
 
 ## Limits
 
