@@ -25,6 +25,7 @@
 
 use anyhow::{bail, Result};
 use glam::{DMat3, DVec3, DVec4};
+use rayon::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ConformOptions {
@@ -79,21 +80,14 @@ impl Conform {
             return Ok(Self { opts: ConformOptions { k: 0, ..opts }, anchors: anchors.to_vec(), anchor_bind, asset_bind, bind: Vec::new() });
         }
         let k = opts.k.min(anchors.len()).max(1);
-        let mut bind = Vec::with_capacity(asset.len() * k);
-        let mut dist: Vec<(f64, u32)> = Vec::with_capacity(anchors.len());
-        for p in asset {
-            let p = DVec3::from(p.map(f64::from));
-            dist.clear();
-            dist.extend(anchor_bind.iter().enumerate().map(|(i, a)| (a.distance_squared(p), i as u32)));
-            dist.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0));
-            let near = &mut dist[..k];
-            near.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
-            let d0 = near[0].0.sqrt();
-            let sigma = (opts.sigma_min as f64).max(opts.sigma_scale as f64 * d0).max(1e-6);
-            let w: Vec<f64> = near.iter().map(|&(d2, _)| (-((d2.sqrt() - d0) / sigma).powi(2)).exp()).collect();
-            let sum: f64 = w.iter().sum();
-            bind.extend(near.iter().zip(&w).map(|(&(_, i), &w)| (i, (w / sum) as f32)));
-        }
+        // k nearest anchors per vertex from a uniform grid (exact), in parallel:
+        // millions of hair vertices against thousands of anchors
+        let grid = AnchorGrid::new(&anchor_bind);
+        let mut bind = vec![(0u32, 0f32); asset_bind.len() * k];
+        bind.par_chunks_mut(k).zip(asset_bind.par_iter()).for_each_init(Vec::new, |near, (out, &p)| {
+            grid.nearest(&anchor_bind, p, k, near);
+            gaussian_weights(&near[..k], opts, out);
+        });
         Ok(Self {
             opts: ConformOptions { k, ..opts },
             anchors: anchors.to_vec(),
@@ -144,6 +138,113 @@ impl Conform {
                 acc.as_vec3().to_array()
             })
             .collect()
+    }
+}
+
+/// Weights `exp(-((d - d_min) / σ)²)` (normalised) for the `k` nearest anchors
+/// `near` (squared distance, anchor slot), nearest first.
+fn gaussian_weights(near: &[(f64, u32)], opts: ConformOptions, out: &mut [(u32, f32)]) {
+    let d0 = near[0].0.sqrt();
+    let sigma = (opts.sigma_min as f64).max(opts.sigma_scale as f64 * d0).max(1e-6);
+    let mut sum = 0.0;
+    for (o, &(d2, i)) in out.iter_mut().zip(near) {
+        let w = (-((d2.sqrt() - d0) / sigma).powi(2)).exp();
+        *o = (i, w as f32);
+        sum += w;
+    }
+    for o in out.iter_mut() {
+        o.1 = (o.1 as f64 / sum) as f32;
+    }
+}
+
+/// Anchor points bucketed in a uniform grid, for exact k-nearest queries.
+struct AnchorGrid {
+    origin: DVec3,
+    cell: f64,
+    dims: [i64; 3],
+    /// CSR: anchors of cell `c` are `items[starts[c]..starts[c + 1]]`.
+    starts: Vec<u32>,
+    items: Vec<u32>,
+}
+
+impl AnchorGrid {
+    fn new(pts: &[DVec3]) -> Self {
+        let (lo, hi) = pts.iter().fold((DVec3::MAX, DVec3::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+        let ext = (hi - lo).max(DVec3::splat(1e-6));
+        // about one anchor per cell over the bounding volume (surface anchors
+        // fill only a shell of it: a few per occupied cell), at most 128 a side
+        let cell = (ext.x * ext.y * ext.z / pts.len() as f64).cbrt().max(ext.max_element() / 128.0).max(1e-4);
+        let dims = [0, 1, 2].map(|a| ((ext[a] / cell).floor() as i64 + 1).max(1));
+        let n = (dims[0] * dims[1] * dims[2]) as usize;
+        let index = |p: &DVec3| {
+            let c = ((*p - lo) / cell).floor();
+            let c = [0, 1, 2].map(|a| (c[a] as i64).clamp(0, dims[a] - 1));
+            ((c[2] * dims[1] + c[1]) * dims[0] + c[0]) as usize
+        };
+        let mut starts = vec![0u32; n + 1];
+        for p in pts {
+            starts[index(p) + 1] += 1;
+        }
+        for c in 0..n {
+            starts[c + 1] += starts[c];
+        }
+        let mut fill = starts.clone();
+        let mut items = vec![0u32; pts.len()];
+        for (i, p) in pts.iter().enumerate() {
+            let c = index(p);
+            items[fill[c] as usize] = i as u32;
+            fill[c] += 1;
+        }
+        Self { origin: lo, cell, dims, starts, items }
+    }
+
+    /// The `k` anchors nearest `p` into `out[..k]` (squared distance, index),
+    /// nearest first. Searches cubic shells of cells around `p`'s cell: after
+    /// shell `r` every unseen anchor is at least `r` cells away, so the search
+    /// stops once the k-th distance is within that.
+    fn nearest(&self, pts: &[DVec3], p: DVec3, k: usize, out: &mut Vec<(f64, u32)>) {
+        out.clear();
+        let c = ((p - self.origin) / self.cell).floor();
+        let c = [c.x as i64, c.y as i64, c.z as i64];
+        // shells beyond this reach no cell of the grid
+        let r_max = (0..3).map(|a| (c[a]).max(self.dims[a] - 1 - c[a]).max(0)).max().unwrap_or(0);
+        let mut r = 0i64;
+        loop {
+            for z in c[2] - r..=c[2] + r {
+                if z < 0 || z >= self.dims[2] {
+                    continue;
+                }
+                for y in c[1] - r..=c[1] + r {
+                    if y < 0 || y >= self.dims[1] {
+                        continue;
+                    }
+                    let edge = (z - c[2]).abs() == r || (y - c[1]).abs() == r;
+                    // inside the shell only the two x ends are new
+                    let xs: &mut dyn Iterator<Item = i64> = if edge { &mut (c[0] - r..=c[0] + r) } else if r == 0 { &mut std::iter::once(c[0]) } else { &mut [c[0] - r, c[0] + r].into_iter() };
+                    for x in xs {
+                        if x < 0 || x >= self.dims[0] {
+                            continue;
+                        }
+                        let cell = ((z * self.dims[1] + y) * self.dims[0] + x) as usize;
+                        for &i in &self.items[self.starts[cell] as usize..self.starts[cell + 1] as usize] {
+                            out.push((pts[i as usize].distance_squared(p), i));
+                        }
+                    }
+                }
+            }
+            if out.len() >= k {
+                out.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                out.truncate(k);
+                let reach = r as f64 * self.cell;
+                if out[k - 1].0 <= reach * reach || r >= r_max {
+                    break;
+                }
+            } else if r >= r_max {
+                break;
+            }
+            r += 1;
+        }
+        out.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
     }
 }
 
@@ -290,6 +391,44 @@ mod tests {
         let delta: Vec<[f32; 3]> = body.iter().map(|p| [p[0] * 0.1, 0.0, 0.01]).collect();
         let c = Conform::bind(&body, &anchors, &[[0.2, 0.05, 0.3]], ConformOptions::HEAD_BOX).unwrap();
         assert!(close(c.apply(&delta)[0], [0.02, 0.0, 0.01], 1e-5), "{:?}", c.apply(&delta));
+    }
+
+    /// The grid search gives the brute-force nearest anchors and weights.
+    #[test]
+    fn grid_bind_matches_brute_force() {
+        // xorshift: deterministic pseudo-random points without a dependency
+        let mut s = 0x9e37_79b9_7f4a_7c15u64;
+        let mut rnd = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            (s >> 11) as f64 / (1u64 << 53) as f64
+        };
+        // anchors on a sphere (like a scalp), assets around and far outside it
+        let body: Vec<[f32; 3]> = (0..3000)
+            .map(|_| {
+                let (u, v) = (rnd() * std::f64::consts::TAU, rnd() * 2.0 - 1.0);
+                let r = (1.0 - v * v).sqrt();
+                [(0.1 * r * u.cos()) as f32, (0.1 * r * u.sin()) as f32, (0.1 * v) as f32]
+            })
+            .collect();
+        let anchors: Vec<u32> = (0..body.len() as u32).collect();
+        let asset: Vec<[f32; 3]> = (0..2000).map(|i| {
+            let f = if i % 10 == 0 { 3.0 } else { 0.3 };
+            [((rnd() - 0.5) * f) as f32, ((rnd() - 0.5) * f) as f32, ((rnd() - 0.5) * f) as f32]
+        }).collect();
+        for opts in [ConformOptions::SKIN, ConformOptions::SCALP] {
+            let c = Conform::bind(&body, &anchors, &asset, opts).unwrap();
+            let anchor_bind: Vec<DVec3> = body.iter().map(|p| DVec3::from(p.map(f64::from))).collect();
+            for (v, p) in asset.iter().enumerate() {
+                let p = DVec3::from(p.map(f64::from));
+                let mut all: Vec<(f64, u32)> = anchor_bind.iter().enumerate().map(|(i, a)| (a.distance_squared(p), i as u32)).collect();
+                all.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let mut want = vec![(0u32, 0f32); c.opts.k];
+                gaussian_weights(&all[..c.opts.k], opts, &mut want);
+                assert_eq!(&c.bind[v * c.opts.k..(v + 1) * c.opts.k], &want[..], "vertex {v}");
+            }
+        }
     }
 
     #[test]
