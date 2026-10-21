@@ -61,7 +61,7 @@ impl Kind {
             Kind::Contour => ([135, 52, 20], 0.35),
             Kind::Highlight => ([220, 162, 140], 1.0),
             Kind::Freckles => ([117, 17, 5], 0.15),
-            Kind::Stubble => ([132, 121, 108], 0.8),
+            Kind::Stubble => ([80, 68, 58], 0.7),
             Kind::Spot => ([120, 76, 52], 0.9),
         }
     }
@@ -69,7 +69,7 @@ impl Kind {
     /// Its starting pattern: stubble denser than freckles' default.
     pub fn default_pattern(self) -> Pattern {
         match self {
-            Kind::Stubble => Pattern { density: 3.0, ..Pattern::default() },
+            Kind::Stubble => Pattern { density: 2.0, ..Pattern::default() },
             _ => Pattern::default(),
         }
     }
@@ -321,6 +321,40 @@ const SHAPE_FRECKLES: &[(&str, f32)] = &[("inner_lid.dy48", 10.5913), ("inner_li
 /// beard_stubble, IoU 0.545
 const SHAPE_STUBBLE: &[(&str, f32)] = &[("chin.dx-24", 2.6286), ("chin.dx24", 1.179), ("cheek.out", 0.987), ("cheek.dy48", 0.6643), ("chin.dy48", 0.6328), ("neck.out", 0.4581), ("mouth.dy48", 0.4293), ("chin.out", 0.4202), ("neck.dy-48", 0.3845), ("upper_lip.dy48", 0.2932), ("upper_lip.dx-24", 0.2465), ("mouth.dy-24", 0.0943), ("mouth.out", 0.081), ("upper_lip.dx-12s", 0.0632), ("mouth.dy-48", 0.0365), ("chin.dx-12s", 0.0304), ("ear.dy-48", 0.0017)];
 
+/// Hairs: short soft strokes of half-width `r` and length `len` (texels) at
+/// density `d` (per texel), pointing down the texture (hair grows down the face)
+/// within ±35°, varying in length and darkness by `var`.
+fn strokes(w: u32, h: u32, r: f32, len: f32, d: f32, var: f32, seed: u32) -> Vec<f32> {
+    let cell = (1.0 / d.max(1e-6)).sqrt().max(2.0 * r + 1.0);
+    let cells = ((w as f32 / cell).ceil() as u32, (h as f32 / cell).ceil() as u32);
+    let mut out = vec![0.0f32; (w * h) as usize];
+    let v = var.clamp(0.0, 1.0);
+    for cy in 0..cells.1 {
+        for cx in 0..cells.0 {
+            let (px, py) = ((cx as f32 + hash(cx, cy, seed)) * cell, (cy as f32 + hash(cy, cx, seed ^ 0x9e37)) * cell);
+            let l = len * (1.0 - 0.6 * v + 1.2 * v * hash(cx ^ 0x55, cy, seed));
+            let k = 1.0 - v + v * hash(cx, cy ^ 0x77, seed);
+            let a = (hash(cx ^ 0x33, cy ^ 0x11, seed) - 0.5) * 1.22; // ±35°
+            let (dx, dy) = (a.sin(), a.cos());
+            let (qx, qy) = (px + dx * l, py + dy * l);
+            let (x0, x1) = ((px.min(qx) - r - 1.0).max(0.0) as u32, ((px.max(qx) + r + 1.0) as u32).min(w - 1));
+            let (y0, y1) = ((py.min(qy) - r - 1.0).max(0.0) as u32, ((py.max(qy) + r + 1.0) as u32).min(h - 1));
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    // distance to the segment
+                    let (ex, ey) = (x as f32 - px, y as f32 - py);
+                    let t = ((ex * dx + ey * dy) / l.max(1e-3)).clamp(0.0, 1.0) * l;
+                    let dd = ((ex - dx * t).powi(2) + (ey - dy * t).powi(2)).sqrt();
+                    let val = ((r - dd) / 0.8 + 0.5).clamp(0.0, 1.0) * k;
+                    let o = &mut out[(y * w + x) as usize];
+                    *o = o.max(val);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// SkinGen's Range controls on a shape (0..1): blur feathers it (radius up to 24
 /// texels at 1024), expansion grows (> 0) or shrinks (< 0) it (a power curve),
 /// contrast hardens (> 0) or softens (< 0) its edge.
@@ -358,8 +392,8 @@ pub fn roughness_layer(color: &LayerImage, value: f32) -> LayerImage {
     LayerImage { rgba, blend: crate::Blend::Normal, parts: Vec::new(), ..color.clone() }
 }
 
-/// Stubble's haze between the hairs, as a share of the hairs' opacity.
-const STUBBLE_HAZE: f32 = 0.25;
+/// Stubble's haze between the hairs (opacity at strength 1, CC5's ~0.1-0.2).
+const STUBBLE_HAZE: f32 = 0.3;
 
 /// The generator `kind` at colour `rgb`; `seed` varies freckles and stubble.
 pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern) -> Generated {
@@ -388,6 +422,8 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
         ("neck", &neck),
         ("ear", &ear),
     ];
+    // stubble's pale haze under its hairs
+    let mut haze: Option<Vec<f32>> = None;
     let alpha: Vec<f32> = match kind {
         Kind::Lipstick => blur(&mouth, w, h, (1.5 * s).max(1.0) as u32, 1),
         Kind::Blush => fitted(&chs, w, h, SHAPE_BLUSH),
@@ -412,18 +448,29 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
                 .collect()
         }
         Kind::Stubble => {
-            // as CC5's stubble: a faint haze over the beard area (shaved hair under
-            // the skin) with the hairs' dots on it (its layer: opacity ~0.1 between
+            // as CC5's stubble: a pale haze over the beard area (shaved hair under
+            // the skin) with the darker hairs on it (its layer: opacity ~0.1 between
             // hairs, ~0.45 on them)
             let region = range(fitted(&chs, w, h, SHAPE_STUBBLE), w, h, &pattern);
-            let dots = speckle(w, h, 0.55 * s * psize, 0.09 * pdens / (s * s), pvar, seed);
-            region.iter().zip(&dots).map(|(r, d)| r * (STUBBLE_HAZE + (1.0 - STUBBLE_HAZE) * d)).collect()
+            let hairs = strokes(w, h, 0.45 * s * psize, 3.0 * s * psize, 0.03 * pdens / (s * s), pvar, seed);
+            haze = Some(region.iter().map(|r| r * STUBBLE_HAZE).collect());
+            region.iter().zip(&hairs).map(|(r, d)| r * d).collect()
         }
     };
 
     let alpha = if matches!(kind, Kind::Freckles | Kind::Stubble) { alpha } else { range(alpha, w, h, &pattern) };
-    let rgba: Vec<u8> = alpha.iter().flat_map(|a| [rgb[0], rgb[1], rgb[2], (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
-    let color = LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: kind.default_blend(), parts: Vec::new() };
+    let layer = |a: &[f32], c: [u8; 3]| {
+        let rgba: Vec<u8> = a.iter().flat_map(|a| [c[0], c[1], c[2], (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
+        LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba, blend: kind.default_blend(), parts: Vec::new() }
+    };
+    let color = match &haze {
+        // the haze (the hair colour washed towards pale grey-beige), the hairs over it
+        Some(hz) => {
+            let pale = [0, 1, 2].map(|c| (rgb[c] as f32 * 0.35 + [176.0, 164.0, 150.0][c] * 0.65).round() as u8);
+            LayerImage { parts: vec![layer(&alpha, rgb)], ..layer(hz, pale) }
+        }
+        None => layer(&alpha, rgb),
+    };
     // lipstick: a satin finish (rougher than bare lips' wet sheen is CC5's matte look)
     let roughness = kind.default_roughness().map(|r| roughness_layer(&color, r));
     Generated { color, roughness }
