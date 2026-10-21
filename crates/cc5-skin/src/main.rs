@@ -10,7 +10,7 @@
 //! See the crate docs (`cc5_skin`).
 use anyhow::{Context, Result};
 use cc5_skin::build::{build, BuildOptions};
-use cc5_skin::generate::{generate, Kind, Masks, Pattern};
+use cc5_skin::generate::{generate, Kind, Masks};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -62,7 +62,7 @@ fn main() -> Result<()> {
             let mut kinds = serde_json::Map::new();
             for k in Kind::ALL {
                 let (rgb, strength) = k.default_look();
-                let g = generate(&m, k, rgb, 1, Pattern::default());
+                let g = generate(&m, k, rgb, 1, k.default_pattern());
                 image::RgbaImage::from_raw(m.w, m.h, g.color.rgba).context("size")?.save(out.join(format!("{k:?}.png")))?;
                 kinds.insert(format!("{k:?}"), serde_json::json!({"blend": g.color.blend, "color": rgb, "strength": strength}));
             }
