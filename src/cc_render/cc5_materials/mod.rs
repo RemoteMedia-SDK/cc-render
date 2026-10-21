@@ -40,6 +40,7 @@ use bevy::render::render_resource::{
 };
 use serde_json::Value;
 
+mod human_color;
 mod mipmaps;
 pub use mipmaps::generate_mips;
 
@@ -276,6 +277,13 @@ pub struct Cc5SkinParams {
     pub tune_b: Vec4,
     /// [`SkinTune`]: (cavity, sss, -, -)
     pub tune_c: Vec4,
+    /// CC5's base colour adjustments: x `_BaseColorMap Brightness`, y `_BaseColorMap
+    /// Saturation`, z blend map strength (0 = off), w human colour on (0/1)
+    pub color: Vec4,
+    /// the blend map colour (linear)
+    pub blend: Vec4,
+    /// human colour: per-channel gain on the sRGB diffuse ([`human_color::gain`])
+    pub human: Vec4,
     pub present: u32,
     pub srgb: u32,
     /// Channels of mask C that are regions (bit per channel; RLHead's ear/neck
@@ -731,6 +739,14 @@ fn skin_params(src: &Cc5SkinSource, present: u32, srgb: u32) -> Cc5SkinParams {
         tune_a: Vec4::new(src.tune.diffuse_detail, src.tune.micro_normal_scale, src.tune.sss_desaturate, src.tune.extra_wrap),
         tune_b: Vec4::new(src.tune.specular, src.tune.broad_weight, src.tune.direct_ao, src.tune.transmission),
         tune_c: Vec4::new(src.tune.cavity, src.tune.sss, 0.0, 0.0),
+        color: {
+            let human_on = var(v, "_Active Human Color") > 0.5;
+            let blend = if human_on && var(v, "_Active Blend Map") > 0.5 { var(v, "_Blend Map Strength").clamp(0.0, 1.0) } else { 0.0 };
+            let adjust = human_on && var(v, "_Active") > 0.5;
+            Vec4::new(var(v, "_BaseColorMap Brightness"), var(v, "_BaseColorMap Saturation"), blend, if adjust { 1.0 } else { 0.0 })
+        },
+        blend: color_var(v, "_Blend Map Color", [0.97, 0.79, 0.61]).extend(0.0),
+        human: human_color::gain(v).extend(1.0),
         present,
         srgb,
         mask_c_channels: if head { 0b0011 } else { 0b1111 },

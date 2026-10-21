@@ -62,6 +62,12 @@ struct Cc5Skin {
     tune_b: vec4<f32>,
     // x cavity occlusion scale, y subsurface (wrapped light) scale
     tune_c: vec4<f32>,
+    // CC5's base colour adjustments: x brightness, y saturation, z blend map strength, w human colour on
+    color: vec4<f32>,
+    // rgb: blend map colour (linear)
+    blend: vec4<f32>,
+    // rgb: human colour gain on the sRGB diffuse
+    human: vec4<f32>,
     // bit i: texture i is present
     present: u32,
     // bit i: texture i was decoded as sRGB by the loader (data maps: undo it)
@@ -103,6 +109,32 @@ const SPEC: u32 = 8u;
 // Dual-lobe specular: the broad lobe's roughness (scale, offset); its weight is SkinTune.broad_weight.
 const BROAD_ROUGHNESS: vec2<f32> = vec2<f32>(1.5, 0.12);
 
+// CC5's base colour adjustments, as its renders and baked exports show them:
+// the blend map (a linear lerp towards its colour), human colour (per-channel
+// gain on the sRGB diffuse), saturation (about
+// the brightest channel, as HSV saturation: 1 + 2 x saturation) and brightness
+// (a scale of the linear albedo: exp(8 x brightness)).
+fn cc5_base_color(c_lin: vec3<f32>) -> vec3<f32> {
+    if all(skin.color == vec4(0.0)) {
+        return c_lin;
+    }
+    var c = mix(c_lin, skin.blend.rgb, skin.color.z);
+    var s = to_srgb(vec4(c, 1.0)).rgb;
+    if skin.color.w > 0.5 {
+        s = s * skin.human.rgb;
+    }
+    let v = max(s.r, max(s.g, s.b));
+    s = clamp(vec3(v) - (vec3(v) - s) * (1.0 + 2.0 * skin.color.y), vec3(0.0), vec3(1.0));
+    // brightness scales the linear albedo exponentially (past white: CC5's skin glows at +0.5)
+    return to_linear3(s) * exp(8.0 * skin.color.x);
+}
+
+fn to_linear3(c: vec3<f32>) -> vec3<f32> {
+    let lo = c / 12.92;
+    let hi = pow((max(c, vec3(0.0)) + 0.055) / 1.055, vec3(2.4));
+    return select(hi, lo, c <= vec3(0.04045));
+}
+
 fn has(i: u32) -> bool {
     return (skin.present & (1u << i)) != 0u;
 }
@@ -125,6 +157,7 @@ fn data(i: u32, c: vec4<f32>) -> vec4<f32> {
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+    pbr_input.material.base_color = vec4(cc5_base_color(pbr_input.material.base_color.rgb), pbr_input.material.base_color.a);
     // softened normal for the diffuse term (before the micro normal goes in)
     var n_geo = normalize(in.world_normal);
     if !is_front { n_geo = -n_geo; }

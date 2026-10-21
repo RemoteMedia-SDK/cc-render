@@ -1,7 +1,7 @@
 //! cc5-skin build <capture_dir> <out_pack_dir> <spec.json>
 //!
-//! spec.json: {"base": "skinbase_female_clean", "alt": "skinbase_male_clean",
-//!             "base_suffix": "@female", "alt_suffix": "@male", "character": "base",
+//! spec.json: {"base": "base", "base_suffix": "", "alt_image": "blue2048.png", "alt_suffix": "@blue",
+//!             "character": "base",            (or "alt": "<variant>" instead of alt_image)
 //!             "materials": ["Std_Skin_Head", ...],
 //!             "layers": [["lip_rouge", "Rouge", "Lip Makeup"], ...],
 //!             "skins": [["full_default_male", "Default Male"], ...]}
@@ -28,6 +28,8 @@ fn main() -> Result<()> {
                 base_suffix: s("base_suffix", "@female"),
                 alt_suffix: s("alt_suffix", "@male"),
                 character: s("character", "base"),
+                alt_image: spec["alt_image"].as_str().map(PathBuf::from),
+                check: spec["check_image"].as_str().map(|p| (PathBuf::from(p), s("check_suffix", "@gray"))),
                 materials: spec["materials"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_owned)).collect(),
                 min_alpha: spec["min_alpha"].as_f64().unwrap_or(0.02) as f32,
             };
