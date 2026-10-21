@@ -120,6 +120,9 @@ struct Editor {
     /// `--hide-hair` / a job's `hide_hair`: the character's own hair and
     /// earrings hidden (as in CC5 while SkinGen edits: its skin renders lack them).
     hide_hair: bool,
+    /// With `hide_hair`: brow cards and eyelashes too (CC5 hides every hair object
+    /// once a SkinGen preset is applied).
+    hide_brows: bool,
     /// Framing requested by the UI: (joints whose midpoint to aim at, camera distance);
     /// no joints = whole body.
     focus_request: Option<(&'static [&'static str], f32)>,
@@ -208,9 +211,12 @@ struct SnapJob {
     /// Skin recipe (absent: the character's skin).
     #[serde(default)]
     skin: Option<PathBuf>,
-    /// Hide the character's own hair, brows and earrings.
+    /// Hide the character's own hair and earrings.
     #[serde(default)]
     hide_hair: bool,
+    /// Also hide its brow cards and eyelashes (as CC5 does after a SkinGen preset).
+    #[serde(default)]
+    hide_brows: bool,
     #[serde(default = "head_view")]
     view: String,
     #[serde(default = "one")]
@@ -406,6 +412,7 @@ fn main() -> anyhow::Result<()> {
         glb_path: glb_path.clone(),
         focus_request: None,
         hide_hair,
+        hide_brows: first_job.as_ref().is_some_and(|j| j.hide_brows),
         ev100,
         recipe_path: recipe_arg.unwrap_or_else(|| out_path.with_extension("recipe.json").to_string_lossy().into_owned()),
         out_path,
@@ -804,6 +811,7 @@ fn snapshot(
 /// Show a batch job: its hair style, shape recipe and hair edit.
 fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edit: Option<&mut HairEdit>, skin: &mut SkinEdit) -> anyhow::Result<()> {
     editor.hide_hair = job.hide_hair;
+    editor.hide_brows = job.hide_brows;
     match &job.skin {
         Some(p) => skin.apply(&serde_json::from_slice(&std::fs::read(p)?)?)?,
         None => skin.reset(),
@@ -1060,8 +1068,10 @@ fn hide_own_hair(
             continue;
         }
         // (brows stay: CC5 keeps its brow cards when hiding hair)
-        if n.contains("hair") || n.contains("bang") || n.contains("earring") {
-            commands.entity(e).insert(if editor.hide_hair { Visibility::Hidden } else { Visibility::Inherited });
+        let brows = n.contains("brow") || n.contains("eyelash");
+        if n.contains("hair") || n.contains("bang") || n.contains("earring") || brows {
+            let hide = editor.hide_hair && (!brows || editor.hide_brows);
+            commands.entity(e).insert(if hide { Visibility::Hidden } else { Visibility::Inherited });
         }
     }
 }
