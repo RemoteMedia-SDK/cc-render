@@ -126,8 +126,17 @@ impl Character {
         fn walk(n: &ufbx::Node, parent: Option<usize>, is_joint: &HashMap<u32, Option<Mat4>>, joints: &mut Vec<Joint>, joint_of: &mut HashMap<u32, usize>) {
             let mut p = parent;
             if let Some(bind) = is_joint.get(&n.element.element_id) {
+                // names stay unique, as Blender makes them (a Smart Hair group and an
+                // accessory can each bring a "CC_Base_Pivot": the later one is ".001")
+                let base = n.element.name.to_string();
+                let mut name = base.clone();
+                let mut k = 0;
+                while joints.iter().any(|j: &Joint| j.name == name) {
+                    k += 1;
+                    name = format!("{base}.{k:03}");
+                }
                 joint_of.insert(n.element.element_id, joints.len());
-                joints.push(Joint { name: n.element.name.to_string(), parent, world: bind.unwrap_or_else(|| mat4(&n.node_to_world)) });
+                joints.push(Joint { name, parent, world: bind.unwrap_or_else(|| mat4(&n.node_to_world)) });
                 p = Some(joints.len() - 1);
             }
             for c in n.children.iter() {
