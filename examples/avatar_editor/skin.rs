@@ -721,10 +721,12 @@ pub fn skin_layers(
                 (Some(m), true) => generated.iter().map(|g| (cc5_skin::generate::generate(m, g.kind, g.color, g.seed), g.strength)).collect(),
                 _ => Vec::new(),
             };
+            let captured = imgs.len();
             for (g, st) in &gens {
                 imgs.push((Arc::new(g.color.clone()), *st, None));
             }
-            let applies: Vec<Apply> = imgs.iter().map(|(li, s, t)| Apply { image: li, strength: *s, tint: *t }).collect();
+            let detail = |k: usize| if k >= captured && gens[k - captured].0.roughness.is_some() { 1.0 } else { 0.0 };
+            let applies: Vec<Apply> = imgs.iter().enumerate().map(|(k, (li, s, t))| Apply { image: li, strength: *s, tint: *t, detail: detail(k) }).collect();
             compose(&mut data, w, h, &applies);
             // roughness the layers lay down
             let mut rough: Vec<(LayerImage, f32)> = gens.iter().filter_map(|(g, st)| g.roughness.clone().map(|r| (r, *st))).collect();

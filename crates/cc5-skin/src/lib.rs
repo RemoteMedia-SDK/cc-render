@@ -155,6 +155,9 @@ pub struct Apply<'a> {
     /// (new colour, the layer's [`Layer::color`]), sRGB 0..255: recolour the
     /// layer, keeping its pattern (each texel's brightness relative to the mean)
     pub tint: Option<([f32; 3], [f32; 3])>,
+    /// 0..1: how much the skin's own shading (each texel's brightness) shows
+    /// through the layer's colour (generated lipstick: the lips' texture)
+    pub detail: f32,
 }
 
 /// Lays layers' roughness (their maps' R, at their opacity x strength) over the
@@ -241,11 +244,14 @@ pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
                 }
                 let p = &mut row[x as usize * 4..x as usize * 4 + 3];
                 let rel = tint.map(|(_, k)| lum([s[0], s[1], s[2]]) * k);
+                // the skin's shading through the colour (relative to a mid skin tone)
+                let shade = 1.0 + a.detail * (lum([p[0] as f32, p[1] as f32, p[2] as f32]) / 115.0 - 1.0);
                 for c in 0..3 {
                     let col = match (tint, rel) {
                         (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
                         _ => s[c],
-                    };
+                    } * shade;
+                    let col = col.min(255.0);
                     p[c] = (p[c] as f32 * (1.0 - alpha) + col * alpha).round().clamp(0.0, 255.0) as u8;
                 }
             }
@@ -287,10 +293,10 @@ mod tests {
     fn compose_over_with_strength_and_tint() {
         let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4) };
         let mut base = [100u8, 100, 100, 255].repeat(4);
-        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None }]);
+        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None, detail: 0.0 }]);
         assert_eq!(&base[0..3], &[150, 50, 50]);
         let mut base = [100u8, 100, 100, 255].repeat(4);
-        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 1.0, tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])) }]);
+        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 1.0, tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])), detail: 0.0 }]);
         assert_eq!(&base[0..3], &[0, 0, 200]);
     }
 

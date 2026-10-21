@@ -183,7 +183,7 @@ fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 
     }
     let li = crate::LayerImage { rect, size: w, w: img.width(), h: img.height(), rgba: img.as_raw().clone() };
     let mut ours = base.as_raw().clone();
-    crate::compose(&mut ours, w, h, &[crate::Apply { image: &li, strength: 1.0, tint: None }]);
+    crate::compose(&mut ours, w, h, &[crate::Apply { image: &li, strength: 1.0, tint: None, detail: 0.0 }]);
     let (mut err, mut size, mut n) = (0.0f64, 0.0f64, 0u64);
     for y in rect[1]..rect[1] + rect[3] {
         for x in rect[0]..rect[0] + rect[2] {
