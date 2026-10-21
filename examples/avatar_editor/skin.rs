@@ -610,6 +610,46 @@ pub fn skin_sync(
     prims: Query<(&Cc5Material, Option<&GltfMaterialName>)>,
     mut assets: ResMut<Assets<Cc5SkinMaterial>>,
 ) {
+    // skin materials built after the first were found (the head can come a frame
+    // later): add them and apply the current recipe again, so they get it too
+    if !skin.mats.is_empty() {
+        let mut new: Vec<SkinMat> = Vec::new();
+        for (m, name) in &prims {
+            let Cc5Handle::Skin(h) = &m.cc5 else { continue };
+            if skin.mats.iter().chain(&new).any(|f| f.handle == *h) {
+                continue;
+            }
+            let Some(mat) = assets.get(h) else { continue };
+            let src = &mat.extension.source;
+            new.push(SkinMat {
+                name: name.map(|n| n.0.clone()).unwrap_or_else(|| format!("skin {}", skin.mats.len() + new.len())),
+                handle: h.clone(),
+                orig_vars: src.vars.clone(),
+                orig_sss: src.sss.clone(),
+                vars: src.vars.clone(),
+                sss: src.sss.clone(),
+            });
+        }
+        if !new.is_empty() {
+            info!("skin: {} more CC5 skin material(s) ({}): applying the recipe again", new.len(), new.iter().map(|m| m.name.as_str()).collect::<Vec<_>>().join(", "));
+            let recipe = skin.pending.take().unwrap_or_else(|| skin.recipe());
+            for m in new {
+                skin.mats.push(m);
+                skin.originals.push(None);
+                skin.bases.push(None);
+                skin.composed.push(None);
+                skin.mr_bases.push(None);
+                skin.composed_mr.push(None);
+                skin.mr_swap.push(None);
+                skin.nm_bases.push(None);
+                skin.composed_nm.push(None);
+                skin.nm_swap.push(None);
+            }
+            if let Err(e) = skin.apply(&recipe) {
+                skin.status = format!("skin recipe: {e:#}");
+            }
+        }
+    }
     if skin.mats.is_empty() {
         let mut found: Vec<SkinMat> = Vec::new();
         for (m, name) in &prims {
