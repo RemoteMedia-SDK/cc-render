@@ -30,8 +30,8 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use bevy_egui::egui;
-use cc5_skin::generate::{roughness_layer, Kind as GenKind, Masks, Pattern, REGIONS};
-use cc5_skin::{compose, compose_normal, compose_roughness, Adjust, Apply, Blend, LayerImage, Mask, SkinPack, Xf};
+use cc5_skin::generate::{colour_layer, roughness_layer, Kind as GenKind, Masks, Pattern, REGIONS};
+use cc5_skin::{compose, compose_channel, compose_normal, compose_roughness, Adjust, Apply, Blend, LayerImage, Mask, SkinPack, Xf};
 use serde::{Deserialize, Serialize};
 use cc_render_plugin::cc_render::cc5_materials::{generate_mips, Cc5Handle, Cc5Material, Cc5SkinMaterial};
 use serde_json::{json, Map, Value};
@@ -177,13 +177,46 @@ pub struct LayerState {
     pub normal: f32,
     pub adjust: Adjust,
     pub mask: MaskSel,
+    pub extras: Extras,
 }
 
 impl LayerState {
     pub fn new(id: String) -> Self {
-        Self { id, strength: 1.0, tint: None, xf: Xf::default(), roughness: 1.0, normal: 1.0, adjust: Adjust::default(), mask: MaskSel::default() }
+        Self {
+            id,
+            strength: 1.0,
+            tint: None,
+            xf: Xf::default(),
+            roughness: 1.0,
+            normal: 1.0,
+            adjust: Adjust::default(),
+            mask: MaskSel::default(),
+            extras: Extras::default(),
+        }
     }
 }
+
+/// What a layer lays down besides colour, as SkinGen's layer Material settings:
+/// metallic and ambient occlusion values (0..1) and a glow (emissive colour at a
+/// strength), each through the layer's opacity.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Extras {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metallic: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ao: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glow: Option<([u8; 3], f32)>,
+}
+
+impl Extras {
+    pub fn is_none(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Glow (emissive) brightness at strength 1, against CC5 mode's exposure.
+const GLOW_NITS: f32 = 2000.0;
 
 /// A layer's mask (SkinGen's Layer Mask): a head region and / or a greyscale
 /// image over the material's texture, multiplied; inverted on request. Regions
@@ -248,11 +281,24 @@ pub struct DecalState {
     pub adjust: Adjust,
     #[serde(default)]
     pub mask: MaskSel,
+    #[serde(default, skip_serializing_if = "Extras::is_none")]
+    pub extras: Extras,
 }
 
 impl DecalState {
     fn new(path: String, material: String) -> Self {
-        Self { path, material, blend: Blend::Normal, strength: 1.0, at: [0.5, 0.5], size: 0.1, rotation: 0.0, adjust: Adjust::default(), mask: MaskSel::default() }
+        Self {
+            path,
+            material,
+            blend: Blend::Normal,
+            strength: 1.0,
+            at: [0.5, 0.5],
+            size: 0.1,
+            rotation: 0.0,
+            adjust: Adjust::default(),
+            mask: MaskSel::default(),
+            extras: Extras::default(),
+        }
     }
 
     /// The decal as a layer on a `size`-texel texture.
@@ -287,6 +333,7 @@ pub struct GenState {
     pub roughness: Option<f32>,
     pub adjust: Adjust,
     pub mask: MaskSel,
+    pub extras: Extras,
 }
 
 impl GenState {
@@ -303,6 +350,7 @@ impl GenState {
             roughness: kind.default_roughness(),
             adjust: Adjust::default(),
             mask: MaskSel::default(),
+            extras: Extras::default(),
         }
     }
 }
@@ -327,7 +375,9 @@ struct Originals {
 /// Per material: the composited diffuse, and the roughness (metallic-roughness
 /// texture) when an active layer changes roughness.
 type Texels = (u32, u32, Vec<u8>);
-type Composed = Vec<(usize, Texels, Option<Texels>, Option<Texels>)>;
+/// Per material: diffuse, and when layers change them metallic-roughness,
+/// normal, occlusion and glow (emissive) texels.
+type Composed = Vec<(usize, Texels, Option<Texels>, Option<Texels>, Option<Texels>, Option<Texels>)>;
 
 #[derive(Resource, Default)]
 pub struct SkinEdit {
@@ -373,6 +423,11 @@ pub struct SkinEdit {
     nm_bases: Vec<Option<Arc<Texels>>>,
     composed_nm: Vec<Option<Handle<Image>>>,
     nm_swap: Vec<Option<Handle<Image>>>,
+    /// the same for the occlusion map, and the composited glow
+    ao_bases: Vec<Option<Arc<Texels>>>,
+    composed_ao: Vec<Option<Handle<Image>>>,
+    ao_swap: Vec<Option<Handle<Image>>>,
+    composed_glow: Vec<Option<Handle<Image>>>,
     cache: Arc<Mutex<HashMap<(String, String), Option<Arc<LayerImage>>>>>,
     task: Option<Task<anyhow::Result<Composed>>>,
     /// what the running task composites (to notice newer edits)
@@ -456,6 +511,9 @@ impl SkinEdit {
                 if !l.mask.is_none() {
                     o["mask"] = json!(l.mask);
                 }
+                if !l.extras.is_none() {
+                    o["extras"] = json!(l.extras);
+                }
                 o
             })
             .collect();
@@ -470,6 +528,9 @@ impl SkinEdit {
                 }
                 if !g.mask.is_none() {
                     o["mask"] = json!(g.mask);
+                }
+                if !g.extras.is_none() {
+                    o["extras"] = json!(g.extras);
                 }
                 o
             })
@@ -511,6 +572,7 @@ impl SkinEdit {
                 normal: l.get("normal").and_then(number).unwrap_or(1.0),
                 adjust: parse(l, "adjust").unwrap_or_default(),
                 mask: parse(l, "mask").unwrap_or_default(),
+                extras: parse(l, "extras").unwrap_or_default(),
                 ..LayerState::new(id.into())
             });
         }
@@ -527,6 +589,7 @@ impl SkinEdit {
                 roughness: if g.get("roughness").is_some() { g.get("roughness").and_then(number) } else { d.roughness },
                 adjust: parse(g, "adjust").unwrap_or_default(),
                 mask: parse(g, "mask").unwrap_or_default(),
+                extras: parse(g, "extras").unwrap_or_default(),
                 ..d
             });
         }
@@ -644,6 +707,10 @@ pub fn skin_sync(
                 skin.nm_bases.push(None);
                 skin.composed_nm.push(None);
                 skin.nm_swap.push(None);
+                skin.ao_bases.push(None);
+                skin.composed_ao.push(None);
+                skin.ao_swap.push(None);
+                skin.composed_glow.push(None);
             }
             if let Err(e) = skin.apply(&recipe) {
                 skin.status = format!("skin recipe: {e:#}");
@@ -685,6 +752,10 @@ pub fn skin_sync(
         skin.nm_bases = vec![None; n];
         skin.composed_nm = vec![None; n];
         skin.nm_swap = vec![None; n];
+        skin.ao_bases = vec![None; n];
+        skin.composed_ao = vec![None; n];
+        skin.ao_swap = vec![None; n];
+        skin.composed_glow = vec![None; n];
         if let Some(r) = skin.pending.take() {
             match skin.apply(&r) {
                 Ok(()) => skin.status = "skin recipe applied".into(),
@@ -759,6 +830,7 @@ pub fn skin_layers(
             mat.base.metallic_roughness_texture = load("MetallicRoughness").or(o.mr.clone());
             skin.mr_swap[i] = mat.base.metallic_roughness_texture.clone();
             mat.base.occlusion_texture = load("ao").or(o.occlusion.clone());
+            skin.ao_swap[i] = mat.base.occlusion_texture.clone();
             // CC5 shader maps (skin.wgsl bits: 1 micro mask, 2 SSS, 3 transmission, 8 specular)
             let e = &mut mat.extension;
             let (mut present, mut srgb) = (o.present, o.srgb);
@@ -788,7 +860,7 @@ pub fn skin_layers(
             skin.task = None;
             match result {
                 Ok(out) => {
-                    for (i, (w, h, data), mr, nm) in out {
+                    for (i, (w, h, data), mr, nm, ao, glow) in out {
                         let nm = match nm {
                             Some((nw, nh, nd)) => Some(put_image(&mut images, &mut skin.composed_nm[i], nw, nh, nd, TextureFormat::Rgba8Unorm)),
                             None => skin.nm_swap[i].clone().or_else(|| skin.originals[i].as_ref().and_then(|o| o.normal.clone())),
@@ -801,9 +873,17 @@ pub fn skin_layers(
                             Some((mw, mh, md)) => Some(put_image(&mut images, &mut skin.composed_mr[i], mw, mh, md, TextureFormat::Rgba8Unorm)),
                             None => skin.mr_swap[i].clone().or_else(|| skin.originals[i].as_ref().and_then(|o| o.mr.clone())),
                         };
+                        let ao = match ao {
+                            Some((aw, ah, ad)) => Some(put_image(&mut images, &mut skin.composed_ao[i], aw, ah, ad, TextureFormat::Rgba8Unorm)),
+                            None => skin.ao_swap[i].clone().or_else(|| skin.originals[i].as_ref().and_then(|o| o.occlusion.clone())),
+                        };
+                        let glow = glow.map(|(gw, gh, gd)| put_image(&mut images, &mut skin.composed_glow[i], gw, gh, gd, TextureFormat::Rgba8UnormSrgb));
                         if let Some(mat) = mats.get_mut(&skin.mats[i].handle) {
                             mat.base.base_color_texture = Some(handle);
                             mat.base.metallic_roughness_texture = mr;
+                            mat.base.occlusion_texture = ao;
+                            mat.base.emissive = if glow.is_some() { LinearRgba::rgb(GLOW_NITS, GLOW_NITS, GLOW_NITS) } else { LinearRgba::BLACK };
+                            mat.base.emissive_texture = glow;
                         }
                     }
                     skin.status = format!("skin: {} layer(s)", skin.layers.len());
@@ -883,6 +963,9 @@ pub fn skin_layers(
         if skin.nm_bases[i].is_none() {
             skin.nm_bases[i] = texels(skin.originals[i].as_ref().and_then(|o| o.normal.clone()));
         }
+        if skin.ao_bases[i].is_none() {
+            skin.ao_bases[i] = texels(skin.originals[i].as_ref().and_then(|o| o.occlusion.clone()));
+        }
     }
     // the head's region masks (generated layers, region masks), once loaded
     let region_masks = skin.layers.iter().map(|l| &l.mask).chain(skin.generated.iter().map(|g| &g.mask)).chain(skin.decals.iter().map(|d| &d.mask)).any(|m| m.region.is_some());
@@ -914,9 +997,11 @@ pub fn skin_layers(
         base: Option<Arc<Texels>>,
         mr_base: Option<Arc<Texels>>,
         nm_base: Option<Arc<Texels>>,
+        ao_base: Option<Arc<Texels>>,
         preset: Option<PathBuf>,
         preset_mr: Option<PathBuf>,
         preset_nm: Option<PathBuf>,
+        preset_ao: Option<PathBuf>,
     }
     let jobs: Vec<Job> = skin
         .mats
@@ -930,7 +1015,9 @@ pub fn skin_layers(
                 base: skin.bases[i].clone(),
                 mr_base: skin.mr_bases[i].clone(),
                 nm_base: skin.nm_bases[i].clone(),
+                ao_base: skin.ao_bases[i].clone(),
                 preset_nm: maps.and_then(|mm| mm.get("Normal")).map(|r| pack.dir.join(r)),
+                preset_ao: maps.and_then(|mm| mm.get("ao")).map(|r| pack.dir.join(r)),
                 preset: maps.and_then(|mm| mm.get("Diffuse")).map(|r| pack.dir.join(r)),
                 preset_mr: maps.and_then(|mm| mm.get("MetallicRoughness")).map(|r| pack.dir.join(r)),
             }
@@ -950,7 +1037,7 @@ pub fn skin_layers(
             let img = image::open(p).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?.to_rgba8();
             Ok((img.width(), img.height(), img.into_raw()))
         };
-        for Job { i, name, base, mr_base, nm_base, preset, preset_mr, preset_nm } in jobs {
+        for Job { i, name, base, mr_base, nm_base, ao_base, preset, preset_mr, preset_nm, preset_ao } in jobs {
             let (w, h, mut data) = match (&preset, &base) {
                 (Some(p), _) => open(p)?,
                 (None, Some(b)) => (b.0, b.1, b.2.clone()),
@@ -968,6 +1055,7 @@ pub fn skin_layers(
                 detail: f32,
                 rough: Option<(LayerImage, f32)>,
                 normal: Option<(LayerImage, f32)>,
+                extras: Extras,
             }
             let mut lays: Vec<Lay> = Vec::new();
             for l in &layers {
@@ -995,6 +1083,7 @@ pub fn skin_layers(
                     detail: 0.0,
                     rough,
                     normal,
+                    extras: l.extras.clone(),
                 });
             }
             // generated layers, on the head
@@ -1014,6 +1103,7 @@ pub fn skin_layers(
                         detail: if g.kind == GenKind::Lipstick { 1.0 } else { 0.0 },
                         rough,
                         normal: None,
+                        extras: g.extras.clone(),
                     });
                 }
             }
@@ -1030,6 +1120,7 @@ pub fn skin_layers(
                     detail: 0.0,
                     rough: None,
                     normal: None,
+                    extras: d.extras.clone(),
                 });
             }
             let applies: Vec<Apply> = lays
@@ -1039,7 +1130,21 @@ pub fn skin_layers(
             compose(&mut data, w, h, &applies);
             // roughness the layers lay down
             let rough: Vec<(&LayerImage, f32, Xf, Option<&Mask>)> = lays.iter().filter_map(|l| l.rough.as_ref().map(|(r, s)| (r, *s, l.xf, l.mask.as_ref()))).collect();
-            let mr = match (rough.is_empty(), &preset_mr, &mr_base) {
+            // metallic, occlusion and glow layers: the colour's opacity at the value
+            let metal_imgs: Vec<(LayerImage, f32)> =
+                lays.iter().filter_map(|l| l.extras.metallic.map(|v| (roughness_layer(&l.image, v), l.strength))).collect();
+            let ao_imgs: Vec<(LayerImage, f32)> = lays.iter().filter_map(|l| l.extras.ao.map(|v| (roughness_layer(&l.image, 1.0 - v), l.strength))).collect();
+            let glow_imgs: Vec<(LayerImage, f32)> = lays.iter().filter_map(|l| l.extras.glow.map(|(c, k)| (colour_layer(&l.image, c), l.strength * k))).collect();
+            let xf_of = |k: usize, pick: fn(&Extras) -> bool| lays.iter().filter(|l| pick(&l.extras)).nth(k).map(|l| (l.xf, l.mask.as_ref()));
+            let metal: Vec<(&LayerImage, f32, Xf, Option<&Mask>)> = metal_imgs
+                .iter()
+                .enumerate()
+                .map(|(k, (r, s))| {
+                    let (xf, m) = xf_of(k, |e| e.metallic.is_some()).unwrap();
+                    (r, *s, xf, m)
+                })
+                .collect();
+            let mr = match (rough.is_empty() && metal.is_empty(), &preset_mr, &mr_base) {
                 (true, _, _) => None,
                 (false, Some(p), _) => Some(open(p)?),
                 (false, None, Some(b)) => Some((b.0, b.1, b.2.clone())),
@@ -1047,7 +1152,42 @@ pub fn skin_layers(
             };
             let mr = mr.map(|(mw, mh, mut md)| {
                 compose_roughness(&mut md, mw, mh, &rough);
+                compose_channel(&mut md, mw, mh, &metal, 2);
                 (mw, mh, md)
+            });
+            // occlusion (R): the preset's or the character's map under the layers'
+            let aol: Vec<(&LayerImage, f32, Xf, Option<&Mask>)> = ao_imgs
+                .iter()
+                .enumerate()
+                .map(|(k, (r, s))| {
+                    let (xf, m) = xf_of(k, |e| e.ao.is_some()).unwrap();
+                    (r, *s, xf, m)
+                })
+                .collect();
+            let ao = match (aol.is_empty(), &preset_ao, &ao_base) {
+                (true, _, _) => None,
+                (false, Some(p), _) => Some(open(p)?),
+                (false, None, Some(b)) => Some((b.0, b.1, b.2.clone())),
+                // no map: fully open
+                (false, None, None) => Some((w, h, vec![255u8; (w * h * 4) as usize])),
+            };
+            let ao = ao.map(|(aw, ah, mut ad)| {
+                compose_channel(&mut ad, aw, ah, &aol, 0);
+                (aw, ah, ad)
+            });
+            // glow: the layers' glow colours over black, at the diffuse's size
+            let glow = (!glow_imgs.is_empty()).then(|| {
+                let mut gd = [0u8, 0, 0, 255].repeat((w * h) as usize);
+                let applies: Vec<Apply> = glow_imgs
+                    .iter()
+                    .enumerate()
+                    .map(|(k, (g, s))| {
+                        let (xf, mask) = xf_of(k, |e| e.glow.is_some()).unwrap();
+                        Apply { strength: *s, xf, mask, ..Apply::new(g) }
+                    })
+                    .collect();
+                compose(&mut gd, w, h, &applies);
+                (w, h, gd)
             });
             // and normals
             let normals: Vec<(&LayerImage, f32, Xf, Option<&Mask>)> = lays.iter().filter_map(|l| l.normal.as_ref().map(|(r, s)| (r, *s, l.xf, l.mask.as_ref()))).collect();
@@ -1061,7 +1201,7 @@ pub fn skin_layers(
                 compose_normal(&mut nd, nw, nh, &normals);
                 (nw, nh, nd)
             });
-            out.push((i, (w, h, data), mr, nm));
+            out.push((i, (w, h, data), mr, nm, ao, glow));
         }
         info!("skin: composited {} layer(s), {} generated, {} decal(s) in {:.0} ms", layers.len(), generated.len(), decals.len(), t0.elapsed().as_secs_f32() * 1000.0);
         Ok(out)
@@ -1134,6 +1274,7 @@ fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                 });
                 changed |= adjust_ui(ui, &mut g.adjust);
                 changed |= mask_ui(ui, &mut g.mask, ("gen_mask", n));
+                changed |= extras_ui(ui, &mut g.extras);
             });
         }
         if let Some(n) = remove {
@@ -1190,6 +1331,7 @@ fn decals_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                 changed |= ui.add(egui::Slider::new(&mut d.rotation, -180.0..=180.0).text("rotate")).changed();
                 changed |= adjust_ui(ui, &mut d.adjust);
                 changed |= mask_ui(ui, &mut d.mask, ("decal_mask", n));
+                changed |= extras_ui(ui, &mut d.extras);
             });
         }
         if let Some(n) = remove {
@@ -1204,6 +1346,43 @@ fn decals_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
             skin.layers_dirty = true;
         }
     });
+}
+
+/// SkinGen's layer Material extras: metallic, occlusion, glow; true when changed.
+fn extras_ui(ui: &mut egui::Ui, e: &mut Extras) -> bool {
+    let mut c = false;
+    ui.horizontal(|ui| {
+        let mut on = e.metallic.is_some();
+        if ui.checkbox(&mut on, "metallic").changed() {
+            e.metallic = on.then_some(1.0);
+            c = true;
+        }
+        if let Some(v) = e.metallic.as_mut() {
+            c |= ui.add(egui::Slider::new(v, 0.0..=1.0)).changed();
+        }
+    });
+    ui.horizontal(|ui| {
+        let mut on = e.ao.is_some();
+        if ui.checkbox(&mut on, "occlusion").changed() {
+            e.ao = on.then_some(0.5);
+            c = true;
+        }
+        if let Some(v) = e.ao.as_mut() {
+            c |= ui.add(egui::Slider::new(v, 0.0..=1.0).text("darkening")).changed();
+        }
+    });
+    ui.horizontal(|ui| {
+        let mut on = e.glow.is_some();
+        if ui.checkbox(&mut on, "glow").changed() {
+            e.glow = on.then_some(([255, 220, 160], 0.5));
+            c = true;
+        }
+        if let Some((col, k)) = e.glow.as_mut() {
+            c |= ui.color_edit_button_srgb(col).changed();
+            c |= ui.add(egui::Slider::new(k, 0.0..=2.0).text("strength")).changed();
+        }
+    });
+    c
 }
 
 /// Blend mode choice; true when changed.
@@ -1402,6 +1581,7 @@ pub fn skin_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                                 }
                                 changed |= adjust_ui(ui, &mut st.adjust);
                                 changed |= mask_ui(ui, &mut st.mask, ("layer_mask", l.id.as_str()));
+                                changed |= extras_ui(ui, &mut st.extras);
                             });
                             if changed {
                                 skin.layers_dirty = true;
