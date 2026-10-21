@@ -21,6 +21,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
+use crate::conform::{Conform, ConformOptions};
 use crate::expr::{ArkitMap, ExpressionPack};
 use crate::pack::ShapePack;
 use crate::subdiv::SubdivMap;
@@ -313,6 +314,59 @@ impl PySubdivMap {
     }
 }
 
+fn read_f32x3(b: &[u8], what: &str) -> PyResult<Vec<[f32; 3]>> {
+    if b.len() % 12 != 0 {
+        return Err(PyValueError::new_err(format!("{what}: {} bytes is not a whole number of f32 xyz", b.len())));
+    }
+    Ok(b.chunks_exact(12).map(|c| std::array::from_fn(|k| f32::from_le_bytes(c[4 * k..4 * k + 4].try_into().unwrap()))).collect())
+}
+
+/// Bind an uncaptured mesh (hair cards, a beard) to body anchor vertices.
+/// `body` / `asset`: f32 xyz bytes (bind positions, same space); `anchors`:
+/// indices into `body`; `mode`: "scalp", "skin" or "head_box" (see `ConformOptions`).
+#[pyclass(name = "Conform", module = "cc5_shape", frozen)]
+struct PyConform {
+    inner: Conform,
+    body_len: usize,
+}
+
+#[pymethods]
+impl PyConform {
+    #[new]
+    #[pyo3(signature = (body, anchors, asset, mode="scalp", k=None, sigma_min=None, sigma_scale=None, similarity=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(py: Python<'_>, body: &[u8], anchors: Vec<u32>, asset: &[u8], mode: &str, k: Option<usize>, sigma_min: Option<f32>,
+           sigma_scale: Option<f32>, similarity: Option<bool>) -> PyResult<Self> {
+        let mut o = match mode {
+            "scalp" => ConformOptions::SCALP,
+            "skin" => ConformOptions::SKIN,
+            "head_box" => ConformOptions::HEAD_BOX,
+            _ => return Err(PyValueError::new_err(format!("mode {mode:?}: expected \"scalp\", \"skin\" or \"head_box\""))),
+        };
+        o.k = k.unwrap_or(o.k);
+        o.sigma_min = sigma_min.unwrap_or(o.sigma_min);
+        o.sigma_scale = sigma_scale.unwrap_or(o.sigma_scale);
+        o.similarity = similarity.unwrap_or(o.similarity);
+        let (body, asset) = (read_f32x3(body, "body")?, read_f32x3(asset, "asset")?);
+        let inner = py.detach(|| Conform::bind(&body, &anchors, &asset, o)).map_err(err)?;
+        Ok(Self { inner, body_len: body.len() })
+    }
+
+    /// Body vertex deltas (f32 xyz bytes) -> asset vertex deltas (f32 xyz bytes).
+    fn apply<'py>(&self, py: Python<'py>, body_delta: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+        let d = read_f32x3(body_delta, "body_delta")?;
+        if d.len() != self.body_len {
+            return Err(PyValueError::new_err(format!("body_delta has {} vertices, the body {}", d.len(), self.body_len)));
+        }
+        let out = py.detach(|| self.inner.apply(&d));
+        Ok(f32_bytes(py, &out))
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+}
+
 /// ARKit-52 -> expression weights, from a runtime ARKit map JSON.
 #[pyclass(name = "ArkitMap", module = "cc5_shape", frozen)]
 struct PyArkitMap {
@@ -355,5 +409,6 @@ fn cc5_shape(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyExpressions>()?;
     m.add_class::<PyArkitMap>()?;
     m.add_class::<PySubdivMap>()?;
+    m.add_class::<PyConform>()?;
     Ok(())
 }

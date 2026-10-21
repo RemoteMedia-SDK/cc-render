@@ -5,11 +5,14 @@
 //! - [`glb`]: write those deltas into a character GLB (bind mesh, joints and
 //!   inverse bind matrices).
 //! - [`subdiv`]: drive CC5's HD (subdivided) mesh from the level-0 pack.
+//! - [`conform`]: make uncaptured meshes (hair cards, beards from a hair library)
+//!   follow the body's shape from its anchors (scalp / face).
 //! - [`expr`]: facial expressions (CC5's ~400 morph targets, more than Bevy's 64
 //!   per mesh) as sparse vertex deltas in the same space, for CPU morphing.
 //!
 //! With the `python` feature this crate is also the CPython module `cc5_shape`.
 
+pub mod conform;
 pub mod expr;
 pub mod glb;
 pub mod pack;
@@ -18,6 +21,7 @@ pub mod subdiv;
 #[cfg(feature = "python")]
 mod python;
 
+pub use conform::{Conform, ConformOptions};
 pub use expr::{ArkitMap, ExpressionPack};
 pub use glb::{shape_glb, shape_glb_hd};
 pub use pack::{ShapeDelta, ShapePack, Slider, StateDeltas};
