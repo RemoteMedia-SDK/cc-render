@@ -23,6 +23,7 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use bevy_egui::egui;
+use cc5_skin::generate::{Generated, Kind as GenKind, Masks};
 use cc5_skin::{compose, compose_normal, compose_roughness, Apply, LayerImage, SkinPack};
 use cc_render_plugin::cc_render::cc5_materials::{Cc5Handle, Cc5Material, Cc5SkinMaterial};
 use serde_json::{json, Map, Value};
@@ -163,6 +164,17 @@ pub struct LayerState {
     pub tint: Option<[u8; 3]>,
 }
 
+/// A makeup / detail layer generated from the head's region masks
+/// ([`cc5_skin::generate`]): any colour, no capture.
+#[derive(Clone, Debug)]
+pub struct GenState {
+    pub kind: GenKind,
+    pub color: [u8; 3],
+    pub strength: f32,
+    /// varies freckles and stubble
+    pub seed: u32,
+}
+
 /// The character's own textures of a skin material (restored when a skin preset
 /// or the last layer is removed).
 #[derive(Clone)]
@@ -198,6 +210,10 @@ pub struct SkinEdit {
     /// `--skin-pack` (default `<character dir>/skin`): SkinGen layers and skins captured from CC5
     pub pack: Option<Arc<SkinPack>>,
     pub layers: Vec<LayerState>,
+    /// generated layers (laid over the head after the captured ones)
+    pub generated: Vec<GenState>,
+    /// the head's region masks, once loaded (for the generators)
+    masks: Option<Arc<Masks>>,
     /// skin preset id (None: the character's own skin)
     pub skin: Option<String>,
     /// recipe `"albedo"`: a flat diffuse colour instead of the maps (sRGB; for
@@ -275,7 +291,9 @@ impl SkinEdit {
                 o
             })
             .collect();
-        let mut r = json!({"format": "cc5-skin", "version": 1, "skin": self.skin, "layers": layers, "materials": mats});
+        let generated: Vec<Value> =
+            self.generated.iter().map(|g| json!({"kind": g.kind, "color": g.color, "strength": g.strength, "seed": g.seed})).collect();
+        let mut r = json!({"format": "cc5-skin", "version": 1, "skin": self.skin, "layers": layers, "generated": generated, "materials": mats});
         if let Some(a) = self.albedo {
             r["albedo"] = json!(a);
         }
@@ -303,6 +321,16 @@ impl SkinEdit {
             let tint = l.get("tint").and_then(color);
             self.layers.push(LayerState { id: id.into(), strength: l.get("strength").and_then(number).unwrap_or(1.0), tint });
         }
+        for g in recipe.get("generated").and_then(Value::as_array).into_iter().flatten() {
+            let Some(kind) = g.get("kind").and_then(|k| serde_json::from_value::<GenKind>(k.clone()).ok()) else { continue };
+            let (c0, s0) = kind.default_look();
+            self.generated.push(GenState {
+                kind,
+                color: g.get("color").and_then(color).unwrap_or(c0),
+                strength: g.get("strength").and_then(number).unwrap_or(s0),
+                seed: g.get("seed").and_then(Value::as_u64).unwrap_or(1) as u32,
+            });
+        }
         if let Some(ms) = recipe.get("materials").and_then(Value::as_object) {
             for (name, r) in ms {
                 let Some(m) = self.mats.iter_mut().find(|m| &m.name == name) else {
@@ -328,6 +356,7 @@ impl SkinEdit {
             m.sss = m.orig_sss.clone();
         }
         self.layers.clear();
+        self.generated.clear();
         self.albedo = None;
         if self.skin.is_some() {
             self.skin = None;
@@ -365,7 +394,7 @@ impl SkinEdit {
     }
 
     fn key(&self) -> String {
-        format!("{:?}|{:?}", self.skin, self.layers)
+        format!("{:?}|{:?}|{:?}", self.skin, self.layers, self.generated)
     }
 }
 
@@ -565,7 +594,7 @@ pub fn skin_layers(
         }
     }
     // nothing over the character's own skin: its own textures
-    if skin.layers.is_empty() && skin.skin.is_none() {
+    if skin.layers.is_empty() && skin.generated.is_empty() && skin.skin.is_none() {
         for (i, m) in skin.mats.iter().enumerate() {
             if let (Some(o), Some(mat)) = (&skin.originals[i], mats.get_mut(&m.handle)) {
                 mat.base.base_color_texture = o.diffuse.clone();
@@ -602,6 +631,25 @@ pub fn skin_layers(
             skin.nm_bases[i] = texels(skin.originals[i].as_ref().and_then(|o| o.normal.clone()));
         }
     }
+    // the head's region masks (generated layers), once loaded
+    if !skin.generated.is_empty() && skin.masks.is_none() {
+        let head = skin.mats.iter().find(|m| m.name.contains("Head")).and_then(|m| mats.get(&m.handle));
+        let tex = |h: &Option<Handle<Image>>| h.as_ref().and_then(|h| images.get(h)).filter(|im| im.data.len() == (im.width() * im.height() * 4) as usize);
+        if let Some(e) = head.map(|m| &m.extension) {
+            match (tex(&e.mask_a), tex(&e.mask_b), tex(&e.mask_c)) {
+                (Some(a), Some(b), Some(c)) if a.size() == b.size() && b.size() == c.size() => {
+                    skin.masks = Some(Arc::new(Masks { w: a.width(), h: a.height(), cfulc: a.data.clone(), nmuil: b.data.clone(), en: c.data.clone() }));
+                }
+                _ => {
+                    if e.mask_a.is_none() || e.mask_b.is_none() || e.mask_c.is_none() {
+                        skin.status = "skin: the head has no region masks to generate from".into();
+                    } else {
+                        return; // still loading
+                    }
+                }
+            }
+        }
+    }
     skin.layers_dirty = false;
     skin.task_key = skin.key();
     struct Job {
@@ -633,6 +681,8 @@ pub fn skin_layers(
         })
         .collect();
     let layers = skin.layers.clone();
+    let generated = skin.generated.clone();
+    let masks = skin.masks.clone();
     let cache = skin.cache.clone();
     let pack2 = pack.clone();
     skin.status = "skin: compositing...".into();
@@ -666,10 +716,18 @@ pub fn skin_layers(
                     imgs.push((li, l.strength, l.tint.map(|t| (t.map(|x| x as f32), layer.color))));
                 }
             }
+            // generated layers, on the head
+            let gens: Vec<(Generated, f32)> = match (&masks, name.contains("Head")) {
+                (Some(m), true) => generated.iter().map(|g| (cc5_skin::generate::generate(m, g.kind, g.color, g.seed), g.strength)).collect(),
+                _ => Vec::new(),
+            };
+            for (g, st) in &gens {
+                imgs.push((Arc::new(g.color.clone()), *st, None));
+            }
             let applies: Vec<Apply> = imgs.iter().map(|(li, s, t)| Apply { image: li, strength: *s, tint: *t }).collect();
             compose(&mut data, w, h, &applies);
             // roughness the layers lay down
-            let mut rough = Vec::new();
+            let mut rough: Vec<(LayerImage, f32)> = gens.iter().filter_map(|(g, st)| g.roughness.clone().map(|r| (r, *st))).collect();
             for l in &layers {
                 let Some(layer) = pack2.layer(&l.id) else { continue };
                 if let Some(r) = pack2.layer_roughness(layer, &name)? {
@@ -711,6 +769,45 @@ pub fn skin_layers(
         info!("skin: composited {} layer(s) in {:.0} ms", layers.len(), t0.elapsed().as_secs_f32() * 1000.0);
         Ok(out)
     }));
+}
+
+/// Generated makeup and details: one row per kind (on/off, strength, colour, reseed).
+fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
+    let on = skin.generated.len();
+    egui::CollapsingHeader::new(format!("Generated makeup & details ({on} on)")).id_salt("skin_generated").show(ui, |ui| {
+        ui.small("from the head's region masks, any colour");
+        for kind in GenKind::ALL {
+            let pos = skin.generated.iter().position(|g| g.kind == kind);
+            ui.horizontal(|ui| {
+                let mut enabled = pos.is_some();
+                if ui.checkbox(&mut enabled, kind.name()).changed() {
+                    match (enabled, pos) {
+                        (true, None) => {
+                            let (color, strength) = kind.default_look();
+                            skin.generated.push(GenState { kind, color, strength, seed: 1 });
+                        }
+                        (false, Some(p)) => {
+                            skin.generated.remove(p);
+                        }
+                        _ => {}
+                    }
+                    skin.layers_dirty = true;
+                }
+                if let Some(p) = pos.filter(|&p| p < skin.generated.len()) {
+                    let g = &mut skin.generated[p];
+                    let mut changed = ui.add(egui::Slider::new(&mut g.strength, 0.0..=1.0).text("strength")).changed();
+                    changed |= ui.color_edit_button_srgb(&mut g.color).changed();
+                    if matches!(kind, GenKind::Freckles | GenKind::Stubble) && ui.small_button("↻").on_hover_text("another pattern").clicked() {
+                        g.seed = g.seed.wrapping_add(1);
+                        changed = true;
+                    }
+                    if changed {
+                        skin.layers_dirty = true;
+                    }
+                }
+            });
+        }
+    });
 }
 
 /// Writes texels into `slot`'s image (made on first use, replaced when the size changes).
@@ -784,6 +881,7 @@ pub fn skin_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                     skin.set_skin(choice);
                 }
             });
+            generated_ui(ui, skin);
             egui::CollapsingHeader::new(format!("SkinGen layers ({} on)", skin.layers.len())).id_salt("skin_layers").show(ui, |ui| {
                 let mut groups: Vec<&str> = pack.layers.iter().map(|l| l.group.as_str()).collect();
                 groups.dedup();

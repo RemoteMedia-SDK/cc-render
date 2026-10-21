@@ -30,6 +30,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub mod build;
+pub mod generate;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LayerMap {
