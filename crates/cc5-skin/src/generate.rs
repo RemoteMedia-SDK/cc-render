@@ -29,10 +29,12 @@ pub enum Kind {
     Highlight,
     Freckles,
     Stubble,
+    /// one mole / freckle at `Pattern::at`
+    Spot,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 7] = [Kind::Lipstick, Kind::Blush, Kind::Eyeshadow, Kind::Contour, Kind::Highlight, Kind::Freckles, Kind::Stubble];
+    pub const ALL: [Kind; 8] = [Kind::Lipstick, Kind::Blush, Kind::Eyeshadow, Kind::Contour, Kind::Highlight, Kind::Freckles, Kind::Stubble, Kind::Spot];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -43,6 +45,7 @@ impl Kind {
             Kind::Highlight => "Highlight",
             Kind::Freckles => "Freckles",
             Kind::Stubble => "Stubble",
+            Kind::Spot => "Mole / spot",
         }
     }
 
@@ -56,6 +59,7 @@ impl Kind {
             Kind::Highlight => ([255, 236, 220], 0.25),
             Kind::Freckles => ([126, 74, 48], 0.6),
             Kind::Stubble => ([42, 32, 28], 0.8),
+            Kind::Spot => ([120, 76, 52], 0.9),
         }
     }
 }
@@ -67,11 +71,18 @@ pub struct Pattern {
     pub size: f32,
     pub density: f32,
     pub variation: f32,
+    /// [`Kind::Spot`]: where (UV, 0..1)
+    #[serde(default = "centre")]
+    pub at: [f32; 2],
+}
+
+fn centre() -> [f32; 2] {
+    [0.5, 0.5]
 }
 
 impl Default for Pattern {
     fn default() -> Self {
-        Self { size: 1.0, density: 1.0, variation: 0.5 }
+        Self { size: 1.0, density: 1.0, variation: 0.5, at: centre() }
     }
 }
 
@@ -224,6 +235,18 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
             let dots = speckle(w, h, 1.1 * s * psize, 0.006 * pdens / (s * s), pvar, seed);
             region.iter().zip(&dots).map(|(r, d)| (r * 1.4).min(1.0) * d).collect()
         }
+        Kind::Spot => {
+            // a soft round spot, radius 1.2 texels at 1024 (a small mole) x size
+            let (cx, cy) = (pattern.at[0] * w as f32, pattern.at[1] * h as f32);
+            let r = 1.2 * s * psize;
+            (0..(w * h) as usize)
+                .map(|i| {
+                    let (x, y) = ((i % w as usize) as f32 + 0.5, (i / w as usize) as f32 + 0.5);
+                    let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
+                    ((r - d) / (0.6 * s.max(1.0)) + 0.5).clamp(0.0, 1.0)
+                })
+                .collect()
+        }
         Kind::Stubble => {
             let jaw_band: Vec<f32> = (0..(w * h) as usize).map(|i| {
                 let above = if i >= (w as usize) * (60.0 * s) as usize { neck[i - w as usize * (60.0 * s) as usize] } else { 0.0 };
@@ -234,6 +257,7 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern
             region.iter().zip(&dots).map(|(r, d)| (r * 1.3).min(1.0) * d).collect()
         }
     };
+
     let rgba: Vec<u8> = alpha.iter().flat_map(|a| [rgb[0], rgb[1], rgb[2], (a.clamp(0.0, 1.0) * 255.0).round() as u8]).collect();
     let color = LayerImage { rect: [0, 0, w, h], size: w, w, h, rgba };
     // lipstick: a satin finish (rougher than bare lips' wet sheen is CC5's matte look)

@@ -850,6 +850,11 @@ fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                 let mut changed = false;
                 egui::CollapsingHeader::new("adjust").id_salt(("gen_adjust", kind.name())).show(ui, |ui| {
                     changed |= xf_ui(ui, &mut g.xf);
+                    if kind == GenKind::Spot {
+                        changed |= ui.add(egui::Slider::new(&mut g.pattern.at[0], 0.0..=1.0).text("at u")).changed();
+                        changed |= ui.add(egui::Slider::new(&mut g.pattern.at[1], 0.0..=1.0).text("at v")).changed();
+                        changed |= ui.add(egui::Slider::new(&mut g.pattern.size, 0.3..=6.0).text("size")).changed();
+                    }
                     if matches!(kind, GenKind::Freckles | GenKind::Stubble) {
                         changed |= ui.add(egui::Slider::new(&mut g.pattern.size, 0.3..=3.0).text("dot size")).changed();
                         changed |= ui.add(egui::Slider::new(&mut g.pattern.density, 0.2..=4.0).text("density")).changed();
