@@ -1168,10 +1168,15 @@ fn ui(
                     .collect();
                 if !shown.is_empty() {
                     let active = ed.expr_weights.iter().filter(|w| **w != 0.0).count();
+                    // a stable id: the label's count changes as sliders move, which must
+                    // not collapse the section under the pointer
                     egui::CollapsingHeader::new(format!("Expressions ({}, {active} active)", shown.len()))
+                        .id_salt("expressions")
                         .default_open(!needle.is_empty())
                         .show(ui, |ui| {
-                            if active > 0 && ui.button("Neutral").clicked() {
+                            // always there (disabled when nothing is active): the rows below
+                            // must not move when the first slider leaves 0
+                            if ui.add_enabled(active > 0, egui::Button::new("Neutral")).clicked() {
                                 ed.expr_weights.iter_mut().for_each(|w| *w = 0.0);
                                 ed.expr_dirty = true;
                             }
