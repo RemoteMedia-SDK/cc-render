@@ -2,12 +2,15 @@
 //! `"export": true`: per variant `tex/<material>_<Channel>.png` as CC5 exported
 //! them, and `character.json`).
 //!
-//! Layers: the layer on two bases, e.g. variant `X` on the character's own skin
-//! (`base`) and `X@blue` on a flat blue diffuse (`alt_image`). Per texel and
-//! channel CC5 gives L = B·(1−α) + C·α on both bases, so
-//! (1−α) = (L1−L2)/(B1−B2) (least squares over the channels, weighted by how much
-//! the bases differ) and C = (L1 − B1·(1−α)) / α.
-use crate::{Layer, LayerMap, Skin, SkinPack};
+//! Layers: the layer on two bases, variant `X` on the character's own skin
+//! (`base`) and `X@dark` on the character saved with a contrasting skin (`alt`;
+//! CC5's SkinGen bake composites onto its own base skin, so a flat diffuse set
+//! in the material never reaches it). Per texel CC5 gives L = blend(B, C, α) on
+//! both bases; each [`Blend`] is solved by least squares and the mode with the
+//! least error over both bases is kept. Normal: (1−α) = (L1−L2)/(B1−B2) over the
+//! channels and C = (L1 − B1·(1−α)) / α; multiply and screen: a per-channel
+//! effect (B·M, 1−(1−B)(1−S)), split into the least opacity and a colour.
+use crate::{Blend, Layer, LayerMap, Skin, SkinPack};
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use rayon::prelude::*;
@@ -43,7 +46,8 @@ pub struct Solved {
     /// sRGB colour 0..1 and opacity per texel
     pub c: Vec<[f32; 3]>,
     pub a: Vec<f32>,
-    /// how well the solve predicts the second base: mean |L2 − pred| (0..255)
+    pub blend: Blend,
+    /// how well the solve explains both bases: mean |L − pred| (0..255)
     pub err_alt: f32,
     /// mean |L1 − B1| over the layer's texels (0..255): how visible it is
     pub size: f32,
@@ -62,34 +66,67 @@ pub fn diffuse_path(capture: &Path, variant: &str, material: &str) -> Option<Pat
     [d.join(format!("{material}_Diffuse.png")), d.join("tex").join(format!("{material}_Diffuse.png"))].into_iter().find(|p| p.is_file())
 }
 
-pub fn solve(b1: &[[f32; 3]], l1: &[[f32; 3]], b2: &[[f32; 3]], l2: &[[f32; 3]], w: u32, h: u32) -> Solved {
+/// Colour and opacity of one texel of a layer blended by `blend`, from the layer
+/// on two bases; None where the layer leaves the texel as it is.
+fn solve_texel(blend: Blend, b1: [f32; 3], l1: [f32; 3], b2: [f32; 3], l2: [f32; 3]) -> Option<([f32; 3], f32)> {
+    let d1 = (0..3).map(|c| (l1[c] - b1[c]).abs()).fold(0.0f32, f32::max);
+    if d1 < 1.5 / 255.0 {
+        return None;
+    }
+    // least squares per channel of an effect `e` linear in a known function of
+    // the base: L = B + e·g(B) for multiply (g = B, e = M − 1) and screen
+    // (g = 1 − B, e = S), fitted over the two bases
+    let fit = |g: fn(f32) -> f32| {
+        [0, 1, 2].map(|c| {
+            let (g1, g2) = (g(b1[c]), g(b2[c]));
+            ((l1[c] - b1[c]) * g1 + (l2[c] - b2[c]) * g2) / (g1 * g1 + g2 * g2 + 1e-6)
+        })
+    };
+    let (col, a) = match blend {
+        Blend::Normal => {
+            // 1 - alpha, regularized towards "fully covered" where the bases agree
+            // (then only an opaque layer explains a change)
+            let (mut num, mut den) = (0.0, 0.0);
+            for c in 0..3 {
+                let db = b1[c] - b2[c];
+                num += (l1[c] - l2[c]) * db;
+                den += db * db;
+            }
+            let keep = (num / (den + 1e-4)).clamp(0.0, 1.0);
+            let a = 1.0 - keep;
+            (a >= 1e-3).then(|| ([0, 1, 2].map(|c| ((l1[c] - b1[c] * keep) / a).clamp(0.0, 1.0)), a))?
+        }
+        Blend::Multiply => {
+            // B·(1 − α + α·C): 1 − α + α·C = 1 + e; least opacity that explains it
+            let e = fit(|b| b).map(|e| e.clamp(-1.0, 0.0));
+            let a = -e.iter().copied().fold(0.0f32, f32::min);
+            (a >= 1e-3).then(|| (e.map(|e| (1.0 + e / a).clamp(0.0, 1.0)), a))?
+        }
+        Blend::Screen => {
+            // 1 − (1−B)(1 − α·C): α·C = e
+            let e = fit(|b| 1.0 - b).map(|e| e.clamp(0.0, 1.0));
+            let a = e.iter().copied().fold(0.0f32, f32::max);
+            (a >= 1e-3).then(|| (e.map(|e| (e / a).clamp(0.0, 1.0)), a))?
+        }
+    };
+    Some((col, a))
+}
+
+/// Solves a layer blended by `blend`: colour, opacity and how well that explains
+/// both bases.
+pub fn solve(blend: Blend, b1: &[[f32; 3]], l1: &[[f32; 3]], b2: &[[f32; 3]], l2: &[[f32; 3]], w: u32, h: u32) -> Solved {
     let n = b1.len();
     let res: Vec<([f32; 3], f32, f32, f32)> = (0..n)
         .into_par_iter()
         .map(|i| {
             let (b1, l1, b2, l2) = (b1[i], l1[i], b2[i], l2[i]);
-            let (mut num, mut den, mut d1) = (0.0, 0.0, 0.0f32);
-            for c in 0..3 {
-                let db = b1[c] - b2[c];
-                num += (l1[c] - l2[c]) * db;
-                den += db * db;
-                d1 = d1.max((l1[c] - b1[c]).abs());
-            }
-            if d1 < 1.5 / 255.0 {
-                // the layer leaves this texel as it is
-                return ([0.0; 3], 0.0, 0.0, 0.0);
-            }
-            // 1 - alpha, regularized towards "fully covered" where the bases agree
-            // (then only an opaque layer explains a change)
-            let k = 1e-4;
-            let keep = (num / (den + k)).clamp(0.0, 1.0);
-            let a = 1.0 - keep;
-            if a < 1e-3 {
-                return ([0.0; 3], 0.0, 0.0, d1);
-            }
-            let col = [0, 1, 2].map(|c| ((l1[c] - b1[c] * keep) / a).clamp(0.0, 1.0));
-            let pred = [0, 1, 2].map(|c| b2[c] * keep + col[c] * a);
-            let err = (0..3).map(|c| (pred[c] - l2[c]).abs()).sum::<f32>() / 3.0;
+            let d1 = (0..3).map(|c| (l1[c] - b1[c]).abs()).fold(0.0f32, f32::max);
+            let Some((col, a)) = solve_texel(blend, b1, l1, b2, l2) else {
+                // untouched (d1 0), or a change no opacity explains (counted)
+                let err = if d1 < 1.5 / 255.0 { 0.0 } else { (0..3).map(|c| (l1[c] - b1[c]).abs() + (l2[c] - b2[c]).abs()).sum::<f32>() / 6.0 };
+                return ([0.0; 3], 0.0, err, if d1 < 1.5 / 255.0 { 0.0 } else { d1 });
+            };
+            let err = (0..3).map(|c| (blend.apply(b1[c], col[c], a) - l1[c]).abs() + (blend.apply(b2[c], col[c], a) - l2[c]).abs()).sum::<f32>() / 6.0;
             (col, a, err, d1)
         })
         .collect();
@@ -98,6 +135,7 @@ pub fn solve(b1: &[[f32; 3]], l1: &[[f32; 3]], b2: &[[f32; 3]], l2: &[[f32; 3]],
     Solved {
         w,
         h,
+        blend,
         err_alt: touched.iter().map(|r| r.2).sum::<f32>() / m * 255.0,
         size: touched.iter().map(|r| r.3).sum::<f32>() / m * 255.0,
         c: res.iter().map(|r| r.0).collect(),
@@ -173,7 +211,7 @@ fn channel_key(c: &str) -> String {
 /// Held-out check: the layer laid over `opt.check`'s image ([`crate::compose`])
 /// against CC5's texture of the layer on that image: (mean abs error, mean
 /// change), 0..255, over the layer's rect; None without that capture.
-fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 4], w: u32, h: u32) -> Result<Option<(f32, f32)>> {
+fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 4], blend: Blend, w: u32, h: u32) -> Result<Option<(f32, f32)>> {
     let Some((pb, suffix)) = &opt.check else { return Ok(None) };
     let Some(pl) = diffuse_path(&opt.capture, &format!("{id}{suffix}"), m) else { return Ok(None) };
     let base = image::open(&pb)?.to_rgba8();
@@ -181,7 +219,7 @@ fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 
     if base.dimensions() != (w, h) || cc5.dimensions() != (w, h) {
         return Ok(None);
     }
-    let li = crate::LayerImage { rect, size: w, w: img.width(), h: img.height(), rgba: img.as_raw().clone() };
+    let li = crate::LayerImage { rect, size: w, w: img.width(), h: img.height(), rgba: img.as_raw().clone(), blend };
     let mut ours = base.as_raw().clone();
     crate::compose(&mut ours, w, h, &[crate::Apply { image: &li, strength: 1.0, tint: None, detail: 0.0, xf: crate::Xf::default() }]);
     let (mut err, mut size, mut n) = (0.0f64, 0.0f64, 0u64);
@@ -319,14 +357,20 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             let (n1, n2) = (changed(&b1, &l1), changed(&b2, &l2));
             anyhow::ensure!(n1 < 100 || n2 * 20 > n1, "{id} {m}: changes {n1} texels on the character but {n2} on the second base (not applied there?)");
             pack.size = pack.size.max(w);
-            let s = solve(&b1, &l1, &b2, &l2, w, h);
+            // the blend mode that explains both bases best
+            let s = [Blend::Normal, Blend::Multiply, Blend::Screen]
+                .map(|b| solve(b, &b1, &l1, &b2, &l2, w, h))
+                .into_iter()
+                .min_by(|a, b| a.err_alt.total_cmp(&b.err_alt))
+                .unwrap();
             let Some((img, rect, mean)) = crop(&s, opt.min_alpha) else { continue };
             let file = format!("layers/{id}.{m}.png");
             img.save(opt.out.join(&file))?;
             let cover = img.pixels().filter(|p| p[3] > 0).count() as f32;
-            let check = validate(opt, id, m, &img, rect, w, h)?;
+            let check = validate(opt, id, m, &img, rect, s.blend, w, h)?;
             println!(
-                "{id:24} {m:14} rect {rect:?} size {:.1} alt err {:.2} ({cover} texels){}",
+                "{id:24} {m:14} {:8} rect {rect:?} size {:.1} err {:.2} ({cover} texels){}",
+                format!("{:?}", s.blend).to_lowercase(),
                 s.size,
                 s.err_alt,
                 check.map_or(String::new(), |(err, size)| format!("; held-out base: err {err:.2} vs change {size:.2}"))
@@ -337,7 +381,7 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             }
             let roughness = layer_roughness(opt, id, m, &s, rect)?;
             let normal = layer_normal(opt, id, m)?;
-            maps.insert(m.clone(), LayerMap { diffuse: file, rect, roughness, normal });
+            maps.insert(m.clone(), LayerMap { diffuse: file, rect, blend: s.blend, roughness, normal });
         }
         if !maps.is_empty() {
             pack.layers.push(Layer { id: id.clone(), name: name.clone(), group: group.clone(), color, maps, source: String::new() });
@@ -418,7 +462,7 @@ mod tests {
         let over = |b: &[f32; 3]| [0, 1, 2].map(|k| b[k] * (1.0 - a) + c[k] * a);
         let l1: Vec<[f32; 3]> = b1.iter().map(over).collect();
         let l2: Vec<[f32; 3]> = b2.iter().map(over).collect();
-        let s = solve(&b1, &l1, &b2, &l2, 2, 1);
+        let s = solve(Blend::Normal, &b1, &l1, &b2, &l2, 2, 1);
         for i in 0..2 {
             assert!((s.a[i] - a).abs() < 1e-3, "alpha {}", s.a[i]);
             for k in 0..3 {
@@ -426,5 +470,28 @@ mod tests {
             }
         }
         assert!(s.err_alt < 0.5, "alt err {} (0..255)", s.err_alt);
+    }
+
+    #[test]
+    fn solve_tells_blend_modes_apart() {
+        // light and dark skin bases, as the capture's character and dark project
+        let b1 = vec![[0.75f32, 0.55, 0.45], [0.65, 0.45, 0.35]];
+        let b2 = vec![[0.40f32, 0.28, 0.20], [0.30, 0.20, 0.15]];
+        for (blend, c, a) in [(Blend::Multiply, [0.2f32, 0.0, 0.1], 0.7f32), (Blend::Screen, [1.0f32, 0.9, 0.8], 0.4), (Blend::Normal, [0.8, 0.1, 0.2], 0.6)] {
+            let over = |b: &[f32; 3]| [0, 1, 2].map(|k| blend.apply(b[k], c[k], a));
+            let l1: Vec<[f32; 3]> = b1.iter().map(over).collect();
+            let l2: Vec<[f32; 3]> = b2.iter().map(over).collect();
+            let fits = [Blend::Normal, Blend::Multiply, Blend::Screen].map(|b| solve(b, &b1, &l1, &b2, &l2, 2, 1));
+            let best = fits.iter().min_by(|x, y| x.err_alt.total_cmp(&y.err_alt)).unwrap();
+            assert_eq!(best.blend, blend, "errors {:?}", fits.iter().map(|f| f.err_alt).collect::<Vec<_>>());
+            assert!(best.err_alt < 0.1, "{blend:?} err {}", best.err_alt);
+            // the recovered layer reproduces both bases
+            for i in 0..2 {
+                for k in 0..3 {
+                    let p = blend.apply(b2[i][k], best.c[i][k], best.a[i]);
+                    assert!((p - l2[i][k]).abs() < 1e-3, "{blend:?} texel {i}: {p} vs {}", l2[i][k]);
+                }
+            }
+        }
     }
 }
