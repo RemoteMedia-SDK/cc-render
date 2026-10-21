@@ -147,6 +147,28 @@ pub struct LayerImage {
     pub rgba: Vec<u8>,
 }
 
+/// Where a layer goes, relative to where it was captured or generated: moved
+/// (`offset`, as a fraction of the texture), scaled and rotated (degrees) about
+/// its rect's centre, as SkinGen places a layer.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Xf {
+    pub offset: [f32; 2],
+    pub scale: f32,
+    pub rotation: f32,
+}
+
+impl Default for Xf {
+    fn default() -> Self {
+        Self { offset: [0.0, 0.0], scale: 1.0, rotation: 0.0 }
+    }
+}
+
+impl Xf {
+    pub fn is_identity(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// One layer to lay over a texture.
 pub struct Apply<'a> {
     pub image: &'a LayerImage,
@@ -158,60 +180,81 @@ pub struct Apply<'a> {
     /// 0..1: how much the skin's own shading (each texel's brightness) shows
     /// through the layer's colour (generated lipstick: the lips' texture)
     pub detail: f32,
+    pub xf: Xf,
+}
+
+/// Runs `f(texel, sample, cos/sin of the rotation)` for every texel of a
+/// `w` x `h` RGBA8 texture the placed layer covers, in parallel; `sample` is the
+/// layer's bilinear RGBA there.
+fn each_texel(buf: &mut [u8], w: u32, h: u32, li: &LayerImage, xf: Xf, f: impl Fn(&mut [u8], [f32; 4]) + Sync) {
+    let k = w as f32 / li.size as f32;
+    let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
+    let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
+    let (cx, cy) = (rx + rw * 0.5, ry + rh * 0.5);
+    let (ox, oy) = (xf.offset[0] * w as f32, xf.offset[1] * h as f32);
+    let sc = xf.scale.max(1e-3);
+    let (sn, cs) = xf.rotation.to_radians().sin_cos();
+    // destination bounds: the rect's corners, placed
+    let corners = [(rx, ry), (rx + rw, ry), (rx, ry + rh), (rx + rw, ry + rh)].map(|(x, y)| {
+        let (dx, dy) = ((x - cx) * sc, (y - cy) * sc);
+        (cx + ox + dx * cs - dy * sn, cy + oy + dx * sn + dy * cs)
+    });
+    let x0 = corners.iter().map(|c| c.0).fold(f32::MAX, f32::min).floor().max(0.0) as u32;
+    let x1 = (corners.iter().map(|c| c.0).fold(f32::MIN, f32::max).ceil().max(0.0) as u32).min(w);
+    let y0 = corners.iter().map(|c| c.1).fold(f32::MAX, f32::min).floor().max(0.0) as u32;
+    let y1 = (corners.iter().map(|c| c.1).fold(f32::MIN, f32::max).ceil().max(0.0) as u32).min(h);
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    buf.par_chunks_mut(w as usize * 4).enumerate().filter(|(y, _)| (*y as u32) >= y0 && (*y as u32) < y1).for_each(|(y, row)| {
+        for x in x0..x1 {
+            // texel centre -> the layer's own frame (inverse placement) -> its image
+            let (px, py) = (x as f32 + 0.5 - cx - ox, y as f32 + 0.5 - cy - oy);
+            let (ux, uy) = ((px * cs + py * sn) / sc + cx, (-px * sn + py * cs) / sc + cy);
+            if ux < rx || uy < ry || ux >= rx + rw || uy >= ry + rh {
+                continue;
+            }
+            let lx = ((ux - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
+            let ly = ((uy - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
+            f(&mut row[x as usize * 4..x as usize * 4 + 4], bilinear(li, lx, ly));
+        }
+    });
 }
 
 /// Lays layers' roughness (their maps' R, at their opacity x strength) over the
 /// G channel of a glTF metallic-roughness texture (RGBA8, `w` x `h`), in place.
-pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32)]) {
-    for (li, strength) in layers {
+pub fn compose_roughness(mr: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf)]) {
+    for (li, strength, xf) in layers {
         if *strength <= 0.0 {
             continue;
         }
-        let k = w as f32 / li.size as f32;
-        let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
-        let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
-        let (x0, y0) = (rx.floor().max(0.0) as u32, ry.floor().max(0.0) as u32);
-        let (x1, y1) = (((rx + rw).ceil() as u32).min(w), ((ry + rh).ceil() as u32).min(h));
-        mr.par_chunks_mut(w as usize * 4).enumerate().filter(|(y, _)| (*y as u32) >= y0 && (*y as u32) < y1).for_each(|(y, row)| {
-            let ly = ((y as f32 + 0.5 - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
-            for x in x0..x1 {
-                let lx = ((x as f32 + 0.5 - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
-                let s = bilinear(li, lx, ly);
-                let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
-                let g = &mut row[x as usize * 4 + 1];
-                *g = (*g as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
-            }
+        each_texel(mr, w, h, li, *xf, |p, s| {
+            let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
+            p[1] = (p[1] as f32 * (1.0 - a) + s[0] * a).round().clamp(0.0, 255.0) as u8;
         });
     }
 }
 
 /// Lays layers' normals over a normal map (RGBA8, `w` x `h`), in place: the
-/// unpacked normals blend by the layers' opacity x strength and renormalize.
-pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32)]) {
-    for (li, strength) in layers {
+/// unpacked normals (turned with the layer's rotation) blend by the layers'
+/// opacity x strength and renormalize.
+pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32, Xf)]) {
+    for (li, strength, xf) in layers {
         if *strength <= 0.0 {
             continue;
         }
-        let k = w as f32 / li.size as f32;
-        let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
-        let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
-        let (x0, y0) = (rx.floor().max(0.0) as u32, ry.floor().max(0.0) as u32);
-        let (x1, y1) = (((rx + rw).ceil() as u32).min(w), ((ry + rh).ceil() as u32).min(h));
-        nm.par_chunks_mut(w as usize * 4).enumerate().filter(|(y, _)| (*y as u32) >= y0 && (*y as u32) < y1).for_each(|(y, row)| {
-            let ly = ((y as f32 + 0.5 - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
-            for x in x0..x1 {
-                let lx = ((x as f32 + 0.5 - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
-                let s = bilinear(li, lx, ly);
-                let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
-                if a <= 0.0 {
-                    continue;
-                }
-                let p = &mut row[x as usize * 4..x as usize * 4 + 3];
-                let n: [f32; 3] = [0, 1, 2].map(|c| (p[c] as f32 / 255.0 * 2.0 - 1.0) * (1.0 - a) + (s[c] / 255.0 * 2.0 - 1.0) * a);
-                let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
-                for c in 0..3 {
-                    p[c] = ((n[c] / len * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8;
-                }
+        let (sn, cs) = xf.rotation.to_radians().sin_cos();
+        each_texel(nm, w, h, li, *xf, |p, s| {
+            let a = (s[3] / 255.0 * strength).clamp(0.0, 1.0);
+            if a <= 0.0 {
+                return;
+            }
+            let l = [0, 1, 2].map(|c| s[c] / 255.0 * 2.0 - 1.0);
+            let l = [l[0] * cs - l[1] * sn, l[0] * sn + l[1] * cs, l[2]];
+            let n: [f32; 3] = [0, 1, 2].map(|c| (p[c] as f32 / 255.0 * 2.0 - 1.0) * (1.0 - a) + l[c] * a);
+            let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+            for c in 0..3 {
+                p[c] = ((n[c] / len * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8;
             }
         });
     }
@@ -220,40 +263,26 @@ pub fn compose_normal(nm: &mut [u8], w: u32, h: u32, layers: &[(&LayerImage, f32
 /// Lays `layers` over `base` (RGBA8 sRGB, `w` x `h`, any size: rects scale) in
 /// order, in place. CC5 blends layers in sRGB.
 pub fn compose(base: &mut [u8], w: u32, h: u32, layers: &[Apply]) {
+    let lum = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     for a in layers {
         if a.strength <= 0.0 {
             continue;
         }
-        let li = a.image;
-        let k = w as f32 / li.size as f32;
-        let (rx, ry) = (li.rect[0] as f32 * k, li.rect[1] as f32 * k);
-        let (rw, rh) = (li.rect[2] as f32 * k, li.rect[3] as f32 * k);
-        let (x0, y0) = (rx.floor().max(0.0) as u32, ry.floor().max(0.0) as u32);
-        let (x1, y1) = (((rx + rw).ceil() as u32).min(w), ((ry + rh).ceil() as u32).min(h));
-        let lum = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
         let tint = a.tint.map(|(to, from)| (to, 1.0 / lum(from).max(1.0)));
-        base.par_chunks_mut(w as usize * 4).enumerate().filter(|(y, _)| (*y as u32) >= y0 && (*y as u32) < y1).for_each(|(y, row)| {
-            // texel centre -> layer image coordinates (bilinear)
-            let ly = ((y as f32 + 0.5 - ry) / rh * li.h as f32 - 0.5).clamp(0.0, li.h as f32 - 1.0);
-            for x in x0..x1 {
-                let lx = ((x as f32 + 0.5 - rx) / rw * li.w as f32 - 0.5).clamp(0.0, li.w as f32 - 1.0);
-                let s = bilinear(li, lx, ly);
-                let alpha = (s[3] / 255.0 * a.strength).clamp(0.0, 1.0);
-                if alpha <= 0.0 {
-                    continue;
-                }
-                let p = &mut row[x as usize * 4..x as usize * 4 + 3];
-                let rel = tint.map(|(_, k)| lum([s[0], s[1], s[2]]) * k);
-                // the skin's shading through the colour (relative to a mid skin tone)
-                let shade = 1.0 + a.detail * (lum([p[0] as f32, p[1] as f32, p[2] as f32]) / 115.0 - 1.0);
-                for c in 0..3 {
-                    let col = match (tint, rel) {
-                        (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
-                        _ => s[c],
-                    } * shade;
-                    let col = col.min(255.0);
-                    p[c] = (p[c] as f32 * (1.0 - alpha) + col * alpha).round().clamp(0.0, 255.0) as u8;
-                }
+        each_texel(base, w, h, a.image, a.xf, |p, s| {
+            let alpha = (s[3] / 255.0 * a.strength).clamp(0.0, 1.0);
+            if alpha <= 0.0 {
+                return;
+            }
+            let rel = tint.map(|(_, k)| lum([s[0], s[1], s[2]]) * k);
+            // the skin's shading through the colour (relative to a mid skin tone)
+            let shade = 1.0 + a.detail * (lum([p[0] as f32, p[1] as f32, p[2] as f32]) / 115.0 - 1.0);
+            for c in 0..3 {
+                let col = match (tint, rel) {
+                    (Some((to, _)), Some(r)) => (to[c] * r).min(255.0),
+                    _ => s[c],
+                } * shade;
+                p[c] = (p[c] as f32 * (1.0 - alpha) + col.min(255.0) * alpha).round().clamp(0.0, 255.0) as u8;
             }
         });
     }
@@ -293,11 +322,22 @@ mod tests {
     fn compose_over_with_strength_and_tint() {
         let li = LayerImage { rect: [0, 0, 2, 2], size: 2, w: 2, h: 2, rgba: [200, 0, 0, 255].repeat(4) };
         let mut base = [100u8, 100, 100, 255].repeat(4);
-        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None, detail: 0.0 }]);
+        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 0.5, tint: None, detail: 0.0, xf: Xf::default() }]);
         assert_eq!(&base[0..3], &[150, 50, 50]);
         let mut base = [100u8, 100, 100, 255].repeat(4);
-        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 1.0, tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])), detail: 0.0 }]);
+        compose(&mut base, 2, 2, &[Apply { image: &li, strength: 1.0, tint: Some(([0.0, 0.0, 200.0], [200.0, 0.0, 0.0])), detail: 0.0, xf: Xf::default() }]);
         assert_eq!(&base[0..3], &[0, 0, 200]);
+    }
+
+    #[test]
+    fn placement_moves_the_layer() {
+        // a 2x2 red patch at the top-left of a 8x8 texture, moved by half the texture
+        let li = LayerImage { rect: [0, 0, 2, 2], size: 8, w: 2, h: 2, rgba: [255, 0, 0, 255].repeat(4) };
+        let mut base = [0u8, 0, 0, 255].repeat(64);
+        let xf = Xf { offset: [0.5, 0.5], scale: 1.0, rotation: 0.0 };
+        compose(&mut base, 8, 8, &[Apply { image: &li, strength: 1.0, tint: None, detail: 0.0, xf }]);
+        let px = |x: usize, y: usize| base[(y * 8 + x) * 4];
+        assert_eq!((px(0, 0), px(4, 4), px(5, 5)), (0, 255, 255));
     }
 
     #[test]
@@ -305,7 +345,7 @@ mod tests {
         // flat normal (0, 0, 1) blended halfway towards (1, 0, 0)
         let li = LayerImage { rect: [0, 0, 1, 1], size: 1, w: 1, h: 1, rgba: vec![255, 128, 128, 255] };
         let mut nm = vec![128u8, 128, 255, 255];
-        compose_normal(&mut nm, 1, 1, &[(&li, 0.5)]);
+        compose_normal(&mut nm, 1, 1, &[(&li, 0.5, Xf::default())]);
         let n: Vec<f32> = nm[..3].iter().map(|&v| v as f32 / 255.0 * 2.0 - 1.0).collect();
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
         assert!((len - 1.0).abs() < 0.02 && (n[0] - n[2]).abs() < 0.03, "{n:?}");

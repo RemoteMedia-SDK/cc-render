@@ -60,6 +60,21 @@ impl Kind {
     }
 }
 
+/// Freckle / stubble pattern controls: dot size and density (1 = default) and
+/// how much dots vary in size and darkness (0 = all alike, 1 = very uneven).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct Pattern {
+    pub size: f32,
+    pub density: f32,
+    pub variation: f32,
+}
+
+impl Default for Pattern {
+    fn default() -> Self {
+        Self { size: 1.0, density: 1.0, variation: 0.5 }
+    }
+}
+
 /// What a generator makes: the colour layer and, for lipstick, a roughness layer
 /// (R = roughness, A = opacity) for its finish.
 pub struct Generated {
@@ -119,15 +134,16 @@ fn hash(x: u32, y: u32, seed: u32) -> f32 {
 }
 
 /// Speckle: round dots of radius `r` (texels) at density `d` (dots per texel), soft-edged.
-fn speckle(w: u32, h: u32, r: f32, d: f32, seed: u32) -> Vec<f32> {
+fn speckle(w: u32, h: u32, r: f32, d: f32, var: f32, seed: u32) -> Vec<f32> {
     let cell = (1.0 / d.max(1e-6)).sqrt().max(2.0 * r + 1.0);
     let cells = ((w as f32 / cell).ceil() as u32, (h as f32 / cell).ceil() as u32);
     let mut out = vec![0.0f32; (w * h) as usize];
     for cy in 0..cells.1 {
         for cx in 0..cells.0 {
             let (px, py) = ((cx as f32 + hash(cx, cy, seed)) * cell, (cy as f32 + hash(cy, cx, seed ^ 0x9e37)) * cell);
-            let rr = r * (0.6 + 0.8 * hash(cx ^ 0x55, cy, seed));
-            let k = 0.5 + 0.5 * hash(cx, cy ^ 0x77, seed);
+            let v = var.clamp(0.0, 1.0);
+            let rr = r * (1.0 - 0.8 * v + 1.6 * v * hash(cx ^ 0x55, cy, seed));
+            let k = 1.0 - v + v * hash(cx, cy ^ 0x77, seed);
             let (x0, x1) = ((px - rr - 1.0).max(0.0) as u32, ((px + rr + 1.0) as u32).min(w - 1));
             let (y0, y1) = ((py - rr - 1.0).max(0.0) as u32, ((py + rr + 1.0) as u32).min(h - 1));
             for y in y0..=y1 {
@@ -164,7 +180,8 @@ fn eye_area(lid: &[f32], w: u32, h: u32) -> Vec<f32> {
 }
 
 /// The generator `kind` at colour `rgb`; `seed` varies freckles and stubble.
-pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32) -> Generated {
+pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32, pattern: Pattern) -> Generated {
+    let (psize, pdens, pvar) = (pattern.size.max(0.05), pattern.density.max(0.01), pattern.variation);
     let (w, h) = (m.w, m.h);
     let s = w as f32 / 1024.0;
     let cheek = channel(&m.cfulc, 0, w, h);
@@ -204,7 +221,7 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32) -> Generated {
         }
         Kind::Freckles => {
             let region = blur(&(0..(w * h) as usize).map(|i| (cheek[i] + nose[i] + fore[i] * 0.3).min(1.0)).collect::<Vec<_>>(), w, h, (16.0 * s) as u32, 3);
-            let dots = speckle(w, h, 1.1 * s, 0.006 / (s * s), seed);
+            let dots = speckle(w, h, 1.1 * s * psize, 0.006 * pdens / (s * s), pvar, seed);
             region.iter().zip(&dots).map(|(r, d)| (r * 1.4).min(1.0) * d).collect()
         }
         Kind::Stubble => {
@@ -213,7 +230,7 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32) -> Generated {
                 (neck[i] - above).max(0.0)
             }).collect();
             let region = blur(&(0..(w * h) as usize).map(|i| (upper_lip[i] + chin[i] + jaw_band[i]).min(1.0)).collect::<Vec<_>>(), w, h, (6.0 * s) as u32, 2);
-            let dots = speckle(w, h, 0.55 * s, 0.09 / (s * s), seed);
+            let dots = speckle(w, h, 0.55 * s * psize, 0.09 * pdens / (s * s), pvar, seed);
             region.iter().zip(&dots).map(|(r, d)| (r * 1.3).min(1.0) * d).collect()
         }
     };
@@ -241,11 +258,11 @@ mod tests {
             }
         }
         let m = Masks { w, h, cfulc: vec![0; (w * h * 4) as usize], nmuil, en: vec![0; (w * h * 4) as usize] };
-        let g = generate(&m, Kind::Lipstick, [200, 0, 0], 1);
+        let g = generate(&m, Kind::Lipstick, [200, 0, 0], 1, Pattern::default());
         let a = |x: u32, y: u32| g.color.rgba[((y * w + x) * 4 + 3) as usize];
         assert!(a(32, 32) > 200 && a(5, 5) == 0);
         assert!(g.roughness.is_some());
-        let f = generate(&m, Kind::Freckles, [100, 50, 30], 1);
+        let f = generate(&m, Kind::Freckles, [100, 50, 30], 1, Pattern::default());
         assert!(f.color.rgba.chunks(4).all(|p| p[3] == 0), "no freckles outside the cheek / nose / forehead regions");
     }
 

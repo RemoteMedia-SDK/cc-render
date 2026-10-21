@@ -23,8 +23,8 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use bevy_egui::egui;
-use cc5_skin::generate::{Generated, Kind as GenKind, Masks};
-use cc5_skin::{compose, compose_normal, compose_roughness, Apply, LayerImage, SkinPack};
+use cc5_skin::generate::{Generated, Kind as GenKind, Masks, Pattern};
+use cc5_skin::{compose, compose_normal, compose_roughness, Apply, LayerImage, SkinPack, Xf};
 use cc_render_plugin::cc_render::cc5_materials::{Cc5Handle, Cc5Material, Cc5SkinMaterial};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -162,6 +162,17 @@ pub struct LayerState {
     pub strength: f32,
     /// recolour (sRGB)
     pub tint: Option<[u8; 3]>,
+    /// placement (moved / scaled / rotated from where CC5 put it)
+    pub xf: Xf,
+    /// scales of its roughness and normal changes (1 = as captured)
+    pub roughness: f32,
+    pub normal: f32,
+}
+
+impl LayerState {
+    pub fn new(id: String) -> Self {
+        Self { id, strength: 1.0, tint: None, xf: Xf::default(), roughness: 1.0, normal: 1.0 }
+    }
 }
 
 /// A makeup / detail layer generated from the head's region masks
@@ -173,6 +184,16 @@ pub struct GenState {
     pub strength: f32,
     /// varies freckles and stubble
     pub seed: u32,
+    pub xf: Xf,
+    /// freckles / stubble: dot size, density, variation
+    pub pattern: Pattern,
+}
+
+impl GenState {
+    pub fn new(kind: GenKind) -> Self {
+        let (color, strength) = kind.default_look();
+        Self { kind, color, strength, seed: 1, xf: Xf::default(), pattern: Pattern::default() }
+    }
 }
 
 /// The character's own textures of a skin material (restored when a skin preset
@@ -288,11 +309,20 @@ impl SkinEdit {
                 if let Some(t) = l.tint {
                     o["tint"] = json!(t);
                 }
+                if !l.xf.is_identity() {
+                    o["xf"] = json!(l.xf);
+                }
+                if l.roughness != 1.0 {
+                    o["roughness"] = json!(l.roughness);
+                }
+                if l.normal != 1.0 {
+                    o["normal"] = json!(l.normal);
+                }
                 o
             })
             .collect();
         let generated: Vec<Value> =
-            self.generated.iter().map(|g| json!({"kind": g.kind, "color": g.color, "strength": g.strength, "seed": g.seed})).collect();
+            self.generated.iter().map(|g| json!({"kind": g.kind, "color": g.color, "strength": g.strength, "seed": g.seed, "xf": g.xf, "pattern": g.pattern})).collect();
         let mut r = json!({"format": "cc5-skin", "version": 1, "skin": self.skin, "layers": layers, "generated": generated, "materials": mats});
         if let Some(a) = self.albedo {
             r["albedo"] = json!(a);
@@ -319,7 +349,14 @@ impl SkinEdit {
                 continue;
             }
             let tint = l.get("tint").and_then(color);
-            self.layers.push(LayerState { id: id.into(), strength: l.get("strength").and_then(number).unwrap_or(1.0), tint });
+            self.layers.push(LayerState {
+                strength: l.get("strength").and_then(number).unwrap_or(1.0),
+                tint,
+                xf: l.get("xf").and_then(|x| serde_json::from_value(x.clone()).ok()).unwrap_or_default(),
+                roughness: l.get("roughness").and_then(number).unwrap_or(1.0),
+                normal: l.get("normal").and_then(number).unwrap_or(1.0),
+                ..LayerState::new(id.into())
+            });
         }
         for g in recipe.get("generated").and_then(Value::as_array).into_iter().flatten() {
             let Some(kind) = g.get("kind").and_then(|k| serde_json::from_value::<GenKind>(k.clone()).ok()) else { continue };
@@ -329,6 +366,8 @@ impl SkinEdit {
                 color: g.get("color").and_then(color).unwrap_or(c0),
                 strength: g.get("strength").and_then(number).unwrap_or(s0),
                 seed: g.get("seed").and_then(Value::as_u64).unwrap_or(1) as u32,
+                xf: g.get("xf").and_then(|x| serde_json::from_value(x.clone()).ok()).unwrap_or_default(),
+                pattern: g.get("pattern").and_then(|x| serde_json::from_value(x.clone()).ok()).unwrap_or_default(),
             });
         }
         if let Some(ms) = recipe.get("materials").and_then(Value::as_object) {
@@ -713,27 +752,28 @@ pub fn skin_layers(
                     }
                 };
                 if let Some(li) = li {
-                    imgs.push((li, l.strength, l.tint.map(|t| (t.map(|x| x as f32), layer.color))));
+                    imgs.push((li, l.strength, l.tint.map(|t| (t.map(|x| x as f32), layer.color)), l.xf));
                 }
             }
             // generated layers, on the head
-            let gens: Vec<(Generated, f32)> = match (&masks, name.contains("Head")) {
-                (Some(m), true) => generated.iter().map(|g| (cc5_skin::generate::generate(m, g.kind, g.color, g.seed), g.strength)).collect(),
+            let gens: Vec<(Generated, f32, Xf)> = match (&masks, name.contains("Head")) {
+                (Some(m), true) => generated.iter().map(|g| (cc5_skin::generate::generate(m, g.kind, g.color, g.seed, g.pattern), g.strength, g.xf)).collect(),
                 _ => Vec::new(),
             };
             let captured = imgs.len();
-            for (g, st) in &gens {
-                imgs.push((Arc::new(g.color.clone()), *st, None));
+            for (g, st, xf) in &gens {
+                imgs.push((Arc::new(g.color.clone()), *st, None, *xf));
             }
             let detail = |k: usize| if k >= captured && gens[k - captured].0.roughness.is_some() { 1.0 } else { 0.0 };
-            let applies: Vec<Apply> = imgs.iter().enumerate().map(|(k, (li, s, t))| Apply { image: li, strength: *s, tint: *t, detail: detail(k) }).collect();
+            let applies: Vec<Apply> =
+                imgs.iter().enumerate().map(|(k, (li, s, t, xf))| Apply { image: li, strength: *s, tint: *t, detail: detail(k), xf: *xf }).collect();
             compose(&mut data, w, h, &applies);
             // roughness the layers lay down
-            let mut rough: Vec<(LayerImage, f32)> = gens.iter().filter_map(|(g, st)| g.roughness.clone().map(|r| (r, *st))).collect();
+            let mut rough: Vec<(LayerImage, f32, Xf)> = gens.iter().filter_map(|(g, st, xf)| g.roughness.clone().map(|r| (r, *st, *xf))).collect();
             for l in &layers {
                 let Some(layer) = pack2.layer(&l.id) else { continue };
                 if let Some(r) = pack2.layer_roughness(layer, &name)? {
-                    rough.push((r, l.strength));
+                    rough.push((r, l.strength * l.roughness, l.xf));
                 }
             }
             let mr = match (rough.is_empty(), &preset_mr, &mr_base) {
@@ -743,7 +783,7 @@ pub fn skin_layers(
                 (false, None, None) => None,
             };
             let mr = mr.map(|(mw, mh, mut md)| {
-                let rl: Vec<(&LayerImage, f32)> = rough.iter().map(|(r, s)| (r, *s)).collect();
+                let rl: Vec<(&LayerImage, f32, Xf)> = rough.iter().map(|(r, s, x)| (r, *s, *x)).collect();
                 compose_roughness(&mut md, mw, mh, &rl);
                 (mw, mh, md)
             });
@@ -752,7 +792,7 @@ pub fn skin_layers(
             for l in &layers {
                 let Some(layer) = pack2.layer(&l.id) else { continue };
                 if let Some(r) = pack2.layer_normal(layer, &name)? {
-                    normals.push((r, l.strength));
+                    normals.push((r, l.strength * l.normal, l.xf));
                 }
             }
             let nm = match (normals.is_empty(), &preset_nm, &nm_base) {
@@ -762,7 +802,7 @@ pub fn skin_layers(
                 (false, None, None) => None,
             };
             let nm = nm.map(|(nw, nh, mut nd)| {
-                let nl: Vec<(&LayerImage, f32)> = normals.iter().map(|(r, s)| (r, *s)).collect();
+                let nl: Vec<(&LayerImage, f32, Xf)> = normals.iter().map(|(r, s, x)| (r, *s, *x)).collect();
                 compose_normal(&mut nd, nw, nh, &nl);
                 (nw, nh, nd)
             });
@@ -784,10 +824,7 @@ fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                 let mut enabled = pos.is_some();
                 if ui.checkbox(&mut enabled, kind.name()).changed() {
                     match (enabled, pos) {
-                        (true, None) => {
-                            let (color, strength) = kind.default_look();
-                            skin.generated.push(GenState { kind, color, strength, seed: 1 });
-                        }
+                        (true, None) => skin.generated.push(GenState::new(kind)),
                         (false, Some(p)) => {
                             skin.generated.remove(p);
                         }
@@ -808,8 +845,37 @@ fn generated_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                     }
                 }
             });
+            if let Some(p) = pos.filter(|&p| p < skin.generated.len()) {
+                let g = &mut skin.generated[p];
+                let mut changed = false;
+                egui::CollapsingHeader::new("adjust").id_salt(("gen_adjust", kind.name())).show(ui, |ui| {
+                    changed |= xf_ui(ui, &mut g.xf);
+                    if matches!(kind, GenKind::Freckles | GenKind::Stubble) {
+                        changed |= ui.add(egui::Slider::new(&mut g.pattern.size, 0.3..=3.0).text("dot size")).changed();
+                        changed |= ui.add(egui::Slider::new(&mut g.pattern.density, 0.2..=4.0).text("density")).changed();
+                        changed |= ui.add(egui::Slider::new(&mut g.pattern.variation, 0.0..=1.0).text("variation")).changed();
+                    }
+                });
+                if changed {
+                    skin.layers_dirty = true;
+                }
+            }
         }
     });
+}
+
+/// Placement sliders (SkinGen's layer move / scale / rotate); true when changed.
+fn xf_ui(ui: &mut egui::Ui, xf: &mut Xf) -> bool {
+    let mut c = false;
+    c |= ui.add(egui::Slider::new(&mut xf.offset[0], -0.15..=0.15).text("move x")).changed();
+    c |= ui.add(egui::Slider::new(&mut xf.offset[1], -0.15..=0.15).text("move y")).changed();
+    c |= ui.add(egui::Slider::new(&mut xf.scale, 0.3..=3.0).text("scale")).changed();
+    c |= ui.add(egui::Slider::new(&mut xf.rotation, -180.0..=180.0).text("rotate")).changed();
+    if !xf.is_identity() && ui.small_button("reset placement").clicked() {
+        *xf = Xf::default();
+        c = true;
+    }
+    c
 }
 
 /// Writes texels into `slot`'s image (made on first use, replaced when the size changes).
@@ -895,7 +961,7 @@ pub fn skin_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                             let mut on = pos.is_some();
                             if ui.checkbox(&mut on, &l.name).changed() {
                                 match (on, pos) {
-                                    (true, None) => skin.layers.push(LayerState { id: l.id.clone(), strength: 1.0, tint: None }),
+                                    (true, None) => skin.layers.push(LayerState::new(l.id.clone())),
                                     (false, Some(p)) => {
                                         skin.layers.remove(p);
                                     }
@@ -920,6 +986,22 @@ pub fn skin_ui(ui: &mut egui::Ui, skin: &mut SkinEdit) {
                                 }
                             }
                         });
+                        if let Some(p) = pos.filter(|&p| p < skin.layers.len()) {
+                            let st = &mut skin.layers[p];
+                            let mut changed = false;
+                            egui::CollapsingHeader::new("adjust").id_salt(("layer_adjust", l.id.as_str())).show(ui, |ui| {
+                                changed |= xf_ui(ui, &mut st.xf);
+                                if l.maps.values().any(|m| m.roughness.is_some()) {
+                                    changed |= ui.add(egui::Slider::new(&mut st.roughness, 0.0..=2.0).text("roughness")).changed();
+                                }
+                                if l.maps.values().any(|m| m.normal.is_some()) {
+                                    changed |= ui.add(egui::Slider::new(&mut st.normal, 0.0..=2.0).text("normal / relief")).changed();
+                                }
+                            });
+                            if changed {
+                                skin.layers_dirty = true;
+                            }
+                        }
                     }
                 }
             });
