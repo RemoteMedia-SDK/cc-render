@@ -52,8 +52,10 @@ fn knob(name: &str, default: f32) -> f32 {
 }
 
 /// CC5's renders are cooler than its light colours say (a global tint on every
-/// light, the ambient and the IBL; calibrated on a flat grey skin).
-pub const TINT: [f32; 3] = [1.0, 0.92, 1.15];
+/// light, the ambient and the IBL). Refitted under the ACES grading at CC5's
+/// framing (was 1, 0.92, 1.15 from the flat grey skin under AgX): patch dE bare
+/// skin 4.58 -> 4.23, HD Neutral F 4.68 -> 3.88, HD Aaron 4.02 -> 3.29.
+pub const TINT: [f32; 3] = [1.0, 0.94, 1.10];
 
 fn tint() -> Vec3 {
     std::env::var("CC5_TINT")
