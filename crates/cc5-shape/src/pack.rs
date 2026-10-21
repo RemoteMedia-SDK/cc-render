@@ -175,23 +175,39 @@ impl ShapePack {
     /// A recipe for `weights`: the sliders that differ from the captured design, by id.
     /// `{"format": "cc5-shape recipe", "version": 1, "sliders": {id: value}}`
     pub fn recipe(&self, weights: &[f32]) -> serde_json::Value {
-        let sliders: serde_json::Map<String, serde_json::Value> = self
-            .sliders
-            .iter()
-            .zip(weights)
-            .filter(|(s, w)| (**w - s.base).abs() > 1e-6)
-            .map(|(s, w)| (s.id.clone(), serde_json::json!(w)))
-            .collect();
-        serde_json::json!({"format": "cc5-shape recipe", "version": 1, "sliders": sliders})
+        self.recipe_on(&self.base_weights(), weights)
     }
 
-    /// Weights from a recipe (`recipe()` output, or a plain `{id or name: value}` map).
-    /// Unknown sliders are an error: the recipe was made for a different pack.
+    /// A recipe for `weights` made on top of `base` (e.g. a CC5 neutral body):
+    /// `"base"` holds the sliders where `base` differs from the captured design,
+    /// `"sliders"` the changes on top of it. Absent when `base` is the captured design.
+    pub fn recipe_on(&self, base: &[f32], weights: &[f32]) -> serde_json::Value {
+        let diff = |from: &[f32], to: &[f32]| -> serde_json::Map<String, serde_json::Value> {
+            self.sliders
+                .iter()
+                .zip(from.iter().zip(to))
+                .filter(|(_, (a, b))| (**a - **b).abs() > 1e-6)
+                .map(|(s, (_, b))| (s.id.clone(), serde_json::json!(b)))
+                .collect()
+        };
+        let mut r = serde_json::json!({"format": "cc5-shape recipe", "version": 1, "sliders": diff(base, weights)});
+        let b = diff(&self.base_weights(), base);
+        if !b.is_empty() {
+            r["base"] = serde_json::Value::Object(b);
+        }
+        r
+    }
+
+    /// Weights from a recipe (`recipe()` / `recipe_on()` output: its `"base"`, then its
+    /// `"sliders"`; or a plain `{id or name: value}` map). Unknown sliders are an
+    /// error: the recipe was made for a different pack.
     pub fn weights_from_recipe(&self, recipe: &serde_json::Value) -> Result<Vec<f32>> {
-        let map = recipe.get("sliders").unwrap_or(recipe).as_object().context("recipe is not a JSON object")?;
-        let mut set = Vec::with_capacity(map.len());
-        for (k, v) in map {
-            set.push((k.as_str(), v.as_f64().with_context(|| format!("{k}: not a number"))? as f32));
+        let mut set = Vec::new();
+        let maps = [recipe.get("base"), Some(recipe.get("sliders").unwrap_or(recipe))];
+        for map in maps.into_iter().flatten() {
+            for (k, v) in map.as_object().context("recipe is not a JSON object")? {
+                set.push((k.as_str(), v.as_f64().with_context(|| format!("{k}: not a number"))? as f32));
+            }
         }
         self.weights_from(set)
     }
@@ -380,6 +396,13 @@ mod tests {
         assert_eq!(p.weights_from_recipe(&r).unwrap(), vec![0.5, 0.0]);
         assert_eq!(p.weights_from_recipe(&serde_json::json!({"Fat": 1.0})).unwrap(), vec![0.0, 1.0]);
         assert!(p.weights_from_recipe(&serde_json::json!({"sliders": {"zz": 1.0}})).is_err());
+        // on top of another base: the base is kept apart, and round-trips
+        let base = vec![0.0, 1.0];
+        let r = p.recipe_on(&base, &[0.5, 1.0]);
+        assert_eq!(r["base"], serde_json::json!({p.sliders[1].id.clone(): 1.0}));
+        assert_eq!(r["sliders"], serde_json::json!({p.sliders[0].id.clone(): 0.5}));
+        assert_eq!(p.weights_from_recipe(&r).unwrap(), vec![0.5, 1.0]);
+        assert!(p.recipe_on(&p.base_weights(), &[0.5, 0.0]).get("base").is_none());
     }
 
     #[test]

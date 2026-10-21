@@ -2,6 +2,7 @@
 //! applied live to the character outside CC5.
 //!
 //! Usage: avatar_editor character.glb pack_dir [shaped_out.glb] [--recipe recipe.json]
+//!                      [--base none|<slider>|<recipe.json>]
 //!                      [--style other_character.glb] [--expressions expressions_dir]
 //!
 //! `character.glb` is the CC5 reference export converted with `cc5-fbx`
@@ -11,6 +12,13 @@
 //! the same way `shape_glb` does; "Save GLB" writes that as a GLB. A recipe (the
 //! changed sliders as JSON, e.g. from `cc5_shape.fit`) can be opened with
 //! `--recipe` or loaded/saved from the panel.
+//!
+//! `--base` sets the body the editor starts from and resets to: a slider at 1
+//! (id or name; `neutral_f` / `neutral_m` = CC5's neutral bases, which
+//! `avatar_slider.py` adds to a pack as `avatar_neutral_f` / `_m`), a recipe file,
+//! or `none` (the character as captured). Default: the neutral female when the pack
+//! has it (`pack_xl`), else the captured character. Changes are counted against
+//! the base; saved recipes keep it apart (`"base"`) from the changes (`"sliders"`).
 //!
 //! `--style` loads another CC character (a GLB, e.g. the one a recipe was fitted
 //! to) for two optional view layers: "Surface" puts its skin / eye / teeth
@@ -81,6 +89,9 @@ struct Editor {
     pack: ShapePack,
     categories: Vec<(String, Vec<usize>)>,
     weights: Vec<f32>,
+    /// `--base`: the weights "Reset all" returns to, and what it is.
+    base: Vec<f32>,
+    base_label: String,
     delta: ShapeDelta,
     dirty: bool,
     /// `--expressions`: the pack and one weight per expression (0 = neutral).
@@ -263,6 +274,7 @@ fn main() -> anyhow::Result<()> {
         }
     };
     let recipe_arg = opt("--recipe")?;
+    let base_arg = opt("--base")?;
     // `--snapshot-batch jobs.json`: [{out, style?, recipe?, edit?, view?, zoom?, yaw?, pitch?}]
     // rendered one after another in this process (no restart, pipelines compiled once)
     let batch_jobs: Option<Vec<SnapJob>> = opt("--snapshot-batch")?.map(|f| -> anyhow::Result<_> { Ok(serde_json::from_str(&std::fs::read_to_string(&f)?)?) }).transpose()?;
@@ -324,9 +336,10 @@ fn main() -> anyhow::Result<()> {
     let glb_path = std::fs::canonicalize(&args[1])?;
     let pack = ShapePack::load(std::path::Path::new(&args[2]))?;
     let out_path = args.get(3).map(PathBuf::from).unwrap_or_else(|| glb_path.with_extension("shaped.glb"));
+    let (base, base_label) = resolve_base(&pack, base_arg.as_deref())?;
     let weights = match &recipe_arg {
         Some(r) => pack.weights_from_recipe(&serde_json::from_slice(&std::fs::read(r)?)?)?,
-        None => pack.base_weights(),
+        None => base.clone(),
     };
     let delta = pack.evaluate(&weights);
     if let Some(x) = &expr {
@@ -342,9 +355,11 @@ fn main() -> anyhow::Result<()> {
     }
     let editor = Editor {
         categories: pack.categories(),
-        status: format!("{} sliders in {} categories", pack.sliders.len(), pack.categories().len()),
+        status: format!("{} sliders in {} categories; base: {base_label}", pack.sliders.len(), pack.categories().len()),
         pack,
         weights,
+        base,
+        base_label,
         delta,
         dirty: false,
         expr_weights: vec![0.0; expr.as_ref().map_or(0, |x| x.len())],
@@ -706,7 +721,7 @@ fn snapshot(
 fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edit: Option<&mut HairEdit>) -> anyhow::Result<()> {
     editor.weights = match &job.recipe {
         Some(r) => editor.pack.weights_from_recipe(&serde_json::from_slice(&std::fs::read(r)?)?)?,
-        None => editor.pack.base_weights(),
+        None => editor.base.clone(),
     };
     editor.dirty = true;
     if let Some(h) = hair {
@@ -724,6 +739,22 @@ fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edi
         e.edit(v)?;
     }
     Ok(())
+}
+
+/// `--base` (see the module docs): the starting / reset weights and a label.
+fn resolve_base(pack: &ShapePack, arg: Option<&str>) -> anyhow::Result<(Vec<f32>, String)> {
+    let neutral = |id: &str, label: &str| -> anyhow::Result<(Vec<f32>, String)> { Ok((pack.weights_from([(id, 1.0)])?, label.to_string())) };
+    match arg {
+        None if pack.find("avatar_neutral_f").is_ok() => neutral("avatar_neutral_f", "CC5 neutral female"),
+        None | Some("none") => Ok((pack.base_weights(), "captured character".into())),
+        Some("neutral_f") => neutral("avatar_neutral_f", "CC5 neutral female"),
+        Some("neutral_m") => neutral("avatar_neutral_m", "CC5 neutral male"),
+        Some(a) if a.to_lowercase().ends_with(".json") => {
+            let w = pack.weights_from_recipe(&serde_json::from_slice(&std::fs::read(a)?)?)?;
+            Ok((w, std::path::Path::new(a).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()))
+        }
+        Some(a) => neutral(a, a),
+    }
 }
 
 fn orbit_transform(o: &Orbit) -> Transform {
@@ -1054,11 +1085,12 @@ fn ui(
     egui::SidePanel::left("sliders").default_width(420.0).show(contexts.ctx_mut(), |ui| {
         ui.heading("CC5 avatar editor");
         ui.label(&ed.status);
-        let active = ed.weights.iter().zip(&ed.pack.sliders).filter(|(w, s)| (**w - s.base).abs() > 1e-6).count();
+        let active = ed.weights.iter().zip(&ed.base).filter(|(w, b)| (**w - **b).abs() > 1e-6).count();
+        ui.label(format!("Base: {}", ed.base_label));
         ui.horizontal(|ui| {
             ui.label(format!("{active} slider(s) changed"));
             if ui.button("Reset all").clicked() {
-                ed.weights = ed.pack.base_weights();
+                ed.weights = ed.base.clone();
                 ed.dirty = true;
             }
             if ui.button("Save GLB").clicked() {
@@ -1093,7 +1125,7 @@ fn ui(
                 };
             }
             if ui.button("Save").clicked() {
-                let json = serde_json::to_vec_pretty(&ed.pack.recipe(&ed.weights)).unwrap();
+                let json = serde_json::to_vec_pretty(&ed.pack.recipe_on(&ed.base, &ed.weights)).unwrap();
                 ed.status = match std::fs::write(&ed.recipe_path, json) {
                     Ok(()) => format!("saved {}", ed.recipe_path),
                     Err(e) => format!("save failed: {e}"),
@@ -1213,8 +1245,8 @@ fn ui(
                                 let changed = ui
                                     .add(egui::Slider::new(&mut ed.weights[i], s.min..=s.max).text(&s.name))
                                     .changed();
-                                if (ed.weights[i] - s.base).abs() > 1e-6 && ui.small_button("↺").clicked() {
-                                    ed.weights[i] = s.base;
+                                if (ed.weights[i] - ed.base[i]).abs() > 1e-6 && ui.small_button("↺").clicked() {
+                                    ed.weights[i] = ed.base[i];
                                     ed.dirty = true;
                                 }
                                 ed.dirty |= changed;
