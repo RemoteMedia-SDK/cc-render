@@ -49,11 +49,11 @@ impl Kind {
     /// A starting colour (sRGB 0..255) and strength.
     pub fn default_look(self) -> ([u8; 3], f32) {
         match self {
-            Kind::Lipstick => ([168, 40, 52], 0.85),
-            Kind::Blush => ([214, 96, 104], 0.35),
+            Kind::Lipstick => ([160, 48, 58], 0.7),
+            Kind::Blush => ([214, 106, 112], 0.3),
             Kind::Eyeshadow => ([96, 62, 70], 0.55),
             Kind::Contour => ([110, 72, 56], 0.35),
-            Kind::Highlight => ([255, 236, 220], 0.3),
+            Kind::Highlight => ([255, 236, 220], 0.25),
             Kind::Freckles => ([126, 74, 48], 0.6),
             Kind::Stubble => ([42, 32, 28], 0.8),
         }
@@ -177,7 +177,7 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32) -> Generated {
     let neck = channel(&m.en, 0, w, h);
     let alpha: Vec<f32> = match kind {
         Kind::Lipstick => blur(&mouth, w, h, (1.5 * s).max(1.0) as u32, 1),
-        Kind::Blush => blur(&cheek, w, h, (10.0 * s) as u32, 3).iter().map(|v| (v * 1.2).min(1.0)).collect(),
+        Kind::Blush => blur(&cheek, w, h, (20.0 * s) as u32, 3).iter().map(|v| v.min(1.0)).collect(),
         Kind::Eyeshadow => eye_area(&lid, w, h),
         Kind::Contour => {
             // under the cheekbones and along the jaw: the cheek mask's lower edge
@@ -198,12 +198,13 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32) -> Generated {
                 let above = cheek.get(i + w as usize * (24.0 * s) as usize).copied().unwrap_or(0.0);
                 (above - cheek[i]).max(0.0)
             }).collect();
-            let a: Vec<f32> = (0..(w * h) as usize).map(|i| (nose[i] * 0.8 + high_cheek[i] + fore[i] * 0.35).min(1.0)).collect();
-            blur(&a, w, h, (6.0 * s) as u32, 3)
+            // the nose bridge, the cheekbones' upper edge and the forehead's middle, faint
+            let a: Vec<f32> = (0..(w * h) as usize).map(|i| (nose[i] * 0.45 + high_cheek[i] * 0.5 + fore[i] * 0.25).min(1.0)).collect();
+            blur(&a, w, h, (14.0 * s) as u32, 3)
         }
         Kind::Freckles => {
             let region = blur(&(0..(w * h) as usize).map(|i| (cheek[i] + nose[i] + fore[i] * 0.3).min(1.0)).collect::<Vec<_>>(), w, h, (16.0 * s) as u32, 3);
-            let dots = speckle(w, h, 1.6 * s, 0.004 / (s * s), seed);
+            let dots = speckle(w, h, 1.1 * s, 0.006 / (s * s), seed);
             region.iter().zip(&dots).map(|(r, d)| (r * 1.4).min(1.0) * d).collect()
         }
         Kind::Stubble => {
@@ -212,7 +213,7 @@ pub fn generate(m: &Masks, kind: Kind, rgb: [u8; 3], seed: u32) -> Generated {
                 (neck[i] - above).max(0.0)
             }).collect();
             let region = blur(&(0..(w * h) as usize).map(|i| (upper_lip[i] + chin[i] + jaw_band[i]).min(1.0)).collect::<Vec<_>>(), w, h, (6.0 * s) as u32, 2);
-            let dots = speckle(w, h, 0.9 * s, 0.03 / (s * s), seed);
+            let dots = speckle(w, h, 0.55 * s, 0.09 / (s * s), seed);
             region.iter().zip(&dots).map(|(r, d)| (r * 1.3).min(1.0) * d).collect()
         }
     };
