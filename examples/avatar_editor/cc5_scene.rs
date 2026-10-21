@@ -57,6 +57,22 @@ pub const SKIN_SSS_DESAT: f32 = 0.41;
 /// fitted against CC5's renders, patch dE bare skin 4.24 -> 4.12, HD Neutral F
 /// 3.88 -> 3.80, HD Aaron 3.29 -> 3.18 (hard shadows before).
 pub const RECT_RADIUS: f32 = 0.25;
+/// The soft shadows' minimum penumbra (Bevy's PCSS blur units; Bevy: 0.5). Bevy
+/// sizes the penumbra physically from the blocker / receiver gap: a nose or an
+/// eyelid shadowing the skin a centimetre away stays hard edged whatever the
+/// light's radius (a lighting step down the philtrum, crescents under the
+/// eyes), where CC5's shadows are soft. Fitted on five faces (batch_variants.py):
+/// face dE 7.27 -> 7.10 (0.5 / 4 / 10 / 25 / 40 / 70: 7.27 / 7.23 / 7.14 / 7.10 /
+/// 7.23 / 7.45). Knob CC5_SHADOW_PENUMBRA.
+pub const SHADOW_PENUMBRA: f32 = 25.0;
+
+/// Bevy's shadow sampling with the minimum penumbra [`SHADOW_PENUMBRA`].
+fn soft_shadows(shaders: &mut Assets<Shader>) {
+    let floor = knob("CC5_SHADOW_PENUMBRA", SHADOW_PENUMBRA);
+    let src = include_str!("shadow_sampling.wgsl").replace("const PENUMBRA_FLOOR: f32 = 0.5;", &format!("const PENUMBRA_FLOOR: f32 = {floor:?};"));
+    shaders.insert(&bevy::pbr::SHADOW_SAMPLING_HANDLE, Shader::from_wgsl(src, "examples/avatar_editor/shadow_sampling.wgsl"));
+}
+
 /// CC5's IBL → Bevy environment map intensity (cd/m² per unit radiance).
 pub const IBL_INTENSITY: f32 = 5.0;
 pub const DEFAULT_IBL: &str = r"C:\Program Files\Reallusion\Character Creator 5\Image\Default_IBL.hdr";
@@ -160,12 +176,14 @@ impl Cc5Scene {
             let beam = l["beam"].as_array();
             let b = |i: usize, d: f32| beam.and_then(|a| a.get(i)).and_then(Value::as_f64).map_or(d, |x| x as f32);
             lights.push(Cc5Light {
-                name,
+                name: name.clone(),
                 transform: t,
                 color: Color::srgb(c(0), c(1), c(2)),
                 multiplier: l["GetMultiplier"].as_f64().unwrap_or(1.0) as f32,
                 range: l["GetRange"].as_f64().unwrap_or(1000.0) as f32 / 100.0,
-                shadows: l["IsCastShadow"].as_bool().unwrap_or(true),
+                shadows: l["IsCastShadow"].as_bool().unwrap_or(true)
+                    && knob("CC5_SHADOWS", 1.0) > 0.5
+                    && !std::env::var("CC5_SHADOW_OFF").is_ok_and(|v| v.split(',').any(|n| n == name)),
                 // CC5's beam angle is the full cone (degrees), falloff a percentage of it
                 angle: (b(0, 60.0) * 0.5).to_radians(),
                 falloff: (b(1, 30.0) / 100.0).clamp(0.0, 1.0),
@@ -320,10 +338,12 @@ pub fn cc5_lights(
     cams: Query<Entity, With<Camera3d>>,
     mut images: ResMut<Assets<Image>>,
     materials: Res<Cc5Materials>,
+    mut shaders: ResMut<Assets<Shader>>,
 ) {
     if !scene.use_lights {
         return;
     }
+    soft_shadows(&mut shaders);
     // grading (calibrated against CC5's renders of skins and SkinGen layers):
     // ACES, as CC5's response to colour changes (makeup, beards) matches it best;
     // knobs CC5_TONEMAP = aces | agx | tony | blender | reinhard | none,
@@ -389,7 +409,7 @@ pub fn cc5_lights(
                 color: tinted(l.color, t),
                 intensity: light_intensity(l, gain, lumens, lumens_flat),
                 range: l.range,
-                radius: l.radius,
+                radius: l.radius * knob("CC5_RADIUS_SCALE", 1.0),
                 shadows_enabled: l.shadows,
                 outer_angle: beam.map_or(l.angle, |b| (b * 0.5).to_radians()),
                 inner_angle: beam.map_or(l.angle, |b| (b * 0.5).to_radians()) * (1.0 - l.falloff),
