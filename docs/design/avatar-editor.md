@@ -64,6 +64,14 @@ with `--expressions <dir>`, an "Expressions" section (see below).
 Right-drag orbits, middle-drag pans, wheel zooms. `weights.json` maps slider
 names or ids to values (`{"Character Height": 0.5}`).
 
+The editor starts from, and "Reset all" returns to, its base body: by default
+CC5's neutral female when the pack has it (`pack_xl`, where `avatar_slider.py`
+adds the neutral bases as `avatar_neutral_f` / `_m` sliders), else the captured
+character. `--base none | neutral_f | neutral_m | <slider> | <recipe.json>`
+chooses another. Changed sliders are counted against the base, and saved recipes
+keep it apart from the changes: `{"base": {...}, "sliders": {...}}` (loading
+applies both, so a recipe means the same body in any session).
+
 ## Accuracy (Beautiful / HD Ariana, Character Height = 1 vs CC5's own FBX export)
 
 | | error |
