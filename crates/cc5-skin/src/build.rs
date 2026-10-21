@@ -27,6 +27,9 @@ pub struct BuildOptions {
     pub alt: String,
     pub base_suffix: String,
     pub alt_suffix: String,
+    /// layers solved on another second base: id -> (variant, suffix) (a preset
+    /// over CC5's 15-layer cap on `alt`)
+    pub alt_for: BTreeMap<String, (String, String)>,
     /// held-out check: the layer laid over this image against CC5's `<layer><suffix>`
     pub check: Option<(PathBuf, String)>,
     /// the second base as an image (the flat diffuse CC5 got in place of every
@@ -379,6 +382,8 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
     std::fs::create_dir_all(opt.out.join("layers"))?;
     let mut pack = SkinPack { format: "cc5-skin-pack".into(), version: 1, size: 0, layers: Vec::new(), skins: Vec::new(), dir: opt.out.clone() };
     for (id, name, group) in layers {
+        let alt_for = opt.alt_for.get(id);
+        let (alt, alt_suffix) = alt_for.map_or((&opt.alt, &opt.alt_suffix), |(a, s)| (a, s));
         let mut maps = BTreeMap::new();
         let mut color = [0.0f32; 3];
         let mut best = 0.0f32;
@@ -386,8 +391,8 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             let paths = [
                 diffuse_path(&opt.capture, &opt.base, m),
                 diffuse_path(&opt.capture, &format!("{id}{}", opt.base_suffix), m),
-                opt.alt_image.clone().or_else(|| diffuse_path(&opt.capture, &opt.alt, m)),
-                diffuse_path(&opt.capture, &format!("{id}{}", opt.alt_suffix), m),
+                opt.alt_image.clone().filter(|_| alt_for.is_none()).or_else(|| diffuse_path(&opt.capture, alt, m)),
+                diffuse_path(&opt.capture, &format!("{id}{alt_suffix}"), m),
             ];
             let [Some(pb1), Some(pl1), Some(pb2), Some(pl2)] = paths else {
                 eprintln!("{id} {m}: missing exports {:?}", paths.iter().map(Option::is_some).collect::<Vec<_>>());
