@@ -287,9 +287,11 @@ const SNAPSHOT_SETTLE_SECS: f32 = 6.0;
 /// Size of the key light for its soft (PCSS) shadows.
 const KEY_SOFT_SHADOW: f32 = 6.0;
 
-/// Vertical field of view: a portrait lens. Bevy's default 45 degrees distorts
-/// close-ups of the face like a wide angle.
-const FOV_DEG: f32 = 25.0;
+/// Vertical field of view: CC5's Preview Camera, an 80 mm lens on its 36 x 24 mm
+/// film gate (2·atan(12 / 80); 25.4 degrees across the gate's width), so faces
+/// have CC5's perspective. Bevy's default 45 degrees distorts close-ups of the
+/// face like a wide angle.
+const FOV_DEG: f32 = 17.06;
 
 /// Camera distances below are framed for 45 degrees; scale them to FOV_DEG.
 fn fov_scale() -> f32 {
