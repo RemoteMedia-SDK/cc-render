@@ -43,6 +43,10 @@ pub const AMBIENT_BRIGHTNESS: f32 = 140.0;
 /// AMBIENT_BRIGHTNESS fitted at CC5's framing over the bare skin and three skins
 /// (`calib_fill.py`): mean patch dE 5.04 -> 4.77.
 pub const SKIN_WRAP: f32 = 0.16;
+/// Soft radius (m) for CC5's rect lights (area lights; scene.json has no size):
+/// fitted against CC5's renders, patch dE bare skin 4.24 -> 4.12, HD Neutral F
+/// 3.88 -> 3.80, HD Aaron 3.29 -> 3.18 (hard shadows before).
+pub const RECT_RADIUS: f32 = 0.25;
 /// CC5's IBL → Bevy environment map intensity (cd/m² per unit radiance).
 pub const IBL_INTENSITY: f32 = 5.0;
 pub const DEFAULT_IBL: &str = r"C:\Program Files\Reallusion\Character Creator 5\Image\Default_IBL.hdr";
@@ -157,8 +161,14 @@ impl Cc5Scene {
                 falloff: (b(1, 30.0) / 100.0).clamp(0.0, 1.0),
                 // CC5's tube lights are soft (radius and soft radius, cm): Bevy's light
                 // radius sets the soft shadows' penumbra
-                radius: l["GetTubeRadius"].as_f64().unwrap_or(0.0).max(l["GetTubeSoftRadius"].as_f64().unwrap_or(0.0)) as f32 / 100.0
-                    * knob("CC5_SOFT", 1.0),
+                radius: if l["IsRectangleShape"].as_bool() == Some(true) {
+                    // CC5's rect lights are area lights, their size not in scene.json:
+                    // a soft radius (m) fitted against CC5's renders
+                    knob("CC5_RECT_RADIUS", RECT_RADIUS)
+                } else {
+                    l["GetTubeRadius"].as_f64().unwrap_or(0.0).max(l["GetTubeSoftRadius"].as_f64().unwrap_or(0.0)) as f32 / 100.0
+                        * knob("CC5_SOFT", 1.0)
+                },
                 inverse_square: l["GetInverseSquare"].as_bool().unwrap_or(true),
             });
         }
