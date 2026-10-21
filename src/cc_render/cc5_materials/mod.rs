@@ -181,7 +181,9 @@ impl Cc5Handle {
             Cc5Handle::Skin(h) => ec.insert(MeshMaterial3d(h.clone())),
             Cc5Handle::Hair(h) => ec.insert(MeshMaterial3d(h.clone())),
             Cc5Handle::Eye(h) => ec.insert(MeshMaterial3d(h.clone())),
-            Cc5Handle::EyeOverlay(h) => ec.insert(MeshMaterial3d(h.clone())),
+            // the occlusion / tearline films are see-through: Bevy would cast their
+            // shadows as solid (hard dark crescents under the eyes CC5 does not have)
+            Cc5Handle::EyeOverlay(h) => ec.insert((MeshMaterial3d(h.clone()), bevy::pbr::NotShadowCaster)),
             Cc5Handle::Mouth(h) => ec.insert(MeshMaterial3d(h.clone())),
         };
     }
@@ -193,6 +195,7 @@ impl Cc5Handle {
             MeshMaterial3d<Cc5EyeMaterial>,
             MeshMaterial3d<Cc5EyeOverlayMaterial>,
             MeshMaterial3d<Cc5MouthMaterial>,
+            bevy::pbr::NotShadowCaster,
         )>();
     }
 }
