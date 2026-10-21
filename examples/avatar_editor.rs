@@ -88,7 +88,7 @@ mod skin;
 mod cc5_scene;
 #[path = "avatar_editor/ibl.rs"]
 mod ibl;
-use cc5_scene::{cc5_lights, cc5_live, Cc5Live, Cc5Scene};
+use cc5_scene::{cc5_backdrop_follow, cc5_lights, cc5_live, Cc5Live, Cc5Scene};
 use skin::{skin_layers, skin_sync, skin_ui, SkinEdit};
 
 const ATTRIBUTE_CCIDX: MeshVertexAttribute = MeshVertexAttribute::new("CcIdx", 0x0CC5_1D_E7, VertexFormat::Float32);
@@ -295,7 +295,7 @@ const KEY_SOFT_SHADOW: f32 = 6.0;
 /// film gate (2·atan(12 / 80); 25.4 degrees across the gate's width), so faces
 /// have CC5's perspective. Bevy's default 45 degrees distorts close-ups of the
 /// face like a wide angle.
-const FOV_DEG: f32 = 17.06;
+pub(crate) const FOV_DEG: f32 = 17.06;
 
 /// Scalp hair's diffuse / specular gains: `CC5_HAIR_GAIN` ("d,s"), else with
 /// CC5's lights [`cc5_scene::HAIR_GAIN`], else 1 (the studio calibration).
@@ -549,6 +549,7 @@ fn main() -> anyhow::Result<()> {
                 snapshot.run_if(resource_exists::<Snapshot>),
                 cc5_live,
                 orbit_camera,
+                cc5_backdrop_follow,
             )
                 .chain()
                 .after(Cc5MaterialsSet),
