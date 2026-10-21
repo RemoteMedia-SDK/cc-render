@@ -491,9 +491,19 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             if std::fs::read(&orig).ok() == Some(std::fs::read(&p)?) {
                 continue;
             }
+            // at most the pack's texture size: CC5 exports HD skins' maps at 8192 even
+            // from their 2K presets (its viewport shows 2K); 8K maps only alias
+            let fit = |img: image::DynamicImage| -> image::DynamicImage {
+                let max = pack.size.max(1024);
+                if img.width() > max || img.height() > max {
+                    img.resize(max, max, image::imageops::FilterType::Lanczos3)
+                } else {
+                    img
+                }
+            };
             if channel == "roughness" {
                 // as a glTF metallic-roughness map (roughness in G, metal 0) for StandardMaterial
-                let r = image::open(&p)?.to_luma8();
+                let r = fit(image::open(&p)?).to_luma8();
                 let mr = image::RgbImage::from_fn(r.width(), r.height(), |x, y| image::Rgb([0, r.get_pixel(x, y)[0], 0]));
                 let out = format!("{m}_MR.png");
                 mr.save(dst.join(&out))?;
@@ -503,12 +513,12 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
             // colour and normal maps as JPEG (q 92), the rest as PNG
             let big = ["Diffuse", "Normal"].contains(&channel.as_str());
             let out = if big { format!("{m}_{channel}.jpg") } else { format!("{m}_{channel}.png") };
+            let img = fit(image::open(&p)?);
             if big {
-                let img = image::open(&p)?.to_rgb8();
                 let mut w = std::io::BufWriter::new(std::fs::File::create(dst.join(&out))?);
-                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut w, 92).encode_image(&img)?;
+                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut w, 92).encode_image(&img.to_rgb8())?;
             } else {
-                std::fs::copy(&p, dst.join(&out))?;
+                img.save(dst.join(&out))?;
             }
             maps.entry(m.clone()).or_default().insert(channel, format!("skins/{id}/{out}"));
         }

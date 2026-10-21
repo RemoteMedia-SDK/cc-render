@@ -293,6 +293,14 @@ const KEY_SOFT_SHADOW: f32 = 6.0;
 /// face like a wide angle.
 const FOV_DEG: f32 = 17.06;
 
+/// Scalp hair's diffuse / specular gains: `CC5_HAIR_GAIN` ("d,s"), else with
+/// CC5's lights [`cc5_scene::HAIR_GAIN`], else 1 (the studio calibration).
+fn hair_gain(cc5_lights: bool) -> [f32; 2] {
+    let d = if cc5_lights { cc5_scene::HAIR_GAIN } else { [1.0, 1.0] };
+    let v: Vec<f32> = std::env::var("CC5_HAIR_GAIN").map(|s| s.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default();
+    [v.first().copied().unwrap_or(d[0]), v.get(1).copied().unwrap_or(d[1])]
+}
+
 /// Camera distances below are framed for 45 degrees; scale them to FOV_DEG.
 fn fov_scale() -> f32 {
     (22.5f32.to_radians()).tan() / (FOV_DEG.to_radians() * 0.5).tan()
@@ -490,6 +498,8 @@ fn main() -> anyhow::Result<()> {
         .insert_resource(Cc5Materials {
             enabled: !no_cc5,
             skin_tune: std::env::var("CC5_SKIN_TUNE").map(|v| SkinTune::parse(&v)).unwrap_or_default(),
+            // CC5_HAIR_GAIN: "diffuse,specular" (with --cc5-lights: calibrated against CC5)
+            hair_gain: hair_gain(cc5_lights_flag),
             ..default()
         })
         .insert_resource(skin_edit)

@@ -19,6 +19,8 @@
 #import bevy_pbr::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, calculate_tbn_mikktspace},
+    pbr_bindings,
+    pbr_types,
     mesh_view_bindings::{view, lights, clusterable_objects},
     mesh_view_types::POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT,
     mesh_view_types::POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE,
@@ -60,7 +62,8 @@ struct Cc5Skin {
     tune_a: vec4<f32>,
     // x specular scale, y broad lobe weight, z direct AO, w transmission
     tune_b: vec4<f32>,
-    // x cavity occlusion scale, y subsurface (wrapped light) scale
+    // x cavity occlusion scale, y subsurface (wrapped light) scale, z normal map strength,
+    // w diffuse normal blur (UV radius)
     tune_c: vec4<f32>,
     // CC5's base colour adjustments: x brightness, y saturation, z blend map strength, w human colour on
     color: vec4<f32>,
@@ -161,7 +164,36 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // softened normal for the diffuse term (before the micro normal goes in)
     var n_geo = normalize(in.world_normal);
     if !is_front { n_geo = -n_geo; }
-    let n_diffuse = normalize(mix(n_geo, pbr_input.N, skin.tune_a.x));
+    // normal map strength (SkinTune normal)
+    pbr_input.N = normalize(mix(n_geo, pbr_input.N, skin.tune_c.z));
+    // the diffuse sees the normal map blurred over the subsurface scattering's
+    // reach (SkinTune diffuse_blur, UV radius): soft creases, as CC5's skin
+    var n_soft = pbr_input.N;
+#ifdef VERTEX_UVS_A
+#ifdef VERTEX_TANGENTS
+#ifdef STANDARD_MATERIAL_NORMAL_MAP
+    if skin.tune_c.w > 0.0 {
+        var acc = vec3(0.0);
+        for (var k = 0; k < 13; k = k + 1) {
+            // centre, then two rings of six
+            var o = vec2(0.0);
+            if k > 0 {
+                let ring = select(1.0, 0.5, k <= 6);
+                let a = f32(k) * 1.0472 + select(0.0, 0.5236, k > 6);
+                o = vec2(cos(a), sin(a)) * ring * skin.tune_c.w;
+            }
+            acc += textureSampleLevel(pbr_bindings::normal_map_texture, pbr_bindings::normal_map_sampler, in.uv + o, 0.0).rgb * 2.0 - 1.0;
+        }
+        var nt = acc / 13.0;
+        if (pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_FLIP_NORMAL_MAP_Y) != 0u { nt.y = -nt.y; }
+        if !is_front { nt = -nt; }
+        let tbn = calculate_tbn_mikktspace(in.world_normal, in.world_tangent);
+        n_soft = normalize(mix(n_geo, normalize(tbn * nt), skin.tune_c.z));
+    }
+#endif
+#endif
+#endif
+    let n_diffuse = normalize(mix(n_geo, n_soft, skin.tune_a.x));
 
 #ifdef VERTEX_UVS_A
     let uv = in.uv;
@@ -216,7 +248,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     pbr_input.material.reflectance = skin.misc.x * spec;
 
     var scatter = dot(ma, skin.scatter_a) + dot(mb, skin.scatter_b) + dot(mc, skin.scatter_c) + unmasked * skin.misc.z;
-    if has(SSS) { scatter *= data(SSS, textureSample(sss_tex, sss_smp, uv)).r; }
+    // CC5's SSS map is centred on mid grey: 0.5 is full strength, as without a map
+    // (HD skins' maps are ~0.5; read as a plain 0..1 scale they halved the
+    // subsurface light: pale, grey faces)
+    if has(SSS) { scatter *= 2.0 * data(SSS, textureSample(sss_tex, sss_smp, uv)).r; }
 
     // (no light passes through into cavities: nostrils, mouth)
     var trans = 0.0;

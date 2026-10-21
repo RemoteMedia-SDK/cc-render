@@ -1,4 +1,4 @@
-//! Mipmaps for CC5 hair textures.
+//! Mipmaps for CC5 hair and skin textures.
 //!
 //! Bevy loads PNG / JPEG textures (glTF base colours, the CC5 maps) with a
 //! single mip level. Hair cards squeeze a whole strand clump (hundreds of
@@ -15,7 +15,7 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_resource::{FilterMode, TextureFormat};
 
-use super::{Cc5Handle, Cc5HairMaterial, Cc5Material};
+use super::{Cc5Handle, Cc5HairMaterial, Cc5Material, Cc5SkinMaterial};
 
 /// Mip chains for every loaded hair texture (base colour and CC5 maps), once.
 pub(super) fn hair_mipmaps(
@@ -40,6 +40,46 @@ pub(super) fn hair_mipmaps(
                 if generate_mips(img, alpha_weighted) {
                     debug!("hair mipmaps: {:?} ({} levels)", t.id(), img.texture_descriptor.mip_level_count);
                 }
+            }
+        }
+    }
+}
+
+/// Mip chains for every loaded skin texture, once: without them a 2K-8K skin
+/// map seen a few hundred pixels across aliases into a blotchy, sparkly mottle
+/// (CC5 samples its skins with mips).
+pub(super) fn skin_mipmaps(
+    mats: Query<&Cc5Material>,
+    skin: Res<Assets<Cc5SkinMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    mut done: Local<HashSet<AssetId<Image>>>,
+) {
+    for m in &mats {
+        let Cc5Handle::Skin(h) = &m.cc5 else { continue };
+        let Some(mat) = skin.get(h) else { continue };
+        let (b, e) = (&mat.base, &mat.extension);
+        let textures = [
+            b.base_color_texture.as_ref(),
+            b.normal_map_texture.as_ref(),
+            b.metallic_roughness_texture.as_ref(),
+            b.occlusion_texture.as_ref(),
+            e.micro_normal.as_ref(),
+            e.micro_mask.as_ref(),
+            e.sss.as_ref(),
+            e.transmission.as_ref(),
+            e.mask_a.as_ref(),
+            e.mask_b.as_ref(),
+            e.mask_c.as_ref(),
+            e.mouth_ao.as_ref(),
+            e.specular.as_ref(),
+        ];
+        for t in textures.into_iter().flatten() {
+            if done.contains(&t.id()) || images.get(t).is_none_or(|i| i.data.is_empty()) {
+                continue; // done, or not loaded yet
+            }
+            done.insert(t.id());
+            if let Some(img) = images.get_mut(t) {
+                generate_mips(img, false);
             }
         }
     }
