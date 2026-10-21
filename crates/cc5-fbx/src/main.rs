@@ -1,4 +1,5 @@
 //! `cc5-fbx <in.fbx> <out.glb> [--dump <dump.json>] [--cc5-json <sidecar.json>]`
+//! `cc5-fbx expressions <ref.fbx> <pack dir> <out dir>`: the editor's expression pack
 //!
 //! A CC5 FBX export as a GLB (`fbx_to_glb.py` without Blender). `--dump` also
 //! writes the joints / weights / rest-position dump the pack builders read.
@@ -11,7 +12,14 @@ use anyhow::{bail, Result};
 use cc5_fbx::{Character, GlbOptions};
 
 fn main() -> Result<()> {
-    let mut args = std::env::args().skip(1);
+    let all: Vec<String> = std::env::args().skip(1).collect();
+    if all.first().map(String::as_str) == Some("expressions") {
+        // cc5-fbx expressions <ref.fbx> <pack dir> <out dir>
+        let [_, fbx, pack, out] = <[String; 4]>::try_from(all).map_err(|_| anyhow::anyhow!("usage: cc5-fbx expressions <ref.fbx> <pack dir> <out dir>"))?;
+        let c = Character::load(std::path::Path::new(&fbx))?;
+        return cc5_fbx::expressions::write(&c, std::path::Path::new(&pack), std::path::Path::new(&out));
+    }
+    let mut args = all.into_iter();
     let (mut pos, mut dump, mut cc5) = (Vec::new(), None, None);
     while let Some(a) = args.next() {
         match a.as_str() {

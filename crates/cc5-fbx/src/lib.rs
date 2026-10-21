@@ -15,6 +15,7 @@
 
 pub mod cc5json;
 pub mod dump;
+pub mod expressions;
 mod glb;
 mod tga;
 
@@ -50,6 +51,14 @@ pub struct Mesh {
     pub weights: Vec<Vec<(u32, f32)>>,
     /// One per material used.
     pub prims: Vec<Prim>,
+    /// Morph targets (facial expressions), at full weight.
+    pub shapes: Vec<Shape>,
+}
+
+/// A morph target: control point and its world-space offset at weight 1.
+pub struct Shape {
+    pub name: String,
+    pub deltas: Vec<(u32, Vec3)>,
 }
 
 /// Vertices split by (control point, normal, UV), triangles.
@@ -206,7 +215,18 @@ impl Character {
                 }
             }
             prims.sort_by_key(|p| p.material);
-            meshes.push(Mesh { name: node.element.name.to_string(), points, weights, prims });
+            let lin = Mat3::from_mat4(g2w);
+            let mut shapes = Vec::new();
+            for bd in mesh.blend_deformers.iter() {
+                for ch in bd.channels.iter() {
+                    // the shape at full weight (in-betweens are not used)
+                    let shape: Option<&ufbx::BlendShape> = ch.keyframes.iter().find(|k| (k.target_weight - 1.0).abs() < 1e-6).map(|k| &*k.shape).or(ch.target_shape.as_deref());
+                    let Some(shape) = shape else { continue };
+                    let deltas = shape.offset_vertices.iter().zip(shape.position_offsets.iter()).map(|(&i, d)| (i, lin * v3(d))).collect();
+                    shapes.push(Shape { name: ch.element.name.to_string(), deltas });
+                }
+            }
+            meshes.push(Mesh { name: node.element.name.to_string(), points, weights, prims, shapes });
         }
         meshes.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(Self { path: path.to_path_buf(), joints, meshes, materials })

@@ -45,6 +45,8 @@ pub struct HairEdit {
     task: Option<Task<anyhow::Result<Built>>>,
     changed_at: Option<Instant>,
     colours_changed: bool,
+    /// When the pending colour change was made (timing in the log).
+    colour_at: Option<Instant>,
     /// The part on screen: its build and mesh entities (entity, material index).
     last: Option<Arc<BuiltPart>>,
     live: Option<(usize, Vec<(Entity, usize)>)>,
@@ -125,6 +127,7 @@ impl HairEdit {
             task: None,
             changed_at: None,
             colours_changed: false,
+            colour_at: None,
             last: None,
             live: None,
             status: String::new(),
@@ -133,7 +136,48 @@ impl HairEdit {
 
     /// Building (or about to): `--snapshot` waits.
     pub fn busy(&self) -> bool {
-        self.task.is_some() || self.changed_at.is_some()
+        self.task.is_some() || self.changed_at.is_some() || self.colours_changed
+    }
+
+    /// A scripted edit (`{"group", settings..., "shape"?: {...}, "vars"?: {...}}`), as
+    /// the panel makes one: on the group being edited the settings add to the
+    /// current ones, and colour variables alone only recolour (no rebuild);
+    /// another group starts from its saved settings.
+    pub fn edit(&mut self, v: &Value) -> anyhow::Result<()> {
+        let g = v["group"].as_str().ok_or_else(|| anyhow::anyhow!("edit: no \"group\""))?.to_string();
+        let o = v.as_object().cloned().unwrap_or_default();
+        if self.group.as_deref() != Some(g.as_str()) {
+            self.select(&g, Some(v));
+            return Ok(());
+        }
+        let mut rebuild = false;
+        for (k, x) in &o {
+            match k.as_str() {
+                "group" => {}
+                "vars" => {
+                    self.vars.extend(x.as_object().cloned().unwrap_or_default());
+                    self.colours_changed = true;
+                    self.colour_at = Some(Instant::now());
+                }
+                "shape" => {
+                    if !self.conv["shape"].is_object() {
+                        self.conv["shape"] = json!({});
+                    }
+                    for (sk, sv) in x.as_object().cloned().unwrap_or_default() {
+                        self.conv["shape"][sk] = sv;
+                    }
+                    rebuild = true;
+                }
+                _ => {
+                    self.conv[k] = x.clone();
+                    rebuild = true;
+                }
+            }
+        }
+        if rebuild {
+            self.changed_at = Some(Instant::now());
+        }
+        Ok(())
     }
 
     /// Edit `group` from its saved settings (`overrides`: on top of them).
@@ -298,6 +342,9 @@ pub fn hair_edit_run(
                 }
                 ec.remove::<(cc_render_plugin::cc_render::cc5_materials::Cc5Material, MeshMaterial3d<Cc5HairMaterial>)>();
             }
+            if let Some(t) = ed.colour_at.take() {
+                info!("hair edit: colours applied in {:.0} ms (no rebuild)", t.elapsed().as_secs_f32() * 1000.0);
+            }
         }
     }
     // a finished build
@@ -451,6 +498,7 @@ fn install(
         built.secs,
         t.elapsed().as_secs_f32()
     );
+    info!("hair edit: {}", ed.status);
     ed.last = Some(part);
     ed.live = Some((i, ents));
     Ok(())
