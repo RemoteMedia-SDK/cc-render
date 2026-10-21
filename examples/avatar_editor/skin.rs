@@ -23,7 +23,7 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use bevy_egui::egui;
-use cc5_skin::{compose, Apply, LayerImage, SkinPack};
+use cc5_skin::{compose, compose_roughness, Apply, LayerImage, SkinPack};
 use cc_render_plugin::cc_render::cc5_materials::{Cc5Handle, Cc5Material, Cc5SkinMaterial};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -180,7 +180,10 @@ struct Originals {
     srgb: u32,
 }
 
-type Composed = Vec<(usize, u32, u32, Vec<u8>)>;
+/// Per material: the composited diffuse, and the roughness (metallic-roughness
+/// texture) when an active layer changes roughness.
+type Texels = (u32, u32, Vec<u8>);
+type Composed = Vec<(usize, Texels, Option<Texels>)>;
 
 #[derive(Resource, Default)]
 pub struct SkinEdit {
@@ -208,6 +211,11 @@ pub struct SkinEdit {
     bases: Vec<Option<Arc<(u32, u32, Vec<u8>)>>>,
     /// per material: the composited diffuse
     composed: Vec<Option<Handle<Image>>>,
+    /// per material: the character's metallic-roughness texels, the composited
+    /// one, and the one the skin choice set (restored when no layer changes roughness)
+    mr_bases: Vec<Option<Arc<Texels>>>,
+    composed_mr: Vec<Option<Handle<Image>>>,
+    mr_swap: Vec<Option<Handle<Image>>>,
     cache: Arc<Mutex<HashMap<(String, String), Option<Arc<LayerImage>>>>>,
     task: Option<Task<anyhow::Result<Composed>>>,
     /// what the running task composites (to notice newer edits)
@@ -392,6 +400,9 @@ pub fn skin_sync(
         skin.originals = vec![None; n];
         skin.bases = vec![None; n];
         skin.composed = vec![None; n];
+        skin.mr_bases = vec![None; n];
+        skin.composed_mr = vec![None; n];
+        skin.mr_swap = vec![None; n];
         if let Some(r) = skin.pending.take() {
             match skin.apply(&r) {
                 Ok(()) => skin.status = "skin recipe applied".into(),
@@ -463,6 +474,7 @@ pub fn skin_layers(
             };
             mat.base.normal_map_texture = load("Normal").or(o.normal.clone());
             mat.base.metallic_roughness_texture = load("MetallicRoughness").or(o.mr.clone());
+            skin.mr_swap[i] = mat.base.metallic_roughness_texture.clone();
             mat.base.occlusion_texture = load("ao").or(o.occlusion.clone());
             // CC5 shader maps (skin.wgsl bits: 1 micro mask, 2 SSS, 3 transmission, 8 specular)
             let e = &mut mat.extension;
@@ -493,28 +505,15 @@ pub fn skin_layers(
             skin.task = None;
             match result {
                 Ok(out) => {
-                    for (i, w, h, data) in out {
-                        let handle = match skin.composed[i].clone() {
-                            Some(hd) if images.get(&hd).is_some_and(|im| im.width() == w && im.height() == h) => {
-                                images.get_mut(&hd).unwrap().data = data;
-                                hd
-                            }
-                            _ => {
-                                let mut img = Image::new(
-                                    Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                                    TextureDimension::D2,
-                                    data,
-                                    TextureFormat::Rgba8UnormSrgb,
-                                    RenderAssetUsages::default(),
-                                );
-                                img.sampler = ImageSampler::linear();
-                                let hd = images.add(img);
-                                skin.composed[i] = Some(hd.clone());
-                                hd
-                            }
+                    for (i, (w, h, data), mr) in out {
+                        let handle = put_image(&mut images, &mut skin.composed[i], w, h, data, TextureFormat::Rgba8UnormSrgb);
+                        let mr = match mr {
+                            Some((mw, mh, md)) => Some(put_image(&mut images, &mut skin.composed_mr[i], mw, mh, md, TextureFormat::Rgba8Unorm)),
+                            None => skin.mr_swap[i].clone().or_else(|| skin.originals[i].as_ref().and_then(|o| o.mr.clone())),
                         };
                         if let Some(mat) = mats.get_mut(&skin.mats[i].handle) {
                             mat.base.base_color_texture = Some(handle);
+                            mat.base.metallic_roughness_texture = mr;
                         }
                     }
                     skin.status = format!("skin: {} layer(s)", skin.layers.len());
@@ -550,11 +549,12 @@ pub fn skin_layers(
             }
         }
     }
-    // nothing over the character's own skin: its own texture
+    // nothing over the character's own skin: its own textures
     if skin.layers.is_empty() && skin.skin.is_none() {
         for (i, m) in skin.mats.iter().enumerate() {
             if let (Some(o), Some(mat)) = (&skin.originals[i], mats.get_mut(&m.handle)) {
                 mat.base.base_color_texture = o.diffuse.clone();
+                mat.base.metallic_roughness_texture = o.mr.clone();
             }
         }
         skin.layers_dirty = false;
@@ -574,15 +574,40 @@ pub fn skin_layers(
         }
         skin.bases[i] = Some(Arc::new((img.width(), img.height(), img.data.clone())));
     }
+    // and its metallic-roughness texels (for layers that change roughness), when loaded
+    for i in 0..skin.mats.len() {
+        if skin.mr_bases[i].is_some() {
+            continue;
+        }
+        let Some(h) = skin.originals[i].as_ref().and_then(|o| o.mr.clone()) else { continue };
+        if let Some(img) = images.get(&h).filter(|im| im.data.len() == (im.width() * im.height() * 4) as usize) {
+            skin.mr_bases[i] = Some(Arc::new((img.width(), img.height(), img.data.clone())));
+        }
+    }
     skin.layers_dirty = false;
     skin.task_key = skin.key();
-    let jobs: Vec<(usize, String, Option<Arc<(u32, u32, Vec<u8>)>>, Option<PathBuf>)> = skin
+    struct Job {
+        i: usize,
+        name: String,
+        base: Option<Arc<Texels>>,
+        mr_base: Option<Arc<Texels>>,
+        preset: Option<PathBuf>,
+        preset_mr: Option<PathBuf>,
+    }
+    let jobs: Vec<Job> = skin
         .mats
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let preset = skin.skin.as_ref().and_then(|id| pack.skin(id)).and_then(|s| s.maps.get(&m.name)).and_then(|mm| mm.get("Diffuse")).map(|r| pack.dir.join(r));
-            (i, m.name.clone(), skin.bases[i].clone(), preset)
+            let maps = skin.skin.as_ref().and_then(|id| pack.skin(id)).and_then(|s| s.maps.get(&m.name));
+            Job {
+                i,
+                name: m.name.clone(),
+                base: skin.bases[i].clone(),
+                mr_base: skin.mr_bases[i].clone(),
+                preset: maps.and_then(|mm| mm.get("Diffuse")).map(|r| pack.dir.join(r)),
+                preset_mr: maps.and_then(|mm| mm.get("MetallicRoughness")).map(|r| pack.dir.join(r)),
+            }
         })
         .collect();
     let layers = skin.layers.clone();
@@ -592,16 +617,15 @@ pub fn skin_layers(
     skin.task = Some(AsyncComputeTaskPool::get().spawn(async move {
         let t0 = std::time::Instant::now();
         let mut out = Vec::new();
-        for (i, name, base, preset) in jobs {
-            let (w, h, mut data) = match preset {
-                Some(p) => {
-                    let img = image::open(&p).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?.to_rgba8();
-                    (img.width(), img.height(), img.into_raw())
-                }
-                None => match base {
-                    Some(b) => (b.0, b.1, b.2.clone()),
-                    None => continue,
-                },
+        let open = |p: &PathBuf| -> anyhow::Result<Texels> {
+            let img = image::open(p).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?.to_rgba8();
+            Ok((img.width(), img.height(), img.into_raw()))
+        };
+        for Job { i, name, base, mr_base, preset, preset_mr } in jobs {
+            let (w, h, mut data) = match (&preset, &base) {
+                (Some(p), _) => open(p)?,
+                (None, Some(b)) => (b.0, b.1, b.2.clone()),
+                (None, None) => continue,
             };
             let mut imgs = Vec::new();
             for l in &layers {
@@ -622,11 +646,43 @@ pub fn skin_layers(
             }
             let applies: Vec<Apply> = imgs.iter().map(|(li, s, t)| Apply { image: li, strength: *s, tint: *t }).collect();
             compose(&mut data, w, h, &applies);
-            out.push((i, w, h, data));
+            // roughness the layers lay down
+            let mut rough = Vec::new();
+            for l in &layers {
+                let Some(layer) = pack2.layer(&l.id) else { continue };
+                if let Some(r) = pack2.layer_roughness(layer, &name)? {
+                    rough.push((r, l.strength));
+                }
+            }
+            let mr = match (rough.is_empty(), &preset_mr, &mr_base) {
+                (true, _, _) => None,
+                (false, Some(p), _) => Some(open(p)?),
+                (false, None, Some(b)) => Some((b.0, b.1, b.2.clone())),
+                (false, None, None) => None,
+            };
+            let mr = mr.map(|(mw, mh, mut md)| {
+                let rl: Vec<(&LayerImage, f32)> = rough.iter().map(|(r, s)| (r, *s)).collect();
+                compose_roughness(&mut md, mw, mh, &rl);
+                (mw, mh, md)
+            });
+            out.push((i, (w, h, data), mr));
         }
         info!("skin: composited {} layer(s) in {:.0} ms", layers.len(), t0.elapsed().as_secs_f32() * 1000.0);
         Ok(out)
     }));
+}
+
+/// Writes texels into `slot`'s image (made on first use, replaced when the size changes).
+fn put_image(images: &mut Assets<Image>, slot: &mut Option<Handle<Image>>, w: u32, h: u32, data: Vec<u8>, format: TextureFormat) -> Handle<Image> {
+    if let Some(hd) = slot.clone().filter(|hd| images.get(hd).is_some_and(|im| im.width() == w && im.height() == h)) {
+        images.get_mut(&hd).unwrap().data = data;
+        return hd;
+    }
+    let mut img = Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, data, format, RenderAssetUsages::default());
+    img.sampler = ImageSampler::linear();
+    let hd = images.add(img);
+    *slot = Some(hd.clone());
+    hd
 }
 
 fn number(v: &Value) -> Option<f32> {

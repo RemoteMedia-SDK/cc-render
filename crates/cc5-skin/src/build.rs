@@ -198,6 +198,43 @@ fn validate(opt: &BuildOptions, id: &str, m: &str, img: &RgbaImage, rect: [u32; 
     Ok(Some(((err / n.max(1) as f64) as f32, (size / n.max(1) as f64) as f32)))
 }
 
+/// The layer's roughness: CC5's baked roughness of the layer on the first base
+/// against that base's, with the opacity solved from the diffuse:
+/// R = (L - B·(1-α)) / α. None when the layer leaves roughness alone.
+fn layer_roughness(opt: &BuildOptions, id: &str, m: &str, s: &Solved, rect: [u32; 4]) -> Result<Option<String>> {
+    let path = |v: &str| opt.capture.join(v).join(format!("{m}_Roughness.png"));
+    let (pb, pl) = (path(&opt.base), path(&format!("{id}{}", opt.base_suffix)));
+    if !pb.is_file() || !pl.is_file() {
+        return Ok(None);
+    }
+    let b = image::open(&pb)?.to_luma8();
+    let l = image::open(&pl)?.to_luma8();
+    if b.dimensions() != (s.w, s.h) || l.dimensions() != (s.w, s.h) {
+        return Ok(None);
+    }
+    let mut changed = 0usize;
+    let img = RgbaImage::from_fn(rect[2], rect[3], |x, y| {
+        let (x, y) = (x + rect[0], y + rect[1]);
+        let i = (y * s.w + x) as usize;
+        let a = s.a[i];
+        let (bv, lv) = (b.get_pixel(x, y)[0] as f32, l.get_pixel(x, y)[0] as f32);
+        if (lv - bv).abs() > 3.0 {
+            changed += 1;
+        }
+        if a < opt.min_alpha {
+            return image::Rgba([0, 0, 0, 0]);
+        }
+        let r = ((lv - bv * (1.0 - a)) / a).clamp(0.0, 255.0).round() as u8;
+        image::Rgba([r, r, r, (a * 255.0).round() as u8])
+    });
+    if changed < 64 {
+        return Ok(None);
+    }
+    let file = format!("layers/{id}.{m}.rough.png");
+    img.save(opt.out.join(&file))?;
+    Ok(Some(file))
+}
+
 /// The exported channels a skin swaps (others stay the character's).
 const SKIN_CHANNELS: [&str; 8] = ["Diffuse", "Normal", "roughness", "ao", "SSSMap", "TransMap", "MicroNMask", "SpecMask"];
 
@@ -243,7 +280,8 @@ pub fn build(opt: &BuildOptions, layers: &[(String, String, String)], skins: &[(
                 best = cover;
                 color = mean;
             }
-            maps.insert(m.clone(), LayerMap { diffuse: file, rect });
+            let roughness = layer_roughness(opt, id, m, &s, rect)?;
+            maps.insert(m.clone(), LayerMap { diffuse: file, rect, roughness });
         }
         if !maps.is_empty() {
             pack.layers.push(Layer { id: id.clone(), name: name.clone(), group: group.clone(), color, maps, source: String::new() });
