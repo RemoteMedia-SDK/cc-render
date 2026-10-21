@@ -59,6 +59,9 @@ cargo run --example avatar_editor -- D:\cc5_editor\beautiful\character.glb D:\cc
 cargo run --example shape_avatar  -- character.glb pack weights.json shaped.glb
 ```
 
+With no `character.glb pack_dir`, the editor opens `$CC5_EDITOR_DIR` (default
+`D:\cc5_editoreautiful_e2e`): its `character.glb` and `pack_xl` (else `pack`).
+
 Editor: category tree with search, per-slider reset, "Reset all", "Save GLB";
 with `--expressions <dir>`, an "Expressions" section (see below).
 Right-drag orbits, middle-drag pans, wheel zooms. `weights.json` maps slider

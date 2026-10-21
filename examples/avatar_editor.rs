@@ -1,9 +1,12 @@
 //! CC5-style avatar shape editor: the sliders captured from Character Creator 5,
 //! applied live to the character outside CC5.
 //!
-//! Usage: avatar_editor character.glb pack_dir [shaped_out.glb] [--recipe recipe.json]
+//! Usage: avatar_editor [character.glb pack_dir [shaped_out.glb]] [--recipe recipe.json]
 //!                      [--base none|<slider>|<recipe.json>]
 //!                      [--style other_character.glb] [--expressions expressions_dir]
+//!
+//! Without `character.glb pack_dir`, the editor opens `$CC5_EDITOR_DIR` (default
+//! `D:\cc5_editor\beautiful_e2e`): its `character.glb` and `pack_xl` (else `pack`).
 //!
 //! `character.glb` is the CC5 reference export converted with `cc5-fbx`
 //! (it carries the `_CCIDX` vertex attribute); `pack_dir` holds `pack.json` and
@@ -332,8 +335,14 @@ fn main() -> anyhow::Result<()> {
         }
         None => false,
     };
-    anyhow::ensure!(args.len() == 3 || args.len() == 4, "character.glb pack_dir [shaped_out.glb] [--recipe recipe.json] required");
-    let glb_path = std::fs::canonicalize(&args[1])?;
+    if args.len() == 1 {
+        // no character given: the default editor folder's character and pack
+        let (glb, pack) = default_inputs();
+        args.push(glb.to_string_lossy().into_owned());
+        args.push(pack.to_string_lossy().into_owned());
+    }
+    anyhow::ensure!(args.len() == 3 || args.len() == 4, "[character.glb pack_dir [shaped_out.glb]] [--recipe recipe.json] ...");
+    let glb_path = std::fs::canonicalize(&args[1]).map_err(|e| anyhow::anyhow!("{}: {e}", args[1]))?;
     let pack = ShapePack::load(std::path::Path::new(&args[2]))?;
     let out_path = args.get(3).map(PathBuf::from).unwrap_or_else(|| glb_path.with_extension("shaped.glb"));
     let (base, base_label) = resolve_base(&pack, base_arg.as_deref())?;
@@ -739,6 +748,15 @@ fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edi
         e.edit(v)?;
     }
     Ok(())
+}
+
+/// The character and pack used when none are given: `$CC5_EDITOR_DIR` (default
+/// `D:\cc5_editor\beautiful_e2e`, `build_cc5_editor_pack.ps1`'s output) with its
+/// `character.glb` and `pack_xl` (the pack with CC5's neutral bases), else `pack`.
+fn default_inputs() -> (PathBuf, PathBuf) {
+    let dir = std::env::var_os("CC5_EDITOR_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"D:\cc5_editor\beautiful_e2e"));
+    let pack = ["pack_xl", "pack"].iter().map(|p| dir.join(p)).find(|p| p.join("pack.json").exists()).unwrap_or_else(|| dir.join("pack"));
+    (dir.join("character.glb"), pack)
 }
 
 /// `--base` (see the module docs): the starting / reset weights and a label.
