@@ -8,6 +8,8 @@ publish = false
 # bevy / wgpu / bevy_rapier3d deps don't unify against the host's, and
 # heavy renderer stack compiles in isolation.
 [workspace]
+# `cc5-shape`: CC5 shaping sliders (Rust + Python); `cc5-hair`: CC5 hair -> strand parts.
+members = ["crates/cc5-shape", "crates/cc5-hair", "crates/cc5-fbx", "crates/cc5-skin"]
 
 [profile.release]
 opt-level = 3
@@ -50,7 +52,8 @@ tracing = "0.1"
 # explicitly carry that default set here so the standalone-workspace
 # build doesn't drop `x11`, `multi_threaded`, etc. and break under
 # winit / wgpu.
-bevy = { version = "0.15", features = ["jpeg", "tonemapping_luts", "ktx2", "zstd"] }
+# experimental_pbr_pcss: soft (PCSS) directional shadows for the avatar editor's studio key light.
+bevy = { version = "0.15", features = ["jpeg", "tonemapping_luts", "ktx2", "zstd", "experimental_pbr_pcss"] }
 # bevy_rapier3d shipped unconditionally — no nested cargo features.
 bevy_rapier3d = { version = "=0.28.0", default-features = false, features = ["dim3", "async-collider"] }
 # wgpu pinned to the version Bevy 0.15.3 bundles. Aliased to `wgpu_pin`
@@ -66,3 +69,15 @@ crossbeam-channel = "0.5"
 # a few regexes — bring in `regex` directly.
 regex = "1"
 tempfile = "3.27.0"
+# CC5 shaping sliders (avatar editor); also a standalone crate + Python module.
+cc5-shape = { path = "crates/cc5-shape" }
+
+[dev-dependencies]
+# `examples/avatar_editor.rs` UI; 0.32 is the Bevy 0.15 line.
+bevy_egui = "0.32"
+# live hair editing in the avatar editor (CC5 hair -> strands)
+cc5-hair = { path = "crates/cc5-hair" }
+# avatar editor: skin layers / skins captured from CC5
+cc5-skin = { path = "crates/cc5-skin" }
+# avatar editor: GPU-ribbon hair expansion in parallel (already in the tree via cc5-shape)
+rayon = "1"

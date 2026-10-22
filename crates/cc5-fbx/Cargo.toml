@@ -1,0 +1,23 @@
+[package]
+name = "cc5-fbx"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Read Character Creator 5 FBX exports (ufbx) and write the GLBs cc-render loads, without Blender."
+
+[lib]
+name = "cc5_fbx"
+
+[[bin]]
+name = "cc5-fbx"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+# 0.29 = the glam Bevy 0.15 uses
+glam = "0.29"
+serde = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+rayon = "1"
+ufbx = "0.11"
