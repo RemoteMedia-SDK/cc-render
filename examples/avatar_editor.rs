@@ -46,6 +46,12 @@
 //! slot (Base, Top, Rear, Bangs, Beard, Brows, ...) or a named style, conformed
 //! to the shaped body (see `avatar_editor/hair.rs`).
 //!
+//! `--timelapse heavy-female|heavy-male|target.recipe.json` opens the Timelapse
+//! section with that target and plays it: the sliders move from the starting
+//! shape to the target over time (e.g. the character gaining weight; see
+//! `avatar_editor/timelapse.rs`). The section can also pick or change the start,
+//! the target and the duration, scrub the time and play back and forth.
+//!
 //! Controls: right-drag orbits, middle-drag pans, wheel zooms towards the cursor
 //! (down to 2 cm); Head / Body / Feet buttons frame those parts.
 //!
@@ -84,12 +90,15 @@ use hair::{hair_bind, hair_shape, hair_sync, hair_ui, HairLib};
 use hair_edit::{hair_edit_run, hair_edit_ui, HairEdit};
 #[path = "avatar_editor/skin.rs"]
 mod skin;
+#[path = "avatar_editor/timelapse.rs"]
+mod timelapse;
 #[path = "avatar_editor/cc5_scene.rs"]
 mod cc5_scene;
 #[path = "avatar_editor/ibl.rs"]
 mod ibl;
 use cc5_scene::{cc5_backdrop_follow, cc5_lights, cc5_live, Cc5Live, Cc5Scene};
 use skin::{skin_layers, skin_sync, skin_ui, SkinEdit};
+use timelapse::{timelapse, timelapse_ui, Timelapse};
 
 const ATTRIBUTE_CCIDX: MeshVertexAttribute = MeshVertexAttribute::new("CcIdx", 0x0CC5_1D_E7, VertexFormat::Float32);
 
@@ -110,6 +119,8 @@ struct Editor {
     expr_weights: Vec<f32>,
     /// Only expression weights changed: positions are rewritten, joints are not.
     expr_dirty: bool,
+    /// The sliders moving from one shape to another over time.
+    lapse: Timelapse,
     /// `--hd`: the character is CC5's HD mesh; vertex deltas go through this map.
     hd: Option<SubdivMap>,
     search: String,
@@ -235,6 +246,9 @@ struct SnapJob {
     yaw: f32,
     #[serde(default)]
     pitch: f32,
+    /// Show the `--timelapse` at this time (0 = start, 1 = target) instead of the recipe.
+    #[serde(default)]
+    time: Option<f32>,
 }
 
 fn head_view() -> String {
@@ -338,6 +352,7 @@ fn main() -> anyhow::Result<()> {
     };
     let recipe_arg = opt("--recipe")?;
     let base_arg = opt("--base")?;
+    let timelapse_arg = opt("--timelapse")?;
     // `--snapshot-batch jobs.json`: [{out, style?, recipe?, edit?, view?, zoom?, yaw?, pitch?}]
     // rendered one after another in this process (no restart, pipelines compiled once)
     let batch_jobs: Option<Vec<SnapJob>> = opt("--snapshot-batch")?.map(|f| -> anyhow::Result<_> { Ok(serde_json::from_str(&std::fs::read_to_string(&f)?)?) }).transpose()?;
@@ -421,6 +436,16 @@ fn main() -> anyhow::Result<()> {
         None => base.clone(),
     };
     let delta = pack.evaluate(&weights);
+    let mut lapse = Timelapse::new(weights.clone());
+    if let Some(arg) = &timelapse_arg {
+        let (w, label) = timelapse::resolve_target(&pack, &weights, arg)?;
+        lapse.set_target(w, label);
+        match first_job.as_ref().and_then(|j| j.time) {
+            Some(t) => lapse.seek(t),
+            None if snapshot_arg.is_none() => lapse.play(),
+            None => {}
+        }
+    }
     if let Some(x) = &expr {
         anyhow::ensure!(
             x.vertex_count == pack.vertex_count,
@@ -444,6 +469,7 @@ fn main() -> anyhow::Result<()> {
         expr_weights: vec![0.0; expr.as_ref().map_or(0, |x| x.len())],
         expr,
         expr_dirty: false,
+        lapse,
         hd,
         search: String::new(),
         glb_path: glb_path.clone(),
@@ -545,6 +571,7 @@ fn main() -> anyhow::Result<()> {
                 hair_edit_run.run_if(resource_exists::<HairEdit>),
                 (skin_sync, skin_layers).chain(),
                 hide_own_hair,
+                timelapse,
                 apply_shape,
                 snapshot.run_if(resource_exists::<Snapshot>),
                 cc5_live,
@@ -891,6 +918,9 @@ fn start_job(job: &SnapJob, editor: &mut Editor, hair: Option<&mut HairLib>, edi
         None => editor.base.clone(),
     };
     editor.dirty = true;
+    if let Some(t) = job.time {
+        editor.lapse.seek(t);
+    }
     if let Some(h) = hair {
         match job.style.as_deref() {
             Some(s) if !s.is_empty() => h.apply_style(s)?,
@@ -1409,6 +1439,7 @@ fn ui(
         ui.separator();
         let needle = ed.search.to_lowercase();
         egui::ScrollArea::vertical().show(ui, |ui| {
+            timelapse_ui(ui, ed);
             skin_ui(ui, &mut skin);
             if let Some(h) = hair.as_deref_mut() {
                 hair_ui(ui, h);
