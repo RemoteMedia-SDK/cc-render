@@ -87,6 +87,23 @@ chooses another. Changed sliders are counted against the base, and saved recipes
 keep it apart from the changes: `{"base": {...}, "sliders": {...}}` (loading
 applies both, so a recipe means the same body in any session).
 
+Timelapse (the shape changing over time, e.g. weight gain): the "Timelapse"
+section moves the sliders from a start (the sliders when the editor opened, or
+"Current sliders") to a target, linearly per slider weight, with a time slider,
+Play / Pause, a duration and back-and-forth playback. Targets: "Heavy (female)" =
+the start plus `Female Heavy Full-body` 1 and `Face Heavy` 0.5 ("Heavy (male)"
+uses `Male Heavy Full-body`), the current sliders, or a recipe file.
+`--timelapse heavy-female | heavy-male | <recipe.json>` opens with that target
+and plays it; in `--snapshot-batch` a job's `"time": 0..1` shows that point of
+it, for rendering frames. Every frame is a plain slider mix, so "Save GLB" and
+recipes save the shape on screen. On Beautiful, the CC5 "HA" heavy sliders
+(`Body/Head HA Female Heavy`) swap in another head and height and `Body Fat A/B`
+is extreme, so the preset uses the HD Ultimate heavy sliders.
+
+```
+cargo run --example avatar_editor -- --base none --timelapse heavy-female
+```
+
 ## Accuracy (Beautiful / HD Ariana, Character Height = 1 vs CC5's own FBX export)
 
 | | error |
