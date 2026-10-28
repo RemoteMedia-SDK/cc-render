@@ -18,6 +18,15 @@ const PLANNING_ROOT_RESERVE_M: f32 = 0.35;
 /// drifts a few centimetres into the planning margin plays on. Only a pelvis
 /// close enough for the body to pass into furniture rejects the candidate.
 const NATIVE_ROOT_RESERVE_M: f32 = 0.20;
+/// Standing sway: generated motion leaving an object it stands within (or at the edge of) the
+/// reserve of may come this much closer per frame; it has left once LEAVING_CLEAR_M clear of
+/// the reserve.
+const LEAVING_SWAY_M: f32 = 0.003;
+const LEAVING_CLEAR_M: f32 = 0.05;
+/// A jointed part's native reserve: her pelvis may move freely while this far from the part
+/// (about her body's front), coming into its full reserve or not: she handled it at arm's
+/// length, and it moves on its own.
+const JOINTED_CLEAR_M: f32 = 0.10;
 const KNEEL_TRANSITION_MS: u64 = 2000;
 const KNEEL_SUPPORT_MS: u64 = 2400;
 const FLOOR_CONTACT_MS: u64 = 4000;
@@ -200,6 +209,9 @@ pub struct OfficeSnapshot {
     pub queued: Vec<ActionRequest>,
     pub motion: MotionRequest,
     pub occupied_hands: Vec<(Hand, String)>,
+    /// Observed travel (m) of each prismatic part's passive rail, by object id.
+    #[serde(default)]
+    pub articulation: std::collections::BTreeMap<String, f32>,
     pub couplings: Vec<Coupling>,
     /// What each holding hand is doing: seat error and finger closure (openspec add-conforming-hand-grasps).
     #[serde(default)]
@@ -277,8 +289,9 @@ pub struct OfficeController {
     /// Parts with permanent physics joints remain obstacles during a hand grip.
     pub constrained_objects: std::collections::HashSet<String>,
     pub seated: Option<String>,
-    /// Seat the native avatar was last measured on. Generated motion may step
-    /// away from it (never deeper) until the pelvis clears its native reserve.
+    /// Seat the native avatar was last measured on (or a support she stepped off, a part
+    /// she let go of). Generated motion may step away from it (never deeper) until the
+    /// pelvis clears its native reserve.
     pub leaving_seat: Option<String>,
     /// Objects attached to hands by declared interactions (posed each frame).
     pub couplings: Vec<Coupling>,
@@ -306,6 +319,8 @@ pub struct OfficeController {
     pub motion: MotionRequest,
     seen: std::collections::HashSet<String>,
     pub held: Vec<(Hand, String)>,
+    /// Observed rail travel of prismatic parts (physics `PropSnapshot.articulation`).
+    pub articulation: std::collections::BTreeMap<String, f32>,
     held_since_ms: [Option<u64>; 2],
     /// Acquired world grip expressed relative to the body's heading at pickup.
     held_grip_rotations: [Option<Quat>; 2],
@@ -373,6 +388,7 @@ impl Default for OfficeController {
                 heading: None,
             },
             held: vec![],
+            articulation: Default::default(),
             held_since_ms: [None; 2],
             held_grip_rotations: [None; 2],
             session,
@@ -874,6 +890,10 @@ impl OfficeController {
             let previous = self.held.iter().find(|(h, _)| *h == hand);
             let current = held.iter().find(|(h, _)| *h == hand);
             if previous != current {
+                // A part let go of (a drawer she pulled out towards her) is left like a seat.
+                if let Some((_, id)) = previous.filter(|(_, id)| !held.iter().any(|(_, now)| now == id)) {
+                    self.leaving_seat = Some(id.clone());
+                }
                 self.held_since_ms[index] = current.map(|_| self.observed.displayed_pts_ms);
                 self.held_grip_rotations[index] = current
                     .and_then(|(_, id)| self.objects.iter().find(|o| &o.id == id))
@@ -2225,9 +2245,14 @@ impl OfficeController {
                 None if onto.is_some() && self.objects.iter().any(|o| o.id == object) =>
                     self.couplings.push(Coupling { object, anchors: Vec::new(), slide_height: None,
                                                    release: Some(onto), latch: None }),
+                // A jointed part's grip the hand already slipped off: nothing left to let go.
+                None if onto.is_none() && self.constrained_objects.contains(&object) => {}
                 None => self.motion_error = Some(format!("cannot release {object}: not coupled")),
             },
             C::SupportOn { object } => self.support_object = Some(object),
+            // A physical grip goes to the renderer's grab, never through declared couplings.
+            C::Grip { object, .. } | C::Drive { object, .. } =>
+                self.motion_error = Some(format!("grip on {object} is a physical command")),
             C::SupportOff { object } => {
                 if self.support_object.as_deref() == Some(object.as_str()) {
                     self.support_object = None;
@@ -2251,7 +2276,7 @@ impl OfficeController {
         } else if let Some(id) = self.leaving_seat.clone() {
             let pelvis = Vec2::new(pose.root_pos[0], pose.root_pos[2]);
             let clear = self.navigation_scene().objects.iter().find(|o| o.id == id)
-                .is_none_or(|o| o.footprint.distance(pelvis) >= NATIVE_ROOT_RESERVE_M);
+                .is_none_or(|o| o.footprint.distance(pelvis) >= NATIVE_ROOT_RESERVE_M + LEAVING_CLEAR_M);
             if clear { self.leaving_seat = None; }
         }
         self.native_previous_pose = Some(pose.clone());
@@ -2285,20 +2310,29 @@ impl OfficeController {
             .filter(|o| validated_seat != Some(o.id.as_str()) && self.seat_transition() != Some(o.id.as_str())
                 && push.is_none_or(|plan| plan.id != o.id)
                 && !(reserve == NATIVE_ROOT_RESERVE_M && self.support_object.as_deref() == Some(o.id.as_str()))
-                && !self.couplings.iter().any(|c| c.object == o.id))
+                && !self.couplings.iter().any(|c| c.object == o.id)
+                // A part she grips (a drawer she pulls) moves with her hand, not into her.
+                && !(reserve == NATIVE_ROOT_RESERVE_M && self.held.iter().any(|(_, id)| id == &o.id)))
             .collect();
-        // Generated motion standing up from the seat it was measured on (a bed it sat
-        // on, say) may move away from that seat but never deeper into it. Any other
-        // object, and planning, keep the strict visibility rule.
-        let leaving = |o: &&super::metadata::SceneObject| reserve == NATIVE_ROOT_RESERVE_M
-            && self.leaving_seat.as_deref() == Some(o.id.as_str()) && o.footprint.distance(start) < reserve;
+        // Generated motion keeps a jointed part's own reserve (a drawer let go of slides on
+        // to its stop, towards her). Standing up from the seat it was measured on (a bed it
+        // sat on, say), or within a jointed part's reserve, it may move away but never
+        // deeper in. Any other object, and planning, keep the strict visibility rule.
+        let native = reserve == NATIVE_ROOT_RESERVE_M;
+        let reserve_of = |o: &super::metadata::SceneObject| {
+            if native && self.constrained_objects.contains(&o.id) { JOINTED_CLEAR_M } else { reserve }
+        };
+        let leaving = |o: &&super::metadata::SceneObject| native
+            && o.footprint.distance(start) < reserve_of(o) + LEAVING_SWAY_M
+            && (self.leaving_seat.as_deref() == Some(o.id.as_str())
+                || self.constrained_objects.contains(&o.id) && o.footprint.distance(start) > 0.);
         let polygons: Vec<_> = checked
             .iter()
             .filter(|o| !leaving(o))
-            .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve)))
+            .map(|o| (o.id.clone(), o.footprint.inflated_polygon(reserve_of(o))))
             .collect();
         checked.iter().filter(|o| leaving(o))
-            .all(|o| o.footprint.distance(end) >= o.footprint.distance(start) - 1e-4)
+            .all(|o| o.footprint.distance(end) >= o.footprint.distance(start) - LEAVING_SWAY_M)
             && super::pathfinder::visible(start, end, &polygons)
     }
     pub fn navigation_scene(&self) -> super::metadata::SceneMetadata {
@@ -2363,6 +2397,7 @@ impl OfficeController {
             timeline_edit_ids: self.timeline_layers.keys().cloned().collect(),
             earliest_edit_pts_ms: self.motion_start().0,
             occupied_hands: self.held.clone(),
+            articulation: self.articulation.clone(),
             objects: self.objects.clone(),
             world_keypoints: self
                 .objects

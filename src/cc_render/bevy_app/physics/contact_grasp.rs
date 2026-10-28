@@ -1,7 +1,7 @@
 //! Generic ideal rigid grip, admitted only on intersecting physics shapes.
 //! Captures existing relative frames: no object repositioning, canonical grip
-//! rotation, body target, or distance-based object follower. This models neither
-//! finger closure nor human grip-force limits.
+//! rotation, body target, or distance-based object follower. It does not model
+//! finger closure; only a grip on a jointed part is force limited.
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -32,6 +32,42 @@ pub(super) fn capture_joint(
     Some(joint)
 }
 
+/// A hand on a jointed part (a drawer on its rail, a door on its hinge) pulls with at most this
+/// force per axis: the part's own joint keeps its limits and orientation.
+pub(super) const ARTICULATED_GRIP_MAX_FORCE_N: f32 = 150.;
+/// A hand that drifts further than this from where it gripped a part, out from it or off to the
+/// side (pulling on past its stop, say), has slipped off and lets go. Sliding along a handle bar
+/// or pressing into the part is not drift. Generated hands sway several centimetres about a
+/// held bar, and nothing repositions them.
+pub(super) const ARTICULATED_GRIP_SLIP_M: f32 = 0.12;
+/// A hand moving faster than this is sweeping past a jointed part's handle, not closing on it.
+pub(super) const ARTICULATED_GRIP_MAX_SPEED_M_S: f32 = 0.25;
+
+/// The grip on a jointed part, captured where the wrist touches it: a force-limited spring at the
+/// wrist, free to turn. A kinematic hand with a rigid grip would overpower the part's joint and
+/// drag it past its limits. Returns the joint and the grip point in the part's frame.
+pub(super) fn capture_articulated_joint(
+    wrist: &GlobalTransform,
+    object: &GlobalTransform,
+    active_contact: bool,
+) -> Option<(GenericJoint, Vec3)> {
+    if !active_contact { return None; }
+    let point = object.affine().inverse().transform_point3(wrist.translation());
+    if !point.is_finite() { return None; }
+    let mut joint = GenericJointBuilder::new(JointAxesMask::empty())
+        .local_anchor1(Vec3::ZERO)
+        .local_anchor2(point)
+        .build();
+    for axis in [JointAxis::LinX, JointAxis::LinY, JointAxis::LinZ] {
+        // Stiff and lightly damped: it closes nearly all of the gap each physics step, as tight
+        // as a rigid grip until the force limit.
+        joint.set_motor_position(axis, 0., 1.0e4, 10.)
+            .set_motor_max_force(axis, ARTICULATED_GRIP_MAX_FORCE_N);
+    }
+    joint.set_contacts_enabled(false);
+    Some((joint, point))
+}
+
 pub(super) fn has_object_contact(context: &RapierContext, wrist: Entity, object: Entity) -> bool {
     let Some(hand) = context.entity2collider().get(&wrist)
         .and_then(|handle| context.colliders.get(*handle)) else { return false; };
@@ -49,16 +85,62 @@ pub(super) fn has_object_contact(context: &RapierContext, wrist: Entity, object:
     })
 }
 
+/// A hand is on a handle bar when its collider comes this close to the declared bar, which is
+/// not itself a collision shape: the wrist collider is a 5 cm stub, and the palm and fingers
+/// that close around the bar reach on beyond it.
+pub(super) const HANDLE_WRAP_M: f32 = 0.04;
+
+/// The hand's collider within HANDLE_WRAP_M of a part's handle box (half extents `extent`,
+/// centred at `centre` in the part's frame).
+pub(super) fn has_handle_contact(context: &RapierContext, wrist: Entity, object: &GlobalTransform,
+                                 centre: Vec3, extent: Vec3) -> bool {
+    let Some(hand) = context.entity2collider().get(&wrist)
+        .and_then(|handle| context.colliders.get(*handle)) else { return false; };
+    if hand.is_sensor() { return false; }
+    let object = object.compute_transform();
+    let pose = bevy_rapier3d::rapier::math::Isometry::from_parts(
+        object.transform_point(centre).into(), object.rotation.into());
+    let bar = bevy_rapier3d::rapier::parry::shape::Cuboid::new(extent.into());
+    bevy_rapier3d::rapier::parry::query::contact(hand.position(), hand.shape(), &pose, &bar, HANDLE_WRAP_M)
+        .ok().flatten().is_some_and(|contact| contact.dist <= HANDLE_WRAP_M)
+}
+
+/// A wrist on a handle bar sits within this of it: the palm's grip point is about 6.5 cm along
+/// the fingers and 2.7 cm off the palm (SDK `GRIP_REACH_M`, `GRIP_LIFT_M`), and the fingers,
+/// some 18 cm from the wrist to their tips, still close around a bar a few cm further out
+/// (generated wrists hold their planned grasp to within about 4 cm).
+pub(super) const HANDLE_REACH_M: f32 = 0.12;
+
+/// While the hand actually touches the target (a prop with a handle box: the handle): the point
+/// its reach is judged to, and how far that may be. A prop with a handle box: the nearest point on the bar, within
+/// HANDLE_REACH_M; else its grasp anchor, within the configured proximity.
 pub(super) fn target_position(
     context: Option<&RapierContext>,
-    wrist: Option<Entity>,
-    target: Option<(Entity, &super::props::Prop, &GlobalTransform)>,
-) -> Option<Vec3> {
+    wrist: Option<(Entity, Vec3)>,
+    target: Option<(Entity, &super::props::Prop, &GlobalTransform, Option<&super::props::HandleExtent>)>,
+    proximity_m: f32,
+) -> Option<(Vec3, f32)> {
     let context = context?;
-    let wrist = wrist?;
-    let (object, prop, transform) = target?;
+    let (wrist, wrist_position) = wrist?;
+    let (object, prop, transform, handle) = target?;
     log_pair(context, wrist, object);
-    has_object_contact(context, wrist, object).then(|| prop.grasp_world(transform))
+    let touching = match handle {
+        Some(extent) => has_handle_contact(context, wrist, transform, prop.grasp_offset(), extent.0),
+        None => has_object_contact(context, wrist, object),
+    };
+    if !touching { return None; }
+    Some(match handle {
+        Some(extent) => (nearest_on_handle(transform, prop.grasp_offset(), extent.0, wrist_position), HANDLE_REACH_M),
+        None => (prop.grasp_world(transform), proximity_m),
+    })
+}
+
+/// Nearest point to `point` on a handle box (half extents `extent`, centred at `centre` in
+/// prop space).
+pub(super) fn nearest_on_handle(transform: &GlobalTransform, centre: Vec3, extent: Vec3, point: Vec3) -> Vec3 {
+    let matrix = transform.compute_matrix();
+    let local = matrix.inverse().transform_point3(point) - centre;
+    matrix.transform_point3(centre + local.clamp(-extent, extent))
 }
 
 pub(super) fn log_pair(context: &RapierContext, wrist: Entity, object: Entity) {
@@ -105,6 +187,20 @@ fn assert_right_grip(app: &App, object: Entity, wrist: Entity, attached: bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hand_on_a_long_bar_is_judged_to_the_bar_not_its_centre() {
+        // A 90 cm bar along Z at the front of a drawer, the drawer turned 90 degrees.
+        let drawer = GlobalTransform::from(Transform::from_xyz(1., 0.8, 0.).with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)));
+        let (centre, extent) = (Vec3::new(0.3, 0.1, 0.), Vec3::new(0.006, 0.006, 0.45));
+        let world_centre = drawer.transform_point(centre);
+        let along = drawer.transform_point(centre + Vec3::new(0., 0., 0.35));
+        let wrist = along + Vec3::new(0., 0.07, 0.);  // above the bar, 35 cm from its middle
+        let nearest = nearest_on_handle(&drawer, centre, extent, wrist);
+        assert!(nearest.distance(along) < 0.007, "{nearest} vs {along}");
+        assert!(wrist.distance(nearest) <= HANDLE_REACH_M);
+        assert!(wrist.distance(world_centre) > HANDLE_REACH_M);
+    }
 
     #[test]
     fn ecs_grasp_requires_contact_with_requested_prop() {

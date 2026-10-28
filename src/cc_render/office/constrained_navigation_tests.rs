@@ -205,3 +205,75 @@ fn legacy_coupling_cannot_reposition_or_freeze_a_body_with_a_permanent_joint() {
     assert_eq!(app.world().get::<RigidBody>(entity), Some(&RigidBody::Dynamic));
     assert_eq!(app.world().get::<ImpulseJoint>(entity), Some(&hinge));
 }
+
+#[test]
+fn a_gripped_drawer_pulled_towards_her_does_not_reject_her_own_root() {
+    let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scenes/toronto_condo/scene-drawers.json")).unwrap();
+    let mut app = App::new();
+    app.insert_resource(package);
+    super::super::systems::install(&mut app);
+    let mut controller = app.world_mut().remove_resource::<OfficeController>().unwrap();
+    controller.objects.retain(|o| o.id == "bedside_upper_drawer");
+    // She stands just outside the reserve of the drawer's front.
+    let drawer = controller.objects[0].clone();
+    let front = drawer.position[2] + drawer.half_extents[2];
+    let stand = Vec3::new(drawer.position[0], 0.9, front + NATIVE_ROOT_RESERVE_M + 0.05);
+    controller.observed.pelvis = stand.to_array();
+    assert!(controller.permits_native_root(stand));
+    // The drawer slides 0.15 m out towards her: ungripped, her standing root is now inside its
+    // reserve, and she may not step closer.
+    controller.objects[0].position[2] += 0.15;
+    assert!(!controller.permits_native_root(stand - Vec3::Z * 0.05));
+    // Gripped, it moves with her hand: the native check ignores it; planning still keeps it.
+    let grip = crate::cc_render::renderer::GrabSnapshot { hand: Hand::Right, prop: "bedside_upper_drawer".into() };
+    controller.advance(&SceneState { grabs: vec![grip], ..Default::default() });
+    assert!(controller.permits_native_root(stand));
+    assert!(!controller.permits_root(stand));
+    // Let go, the open drawer is an obstacle again: she may stay or step back, never closer.
+    controller.advance(&SceneState::default());
+    assert!(controller.held.is_empty());
+    assert!(controller.permits_native_root(stand));
+    assert!(controller.permits_native_root(stand + Vec3::Z * 0.05));
+    assert!(controller.permits_native_root(stand - Vec3::Z * 0.002), "standing sway");
+    assert!(!controller.permits_native_root(stand - Vec3::Z * 0.05));
+    assert!(!controller.permits_root(stand));
+    // Let go clear of it, then slid on into her reserve by itself: the same rule.
+    controller.leaving_seat = None;
+    assert!(controller.permits_native_root(stand));
+    assert!(controller.permits_native_root(stand + Vec3::Z * 0.05));
+    assert!(!controller.permits_native_root(stand - Vec3::Z * 0.05));
+    // Its release phase lets go of a grip the hand has already slipped off: not an error.
+    controller.apply_coupling(super::super::interaction::CouplingCommand::Release {
+        object: "bedside_upper_drawer".into(), onto: None });
+    assert_eq!(controller.motion_error, None);
+}
+
+#[test]
+fn standing_at_the_edge_of_an_open_vanity_drawers_reserve_she_may_sway() {
+    // Live: let go at full travel, her pelvis 0.2001 m from the drawer swayed 0.6 mm closer.
+    let package = ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scenes/toronto_condo/scene-vanity-drawers.json")).unwrap();
+    let mut app = App::new();
+    app.insert_resource(package);
+    super::super::systems::install(&mut app);
+    let mut controller = app.world_mut().remove_resource::<OfficeController>().unwrap();
+    controller.observed.ready = true;
+    controller.objects.iter_mut().find(|o| o.id == "vanity_upper_drawer").unwrap().position[0] += 0.4;
+    let start = Vec3::new(-4.6158905, 0.9324477, -2.7891545);
+    controller.observed.pelvis = start.to_array();
+    assert!(controller.permits_native_root(Vec3::new(-4.6165109, 0.9316328, -2.7874453)));
+    // Live: stood 15 cm from it after pulling, standing up straight moved her 3.2 mm closer.
+    let near = Vec3::new(-4.664736, 0.9711016, -2.834644);
+    controller.observed.pelvis = near.to_array();
+    assert!(controller.permits_native_root(Vec3::new(-4.667926, 0.9727172, -2.8314695)));
+    assert!(!controller.permits_native_root(near - Vec3::X * 0.06), "within 10 cm of it");
+    // Live: let go of the lower drawer at full travel 20.3 cm from it, just outside its full
+    // reserve; standing up moved her 3.2 mm closer.
+    controller.objects.iter_mut().find(|o| o.id == "vanity_upper_drawer").unwrap().position[0] -= 0.4;
+    controller.objects.iter_mut().find(|o| o.id == "vanity_lower_drawer").unwrap().position[0] += 0.4;
+    let edge = Vec3::new(-4.612988, 0.9456605, -2.7784178);
+    controller.observed.pelvis = edge.to_array();
+    assert!(controller.permits_native_root(Vec3::new(-4.616138, 0.9509126, -2.7807331)));
+    assert!(!controller.permits_native_root(edge - Vec3::X * 0.12), "within 10 cm of it");
+}

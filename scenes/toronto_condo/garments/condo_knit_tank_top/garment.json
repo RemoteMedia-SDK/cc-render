@@ -1,0 +1,75 @@
+{
+  "schema": "cc-render.garment/0",
+  "id": "condo_knit_tank_top",
+  "display_name": "Cream sleeveless knit top",
+  "slot": "top",
+  "layer": 1,
+  "asset": {
+    "glb": "condo_knit_tank_top.glb",
+    "bytes": 1273436,
+    "sha256": "62b52ecb687d5df384bdf459bd98c38e6fdfb79d067431832975777eb5f5f123"
+  },
+  "binding": {
+    "skeleton": "CC5",
+    "bind_by": "joint_name",
+    "joints": [
+      "CC_Base_Pelvis",
+      "CC_Base_L_ThighTwist01",
+      "CC_Base_L_ThighTwist02",
+      "CC_Base_Waist",
+      "CC_Base_Spine01",
+      "CC_Base_Spine02",
+      "CC_Base_L_Clavicle",
+      "CC_Base_L_UpperarmTwist01",
+      "CC_Base_L_RibsTwist",
+      "CC_Base_L_Breast",
+      "CC_Base_NeckTwist01",
+      "CC_Base_R_ThighTwist01",
+      "CC_Base_R_ThighTwist02",
+      "CC_Base_R_Clavicle",
+      "CC_Base_R_UpperarmTwist01",
+      "CC_Base_R_RibsTwist",
+      "CC_Base_R_Breast",
+      "CC_Base_L_UpperarmTwist02",
+      "CC_Base_R_UpperarmTwist02"
+    ],
+    "joints_sha256": "44e81c924d11c4ed27149a1fa51cb4eb359f810e6163054521793be734ce6bb8",
+    "max_influences": 4,
+    "bind_pose": "CC5 rest pose of the source avatar; inverse bind matrices copied from its CC_Base_Body skin"
+  },
+  "geometry": {
+    "vertices": 15780,
+    "triangles": 31200,
+    "attributes": [
+      "JOINTS_0",
+      "NORMAL",
+      "POSITION",
+      "TEXCOORD_0",
+      "WEIGHTS_0"
+    ],
+    "morph_targets": 0
+  },
+  "materials": [
+    {
+      "name": "Condo cream knit top",
+      "double_sided": true,
+      "textures": [
+        "baseColorTexture",
+        "normalTexture"
+      ]
+    }
+  ],
+  "deformation": "static skinned, no simulation",
+  "provenance": {
+    "source_outfit": "scenes/toronto_condo/beautiful_assistant.condo-outfit-v13.glb",
+    "source_outfit_sha256": "aaca98681c5c1e950be0830503d8803e8c00d33932e7c49a891559ca94e564c7",
+    "source_avatar_sha256": "23060843839654603f26d7aae6a955cf09c86bb2b39de8bf70bfc5e70d1062a9",
+    "source_node_index": 119,
+    "source_node_name": "Condo cream knit top",
+    "source_mesh_index": 14,
+    "source_skin_index": 1,
+    "source_skin_joint_count": 78,
+    "authored_by": "scripts/condo/build_outfit.py",
+    "extracted_by": "scripts/condo/split_outfit.py"
+  }
+}

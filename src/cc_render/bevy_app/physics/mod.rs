@@ -8,6 +8,7 @@ pub(crate) mod cc5_json;
 pub(crate) mod debug_overlay;
 pub(crate) mod grab;
 mod contact_grasp;
+pub(crate) mod rail_drive;
 mod articulation;
 #[cfg(test)]
 mod grip_lifecycle_tests;
@@ -294,6 +295,15 @@ pub(crate) fn install(app: &mut App, config: PhysicsConfig, glb_path: PathBuf) {
     app.add_systems(
         bevy::app::PostUpdate,
         props::publish_scene_state.after(bevy::transform::TransformSystem::TransformPropagate),
+    );
+    // Driven rail parts are placed, then the hands gripping them solved onto their handles,
+    // on this frame's generated pose before it propagates.
+    app.add_systems(
+        bevy::app::PostUpdate,
+        (rail_drive::drive_rails, rail_drive::keep_hand_on_handle).chain()
+            .after(bevy_rapier3d::plugin::PhysicsSet::Writeback)
+            .after(crate::cc_render::bevy_app::pose::apply_skeletal_pose)
+            .before(bevy::transform::TransformSystem::TransformPropagate),
     );
 
     app.add_systems(

@@ -1,0 +1,68 @@
+{
+  "schema": "cc-render.garment/0",
+  "id": "condo_charcoal_trousers",
+  "display_name": "Charcoal trousers",
+  "slot": "bottom",
+  "layer": 0,
+  "asset": {
+    "glb": "condo_charcoal_trousers.glb",
+    "bytes": 472660,
+    "sha256": "d5ade691edca5c58407c897e3bd799cba0f4ff24879c9dcae4881044bfb9a972"
+  },
+  "binding": {
+    "skeleton": "CC5",
+    "bind_by": "joint_name",
+    "joints": [
+      "CC_Base_Pelvis",
+      "CC_Base_L_ThighTwist01",
+      "CC_Base_L_ThighTwist02",
+      "CC_Base_L_CalfTwist01",
+      "CC_Base_L_KneeShareBone",
+      "CC_Base_L_CalfTwist02",
+      "CC_Base_L_Foot",
+      "CC_Base_Waist",
+      "CC_Base_Spine01",
+      "CC_Base_Spine02",
+      "CC_Base_R_ThighTwist01",
+      "CC_Base_R_CalfTwist01",
+      "CC_Base_R_KneeShareBone",
+      "CC_Base_R_ThighTwist02",
+      "CC_Base_R_CalfTwist02",
+      "CC_Base_R_Foot"
+    ],
+    "joints_sha256": "bcec80ec62f9659e5cf374f1705196e579586c3112bc10363777173fb1d87cca",
+    "max_influences": 4,
+    "bind_pose": "CC5 rest pose of the source avatar; inverse bind matrices copied from its CC_Base_Body skin"
+  },
+  "geometry": {
+    "vertices": 6509,
+    "triangles": 12646,
+    "attributes": [
+      "JOINTS_0",
+      "NORMAL",
+      "POSITION",
+      "WEIGHTS_0"
+    ],
+    "morph_targets": 0
+  },
+  "materials": [
+    {
+      "name": "Condo charcoal trousers",
+      "double_sided": true,
+      "textures": []
+    }
+  ],
+  "deformation": "static skinned, no simulation",
+  "provenance": {
+    "source_outfit": "scenes/toronto_condo/beautiful_assistant.condo-outfit-v13.glb",
+    "source_outfit_sha256": "aaca98681c5c1e950be0830503d8803e8c00d33932e7c49a891559ca94e564c7",
+    "source_avatar_sha256": "23060843839654603f26d7aae6a955cf09c86bb2b39de8bf70bfc5e70d1062a9",
+    "source_node_index": 120,
+    "source_node_name": "Condo charcoal trousers",
+    "source_mesh_index": 15,
+    "source_skin_index": 1,
+    "source_skin_joint_count": 78,
+    "authored_by": "scripts/condo/build_outfit.py",
+    "extracted_by": "scripts/condo/split_outfit.py"
+  }
+}

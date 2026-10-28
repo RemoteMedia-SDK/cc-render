@@ -1,5 +1,5 @@
-//! Captured hand geometry and legacy grasp calculations. Production captures
-//! rig geometry only; it must not close fingers or otherwise write body poses.
+//! Conforming hand grasps: the palm grip frame, seated grips and contact-conforming
+//! fingers (openspec add-conforming-hand-grasps; restored by owner decision 2026-10-17).
 //!
 //! Everything here is in the hand bone's local space, so a grip computed once stays
 //! valid while the hand moves. Fingers are posed from the rig's own rest transforms:
@@ -346,7 +346,7 @@ pub fn grip_zone(object: &super::OfficeObject, point: [f32; 3], grip: Grip) -> O
         .min_by(|a, b| a.distance_local(p).total_cmp(&b.distance_local(p)))
 }
 
-/// A captured hand: its rig and the bone entities it observes.
+/// A captured hand: its rig and the bone entities it poses.
 pub struct CapturedHand {
     pub rig: HandRig,
     pub hand: Entity,
@@ -412,6 +412,81 @@ pub struct GraspReport {
     pub seat_error_m: Option<f32>,
     pub flexion: [f32; 5],
     pub touching: [bool; 5],
+}
+
+#[derive(Default)]
+pub(crate) struct FingerState {
+    angles: [[f32; 3]; 5],
+    target: [[f32; 3]; 5],
+    key: Option<(String, Transform)>,
+}
+
+/// Recompute a closure only when the object moved in the hand by more than this.
+const RECLOSE_M: f32 = 0.002;
+const RECLOSE_RAD: f32 = 0.03;
+/// Finger angles follow their target with this time constant (≈ 0.25 s to settle).
+const FINGER_TAU_S: f32 = 0.06;
+
+/// Close each holding hand's fingers onto its object; open them again after release.
+/// Runs before transform propagation, in hand space, from the object's pose in the
+/// hand on the previous frame (both poses from the same frame).
+pub(crate) fn conform_fingers(
+    rigs: Res<HandRigs>,
+    held: Res<HeldInHand>,
+    mut office: ResMut<super::controller::OfficeController>,
+    registry: Option<Res<super::super::bevy_app::physics::props::PropRegistry>>,
+    globals: Query<&GlobalTransform>,
+    mut transforms: Query<&mut Transform>,
+    time: Res<Time>,
+    mut states: Local<[FingerState; 2]>,
+) {
+    let blend = 1. - (-time.delta_secs() / FINGER_TAU_S).exp();
+    let mut reports = Vec::new();
+    for i in 0..2 {
+        let Some(captured) = rigs.hands[i].as_ref() else { continue };
+        let hand = if i == 0 { super::super::renderer::Hand::Left } else { super::super::renderer::Hand::Right };
+        // A declared coupling, else a physical grip.
+        let holding = held.hands[i].clone().or_else(|| {
+            let (_, id) = office.held.iter().find(|(h, _)| *h == hand)?;
+            let entity = *registry.as_ref()?.by_id.get(id)?;
+            let (h, o) = (globals.get(captured.hand).ok()?, globals.get(entity).ok()?);
+            Some((id.clone(), in_hand(&h.compute_transform(), &o.compute_transform())))
+        });
+        let state = &mut states[i];
+        match holding.as_ref().and_then(|(id, pose)| office.objects.iter().find(|o| &o.id == id).map(|o| (o, pose))) {
+            Some((object, pose)) => {
+                let moved = state.key.as_ref().is_none_or(|(id, last)| id != &object.id
+                    || last.translation.distance(pose.translation) > RECLOSE_M
+                    || last.rotation.angle_between(pose.rotation) > RECLOSE_RAD);
+                if moved {
+                    state.target = close_hand(&captured.rig, object, pose);
+                    state.key = Some((object.id.clone(), *pose));
+                }
+            }
+            None => { state.target = [[0.; 3]; 5]; state.key = None; }
+        }
+        if let Some((id, pose)) = holding.as_ref() {
+            // Seat error: distance of the object's grip from its seated pose, when it has one.
+            let seat_error_m = office.couplings.iter().find(|c| &c.object == id)
+                .and_then(|c| c.latch.as_ref()?.seat).map(|(_, seat, ..)| seat.translation.distance(pose.translation));
+            let rig = &captured.rig;
+            reports.push(GraspReport {
+                hand, object: id.clone(), seat_error_m,
+                flexion: std::array::from_fn(|f| state.angles[f].iter().sum()),
+                touching: std::array::from_fn(|f| (0..3).any(|k| state.target[f][k] < rig.fingers[f].limits[k] - 1e-3)),
+            });
+        }
+        for f in 0..5 {
+            for k in 0..3 {
+                let a = &mut state.angles[f][k];
+                *a += (state.target[f][k] - *a) * blend;
+                if let Ok(mut transform) = transforms.get_mut(captured.bones[f][k]) {
+                    transform.rotation = captured.rig.fingers[f].posed(captured.rig.flex, k, *a).rotation;
+                }
+            }
+        }
+    }
+    office.grasps = reports;
 }
 
 #[cfg(test)]

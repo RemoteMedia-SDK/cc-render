@@ -89,6 +89,9 @@ fn spawn_part(commands: &mut Commands, mechanism: &SceneMechanism, part: &Mechan
             grasp_local: part.handle_region.as_ref().map(|h|
                 Mat4::from_translation(Vec3::from(h.centre) - center).to_cols_array_2d()) },
     ));
+    if let Some(handle) = &part.handle_region {
+        entity.insert(super::physics::props::HandleExtent(Vec3::from(handle.half_extents)));
+    }
     if let Some(mass) = part.mass_kg {
         entity.insert((RigidBody::Dynamic, ColliderMassProperties::Mass(mass), Velocity::default(),
             Damping { linear_damping: 0.1, angular_damping: 0.1 },

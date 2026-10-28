@@ -17,6 +17,12 @@ impl OfficeController {
             object.position = pose.translation.to_array();
             object.rotation_xyzw = Some(pose.rotation.to_array());
             object.yaw_deg = pose.rotation.to_euler(EulerRot::YXZ).0.to_degrees();
+            match prop.articulation.as_ref().map(|a| &a.state) {
+                Some(crate::cc_render::renderer::ArticulationCoordinate::Prismatic { travel_m, .. }) => {
+                    self.articulation.insert(prop.id.clone(), *travel_m);
+                }
+                _ => { self.articulation.remove(&prop.id); }
+            }
         }
         moved
     }

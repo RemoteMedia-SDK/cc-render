@@ -6,7 +6,8 @@ Read `docs/design/model-owned-motion.md` before changing motion, actions, physic
 
 - Task code describes semantic outcomes; it must not write pelvis/root paths, body heights/headings, joint targets, stance/gait timing, reference poses, or corrective transforms.
 - A model-generated pose becomes a prohibited prescription if relocated, height-adjusted, scheduled or held by task code.
-- Validators accept or reject unchanged motion. Never add IK, floor/seat snapping, smoothing, bone clamps or object actuators to pass a task.
+- Validators accept or reject unchanged motion. Never add floor/seat snapping, smoothing, bone clamps or object actuators to pass a task.
+- Owner clarification (2026-10-17): the pose-repair ban is about manual poses (hand-authored, snapped or corrected poses). It does not forbid a body part following a trajectory, such as a hand following a drawer handle's path.
 - Unsupported actions fail explicitly. Do not restore retired behavior through flags, defaults, fallback clips or renamed helpers.
 - Fixed action-independent bind/coordinate conversion and adjacent-frame interpolation are distinct from behavioral repair; changes need fidelity evidence.
 - Owner approval is required for exceptions and for weakening protocol/policy/ownership tests. An implementing agent cannot approve its own exception.

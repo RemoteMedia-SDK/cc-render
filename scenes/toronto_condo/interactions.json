@@ -1,0 +1,514 @@
+{
+ "vanity_upper_drawer": {
+  "zones": [
+   {
+    "id": "pull",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.311,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.311,
+     0.096,
+     0.2
+    ]
+   },
+   {
+    "id": "pull_open",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.661,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.661,
+     0.096,
+     0.2
+    ]
+   },
+   {
+    "id": "push_shut",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.261,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.261,
+     0.096,
+     0.2
+    ]
+   },
+   {
+    "id": "front",
+    "type": "point",
+    "center": [
+     0.933,
+     -0.695,
+     0.0
+    ],
+    "radius": 0.25
+   }
+  ],
+  "interactions": [
+   {
+    "id": "open",
+    "phases": [
+     {
+      "id": "grip",
+      "hands": "either",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "prompt": "A person reaches out with their {hand} hand and grips the handle of the drawer in front of them at waist height.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "pull",
+        "window_s": [
+         0,
+         12
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "transition": {
+       "kind": "grip",
+       "anchor": {
+        "joint": "RightHand",
+        "zone": "pull"
+       }
+      },
+      "timeout_s": 14
+     },
+     {
+      "id": "pull",
+      "hands": "either",
+      "prompt": "A person holds the drawer handle in their {hand} hand and pulls the drawer open towards themselves.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "@home/pull_open",
+        "window_s": [
+         0,
+         8
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "travel": {
+       "min_m": 0.3,
+       "to_m": 0.35,
+       "over_s": 1.0
+      },
+      "timeout_s": 10
+     },
+     {
+      "id": "release",
+      "prompt": "A person lets go of the drawer handle with their {hand} hand and stands up straight.",
+      "transition": {
+       "kind": "release"
+      },
+      "timeout_s": 4
+     },
+     {
+      "id": "step_back",
+      "prompt": "A person stands up straight and takes a small step back from the drawer.",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "timeout_s": 4
+     }
+    ]
+   },
+   {
+    "id": "close",
+    "phases": [
+     {
+      "id": "grip",
+      "hands": "either",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "prompt": "A person reaches out with their {hand} hand and grips the handle of the drawer in front of them at waist height.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "pull",
+        "window_s": [
+         0,
+         12
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "transition": {
+       "kind": "grip",
+       "anchor": {
+        "joint": "RightHand",
+        "zone": "pull"
+       }
+      },
+      "timeout_s": 14
+     },
+     {
+      "id": "push",
+      "hands": "either",
+      "prompt": "A person holds the drawer handle in their {hand} hand and pushes the drawer closed.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "@home/push_shut",
+        "window_s": [
+         0,
+         8
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "travel": {
+       "max_m": 0.03,
+       "to_m": 0.0,
+       "over_s": 1.0
+      },
+      "timeout_s": 10
+     },
+     {
+      "id": "release",
+      "prompt": "A person lets go of the drawer handle with their {hand} hand and stands up straight.",
+      "transition": {
+       "kind": "release"
+      },
+      "timeout_s": 4
+     },
+     {
+      "id": "step_back",
+      "prompt": "A person stands up straight and takes a small step back from the drawer.",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "timeout_s": 4
+     }
+    ]
+   }
+  ]
+ },
+ "vanity_lower_drawer": {
+  "zones": [
+   {
+    "id": "pull",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.311,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.311,
+     0.096,
+     0.2
+    ]
+   },
+   {
+    "id": "pull_open",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.661,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.661,
+     0.096,
+     0.2
+    ]
+   },
+   {
+    "id": "push_shut",
+    "type": "segment",
+    "radius": 0.08,
+    "grip": "power",
+    "palm": {
+     "LeftHand": [
+      -1.0,
+      0.0,
+      0.0
+     ],
+     "RightHand": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    "a": [
+     0.261,
+     0.096,
+     -0.2
+    ],
+    "b": [
+     0.261,
+     0.096,
+     0.2
+    ]
+   },
+   {
+    "id": "front",
+    "type": "point",
+    "center": [
+     0.933,
+     -0.435,
+     0.0
+    ],
+    "radius": 0.25
+   }
+  ],
+  "interactions": [
+   {
+    "id": "open",
+    "phases": [
+     {
+      "id": "grip",
+      "hands": "either",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "prompt": "A person bends their knees and crouches down, then grips the handle of the low drawer in front of them with their {hand} hand.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "pull",
+        "window_s": [
+         0,
+         12
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "transition": {
+       "kind": "grip",
+       "anchor": {
+        "joint": "RightHand",
+        "zone": "pull"
+       }
+      },
+      "timeout_s": 14
+     },
+     {
+      "id": "pull",
+      "hands": "either",
+      "prompt": "A person crouching in front of a low drawer pulls it open towards themselves with their {hand} hand.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "@home/pull_open",
+        "window_s": [
+         0,
+         8
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "travel": {
+       "min_m": 0.3,
+       "to_m": 0.35,
+       "over_s": 1.0
+      },
+      "timeout_s": 10
+     },
+     {
+      "id": "release",
+      "prompt": "A person lets go of the low drawer's handle with their {hand} hand and stands up from the crouch.",
+      "transition": {
+       "kind": "release"
+      },
+      "timeout_s": 4
+     },
+     {
+      "id": "step_back",
+      "prompt": "A person stands up straight and takes a small step back from the drawer.",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "timeout_s": 4
+     }
+    ]
+   },
+   {
+    "id": "close",
+    "phases": [
+     {
+      "id": "grip",
+      "hands": "either",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "prompt": "A person bends their knees and crouches down, then grips the handle of the low drawer in front of them with their {hand} hand.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "pull",
+        "window_s": [
+         0,
+         12
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "transition": {
+       "kind": "grip",
+       "anchor": {
+        "joint": "RightHand",
+        "zone": "pull"
+       }
+      },
+      "timeout_s": 14
+     },
+     {
+      "id": "push",
+      "hands": "either",
+      "prompt": "A person crouching in front of a low drawer pushes it closed with their {hand} hand.",
+      "relations": [
+       {
+        "kind": "touch",
+        "joints": [
+         "RightHand"
+        ],
+        "zone": "@home/push_shut",
+        "window_s": [
+         0,
+         8
+        ],
+        "min_frames": 3,
+        "tolerance_m": 0.03
+       }
+      ],
+      "travel": {
+       "max_m": 0.03,
+       "to_m": 0.0,
+       "over_s": 1.0
+      },
+      "timeout_s": 10
+     },
+     {
+      "id": "release",
+      "prompt": "A person lets go of the low drawer's handle with their {hand} hand and stands up from the crouch.",
+      "transition": {
+       "kind": "release"
+      },
+      "timeout_s": 4
+     },
+     {
+      "id": "step_back",
+      "prompt": "A person stands up straight and takes a small step back from the drawer.",
+      "stand_at": {
+       "zone": "@home/front"
+      },
+      "timeout_s": 4
+     }
+    ]
+   }
+  ]
+ }
+}

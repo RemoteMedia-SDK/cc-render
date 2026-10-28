@@ -13,7 +13,9 @@ pub struct SceneSnapshot {
     floor_y: f32,
     objects: Vec<SceneObject>,
     /// Objects held by declared couplings through a grip zone: what the hand must keep
-    /// doing with its palm (openspec add-conforming-hand-grasps). Absent when none.
+    /// doing with its palm (openspec add-conforming-hand-grasps); and a jointed part's handle
+    /// held by a physical grip, through the zone its interactions grip (a drawer: the hand
+    /// pulling it is the hand on it). Absent when none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     held: Vec<HeldObject>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -86,12 +88,12 @@ impl SceneSnapshot {
             if !object.interactions.is_empty() { exported.home = office.homes.get(&object.id).copied(); }
             Ok::<_, String>(exported)
         }).collect::<Result<Vec<_>, _>>()?;
-        let held = office.couplings.iter().filter(|c| c.release.is_none()).flat_map(|c| {
+        let joint = |hand: crate::cc_render::Hand| if hand == crate::cc_render::Hand::Left { "LeftHand" } else { "RightHand" };
+        let mut held: Vec<HeldObject> = office.couplings.iter().filter(|c| c.release.is_none()).flat_map(|c| {
             let object = office.objects.iter().find(|o| o.id == c.object);
             c.anchors.iter().filter_map(move |(hand, point, grip)| {
                 let zone = super::hand::grip_zone(object?, *point, (*grip)?)?;
-                Some(HeldObject { joint: if *hand == crate::cc_render::Hand::Left { "LeftHand" } else { "RightHand" },
-                                  object: c.object.clone(), zone: zone.id,
+                Some(HeldObject { joint: joint(*hand), object: c.object.clone(), zone: zone.id,
                                   in_hand: c.latch.and_then(|l| l.seat).map(|(start,end,_,progress)| {
                                       let t = super::hand::seat_blend(&start,&end,progress*super::hand::SEAT_BLEND_S);
                                       let p=t.translation; let q=t.rotation;
@@ -99,6 +101,15 @@ impl SceneSnapshot {
                                   }) })
             })
         }).collect();
+        for (hand, id) in &office.occupied_hands {
+            if held.iter().any(|h| &h.object == id) { continue; }
+            let grip = office.objects.iter().find(|o| &o.id == id).and_then(|o| o.interactions.iter()
+                .flat_map(|i| &i.phases).find_map(|p| match &p.transition {
+                    Some(super::interaction::Transition::Grip { anchor }) => Some(anchor.zone.clone()),
+                    _ => None,
+                }));
+            if let Some(zone) = grip { held.push(HeldObject { joint: joint(*hand), object: id.clone(), zone, in_hand: None }); }
+        }
         let palms=office.avatar.palm_geometry.iter().enumerate().filter_map(|(i,p)|
             p.clone().map(|geometry| PalmGeometry { joint: if i==0 { "LeftHand" } else { "RightHand" }, geometry })).collect();
         Ok(Self { version: 1, session_id: session_id.into(), scene_revision: revision,
@@ -177,6 +188,23 @@ mod tests {
         let moved = serde_json::to_value(SceneSnapshot::from_office(&controller.snapshot(), "test", 3).unwrap()).unwrap();
         let broom = moved["objects"].as_array().unwrap().iter().find(|o| o["id"] == "broom").unwrap();
         assert_eq!((broom["position"][0].as_f64(), broom["home"][0].as_f64().map(|v| v as f32)), (Some(0.), Some(-1.6)));
+    }
+
+    #[test]
+    fn a_drawer_held_by_a_physical_grip_is_held_by_that_hand_through_its_handle() {
+        use bevy::prelude::App;
+        let package = crate::cc_render::scene_package::ScenePackage::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("scenes/toronto_condo/scene-vanity-drawers.json")).unwrap();
+        let mut app = App::new();
+        app.insert_resource(package);
+        super::super::systems::install(&mut app);
+        let controller = app.world_mut().remove_resource::<OfficeController>().unwrap();
+        let mut office = controller.snapshot();
+        let value = serde_json::to_value(SceneSnapshot::from_office(&office, "test", 5).unwrap()).unwrap();
+        assert!(value.get("held").is_none());
+        office.occupied_hands.push((crate::cc_render::Hand::Left, "vanity_lower_drawer".into()));
+        let value = serde_json::to_value(SceneSnapshot::from_office(&office, "test", 6).unwrap()).unwrap();
+        assert_eq!(value["held"], serde_json::json!([{"joint": "LeftHand", "object": "vanity_lower_drawer", "zone": "pull"}]));
     }
 
     #[test]

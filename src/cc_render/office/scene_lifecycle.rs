@@ -503,4 +503,151 @@ mod tests {
         evidence.patch_distances_m[0] = 0.02;
         assert_eq!(task.observe(&scene), Update::Failed("seated geometric contact lost".into()));
     }
+
+    /// A drawer on a passive rail (object-local +X opens it) declaring open: grip, pull, release.
+    fn drawer_scene() -> OfficeSnapshot {
+        let mut scene = OfficeController::default().snapshot();
+        let drawer: crate::cc_render::office::OfficeObject = serde_json::from_value(serde_json::json!({
+            "id": "drawer", "label": "Drawer", "position": [0., 0.7, 0.], "half_extents": [0.25, 0.1, 0.45],
+            "color": [0.5, 0.5, 0.5], "dynamic": true, "approach": [0.85, -0.7, 0.],
+            "zones": [
+                {"id": "pull", "type": "segment", "a": [0.3, 0.1, -0.2], "b": [0.3, 0.1, 0.2], "radius": 0.03, "grip": "power"},
+                {"id": "pull_open", "type": "segment", "a": [0.6, 0.1, -0.2], "b": [0.6, 0.1, 0.2], "radius": 0.03, "grip": "power"},
+                {"id": "front", "type": "point", "center": [0.85, -0.7, 0.], "radius": 0.25}],
+            "interactions": [{"id": "open", "phases": [
+                {"id": "grip", "prompt": "A person grips the drawer handle.", "stand_at": {"zone": "@home/front"},
+                 "relations": [{"kind": "touch", "joints": ["RightHand"], "zone": "pull", "window_s": [0, 10],
+                                "min_frames": 3, "tolerance_m": 0.05}],
+                 "transition": {"kind": "grip", "anchor": {"joint": "RightHand", "zone": "pull"}}, "timeout_s": 12},
+                {"id": "pull", "prompt": "A person pulls the drawer open.",
+                 "relations": [{"kind": "touch", "joints": ["RightHand"], "zone": "@home/pull_open", "window_s": [0, 6],
+                                "min_frames": 3, "tolerance_m": 0.05}],
+                 "travel": {"min_m": 0.3, "to_m": 0.35, "over_s": 1.0}, "timeout_s": 8},
+                {"id": "release", "prompt": "A person lets go of the drawer and stands.",
+                 "transition": {"kind": "release"}, "timeout_s": 4}]}]
+        })).unwrap();
+        crate::cc_render::office::validate_objects(std::slice::from_ref(&drawer)).unwrap();
+        scene.homes.insert("drawer".into(), [0., 0.7, 0., 0., 0., 0., 1.]);
+        scene.objects.push(drawer);
+        scene
+    }
+
+    #[test]
+    fn a_drawer_is_gripped_pulled_open_on_observed_travel_and_released() {
+        use crate::cc_render::{office::interaction::CouplingCommand, Hand};
+        let mut scene = drawer_scene();
+        let mut task = SceneLifecycle::new(interact(1, "drawer", "open"), &scene).unwrap();
+        // The right hand reaches the bar: the grip is requested, but the phase waits to see it held.
+        scene.avatar.wrists[1] = [0.3, 0.8, 0.05];
+        for pts in [100, 150, 200] {
+            displayed(&mut scene, 1, pts);
+            assert_eq!(task.observe(&scene), Update::None);
+        }
+        assert_eq!(task.take_couplings(), vec![CouplingCommand::Grip { object: "drawer".into(), hand: Hand::Right }]);
+        displayed(&mut scene, 1, 250);
+        assert_eq!(task.observe(&scene), Update::None);
+        assert!(task.take_couplings().is_empty(), "not asked again before the pursuit could time out");
+        displayed(&mut scene, 1, 2800);
+        task.observe(&scene);
+        assert_eq!(task.take_couplings().len(), 1, "asked again after a timed-out pursuit");
+        // The renderer admits the grip on actual contact: the phase passes.
+        scene.occupied_hands.push((Hand::Right, "drawer".into()));
+        displayed(&mut scene, 1, 2850);
+        assert_eq!(task.observe(&scene), Update::PhaseChanged);
+        task.bind_generation(interact(2, "drawer", "open")).unwrap();
+        assert_eq!(task.phase_name(), "pull");
+        // Pulling: the gripped drawer is driven from the phase's first displayed frame, and the
+        // phase passes only on sustained observed travel, whatever the hand relation did.
+        scene.articulation.insert("drawer".into(), 0.12);
+        for pts in [2900, 2950] {
+            displayed(&mut scene, 2, pts);
+            assert_eq!(task.observe(&scene), Update::None);
+        }
+        assert_eq!(task.take_couplings(), vec![CouplingCommand::Drive { object: "drawer".into(), hand: Hand::Right,
+                                                                        to_m: 0.35, over_s: 1.0 }]);
+        scene.articulation.insert("drawer".into(), 0.31);
+        let mut update = Update::None;
+        for pts in [3000, 3050, 3100, 3150, 3200] {
+            displayed(&mut scene, 2, pts);
+            update = task.observe(&scene);
+        }
+        assert_eq!(update, Update::PhaseChanged);
+        let declared = task.declared.as_ref().unwrap();
+        assert_eq!(declared.results.last().unwrap().travel_m, Some(0.31));
+        assert!(task.take_couplings().is_empty());
+        task.bind_generation(interact(3, "drawer", "open")).unwrap();
+        // Letting go as the release phase starts, before its motion can drag the drawer.
+        assert_eq!(task.take_couplings(), vec![CouplingCommand::Release { object: "drawer".into(), onto: None }]);
+        scene.occupied_hands.clear();
+        displayed(&mut scene, 3, 3300);
+        assert_eq!(task.observe(&scene), Update::None);
+        displayed(&mut scene, 3, 4400);
+        assert_eq!(task.observe(&scene), Update::Completed);
+        assert!(task.take_couplings().is_empty(), "let go once");
+    }
+
+    #[test]
+    fn a_drawer_grip_lost_while_pulling_fails_the_phase() {
+        use crate::cc_render::Hand;
+        let mut scene = drawer_scene();
+        let mut task = SceneLifecycle::new(interact(1, "drawer", "open"), &scene).unwrap();
+        scene.avatar.wrists[1] = [0.3, 0.8, 0.];
+        scene.occupied_hands.push((Hand::Right, "drawer".into()));
+        for pts in [100, 150, 200] {
+            displayed(&mut scene, 1, pts);
+            task.observe(&scene);
+        }
+        task.bind_generation(interact(2, "drawer", "open")).unwrap();
+        scene.occupied_hands.clear();
+        displayed(&mut scene, 2, 300);
+        assert_eq!(task.observe(&scene), Update::Failed("interaction open/pull: grip on drawer lost".into()));
+    }
+
+    #[test]
+    fn a_hand_slipping_off_while_letting_go_has_released_the_drawer() {
+        use crate::cc_render::Hand;
+        let mut scene = drawer_scene();
+        let mut task = SceneLifecycle::new(interact(1, "drawer", "open"), &scene).unwrap();
+        scene.avatar.wrists[1] = [0.3, 0.8, 0.];
+        scene.occupied_hands.push((Hand::Right, "drawer".into()));
+        for pts in [100, 150, 200] {
+            displayed(&mut scene, 1, pts);
+            task.observe(&scene);
+        }
+        task.bind_generation(interact(2, "drawer", "open")).unwrap();
+        scene.articulation.insert("drawer".into(), 0.31);
+        let mut update = Update::None;
+        for pts in [300, 350, 400, 450, 500] {
+            displayed(&mut scene, 2, pts);
+            update = task.observe(&scene);
+        }
+        assert_eq!(update, Update::PhaseChanged);
+        task.bind_generation(interact(3, "drawer", "open")).unwrap();
+        scene.occupied_hands.clear();
+        displayed(&mut scene, 3, 600);
+        assert_eq!(task.observe(&scene), Update::None);
+        displayed(&mut scene, 3, 1700);
+        assert_eq!(task.observe(&scene), Update::Completed);
+    }
+
+    #[test]
+    fn travel_needs_a_gripped_object_and_a_range() {
+        let base = drawer_scene().objects.pop().unwrap();
+        let mut ungripped = base.clone();
+        ungripped.interactions[0].phases.remove(0);
+        assert!(crate::cc_render::office::validate_objects(&[ungripped]).unwrap_err().contains("travel"));
+        use crate::cc_render::office::interaction::Travel;
+        let mut open_ended = base.clone();
+        open_ended.interactions[0].phases[1].travel = Some(Travel { min_m: None, max_m: None, to_m: None, over_s: None });
+        assert!(crate::cc_render::office::validate_objects(&[open_ended]).is_err());
+        // A drive needs both its target and its time, and must end inside the range it passes on.
+        for (to_m, over_s) in [(Some(0.35), None), (None, Some(1.)), (Some(0.2), Some(1.)), (Some(0.35), Some(0.))] {
+            let mut bad = base.clone();
+            bad.interactions[0].phases[1].travel = Some(Travel { min_m: Some(0.3), max_m: None, to_m, over_s });
+            assert!(crate::cc_render::office::validate_objects(&[bad]).unwrap_err().contains("travel"), "{to_m:?} {over_s:?}");
+        }
+        let mut no_hint = base;
+        no_hint.zones[0].grip = None;
+        assert!(crate::cc_render::office::validate_objects(&[no_hint]).unwrap_err().contains("transition"));
+    }
 }

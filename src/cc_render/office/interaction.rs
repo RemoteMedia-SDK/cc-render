@@ -118,6 +118,36 @@ pub enum Transition {
     Release { #[serde(default)] onto: Option<String> },
     SupportOn { zone: String },
     SupportOff,
+    /// Grip a handle physically with one hand (openspec add-declared-articulated-grips): the
+    /// renderer's contact grip, admitted only on actual shape contact, joints the hand to the
+    /// part; the phase passes once that grip is observed. A later `release` lets go.
+    Grip { anchor: Anchor },
+}
+
+/// Observed joint travel a phase must reach while its object stays gripped. Either bound may be
+/// open. With `to_m` and `over_s` (owner approval 2026-10-17) the gripped part is driven along
+/// its rail to `to_m` over `over_s` as the phase starts, and the gripping hand follows its
+/// handle; without them it moves only as the hand drags it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Travel {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_m: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_m: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_m: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub over_s: Option<f32>,
+}
+
+impl Travel {
+    pub fn contains(&self, travel_m: f32) -> bool {
+        self.min_m.is_none_or(|m| travel_m >= m) && self.max_m.is_none_or(|m| travel_m <= m)
+    }
+
+    /// Where and over how long the gripped part is driven, when it is.
+    pub fn drive(&self) -> Option<(f32, f32)> { self.to_m.zip(self.over_s) }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -157,6 +187,9 @@ pub struct InteractionPhase {
     pub transition: Option<Transition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispense: Option<Dispense>,
+    /// Pass on observed joint travel instead of relations (which then only guide the motion).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub travel: Option<Travel>,
     pub timeout_s: f32,
 }
 
@@ -321,6 +354,10 @@ pub enum CouplingCommand {
     Release { object: String, onto: Option<String> },
     SupportOn { object: String },
     SupportOff { object: String },
+    /// A physical contact grip request (the renderer's grab, never a declared coupling).
+    Grip { object: String, hand: crate::cc_render::Hand },
+    /// Drive the part `hand` grips along its rail to `to_m` over `over_s` (the renderer's grab).
+    Drive { object: String, hand: crate::cc_render::Hand, to_m: f32, over_s: f32 },
 }
 
 impl Relation {
@@ -358,6 +395,7 @@ pub fn validate(object_id: &str, zones: &[Zone], interactions: &[Interaction],
             return Err(format!("{object_id} interaction {:?} is invalid", interaction.id));
         }
         let mut phase_ids = std::collections::HashSet::new();
+        let mut gripping = false;
         for phase in &interaction.phases {
             let bad = |what: &str| Err(format!("{object_id}/{}/{} {what}", interaction.id, phase.id));
             if !valid_id(&phase.id) || !phase_ids.insert(phase.id.as_str()) { return bad("has an invalid id"); }
@@ -401,8 +439,28 @@ pub fn validate(object_id: &str, zones: &[Zone], interactions: &[Interaction],
                     && (anchors.len() < 2 || anchors[0].joint != anchors[1].joint),
                 Some(Transition::Release { onto: Some(zone) }) => zone.contains('/') && resolves(zone),
                 Some(Transition::SupportOn { zone }) => resolves(zone),
+                // One hand on a handle of this object, held with a grip hint.
+                Some(Transition::Grip { anchor }) => !gripping && hand(anchor.joint).is_some()
+                    && zones.iter().any(|z| z.id == anchor.zone && matches!(z.grip, Some(Grip::Power | Grip::Pinch))),
             };
             if !ok { return bad("has an invalid transition"); }
+            if let Some(travel) = &phase.travel {
+                let bound = |m: Option<f32>| m.is_none_or(|m| m.is_finite() && (0. ..=2.).contains(&m));
+                // A drive ends inside the range it passes on.
+                let drive = travel.to_m.is_some() == travel.over_s.is_some() && bound(travel.to_m)
+                    && travel.over_s.is_none_or(|s| s.is_finite() && (0.2..=10.).contains(&s))
+                    && travel.to_m.is_none_or(|to| travel.contains(to));
+                if !gripping || (travel.min_m.is_none() && travel.max_m.is_none()) || !bound(travel.min_m)
+                    || !bound(travel.max_m) || travel.min_m.zip(travel.max_m).is_some_and(|(lo, hi)| lo > hi)
+                    || !drive || matches!(phase.transition, Some(Transition::Grip { .. })) {
+                    return bad("needs a travel range while its object is gripped");
+                }
+            }
+            match &phase.transition {
+                Some(Transition::Grip { .. }) => gripping = true,
+                Some(Transition::Release { .. }) => gripping = false,
+                _ => {}
+            }
         }
     }
     Ok(())
@@ -428,8 +486,10 @@ impl InteractionPhase {
                 Relation::Support { .. } => {}
             }
         }
-        if let Some(Transition::Attach { anchors, .. }) = &mut phase.transition {
-            anchors.iter_mut().for_each(|a| a.joint = a.joint.mirrored());
+        match &mut phase.transition {
+            Some(Transition::Attach { anchors, .. }) => anchors.iter_mut().for_each(|a| a.joint = a.joint.mirrored()),
+            Some(Transition::Grip { anchor }) => anchor.joint = anchor.joint.mirrored(),
+            _ => {}
         }
         phase
     }

@@ -73,6 +73,10 @@ pub fn install(app: &mut App) {
         .init_resource::<super::hand::HeldInHand>()
         .add_systems(Startup, spawn_office)
         .add_systems(Update, super::hand::capture_hand_rigs)
+        // Fingers close in hand space from last frame's object-in-hand pose, then propagate this frame.
+        .add_systems(PostUpdate, super::hand::conform_fingers
+            .after(crate::cc_render::bevy_app::pose::apply_skeletal_pose)
+            .before(bevy::transform::TransformSystem::TransformPropagate))
         .add_systems(PreUpdate, classify_animated_colliders)
         .add_systems(
             PostUpdate,
