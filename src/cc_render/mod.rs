@@ -23,6 +23,7 @@
 //! dropped — the plugin always ships the full renderer + physics stack.
 
 pub mod bevy_app;
+pub mod cc5_materials;
 pub mod node;
 pub mod renderer;
 pub mod scene_package;
@@ -43,6 +44,8 @@ mod cloth_under_covers_tests;
 mod cloth_gpu_probe_tests;
 pub mod scene_cloth;
 pub mod soft_tissue;
+// CC5 shaping sliders live in the `cc5-shape` crate (also a Python module).
+pub use cc5_shape::{glb as shape_glb, pack as shape};
 
 pub use node::{CcRenderConfig, CcRenderNode};
 #[allow(unused_imports)]
