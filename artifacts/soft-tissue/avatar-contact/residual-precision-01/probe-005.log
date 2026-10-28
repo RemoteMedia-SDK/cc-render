@@ -1,0 +1,653 @@
+637 |         own_rest_local[1] = lhip_own;
+2429 |     let mut grab = |key: &'static str| -> Option<(Entity, Quat)> {
+240 |             &mut DVec3::ZERO,
+note: `const` item defined here
+ 28 |     pub const ZERO: Self = Self::splat(0.0);
+488 |         let mut particles = GripParticles {
+1478 | ...                   let o = object.unwrap();
+125 | / pub(crate) fn auto_detect_chains(
+126 | |     mut commands: Commands,
+127 | |     bones: Query<
+128 | |         (Entity, &Name, &Transform, Option<&Parent>),
+...   |
+139 | |     tissue: Option<Res<crate::cc_render::bevy_app::tissue::TissueRequest>>,
+140 | | ) {
+note: but type `tissue::TissueRequest` is only usable at visibility `pub(in crate::cc_render::bevy_app)`
+ 35 | pub(super) struct TissueRequest {
+ 99 | impl BlendshapeFrame {
+...
+110 |     pub fn neutral(pts_ms: u64) -> Self {
+...
+115 |     pub fn to_json(&self) -> Value {
+124 | pub(crate) struct MonotonicCaptureClock {
+125 |     pub frame_count: u64,
+126 |     pub frame_interval_ms: u64,
+923 | pub(crate) struct LatestPose {
+22 |     Capsule {
+...
+36 |         elasticity: f32,
+38 |     Box {
+...
+50 |         elasticity: f32,
+20 |     Pursuing {
+...
+23 |         palm_override: Option<[f32; 3]>,
+79 | pub struct PlayVolumeRaw {
+80 |     pub half_extents_xz: f32,
+81 |     pub ceiling_y: f32,
+164 | pub(crate) struct PushForceIntent {
+165 |     pub id: String,
+190 | fn apply_furniture_push(
+25 | pub(crate) fn damp_seated_idle(
+8 | pub(crate) enum Phase { Arrive, Occupy, Contact, Holding, Settle, Declared }
+36 | impl SceneLifecycle {
+...
+79 |     pub(crate) fn awaiting_revision(&self) -> bool { self.awaiting_revision }
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.16s
+     Running unittests src/lib.rs (target/debug/deps/cc_render_plugin-8e2826f95e286ce8)
+running 1 test
+{
+  "centered_residual_n": 4.2233098732979985e-6,
+  "contacts": [
+    {
+      "depth_m": 0.00014118144385697634,
+      "influence": 1.0,
+      "stiffness_n_per_m": 703677846.7253491,
+      "tetrahedron": 587
+    },
+    {
+      "depth_m": 0.00002482592894235645,
+      "influence": 1.0,
+      "stiffness_n_per_m": 212280770.85775205,
+      "tetrahedron": 587
+    },
+    {
+      "depth_m": 0.0,
+      "influence": 1.0,
+      "stiffness_n_per_m": 212280770.85775205,
+      "tetrahedron": 587
+    },
+    {
+      "depth_m": 0.000011295271196933162,
+      "influence": 1.0,
+      "stiffness_n_per_m": 212280770.85775205,
+      "tetrahedron": 587
+    }
+  ],
+  "correction_limit_m": 1.5276018530023677e-12,
+  "effective_bdf2_dt_s": 0.00019531249999965892,
+  "energy_j": 9.357515943072674,
+  "energy_ulp_j": 1.7763568394002505e-15,
+  "first_step_energy_terms": {
+    "contact": {
+      "actual_change_j": -1.9113155502736845e-10,
+      "gradient_predicted_change_j": -1.8091169809973263e-10,
+      "value_j": 7.091882703185508
+    },
+    "elastic_pressure_attachment": {
+      "actual_change_j": 9.461387229237062e-11,
+      "gradient_predicted_change_j": 9.46145039723906e-11,
+      "value_j": 1.423241890807002
+    },
+    "inertia": {
+      "actual_change_j": -1.2758016865177524e-11,
+      "gradient_predicted_change_j": -1.275799573738371e-11,
+      "value_j": 0.06399463766686482
+    },
+    "viscous_elements": {
+      "actual_change_j": 1.0454204169008108e-10,
+      "gradient_predicted_change_j": 1.0452897865005857e-10,
+      "value_j": 0.7293859513753447
+    },
+    "viscous_pressure": {
+      "actual_change_j": -5.473510533704484e-12,
+      "gradient_predicted_change_j": -5.4737888720226656e-12,
+      "value_j": 0.049010760037955015
+    }
+  },
+  "force_limit_n": 1.2359619140581831e-6,
+  "interval_s": 0.0002604166666660603,
+  "largest_8_nodes_residual_share": 0.9999999752218002,
+  "largest_residual_nodes": [
+    {
+      "diagonal_norm_n_per_m": 234072416.07928932,
+      "node": 110,
+      "position": [
+        0.0003898173796535481,
+        1.2973280337672555,
+        0.13049302728124756
+      ],
+      "residual_n": 4.233124507494851e-6,
+      "term_magnitude_sum_n": 25781.143903481767,
+      "terms_n": {
+        "contact": 12680.766957034872,
+        "elastic_pressure_attachment": 5384.513469196619,
+        "inertia": 184.84392027195062,
+        "viscous_elements": 7286.491336152205,
+        "viscous_pressure": 244.52822082612403
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 14985083.811915595,
+      "node": 99,
+      "position": [
+        -0.006242379395434935,
+        1.2808775612246626,
+        0.14486783983600113
+      ],
+      "residual_n": 7.215069862982009e-9,
+      "term_magnitude_sum_n": 442.4784435597362,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 37.22029478035254,
+        "inertia": 165.43580153809387,
+        "viscous_elements": 175.45959463888866,
+        "viscous_pressure": 64.36275260240116
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 9960996.57757231,
+      "node": 222,
+      "position": [
+        0.006548540084614341,
+        1.2385626278023392,
+        0.12147294972706066
+      ],
+      "residual_n": 5.968783902088878e-9,
+      "term_magnitude_sum_n": 370.0328725618509,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 16.64234734004456,
+        "inertia": 70.84991268983818,
+        "viscous_elements": 170.38726953628233,
+        "viscous_pressure": 112.15334299568588
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 3042073.920890017,
+      "node": 126,
+      "position": [
+        0.013474939281331942,
+        1.2854016158418167,
+        0.14355739548485594
+      ],
+      "residual_n": 7.152956327283149e-10,
+      "term_magnitude_sum_n": 594.8761536727593,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 2.706155069562024,
+        "inertia": 70.26545546672557,
+        "viscous_elements": 242.48966023536966,
+        "viscous_pressure": 279.4148829011021
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 5639323.967980991,
+      "node": 60,
+      "position": [
+        -0.05054832813444523,
+        1.175339600487823,
+        0.1036300710171896
+      ],
+      "residual_n": 4.3301680467553133e-10,
+      "term_magnitude_sum_n": 0.8933005772546067,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 0.0595547485661527,
+        "inertia": 0.09678335017201416,
+        "viscous_elements": 0.37539889104873025,
+        "viscous_pressure": 0.36156358746770956
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 11303871.918721251,
+      "node": 81,
+      "position": [
+        -0.030856104351850787,
+        1.170335159144928,
+        0.10472536847025168
+      ],
+      "residual_n": 3.8000682435137453e-10,
+      "term_magnitude_sum_n": 0.4492786430761536,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 0.02854374771777295,
+        "inertia": 0.06553960840969938,
+        "viscous_elements": 0.19025120667337678,
+        "viscous_pressure": 0.16494408027530452
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 8467695.51773226,
+      "node": 91,
+      "position": [
+        -0.022001286879676125,
+        1.1705486125992233,
+        0.1067071801249069
+      ],
+      "residual_n": 3.6746028683437565e-10,
+      "term_magnitude_sum_n": 0.562906042380276,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 0.018002491782679902,
+        "inertia": 0.08019871081158654,
+        "viscous_elements": 0.25439937153729625,
+        "viscous_pressure": 0.21030546824871327
+      }
+    },
+    {
+      "diagonal_norm_n_per_m": 7089762.064871397,
+      "node": 220,
+      "position": [
+        -0.03798140276330362,
+        1.2043097167025798,
+        0.12265287509579512
+      ],
+      "residual_n": 3.595778707964574e-10,
+      "term_magnitude_sum_n": 37.44568895099013,
+      "terms_n": {
+        "contact": 0.0,
+        "elastic_pressure_attachment": 1.973081504440181,
+        "inertia": 12.218921927095282,
+        "viscous_elements": 16.721484862543573,
+        "viscous_pressure": 6.5322006569110975
+      }
+    }
+  ],
+  "newton_continuation": [
+    {
+      "correction_max_m": 4.5713675408823387e-14,
+      "expected_energy_change_j": -4.3288191746661956e-20,
+      "full_step_energy_change_j": -1.0206946399193839e-11,
+      "full_step_residual_n": 2.2112463365849064e-6,
+      "linear_model_residual_n": 1.1134361202906055e-21,
+      "nodes_changed": 103,
+      "residual_n": 4.233135047628305e-6
+    },
+    {
+      "correction_max_m": 2.3496824249832626e-14,
+      "expected_energy_change_j": -1.1768701508678437e-20,
+      "full_step_energy_change_j": 5.908162847845233e-12,
+      "full_step_residual_n": 1.1319521503411328e-6,
+      "linear_model_residual_n": 4.796326328164975e-22,
+      "nodes_changed": 100,
+      "residual_n": 2.2112463365849064e-6
+    },
+    {
+      "correction_max_m": 1.2323153615234644e-14,
+      "expected_energy_change_j": -3.105895622990074e-21,
+      "full_step_energy_change_j": 5.400124791776761e-13,
+      "full_step_residual_n": 5.792117714905539e-7,
+      "linear_model_residual_n": 3.4489398051376284e-22,
+      "nodes_changed": 92,
+      "residual_n": 1.1319521503411328e-6
+    },
+    {
+      "correction_max_m": 6.405074689351199e-15,
+      "expected_energy_change_j": -8.144909492141299e-22,
+      "full_step_energy_change_j": -4.04476452331437e-12,
+      "full_step_residual_n": 2.9461127183691616e-7,
+      "linear_model_residual_n": 3.41186922346971e-23,
+      "nodes_changed": 79,
+      "residual_n": 5.792117714905539e-7
+    },
+    {
+      "correction_max_m": 3.260150615199993e-15,
+      "expected_energy_change_j": -2.1120267528517642e-22,
+      "full_step_energy_change_j": 3.836930773104541e-13,
+      "full_step_residual_n": 1.5591788497756224e-7,
+      "linear_model_residual_n": 1.5135453877520722e-22,
+      "nodes_changed": 71,
+      "residual_n": 2.9461127183691616e-7
+    },
+    {
+      "correction_max_m": 1.3126962737205945e-15,
+      "expected_energy_change_j": -5.579250448179233e-23,
+      "full_step_energy_change_j": 3.021582983819826e-12,
+      "full_step_residual_n": 8.487332287304643e-8,
+      "linear_model_residual_n": 7.608969212674389e-23,
+      "nodes_changed": 58,
+      "residual_n": 1.5591788497756224e-7
+    },
+    {
+      "correction_max_m": 5.134850246766895e-16,
+      "expected_energy_change_j": -1.596309912870044e-23,
+      "full_step_energy_change_j": 1.623590151211829e-12,
+      "full_step_residual_n": 4.520249300498245e-8,
+      "linear_model_residual_n": 3.6718607197447547e-23,
+      "nodes_changed": 45,
+      "residual_n": 8.487332287304643e-8
+    },
+    {
+      "correction_max_m": 3.9811668456286023e-16,
+      "expected_energy_change_j": -4.841185757295565e-24,
+      "full_step_energy_change_j": -1.3855583347321954e-12,
+      "full_step_residual_n": 1.1987390667233567e-8,
+      "linear_model_residual_n": 6.972346989936906e-24,
+      "nodes_changed": 47,
+      "residual_n": 4.520249300498245e-8
+    },
+    {
+      "correction_max_m": 1.5000320235529933e-16,
+      "expected_energy_change_j": -5.025398088025179e-25,
+      "full_step_energy_change_j": 1.1191048088221578e-13,
+      "full_step_residual_n": 3.522441514769618e-9,
+      "linear_model_residual_n": 1.8820193207532848e-24,
+      "nodes_changed": 47,
+      "residual_n": 1.1987390667233567e-8
+    },
+    {
+      "correction_max_m": 1.1334955570622619e-16,
+      "expected_energy_change_j": -2.123939542877386e-25,
+      "full_step_energy_change_j": 3.6770586575585185e-13,
+      "full_step_residual_n": 6.596716982688623e-9,
+      "linear_model_residual_n": 3.43732841040542e-24,
+      "nodes_changed": 37,
+      "residual_n": 3.522441514769618e-9
+    },
+    {
+      "correction_max_m": 1.363513553447645e-16,
+      "expected_energy_change_j": -2.4894285623854196e-25,
+      "full_step_energy_change_j": -3.446132268436486e-13,
+      "full_step_residual_n": 3.8427979601259515e-9,
+      "linear_model_residual_n": 8.413956970703479e-24,
+      "nodes_changed": 34,
+      "residual_n": 6.596716982688623e-9
+    },
+    {
+      "correction_max_m": 1.151836753781857e-16,
+      "expected_energy_change_j": -2.2144904336612083e-25,
+      "full_step_energy_change_j": 3.446132268436486e-13,
+      "full_step_residual_n": 5.64343807527712e-9,
+      "linear_model_residual_n": 2.9078382604715227e-24,
+      "nodes_changed": 40,
+      "residual_n": 3.8427979601259515e-9
+    }
+  ],
+  "previous_dt_s": 0.0005208333333339396,
+  "production_iteration_trace": [
+    {
+      "accepted_scale": 1.0000000000001585,
+      "armijo_slope_j": -0.987963412444341,
+      "correction_max_m": 0.00031368542204080727,
+      "energy_change_j": -0.44256910030327923,
+      "iteration": 0,
+      "residual_n": 9475.46900375384
+    },
+    {
+      "accepted_scale": 0.9999999999998305,
+      "armijo_slope_j": -0.07027990557929191,
+      "correction_max_m": 0.00004505572775789772,
+      "energy_change_j": -0.020437662623566055,
+      "iteration": 1,
+      "residual_n": 4117.515731083835
+    },
+    {
+      "accepted_scale": 1.00000000000161,
+      "armijo_slope_j": -0.01112663206586759,
+      "correction_max_m": 0.000018022895646036287,
+      "energy_change_j": -0.002448427005930398,
+      "iteration": 2,
+      "residual_n": 1447.609120956788
+    },
+    {
+      "accepted_scale": 1.0000000000011422,
+      "armijo_slope_j": -0.003575471951828956,
+      "correction_max_m": 9.161507835662404e-6,
+      "energy_change_j": -0.000901824818457797,
+      "iteration": 3,
+      "residual_n": 878.5552540856212
+    },
+    {
+      "accepted_scale": 0.9999999999926399,
+      "armijo_slope_j": -0.0008604634766478897,
+      "correction_max_m": 4.72502303225577e-6,
+      "energy_change_j": -0.00020260207757161197,
+      "iteration": 4,
+      "residual_n": 416.0387755797036
+    },
+    {
+      "accepted_scale": 1.0000000000061895,
+      "armijo_slope_j": -0.00024283275879079475,
+      "correction_max_m": 2.4423311040159234e-6,
+      "energy_change_j": -0.00005927872101096909,
+      "iteration": 5,
+      "residual_n": 225.04422896912723
+    },
+    {
+      "accepted_scale": 0.9999999999778146,
+      "armijo_slope_j": -0.00006329761292840358,
+      "correction_max_m": 1.2642473299375934e-6,
+      "energy_change_j": -0.00001516792109690357,
+      "iteration": 6,
+      "residual_n": 113.82335044753397
+    },
+    {
+      "accepted_scale": 0.9999999999394481,
+      "armijo_slope_j": -0.00001720433617951764,
+      "correction_max_m": 6.543643391139758e-7,
+      "energy_change_j": -4.162570222732143e-6,
+      "iteration": 7,
+      "residual_n": 59.62949865996658
+    },
+    {
+      "accepted_scale": 1.000000000126677,
+      "armijo_slope_j": -4.576892985501899e-6,
+      "correction_max_m": 3.387658189884643e-7,
+      "energy_change_j": -1.1018734351608828e-6,
+      "iteration": 8,
+      "residual_n": 30.678687348039908
+    },
+    {
+      "accepted_scale": 1.0000000001568587,
+      "armijo_slope_j": -1.2312616232079866e-6,
+      "correction_max_m": 1.753683828900113e-7,
+      "energy_change_j": -2.971923489525352e-7,
+      "iteration": 9,
+      "residual_n": 15.932754495419259
+    },
+    {
+      "accepted_scale": 0.9999999993627271,
+      "armijo_slope_j": -3.293268364125561e-7,
+      "correction_max_m": 9.078681736370586e-8,
+      "energy_change_j": -7.938512069927128e-8,
+      "iteration": 10,
+      "residual_n": 8.234496012699315
+    },
+    {
+      "accepted_scale": 1.000000000523726,
+      "armijo_slope_j": -8.83489192658742e-8,
+      "correction_max_m": 4.6998656113687464e-8,
+      "energy_change_j": -2.1306796327280608e-8,
+      "iteration": 11,
+      "residual_n": 4.266535253106365
+    },
+    {
+      "accepted_scale": 1.0000000008477876,
+      "armijo_slope_j": -2.3664873935285273e-8,
+      "correction_max_m": 2.4330612150312614e-8,
+      "energy_change_j": -5.713829409614846e-9,
+      "iteration": 12,
+      "residual_n": 2.2077429443835204
+    },
+    {
+      "accepted_scale": 1.0000000024899691,
+      "armijo_slope_j": -6.343876484799295e-9,
+      "correction_max_m": 1.2595580192505255e-8,
+      "energy_change_j": -1.522938219977732e-9,
+      "iteration": 13,
+      "residual_n": 1.1431791736211299
+    },
+    {
+      "accepted_scale": 1.000000004158078,
+      "armijo_slope_j": -1.6999077143128932e-9,
+      "correction_max_m": 6.5205559872057055e-9,
+      "energy_change_j": -4.107132411945713e-10,
+      "iteration": 14,
+      "residual_n": 0.5917368676075084
+    },
+    {
+      "accepted_scale": 1.0000000012506687,
+      "armijo_slope_j": -4.5560563883566456e-10,
+      "correction_max_m": 3.3755951617910704e-9,
+      "energy_change_j": -1.0678391504370666e-10,
+      "iteration": 15,
+      "residual_n": 0.3063524581376851
+    },
+    {
+      "accepted_scale": 0.999999996170801,
+      "armijo_slope_j": -1.2209689787152402e-10,
+      "correction_max_m": 1.7474965452846633e-9,
+      "energy_change_j": -3.267608406076761e-11,
+      "iteration": 16,
+      "residual_n": 0.1585891732724483
+    },
+    {
+      "accepted_scale": 1.0000000217101492,
+      "armijo_slope_j": -3.272240213893318e-11,
+      "correction_max_m": 9.046533436733623e-10,
+      "energy_change_j": -6.037836897121451e-12,
+      "iteration": 17,
+      "residual_n": 0.08210067643875793
+    },
+    {
+      "accepted_scale": 0.9999999282378221,
+      "armijo_slope_j": -8.76945737853318e-12,
+      "correction_max_m": 4.683259612457217e-10,
+      "energy_change_j": -4.913403017781093e-12,
+      "iteration": 18,
+      "residual_n": 0.04250196302658416
+    },
+    {
+      "accepted_scale": 1.0000002038572495,
+      "armijo_slope_j": -2.3502148874314675e-12,
+      "correction_max_m": 2.4244583636275445e-10,
+      "energy_change_j": 1.7070789226636407e-12,
+      "iteration": 19,
+      "residual_n": 0.02200276048614023
+    },
+    {
+      "accepted_scale": 1.0000002712692806,
+      "armijo_slope_j": -6.298509208017623e-13,
+      "correction_max_m": 1.2551077897541465e-10,
+      "energy_change_j": -7.064571150294796e-12,
+      "iteration": 20,
+      "residual_n": 0.011390472883857852
+    },
+    {
+      "accepted_scale": 0.9999995497969558,
+      "armijo_slope_j": -1.6879892677260626e-13,
+      "correction_max_m": 6.497487256272495e-11,
+      "energy_change_j": 2.2595258997171186e-12,
+      "iteration": 21,
+      "residual_n": 0.005896686884361877
+    },
+    {
+      "accepted_scale": 1.000000695539026,
+      "armijo_slope_j": -4.523815354200554e-14,
+      "correction_max_m": 3.3636287805823496e-11,
+      "energy_change_j": 2.327027459614328e-12,
+      "iteration": 22,
+      "residual_n": 0.0030526456212428385
+    },
+    {
+      "accepted_scale": 0.9999996981749133,
+      "armijo_slope_j": -1.2123556086493587e-14,
+      "correction_max_m": 1.7412893107056498e-11,
+      "energy_change_j": -3.3804070653786766e-12,
+      "iteration": 23,
+      "residual_n": 0.0015802980033876434
+    },
+    {
+      "accepted_scale": 0.9999983580347158,
+      "armijo_slope_j": -3.2491256936536984e-15,
+      "correction_max_m": 9.014499004038204e-12,
+      "energy_change_j": -3.6060043839825084e-13,
+      "iteration": 24,
+      "residual_n": 0.000818101172668545
+    },
+    {
+      "accepted_scale": 1.000007186391209,
+      "armijo_slope_j": -8.707725495463063e-16,
+      "correction_max_m": 4.666974342471977e-12,
+      "energy_change_j": 5.835332217429823e-12,
+      "iteration": 25,
+      "residual_n": 0.0004235188249725907
+    },
+    {
+      "accepted_scale": 0.9999919900635839,
+      "armijo_slope_j": -2.333496803223499e-16,
+      "correction_max_m": 2.416530303301935e-12,
+      "energy_change_j": -4.035882739117369e-12,
+      "iteration": 26,
+      "residual_n": 0.00021923423214498163
+    },
+    {
+      "accepted_scale": 0.9999805961720056,
+      "armijo_slope_j": -6.254621779784399e-17,
+      "correction_max_m": 1.2510875985183542e-12,
+      "energy_change_j": 6.249223361010081e-12,
+      "iteration": 27,
+      "residual_n": 0.00011350194977137815
+    },
+    {
+      "accepted_scale": 0.9999367643218517,
+      "armijo_slope_j": -1.6770887492246323e-17,
+      "correction_max_m": 6.475479568939616e-13,
+      "energy_change_j": -6.711076139254146e-12,
+      "iteration": 28,
+      "residual_n": 0.00005877797293166388
+    },
+    {
+      "accepted_scale": 0.9999301393368053,
+      "armijo_slope_j": -4.498279164339573e-18,
+      "correction_max_m": 3.3489732545846176e-13,
+      "energy_change_j": 1.3322676295501878e-13,
+      "iteration": 29,
+      "residual_n": 0.000030446962817866938
+    },
+    {
+      "accepted_scale": 1.0000209825132136,
+      "armijo_slope_j": -1.2070884356051375e-18,
+      "correction_max_m": 1.7339265798404489e-13,
+      "energy_change_j": 1.5720758028692217e-12,
+      "iteration": 30,
+      "residual_n": 0.000015773442243831768
+    },
+    {
+      "accepted_scale": 1.0005987491608004,
+      "armijo_slope_j": -3.239317600776383e-19,
+      "correction_max_m": 8.956764781042689e-14,
+      "energy_change_j": 6.409095476556104e-12,
+      "iteration": 31,
+      "residual_n": 8.174185717399499e-6
+    },
+    {
+      "accepted_scale": 0.9995368378777243,
+      "armijo_slope_j": -8.657638349332395e-20,
+      "correction_max_m": 4.571367540949162e-14,
+      "energy_change_j": -1.0206946399193839e-11,
+      "iteration": 32,
+      "residual_n": 4.233135047628305e-6
+    }
+  ],
+  "replay_error": "tissue nonlinear solve did not converge (force 0.000004233135047628305 N, correction 0.00000000000004571367540949162 m); state was not committed",
+  "representability_floor_max_n": 1.4523761307359209e-8,
+  "representability_floor_rms_n": 7.255827278368648e-9,
+  "residual_n": 4.233135047628305e-6,
+  "tangent_condition": 26863.972190830897,
+  "tangent_largest_eigenvalue_n_per_m": 234117345.07419127,
+  "tangent_smallest_eigenvalue_n_per_m": 8714.919127041803,
+  "term_norms_n": {
+    "contact": 12680.766957034872,
+    "elastic_pressure_attachment": 5384.671968773615,
+    "inertia": 272.1675403351398,
+    "viscous_elements": 7294.732291114717,
+    "viscous_pressure": 394.74546662408943
+  },
+  "world_vs_centered_gradient_difference_n": 1.0885184249171462e-8,
+  "world_vs_centered_noncontact_difference_n": 0.0,
+  "y_in_unit_binade": true
+}
+test cc_render::soft_tissue::solver::implicit::failed_state_probe::failed_state_precision ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 496 filtered out; finished in 0.08s

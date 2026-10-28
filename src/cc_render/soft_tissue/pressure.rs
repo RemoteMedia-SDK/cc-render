@@ -21,8 +21,10 @@ pub(super) fn element_partition(
     tets.iter().map(|tet| match material.pressure_discretization {
         PressureDiscretization::Element => true,
         PressureDiscretization::AverageNodal => false,
+        // Compliant nodes are attachment too: softening a rim must not move
+        // its tetrahedra into the averaged partition and free local volume.
         PressureDiscretization::AverageNodalBoundary => tet.ids.iter()
-            .filter(|&&i| matches!(attachments[i], super::solver::Attachment::Fixed)).count() >= 2
+            .filter(|&&i| !matches!(attachments[i], super::solver::Attachment::Free)).count() >= 2
             || (material.element_pressure_quality_cutoff > 0.
                 && mean_ratio_quality(tet.ids.map(|i| initial[i])) < material.element_pressure_quality_cutoff),
     }).collect()
@@ -34,8 +36,9 @@ pub enum PressureDiscretization {
     #[default]
     Element,
     AverageNodal,
-    /// Use element pressure in tetrahedra with a fixed edge, retaining
-    /// local volume at the chest attachment while averaging the free interior.
+    /// Use element pressure in tetrahedra with an attached (fixed or compliant)
+    /// edge, retaining local volume at the chest attachment while averaging
+    /// the free interior.
     AverageNodalBoundary,
 }
 

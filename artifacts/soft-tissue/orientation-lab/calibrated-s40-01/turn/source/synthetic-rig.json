@@ -1,0 +1,49 @@
+{
+  "policy": "Synthetic rigid-body test rig for the tissue lab; not ARDY motion, never used at runtime.",
+  "scenario": "turn",
+  "segments": [
+    [
+      "hold",
+      1.5
+    ],
+    [
+      "rotate",
+      0.5,
+      "y",
+      90
+    ],
+    [
+      "hold",
+      1.0
+    ],
+    [
+      "rotate",
+      1.0,
+      "y",
+      -180
+    ],
+    [
+      "hold",
+      1.0
+    ],
+    [
+      "rotate",
+      0.5,
+      "y",
+      90
+    ],
+    [
+      "hold",
+      1.5
+    ]
+  ],
+  "fps": 60,
+  "pivot_from_root_m": [
+    0.0,
+    0.27,
+    0.08
+  ],
+  "pose": "artifacts/soft-tissue/orientation-lab/standing-pose.json",
+  "pose_sha256": "cfcbd03cce1e314e4e30bdbd64a8fcf3ac224a48df8cc26161ab8700af33e2a0",
+  "script_sha256": "4c4df4853406f6d14430fc5f48b309685b3da03fe948e3490511e1550208a7c8"
+}

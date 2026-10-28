@@ -17,6 +17,8 @@ pub use timestep::TimeIntegration;
 use timestep::{History, IntegrationStep};
 #[path = "viscosity.rs"]
 mod viscosity;
+#[path = "failed_state.rs"]
+mod failed_state;
 pub use viscosity::Viscosity;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -358,6 +360,11 @@ impl Tissue {
     pub fn rest_positions(&self) -> &[DVec3] {
         &self.rest
     }
+    /// Overlap of a contact plane at the committed positions.
+    pub fn contact_depth(&self, contact: &PlaneContact) -> f64 {
+        contact.depth(&self.positions, &self.tets)
+    }
+
     pub fn frame(&self) -> Frame {
         self.frame
     }
@@ -486,7 +493,11 @@ impl Tissue {
         let integration = IntegrationStep::new(self, dt, gravity);
         self.place_fixed_attachments(&mut next, frame);
         self.validate_positions(&next)?;
-        self.solve_implicit(&mut next, &integration.predicted, frame, integration.dt, contacts, &integration.damping)?;
+        let solved = self.solve_implicit(&mut next, &integration.predicted, frame, integration.dt, contacts, &integration.damping);
+        if let Err(error @ TissueError::NonlinearSolveFailed { .. }) = &solved {
+            failed_state::record(self, dt, frame, gravity, contacts, &next, error);
+        }
+        solved?;
         self.validate_positions(&next)?;
         let mut velocities: Vec<_> = next
             .iter()

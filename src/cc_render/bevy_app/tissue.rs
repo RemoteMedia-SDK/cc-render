@@ -40,6 +40,7 @@ pub(super) struct TissueRequest {
     rate: u32,
     snapshot: Option<(std::path::PathBuf, u64)>,
     trace: Option<trace::Trace>,
+    contact: super::tissue_collision::ContactPolicy,
 }
 
 #[derive(Resource, Default)]
@@ -56,6 +57,11 @@ struct TissueState {
 
 struct Active {
     rig: TissueRig,
+    /// Owner-approved display hand clamp (docs/design/hand-ribcage-clamp-exception.md).
+    hand_clamp: Option<std::sync::Arc<super::hand_clamp::HandRibcageClamp>>,
+    /// Display-only joint world transforms resting the hand on the solved
+    /// breast skin for the current frame (see `apply_hand_rest`).
+    rest_overrides: Vec<(Entity, Mat4)>,
     anchors: Vec<Entity>,
     surfaces: Vec<TissueSurface>,
     contacts: BodyContacts,
@@ -106,13 +112,14 @@ pub(super) fn install(app: &mut App, glb: &Path) -> anyhow::Result<()> {
         rate,
         snapshot,
         trace: trace::Trace::from_env()?,
+        contact: super::tissue_collision::ContactPolicy::from_env()?,
     });
     app.init_resource::<TissueReadiness>()
         .init_resource::<super::capture::TissueFramePts>()
         .init_resource::<TissueState>();
     app.add_systems(
         PostUpdate,
-        (initialize, advance)
+        (initialize, advance, apply_hand_rest)
             .chain()
             .in_set(TissueSurfaceUpdate)
             .after(bevy::render::mesh::inherit_weights)
@@ -184,6 +191,32 @@ fn initialize(
     }
 }
 
+/// Opt-in owner-approved exception; ARDY packets and history are never modified.
+/// `1`: wrist/palm guard plus finger conformance (approved scope).
+/// `whole`: rigid whole-hand translation, kept only for comparison.
+fn hand_clamp_from_env(
+    commands: &mut Commands,
+    rig: &TissueRig,
+    surfaces: &[TissueSurface],
+    names: &HashMap<Entity, String>,
+    bind: &CC5BindRotations,
+    asset: &TissueAsset,
+    anchors: &[Entity],
+) -> anyhow::Result<Option<Arc<super::hand_clamp::HandRibcageClamp>>> {
+    use super::hand_clamp::{HandClampResource, HandPoints, HandRibcageClamp};
+    let points = match std::env::var("CC_AVATAR_HAND_RIBCAGE_CLAMP").as_deref() {
+        Ok("1") => HandPoints::Palm,
+        Ok("whole") => HandPoints::Whole,
+        Ok(other) => anyhow::bail!("CC_AVATAR_HAND_RIBCAGE_CLAMP must be 1 or whole, not {other:?}"),
+        Err(_) => return Ok(None),
+    };
+    let clamp = Arc::new(HandRibcageClamp::new(rig, surfaces, names, &bind.entities, asset, anchors, points)?);
+    tracing::warn!(counts=?clamp.counts(), ?points,
+        "EXCEPTION-ASSISTED run: hand ribcage clamp active (docs/design/hand-ribcage-clamp-exception.md)");
+    commands.insert_resource(HandClampResource(clamp.clone()));
+    Ok(Some(clamp))
+}
+
 fn initialize_ready(
     commands: &mut Commands,
     request: &TissueRequest,
@@ -251,6 +284,9 @@ fn initialize_ready(
             .get(&skin.inverse_bindposes)
             .ok_or_else(|| anyhow::anyhow!("missing tissue inverse bind asset"))?;
         let mut surface = TissueSurface::capture(mesh, binding, skin, inverse)?;
+        if super::tissue_embedding::requested()? && !binding.vertices.is_empty() {
+            surface.embed_smoothly(&request.asset)?;
+        }
         surface.capture_morphs(mesh, &scene.images)?;
         surface.entity = Some(entity);
         if surface.has_deformation() {
@@ -279,10 +315,14 @@ fn initialize_ready(
         &[]
     } else {
         &surfaces
-    })?;
-    tracing::info!(counts=?contacts.counts(), "source-time body contact bound");
+    }, request.contact)?;
+    tracing::info!(counts=?contacts.counts(), policy=?request.contact, "source-time body contact bound");
+    let names = scene.bones.iter().map(|(e, n)| (e, n.as_str().to_owned())).collect();
+    let hand_clamp = hand_clamp_from_env(commands, &rig, &surfaces, &names, bind, &request.asset, &anchors)?;
     Ok(Active {
         rig,
+        hand_clamp,
+        rest_overrides: Vec::new(),
         contacts,
         anchors,
         surfaces,
@@ -298,12 +338,57 @@ fn initialize_ready(
 }
 
 impl Active {
+    /// Skeleton at a source time, with the approved hand clamp when active.
+    /// Display applies the identical correction to the identical retarget.
+    fn matrices_at(
+        &self,
+        knots: &[crate::cc_render::renderer::SkeletalPose],
+        at: f64,
+    ) -> anyhow::Result<HashMap<Entity, Mat4>> {
+        let pose = tissue_motion::sample_pose(knots, at)?;
+        let rotations = self.rig.retarget(&pose);
+        let Some(clamp) = &self.hand_clamp else {
+            return Ok(self.rig.sample_rotations(&pose, &rotations));
+        };
+        let correction = clamp.correct(&pose, rotations)?;
+        Ok(self.rig.sample_with(&pose, &correction.rotations, &correction.fingers))
+    }
+
+    /// The approved hand clamp at the displayed time: the ribcage correction
+    /// the tissue used, then the display-only rest on the solved breast skin.
+    /// Returns both reports; stores the display overrides for this frame.
+    fn rest_hands(
+        &mut self,
+        request: &TissueRequest,
+        window: &crate::cc_render::office::timeline::MotionWindow,
+        end: f64,
+        nodes: &[Vec<DVec3>],
+        frames: &[Frame],
+        globals: &HashMap<Entity, Mat4>,
+    ) -> anyhow::Result<Option<[[super::hand_clamp::HandCorrection; 2]; 2]>> {
+        let Some(clamp) = &self.hand_clamp else {
+            return Ok(None);
+        };
+        let pose = tissue_motion::sample_pose(&window.knots, end)?;
+        let base = clamp.correct(&pose, self.rig.retarget(&pose))?;
+        let body = self.surfaces.iter().find(|s| s.binding().mesh_name == "CC_Base_Body")
+            .ok_or_else(|| anyhow::anyhow!("hand rest requires the body tissue surface"))?;
+        let skin = body.deformed_positions(&request.asset, nodes, frames, globals)?;
+        let rest = clamp.rest_on_skin(&pose, &base, &skin)?;
+        if base.report.iter().chain(&rest.report).any(|c| c.unsupported) {
+            tracing::warn!(displayed_ms = window.displayed_ms, ribcage = ?base.report, skin = ?rest.report,
+                "hand penetration exceeds the approved clamp; left unrepaired");
+        }
+        self.rest_overrides = clamp.display_overrides(&pose, &base, &rest, globals);
+        Ok(Some([base.report, rest.report]))
+    }
+
     fn pose_at(
         &self,
         knots: &[crate::cc_render::renderer::SkeletalPose],
         at: f64,
     ) -> anyhow::Result<ContactPose> {
-        let matrices = self.rig.sample(&tissue_motion::sample_pose(knots, at)?);
+        let matrices = self.matrices_at(knots, at)?;
         let frames = self
             .anchors
             .iter()
@@ -322,8 +407,7 @@ impl Active {
         knots: &[crate::cc_render::renderer::SkeletalPose],
         at: f64,
     ) -> anyhow::Result<Vec<Frame>> {
-        let pose = tissue_motion::sample_pose(knots, at)?;
-        let matrices = self.rig.sample(&pose);
+        let matrices = self.matrices_at(knots, at)?;
         self.anchors
             .iter()
             .map(|e| tissue_motion::frame(matrices[e]))
@@ -387,6 +471,7 @@ impl Active {
         morph_weights: &[Vec<f32>],
         meshes: &mut Assets<Mesh>,
     ) -> anyhow::Result<Option<u64>> {
+        self.rest_overrides.clear();
         anyhow::ensure!(morph_weights.len() == self.surfaces.len(),
             "contact morph surface count differs from the captured topology");
         let dt_ms = 1000.0 / request.rate as f64;
@@ -469,7 +554,9 @@ impl Active {
         (integration.pose_samples, integration.pose_cache_hits) = pose_cache.counts();
         let nodes: Vec<_> = output.iter().map(|s| s.positions().to_vec()).collect();
         let mut maximum = 0.0_f64;
+        let mut crease = 0.0_f64;
         let mut surface_metrics = Vec::with_capacity(self.surfaces.len());
+        let surface_started = std::time::Instant::now();
         for surface in &self.surfaces {
             if !surface.has_deformation() {
                 continue;
@@ -479,7 +566,12 @@ impl Active {
                 .ok_or_else(|| anyhow::anyhow!("tissue render mesh disappeared"))?;
             let metrics = surface.deform(mesh, &request.asset, &nodes, frames, globals)?;
             maximum = maximum.max(metrics.maximum_displacement_m);
+            crease = crease.max(metrics.maximum_crease_deg as f64);
             surface_metrics.push(metrics);
+        }
+        integration.surface_ms = surface_started.elapsed().as_secs_f64() * 1000.0;
+        if let Some([ribcage, skin]) = self.rest_hands(request, &window, end, &nodes, frames, globals)? {
+            (integration.hand_clamp, integration.hand_rest) = (Some(ribcage), Some(skin));
         }
         if let Some((path, at)) = &request.snapshot {
             if !self.snapshot_written && window.displayed_ms >= *at {
@@ -501,7 +593,7 @@ impl Active {
             }
         }
         if let Some(trace) = &request.trace {
-            trace.record(window.displayed_ms, &request.asset, &output, &integration, maximum, skin_error)?;
+            trace.record(window.displayed_ms, &request.asset, &output, &integration, maximum, crease, skin_error)?;
         }
         if window.displayed_ms >= self.report_ms + 1000 {
             self.report_ms = window.displayed_ms;
@@ -522,9 +614,21 @@ struct IntegrationReport {
     active_contact_samples: usize,
     maximum_penetration_m: f64,
     maximum_normal_force_n: f64,
+    // Overlap permitted at the contact pressure cap (diagnostic, not repaired).
+    force_limited_contact_samples: usize,
+    // Displayed-time hand clamp per side [left, right]; present only when the
+    // owner-approved exception is active (exception-assisted run).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hand_clamp: Option<[super::hand_clamp::HandCorrection; 2]>,
+    // The same, solved display-only against the solved breast skin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hand_rest: Option<[super::hand_clamp::HandCorrection; 2]>,
+    maximum_force_limited_penetration_m: f64,
     sampling_ms: f64,
     elasticity_ms: f64,
     collision_ms: f64,
+    // Displayed skin (embedding, smoothing, metrics) for this output frame.
+    surface_ms: f64,
 }
 
 impl IntegrationReport {
@@ -534,12 +638,17 @@ impl IntegrationReport {
         self.subdivisions += other.subdivisions;
         self.active_contact_samples += other.active_contact_samples;
         self.maximum_penetration_m = self.maximum_penetration_m.max(other.maximum_penetration_m);
+        self.force_limited_contact_samples += other.force_limited_contact_samples;
+        self.maximum_force_limited_penetration_m = self
+            .maximum_force_limited_penetration_m
+            .max(other.maximum_force_limited_penetration_m);
         self.maximum_normal_force_n = self
             .maximum_normal_force_n
             .max(other.maximum_normal_force_n);
         self.sampling_ms += other.sampling_ms;
         self.elasticity_ms += other.elasticity_ms;
         self.collision_ms += other.collision_ms;
+        self.surface_ms += other.surface_ms;
     }
 }
 
@@ -616,6 +725,11 @@ fn integrate_interval(
                     .map(|m| m.maximum_penetration_m)
                     .fold(0.0, f64::max);
                 report.maximum_normal_force_n = metrics.iter().map(|m| m.normal_force_n).sum();
+                report.force_limited_contact_samples = metrics.iter().map(|m| m.force_limited_contacts).sum();
+                report.maximum_force_limited_penetration_m = metrics
+                    .iter()
+                    .map(|m| m.maximum_force_limited_penetration_m)
+                    .fold(0.0, f64::max);
             }
             Err(error) => failure = Some((0, error)),
         }
@@ -659,6 +773,21 @@ fn integrate_interval(
     }
     *solvers = candidate;
     Ok(report)
+}
+
+/// Owner-approved exception, display only: writes this frame's hand rest on
+/// the solved breast skin after the tissue step (and its FK check) and before
+/// rendering. The next frame's pose application starts from the ribcage-only
+/// correction again, so the adjustment never reaches the tissue.
+fn apply_hand_rest(state: Res<TissueState>, mut globals: Query<&mut GlobalTransform>) {
+    let Some(active) = &state.active else {
+        return;
+    };
+    for (entity, matrix) in &active.rest_overrides {
+        if let Ok(mut global) = globals.get_mut(*entity) {
+            *global = GlobalTransform::from(*matrix);
+        }
+    }
 }
 
 fn advance(

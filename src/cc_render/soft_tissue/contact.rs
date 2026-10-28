@@ -31,12 +31,16 @@ impl EmbeddedPoint {
 /// Supply the plane and embedded offset at the physical substep endpoint.
 /// Stiffness is N/m for this quadrature sample, including its represented area;
 /// splitting a sample requires splitting its stiffness, not duplicating it.
+/// `max_force_n` caps the reaction (a bounded contact pressure times the same
+/// area share); beyond it the energy grows linearly and overlap is permitted.
+/// `f64::INFINITY` keeps the unbounded quadratic penalty.
 #[derive(Clone, Copy, Debug)]
 pub struct PlaneContact {
     pub point: EmbeddedPoint,
     pub surface_point: DVec3,
     pub normal: DVec3,
     pub stiffness_n_per_m: f64,
+    pub max_force_n: f64,
 }
 
 impl PlaneContact {
@@ -57,6 +61,8 @@ impl PlaneContact {
             || (self.normal.length_squared() - 1.0).abs() > 1e-8
             || !self.stiffness_n_per_m.is_finite()
             || self.stiffness_n_per_m <= 0.0
+            || self.max_force_n.is_nan()
+            || self.max_force_n <= 0.0
         {
             return Err(TissueError::InvalidInput("embedded contact plane"));
         }
@@ -70,8 +76,36 @@ impl PlaneContact {
         .max(0.0)
     }
 
+    /// Depth where the quadratic penalty reaches the force cap.
+    fn limit_depth(&self) -> f64 {
+        self.max_force_n / self.stiffness_n_per_m
+    }
+
+    pub fn is_force_limited(&self, depth: f64) -> bool {
+        depth > self.limit_depth()
+    }
+
+    /// Normal reaction for `depth`: the penalty, bounded by the cap.
+    pub(super) fn force(&self, depth: f64) -> f64 {
+        (self.stiffness_n_per_m * depth).min(self.max_force_n)
+    }
+
+    /// Derivative of `force`; zero on the capped (linear-energy) branch.
+    pub(super) fn tangent(&self, depth: f64) -> f64 {
+        if self.is_force_limited(depth) { 0.0 } else { self.stiffness_n_per_m }
+    }
+
     pub(super) fn energy(&self, positions: &[DVec3], tets: &[Tet]) -> f64 {
-        0.5 * self.stiffness_n_per_m * self.depth(positions, tets).powi(2)
+        self.depth_energy(self.depth(positions, tets))
+    }
+
+    pub(super) fn depth_energy(&self, depth: f64) -> f64 {
+        if self.is_force_limited(depth) {
+            let limit = self.limit_depth();
+            self.max_force_n * (depth - 0.5 * limit)
+        } else {
+            0.5 * self.stiffness_n_per_m * depth * depth
+        }
     }
 }
 
@@ -83,6 +117,12 @@ pub struct ContactMetrics {
     pub maximum_penetration_m: f64,
     pub normal_force_n: f64,
     pub elastic_energy_j: f64,
+    /// Active samples at the force cap and their deepest overlap. Their
+    /// penetration is permitted by the bounded pressure, not hidden.
+    pub force_limited_contacts: usize,
+    pub maximum_force_limited_penetration_m: f64,
+    /// Deepest overlap among samples below the cap: the penalty residual.
+    pub maximum_unlimited_penetration_m: f64,
 }
 
 pub(super) fn metrics(
@@ -95,8 +135,14 @@ pub(super) fn metrics(
         let depth = contact.depth(x, tets);
         result.active_contacts += usize::from(depth > 0.0);
         result.maximum_penetration_m = result.maximum_penetration_m.max(depth);
-        result.normal_force_n += contact.stiffness_n_per_m * depth;
-        result.elastic_energy_j += 0.5 * contact.stiffness_n_per_m * depth * depth;
+        result.normal_force_n += contact.force(depth);
+        result.elastic_energy_j += contact.depth_energy(depth);
+        if contact.is_force_limited(depth) {
+            result.force_limited_contacts += 1;
+            result.maximum_force_limited_penetration_m = result.maximum_force_limited_penetration_m.max(depth);
+        } else {
+            result.maximum_unlimited_penetration_m = result.maximum_unlimited_penetration_m.max(depth);
+        }
     }
     if !result.normal_force_n.is_finite() || !result.elastic_energy_j.is_finite() {
         return Err(TissueError::Nonfinite);

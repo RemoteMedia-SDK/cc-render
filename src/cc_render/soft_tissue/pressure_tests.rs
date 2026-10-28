@@ -112,6 +112,20 @@ fn nodal_pressure_couplings_match_independent_directional_derivatives() {
 }
 
 #[test]
+fn compliant_rim_keeps_the_fixed_rim_pressure_partition() {
+    let fixed = cube_with_pressure(true, PressureDiscretization::AverageNodalBoundary);
+    let attachments: Vec<_> = fixed.attachments.iter().map(|a| match a {
+        Attachment::Fixed => Attachment::Compliant { compliance_m_per_n: 1e-6 },
+        other => *other,
+    }).collect();
+    let compliant = Tissue::new(fixed.rest.clone(), fixed.rest.clone(), fixed.tets.iter().map(|t| t.ids).collect(),
+        attachments, fixed.material, Frame::IDENTITY).unwrap();
+    assert!(fixed.element_pressure.iter().any(|local| *local));
+    assert_eq!(compliant.element_pressure, fixed.element_pressure);
+    assert_eq!(compliant.pressure_patches.len(), fixed.pressure_patches.len());
+}
+
+#[test]
 fn fixed_edge_pressure_partition_preserves_homogeneous_material_energy() {
     let tissue = cube_with_pressure(true, PressureDiscretization::AverageNodalBoundary);
     let partition: f64 = tissue.pressure_patches.iter().map(|p| p.volume).sum::<f64>()
@@ -121,7 +135,7 @@ fn fixed_edge_pressure_partition_preserves_homogeneous_material_energy() {
     assert!(tissue.element_pressure.iter().any(|local| *local));
     assert!(tissue.element_pressure.iter().any(|local| !*local));
     for (tet, local) in tissue.tets.iter().zip(&tissue.element_pressure) {
-        assert_eq!(*local,tet.ids.iter().filter(|&&i| matches!(tissue.attachments[i],Attachment::Fixed)).count() >= 2);
+        assert_eq!(*local,tet.ids.iter().filter(|&&i| !matches!(tissue.attachments[i],Attachment::Free)).count() >= 2);
     }
     let f = DMat3::from_cols(DVec3::new(1.05,0.1,0.), DVec3::Y*0.95, DVec3::Z*1.02);
     let x: Vec<_> = tissue.rest.iter().map(|p| f**p).collect();

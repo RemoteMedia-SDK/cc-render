@@ -1,0 +1,162 @@
+{
+  "criteria": {
+    "completes": "tissue replay reaches 8000 ms",
+    "contact": "at least one frame with active tissue contact",
+    "ribcage_supported": "no unsupported ribcage-clamp frames",
+    "rest_supported": "no unsupported breast-skin rest frames (corrections <= 50 mm)",
+    "fingers_rest": "finger residual <= 1 mm in every frame",
+    "rank": "passing attempts ordered by smallest maximum rest correction"
+  },
+  "results": [
+    {
+      "case": "rest-740",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 0,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 0,
+      "max_rest_correction_mm": 0.0,
+      "max_palm_penetration_mm": 0.0,
+      "max_finger_residual_mm": 0.0,
+      "passes": false
+    },
+    {
+      "case": "rest-741",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 0,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 0,
+      "max_rest_correction_mm": 0.0,
+      "max_palm_penetration_mm": 0.0,
+      "max_finger_residual_mm": 0.0,
+      "passes": false
+    },
+    {
+      "case": "rest-742",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 43,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 0,
+      "max_rest_correction_mm": 11.9,
+      "max_palm_penetration_mm": 10.9,
+      "max_finger_residual_mm": 0.0,
+      "passes": true
+    },
+    {
+      "case": "rest-743",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 0,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 0,
+      "max_rest_correction_mm": 0.0,
+      "max_palm_penetration_mm": 0.0,
+      "max_finger_residual_mm": 0.0,
+      "passes": false
+    },
+    {
+      "case": "gentle-740",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 106,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 0,
+      "max_rest_correction_mm": 5.0,
+      "max_palm_penetration_mm": 4.0,
+      "max_finger_residual_mm": 0.0,
+      "passes": true
+    },
+    {
+      "case": "gentle-741",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 218,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 176,
+      "max_rest_correction_mm": 42.8,
+      "max_palm_penetration_mm": 53.2,
+      "max_finger_residual_mm": 54.17,
+      "passes": false
+    },
+    {
+      "case": "gentle-742",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 138,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 43,
+      "max_rest_correction_mm": 49.3,
+      "max_palm_penetration_mm": 48.2,
+      "max_finger_residual_mm": 46.62,
+      "passes": false
+    },
+    {
+      "case": "gentle-743",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 200,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 21,
+      "max_rest_correction_mm": 49.3,
+      "max_palm_penetration_mm": 43.6,
+      "max_finger_residual_mm": 37.02,
+      "passes": false
+    },
+    {
+      "case": "rub-740",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 134,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 0,
+      "max_rest_correction_mm": 27.4,
+      "max_palm_penetration_mm": 26.0,
+      "max_finger_residual_mm": 0.0,
+      "passes": true
+    },
+    {
+      "case": "rub-741",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 263,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 12,
+      "max_rest_correction_mm": 47.3,
+      "max_palm_penetration_mm": 39.0,
+      "max_finger_residual_mm": 36.07,
+      "passes": false
+    },
+    {
+      "case": "rub-742",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 119,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 7,
+      "max_rest_correction_mm": 49.5,
+      "max_palm_penetration_mm": 40.9,
+      "max_finger_residual_mm": 37.5,
+      "passes": false
+    },
+    {
+      "case": "rub-743",
+      "generated": true,
+      "last_pts_ms": 8000,
+      "contact_frames": 203,
+      "ribcage_unsupported": 0,
+      "rest_unsupported": 90,
+      "max_rest_correction_mm": 49.9,
+      "max_palm_penetration_mm": 50.4,
+      "max_finger_residual_mm": 43.05,
+      "passes": false
+    }
+  ],
+  "passing": [
+    "gentle-740",
+    "rest-742",
+    "rub-740"
+  ],
+  "pass_rate": "3/12"
+}

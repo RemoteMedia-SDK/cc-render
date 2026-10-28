@@ -88,6 +88,7 @@ fn main() -> anyhow::Result<()> {
                 surface_point: DVec3::Z * start_z,
                 normal: DVec3::NEG_Z,
                 stiffness_n_per_m: pressure_stiffness * sample.area_m2,
+                max_force_n: f64::INFINITY,
             });
         }
         let start = std::time::Instant::now();

@@ -21,8 +21,12 @@ the final rebuild passed. Other worktrees were not modified.
 - [Review page](../../artifacts/soft-tissue/volume-audit/index.html).
 
 The lab uses the base `beautiful_assistant.smpl_aligned.glb`, a focused camera
-and native ARDY motion, without clothing or condo geometry. Selected asset:
-`assets/tissue/beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
+and native ARDY motion, without clothing or condo geometry. Default asset
+(owner-accepted 2026-10-19):
+`assets/tissue/beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json`,
+with the MLS skin embedding and 4 smoothing passes now the runtime default.
+The contact checkpoints below used the previous
+`beautiful_assistant.base-quality-stabilized-volume-prototype.json`.
 See [the design record](breast-soft-tissue.md) for input paths, hashes and solver
 parameters. ARDY retains sole ownership of body/root/joint motion; preserve
 unchanged packets and the [motion ownership contract](model-owned-motion.md).
@@ -52,25 +56,27 @@ their initial-intersection or no-contact outcomes.
 
 The bounded penalty update fixes the first contact step: residual overlap falls
 from about 130 µm to **95.777 µm**, below the unchanged 100 µm limit. Its 153.24 N
-reaction is a numerical observation, not anatomical force calibration. A later
-step exhausts bounded subdivision at **7666.666667–7666.731771 ms**, depth 6.
-The right region has force residual **1.112e-6 N** against an approximately
-**1.332e-7 N** timestep-scaled budget, despite a **9.767e-14 m** Newton correction.
-The underlying error correctly names region 1; the outer region-0 label remains
-a diagnostic limitation. No tolerance was relaxed.
+reaction is a numerical observation, not anatomical force calibration.
 
-Coordinate-centering improved one synthetic oblique contact case but **still
-failed the actual replay** near 7666.8 ms. It was removed from production. Its
-patch, frozen sources, probe results, tests, failed capture and baseline rebuild
-log remain in the [precision experiment](../../artifacts/soft-tissue/avatar-contact/origin-precision-01/README.md).
-These partial captures are not a successful contact video. See the
-[native contact checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md)
-for detailed findings and test logs.
+**Update (residual-precision checkpoint):** the later 7666.67 ms
+depth-6 failure was a line-search defect, not a precision floor. Measured on
+the bit-exact recorded state: gradient noise 4e-12 N, representability floor
+7e-9 N, condition 900, all far below the 1.33e-7 N limit; one Newton step
+reaches 7e-9 N. The energy Armijo test rejected it because trial energies carry
+~6e-15 J rounding against a ~1e-19 J decrease. `descend` now falls back to the
+Hager–Zhang approximate Wolfe test through the gradient; convergence limits are
+unchanged. The jump regression is identical in every value. The contact replay
+now stops at **7671.35 ms (ContactUnresolved)** on skin samples embedded 78–89 %
+in Fixed attachment nodes. See the
+[residual-precision checkpoint](../../artifacts/soft-tissue/avatar-contact/residual-precision-01/README.md).
+Coordinate-centering remains a rejected experiment
+([precision experiment](../../artifacts/soft-tissue/avatar-contact/origin-precision-01/README.md);
+[native contact checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-continuation-01/README.md)).
 
 ## Verification and remaining limits
 
-- **87 focused tissue tests pass** on the saved baseline; the native recording
-  example's five tests also pass.
+- **89 focused tissue tests pass** with the line-search change (87 earlier + 2
+  regressions that fail without it); the native recording example's five pass.
 - Python: **15 pass, one existing failure** in
   `test_root_acceptance_does_not_rewrite_the_candidate`. Its source slice includes
   an unrelated `for` beyond `resolve_root`. Protected assertions were unchanged.
@@ -84,18 +90,86 @@ for detailed findings and test logs.
   friction, edge/edge, mutual-breast and environmental contact remain open.
   Do not default-enable the replacement on the present evidence.
 
-## Resume with one bounded investigation
+## Contact status after rim and pressure-cap work
 
-1. Reproduce seed 739 and capture the exact failed nonlinear state, objective,
-   gradient components and effective BDF2 timestep. Measure residual-evaluation
-   precision and conditioning before changing convergence acceptance. A tiny
-   Newton step alone does not establish residual convergence.
-2. Investigate that state without changing source poses, timing, material,
-   attachments or contact limits. Coordinate-centering is a rejected diagnostic,
-   not an established fix. Further seed searches are unnecessary for this failure.
-3. After a justified solver change, complete the same contact replay and render
-   its compression/release. Repeat the unchanged-jump regression, focused tests
-   and live performance check. Keep numerical checks separate from visual proof.
+- `0a8ee06`: compliant skin-side rim variants (`soften_tissue_rim.py`) and an
+  attachment-aware pressure partition; the reviewed bounce is unchanged at 1e-5.
+- Bounded contact pressure (default 10 kPa, `CC_AVATAR_TISSUE_CONTACT_PRESSURE_PA`):
+  **the seed-739 chest rub now completes through 8000 ms** at 2/10/50 kPa on both
+  rims. Hands visibly pass ~2–3 mm into the breasts (reported, not repaired).
+  See the [pressure-cap checkpoint](../../artifacts/soft-tissue/avatar-contact/pressure-cap-02/README.md).
+
+- Owner-approved exception (`docs/design/hand-ribcage-clamp-exception.md`,
+  opt-in `CC_AVATAR_HAND_RIBCAGE_CLAMP=1`): wrist/palm ribcage guard plus
+  finger conformance. On seed 739 only the right hand's fingers entered the
+  ribcage (up to 23 mm); they now bend up to 14° with zero residual. See the
+  [hand clamp checkpoint](../../artifacts/soft-tissue/avatar-contact/hand-clamp-01/README.md).
+
+- Display-only hand rest on the solved breast skin (second exception
+  amendment): works while corrections stay within 50 mm; seed 739's last
+  ~150 ms need 58 mm to 30 cm (hand wedged between both breasts), so the
+  source motion is the limit. See the
+  [hand rest checkpoint](../../artifacts/soft-tissue/avatar-contact/hand-rest-01/README.md).
+
+- Preregistered regeneration (12 semantic attempts): 3/12 pass the clamp and
+  rest without unsupported frames; best `gentle-740` and `rub-740` show hands
+  resting on the upper chest. Hands still pass through each other where they
+  cross (outside the exception). See the
+  [matrix checkpoint](../../artifacts/soft-tissue/avatar-contact/chest-matrix-01/README.md).
+
+## Gravity and inertia baseline (orientation lab)
+
+`scripts/avatars/tissue_orientation_lab.py` turns one frozen standing frame as
+a rigid body (face-down/up, upside-down, side-lying, turns, tumble, shakes) in
+the tissue lab, with the office runtime off for these marked synthetic packets.
+Evidence: `artifacts/soft-tissue/orientation-lab/` (`orientation-01`). All
+captures complete and return to rest, with correct directions but millimetre
+responses (4–10 mm held, 7 mm peak for a 3 cm, 3 Hz bounce, settled within
+~0.3 s): the material is far stiffer and more damped than tissue. This is the
+calibration baseline.
+
+Calibration checkpoint (`artifacts/soft-tissue/calibration/`, headless
+`examples/tissue_calibrate.rs`): shear 40 Pa, shear viscosity 0.4 Pa s and
+stiffening 32 (`...calibrated-s40-k32-prototype.json`) raises upside-down
+nipple travel from 17 to 36 mm and prone–supine from 8 to 22 mm, at 5.2 Hz and
+damping ratio 0.08, but hard shakes dent the skin where the coarse cage meets
+fixed skin. The selected asset is unchanged; the seam is the next blocker.
+
+The creases turned out to be the linear embedding in the coarse cage, not the
+seam: opt-in `CC_AVATAR_TISSUE_SURFACE_SMOOTHING=8` (Taubin smoothing of the
+skin displacement) removes the kinks and inverted skin triangles in the rig.
+On the ARDY jump, s40-k32 + smoothing doubles motion (33 -> 58 mm).
+
+Finer cages (`artifacts/soft-tissue/cage-resolution/`) double the sag but cost
+25-90x per step: not real time. Instead the coarse cage stays the physics and
+the skin follows it smoothly: opt-in `CC_AVATAR_TISSUE_SURFACE_EMBEDDING=mls`
+plus `CC_AVATAR_TISSUE_SURFACE_SMOOTHING=4`. A new trace metric,
+`maximum_crease_deg`, measures folding without counting rotation (the earlier
+end-of-jump "distortion" was the old metric, not visible in frames). Jump
+peak crease: selected asset 47.8° today, 16.9° with mls + smoothing 4;
+s40-k32 with mls + smoothing 4 44.3° while moving twice as far. Defaults are
+unchanged. Details in `artifacts/soft-tissue/calibration/README.md`.
+
+The undamped candidate bounced too much ("the nipples bounce around wildly a
+bit too much"); shear viscosity 4 Pa s (damping ratio 0.20, settles in about
+0.3 s, sag unchanged) was accepted by the owner ("4 Pa's looks great"):
+`beautiful_assistant.base-calibrated-s40-k32-v4-prototype.json` with mls +
+smoothing 4 is the lab candidate. See `orientation-lab/jump-03/`.
+
+## Resume
+
+1. Owner review of the finger-conformance and pressure-cap videos; choose the
+   default cap (10 kPa now) and whether fingers should also rest on breast skin.
+2. Live 120 Hz (`artifacts/soft-tissue/live120-01/`): the accepted
+   s40-k32-v4 + mls + smoothing 4 candidate costs no measurable delivery; the
+   skin layer adds ~0.15 ms per output frame and the material solves slightly
+   faster. Live playback is still short of smooth 30 FPS (~210 of ~239
+   readbacks) for every setup. Cap and clamp are still unmeasured live.
+   The owner made it the default (asset in the orientation lab and docs;
+   embedding and smoothing in the runtime). Next: re-run the seed-739 chest
+   contact with the new default; contact with the softer material is
+   unmeasured.
+3. Default enablement still needs anatomical calibration and broader clips.
 
 Run from this worktree:
 

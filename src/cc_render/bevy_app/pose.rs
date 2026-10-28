@@ -1699,6 +1699,31 @@ pub(crate) fn capture_cc5_bind_rotations(
 /// - `CC_RENDER_DISABLE_BAKED_ANIM=1` — embedded FBX animations
 ///   (TempMotion etc.) are disabled by default to avoid frame-0
 ///   bone-overdrive artifacts; set `0` to re-enable.
+/// Owner-approved exception (docs/design/hand-ribcage-clamp-exception.md):
+/// the tissue path applies the same correction to the same retarget and
+/// verifies displayed skin against it every frame. Writes finger rotations.
+fn apply_hand_clamp(
+    clamp: &super::hand_clamp::HandRibcageClamp,
+    pose: &SkeletalPose,
+    cc5_local: [Quat; 22],
+    transforms: &mut Query<&mut Transform>,
+) -> [Quat; 22] {
+    match clamp.correct(pose, cc5_local) {
+        Ok(correction) => {
+            for (bone, rotation) in &correction.fingers {
+                if let Ok(mut transform) = transforms.get_mut(*bone) {
+                    transform.rotation = *rotation;
+                }
+            }
+            correction.rotations
+        }
+        Err(error) => {
+            tracing::error!(%error, "hand ribcage clamp failed; displaying generated arm pose");
+            cc5_local
+        }
+    }
+}
+
 pub(crate) fn apply_skeletal_pose(
     rx: Res<SkeletalPoseWatchRx>,
     bind: Res<CC5BindRotations>,
@@ -1711,6 +1736,7 @@ pub(crate) fn apply_skeletal_pose(
     mut idle_ticks: Local<u64>,
     mut total_streams: Local<u64>,
     mut world_motion: crate::cc_render::office::timeline::WorldMotion,
+    hand_clamp: Option<Res<super::hand_clamp::HandClampResource>>,
 ) {
     if !bind.captured {
         return;
@@ -2026,6 +2052,10 @@ pub(crate) fn apply_skeletal_pose(
             bind.parent_chain_rest[0],
             r_align,
         ),
+    };
+    let cc5_local = match (&hand_clamp, mode.as_str()) {
+        (Some(clamp), "calibrated") => apply_hand_clamp(&clamp.0, &pose, cc5_local, &mut transforms),
+        _ => cc5_local,
     };
 
     // ─── Diagnostic: dump SMPL pose values for shoulders/elbows. ─────

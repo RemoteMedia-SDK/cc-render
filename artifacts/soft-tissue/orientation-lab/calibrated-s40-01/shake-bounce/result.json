@@ -1,0 +1,126 @@
+{
+  "captures": {
+    "chest-front": {
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/examples/tissue_lab",
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/orientation-lab/calibrated-s40-01/shake-bounce/source/packets.ndjson",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/assets/tissue/beautiful_assistant.base-calibrated-s40-prototype.json",
+        "chest-front",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/orientation-lab/calibrated-s40-01/shake-bounce/chest-front"
+      ],
+      "environment": {
+        "CC_RENDER_FAST": "0",
+        "CC_AVATAR_TISSUE_HZ": "240",
+        "CC_AVATAR_TISSUE_ITERATIONS": "32",
+        "CC_TISSUE_LAB_FPS": "60",
+        "CC_TISSUE_LAB_CLOCK": "fixed",
+        "CC_TISSUE_LAB_TRACE_ONLY": "0",
+        "CC_AVATAR_TISSUE_TRACE_NODES": "0",
+        "RUST_LOG": "info"
+      },
+      "exit_code": 0
+    },
+    "chest-side": {
+      "argv": [
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/target/debug/examples/tissue_lab",
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/processed/beautiful_assistant.smpl_aligned.glb",
+        "/home/acidhax/dev/personal/remotemedia/remotemedia-sdk-office-main/avatars/beautiful_assistant.arkit_map.resolved.json",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/orientation-lab/calibrated-s40-01/shake-bounce/source/packets.ndjson",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/assets/tissue/beautiful_assistant.base-calibrated-s40-prototype.json",
+        "chest-side",
+        "/home/acidhax/dev/personal/remotemedia/cc-render-soft-tissue/artifacts/soft-tissue/orientation-lab/calibrated-s40-01/shake-bounce/chest-side"
+      ],
+      "environment": {
+        "CC_RENDER_FAST": "0",
+        "CC_AVATAR_TISSUE_HZ": "240",
+        "CC_AVATAR_TISSUE_ITERATIONS": "32",
+        "CC_TISSUE_LAB_FPS": "60",
+        "CC_TISSUE_LAB_CLOCK": "fixed",
+        "CC_TISSUE_LAB_TRACE_ONLY": "0",
+        "CC_AVATAR_TISSUE_TRACE_NODES": "0",
+        "RUST_LOG": "info"
+      },
+      "exit_code": 0
+    }
+  },
+  "response": {
+    "frames": 391,
+    "last_pts_ms": 6550,
+    "regions": {
+      "left_breast": {
+        "peak_centroid_offset_mm": 25.33,
+        "peak_node_offset_mm": 59.38,
+        "minimum_volume_ratio": 0.423,
+        "maximum_volume_ratio": 1.72,
+        "maximum_speed_m_s": 1.841,
+        "segment_end_offsets_mm": [
+          {
+            "segment": "hold",
+            "pts_ms": 1550,
+            "offset": [
+              -0.4,
+              0.4,
+              0.8
+            ]
+          },
+          {
+            "segment": "shake",
+            "pts_ms": 4550,
+            "offset": [
+              3.9,
+              11.1,
+              1.2
+            ]
+          },
+          {
+            "segment": "hold",
+            "pts_ms": 6550,
+            "offset": [
+              -0.4,
+              0.3,
+              0.7
+            ]
+          }
+        ]
+      },
+      "right_breast": {
+        "peak_centroid_offset_mm": 24.96,
+        "peak_node_offset_mm": 68.1,
+        "minimum_volume_ratio": 0.527,
+        "maximum_volume_ratio": 1.727,
+        "maximum_speed_m_s": 1.953,
+        "segment_end_offsets_mm": [
+          {
+            "segment": "hold",
+            "pts_ms": 1550,
+            "offset": [
+              1.6,
+              0.2,
+              0.9
+            ]
+          },
+          {
+            "segment": "shake",
+            "pts_ms": 4550,
+            "offset": [
+              4.6,
+              12.7,
+              4.9
+            ]
+          },
+          {
+            "segment": "hold",
+            "pts_ms": 6550,
+            "offset": [
+              -0.4,
+              1.0,
+              0.5
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
