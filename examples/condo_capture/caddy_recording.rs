@@ -8,6 +8,36 @@ const SHOWER_PROMPT: &str = "A person stands upright and looks forward under a r
 
 pub(super) enum Action { Goal(u64, u64, u8, Value) }
 
+/// A bounded prompt experiment that keeps the physical bottle as its scene target.
+#[derive(Serialize)]
+struct TargetedSequence {
+    interaction: String,
+    prompt: TimedPrompt,
+}
+
+impl TargetedSequence {
+    fn from_env(world: &Value, target: &str) -> anyhow::Result<Option<Self>> {
+        let Ok(interaction) = std::env::var("CC_CONDO_CADDY_SEQUENCE") else { return Ok(None) };
+        let declaration = world["office"]["objects"].as_array()
+            .and_then(|objects| objects.iter().find(|o| o["id"] == target))
+            .and_then(|object| object["interactions"].as_array())
+            .and_then(|items| items.iter().find(|i| i["id"] == interaction))
+            .ok_or_else(|| anyhow::anyhow!("sequence interaction is not declared on the bottle"))?;
+        Self::new(interaction, declaration).map(Some)
+    }
+
+    fn new(interaction: String, declaration: &Value) -> anyhow::Result<Self> {
+        let phases = declaration["phases"].as_array().ok_or_else(|| anyhow::anyhow!("missing phases"))?;
+        anyhow::ensure!(phases.len() == 1, "sequence trial requires one semantic phase");
+        let phase = &phases[0];
+        anyhow::ensure!(["stand_at", "transition", "dispense"].iter().all(|k| phase[k].is_null())
+            && phase["relations"].as_array().is_none_or(|r| r.is_empty()),
+            "sequence trial cannot guide hands, navigate or change attachment");
+        let description = phase["prompt"].as_str().ok_or_else(|| anyhow::anyhow!("missing prompt"))?;
+        Ok(Self { interaction, prompt: TimedPrompt::new(description.into(), 12.)? })
+    }
+}
+
 #[derive(Serialize)]
 pub(super) struct CaddyTask {
     object_handling: &'static str,
@@ -25,6 +55,7 @@ pub(super) struct CaddyTask {
     completed_pts_ms: Option<u64>,
     error: Option<String>,
     shower: TimedPrompt,
+    sequence: Option<TargetedSequence>,
 }
 
 impl CaddyTask {
@@ -34,11 +65,13 @@ impl CaddyTask {
         let prop = world["props"].as_array().and_then(|props| props.iter().find(|p| p["id"] == target))
             .ok_or_else(|| anyhow::anyhow!("caddy target is not a loaded physical prop"))?;
         let home = std::array::from_fn(|i| prop["transform"][3][i].as_f64().unwrap());
+        let sequence = TargetedSequence::from_env(world, &target)?;
         Ok(Some(Self { object_handling:"declared_interact_coupling",target,status:"waiting_for_arrival",home,
             shelf_y:prop["aabb_min"][1].as_f64().unwrap(), lifted:false, poured_liters:0.,
             left_palm_impacts:0, pour_baseline:None, prompt_revision:None,prompt_started_pts_ms:None,
             released_pts_ms:None,completed_pts_ms:None,error:None,
-            shower:TimedPrompt::new(SHOWER_PROMPT.into(),30.)? }))
+            shower:TimedPrompt::new(SHOWER_PROMPT.into(),30.)?,
+            sequence }))
     }
 
     pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
@@ -46,15 +79,30 @@ impl CaddyTask {
         Ok(())
     }
 
-    pub fn finished(&self) -> bool { matches!(self.status,"failed"|"complete") }
+    pub fn finished(&self) -> bool { matches!(self.status,"failed"|"complete"|"trial_complete") }
 
     fn fail(&mut self, error: String) { self.status="failed"; self.error=Some(error); }
 
     pub fn observe(&mut self, event: &Value, session: &str, navigation: &str,
         water: &[WaterSnapshot]) -> Option<Action> {
-        if matches!(self.status,"failed"|"complete") { return None; }
+        if self.finished() { return None; }
         if matches!(event["kind"].as_str(),Some("motion_error"|"worker_error")) {
             self.fail(event["error"].to_string()); return None;
+        }
+        if event["kind"] == "motion_goal_status" && event["goal"]["session_id"] == session
+            && event["status"] == "failed" {
+            self.fail(event.to_string()); return None;
+        }
+        if self.status == "prompting_sequence" {
+            let sequence = self.sequence.as_mut()?;
+            let action = sequence.prompt.observe(event,session,navigation)
+                .map(|(revision,pts,prompt)| Action::Goal(revision,pts,2,json!({"description":prompt})));
+            if sequence.prompt.complete() {
+                // A finished recording does not establish pouring or shelf placement.
+                self.status = "trial_complete";
+                self.completed_pts_ms = event["state"]["office"]["avatar"]["displayed_pts_ms"].as_u64();
+            }
+            return action;
         }
         if self.status == "showering" {
             let action=self.shower.observe(event,session,navigation)
@@ -96,14 +144,7 @@ impl CaddyTask {
 
     fn advance_task(&mut self, pts:u64, held:bool, near:bool) -> Option<Action> {
         if self.status == "awaiting_attachment" {
-            if held {
-                let revision=self.prompt_revision?+1;
-                self.status="pouring";
-                self.prompt_revision=Some(revision);
-                self.prompt_started_pts_ms=None;
-                return Some(Action::Goal(revision,pts,3,json!({"operation":"interact",
-                    "target_id":self.target,"interaction":"pour_into_hand"})));
-            }
+            if held { return self.begin_bottle_use(pts); }
             if pts.saturating_sub(self.prompt_started_pts_ms?) > 3000 {
                 self.fail("pickup completed without an observed bottle attachment".into());
             }
@@ -127,6 +168,22 @@ impl CaddyTask {
             }
         }
         None
+    }
+
+    fn begin_bottle_use(&mut self, pts:u64) -> Option<Action> {
+        let revision=self.prompt_revision?+1;
+        if let Some(sequence) = self.sequence.as_mut() {
+            self.status = "prompting_sequence";
+            sequence.prompt.start(revision,pts);
+            self.prompt_revision = Some(revision);
+            return Some(Action::Goal(revision,pts,3,json!({"operation":"interact",
+                "target_id":self.target,"interaction":sequence.interaction})));
+        }
+        self.status="pouring";
+        self.prompt_revision=Some(revision);
+        self.prompt_started_pts_ms=None;
+        Some(Action::Goal(revision,pts,3,json!({"operation":"interact",
+            "target_id":self.target,"interaction":"pour_into_hand"})))
     }
 
     fn observe_pour(&mut self, pts:u64, held:bool) -> Option<Action> {
@@ -187,11 +244,11 @@ impl CaddyTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn task() -> CaddyTask {
+    pub(super) fn task() -> CaddyTask {
         CaddyTask { object_handling:"declared_interact_coupling",target:"shampoo".into(),status:"picking_up",home:[0.,1.,0.],shelf_y:0.9,
             lifted:false,poured_liters:0.,left_palm_impacts:0,pour_baseline:None,prompt_revision:None,
             prompt_started_pts_ms:None,released_pts_ms:None,completed_pts_ms:None,error:None,
-            shower:TimedPrompt::new(SHOWER_PROMPT.into(),30.).unwrap() }
+            shower:TimedPrompt::new(SHOWER_PROMPT.into(),30.).unwrap(), sequence:None }
     }
 
     #[test]
@@ -290,4 +347,45 @@ mod tests {
         t.advance_task(12500,false,false);
         assert_eq!(t.status,"failed", "leaving the shelf during settling must fail immediately");
     }
+}
+
+#[cfg(test)]
+mod sequence_tests {
+    use super::*;
+    use super::tests::task;
+
+    #[test]
+    fn targeted_sequence_waits_for_attachment_and_preserves_target() {
+        let mut t = task();
+        let description = "grab a bottle from the shelf, pour some into your hand, and place it back";
+        let declaration = json!({"phases":[{"prompt":description}]});
+        t.sequence = Some(TargetedSequence::new("use_and_return".into(), &declaration).unwrap());
+        t.status = "awaiting_attachment";
+        t.prompt_revision = Some(3);
+        t.prompt_started_pts_ms = Some(1000);
+        assert!(t.advance_task(1100,false,true).is_none());
+        let Some(Action::Goal(revision,_,version,goal)) = t.advance_task(1200,true,true) else { panic!("missing targeted goal") };
+        assert_eq!((revision,version),(4,3));
+        assert_eq!(goal,json!({"operation":"interact","target_id":"shampoo","interaction":"use_and_return"}));
+        assert_eq!(t.status,"prompting_sequence");
+        let state = |pts,revision| json!({"kind":"scene_state","state":{"office":{"avatar":{
+            "ready":true,"displayed_pts_ms":pts,"native_stream":{"session_id":"test","generation_revision":revision}}}}});
+        assert!(t.observe(&state(2000,4),"test","shampoo",&[]).is_none());
+        assert!(matches!(t.observe(&state(14000,4),"test","shampoo",&[]),Some(Action::Goal(5,14000,2,_))));
+        t.observe(&state(14500,5),"test","shampoo",&[]);
+        assert_eq!(t.status,"trial_complete", "recording duration is not manipulation success");
+        assert!(t.finished());
+    }
+
+    #[test]
+    fn targeted_sequence_rejects_conditioned_or_attachment_changing_phases() {
+        for (key,value) in [("stand_at",json!({"zone":"approach"})),
+            ("transition",json!({"kind":"release"})), ("dispense",json!({"outlet":"outlet"})),
+            ("relations",json!([{"kind":"touch"}]))] {
+            let mut declaration = json!({"phases":[{"prompt":"Use the bottle."}]});
+            declaration["phases"][0][key] = value;
+            assert!(TargetedSequence::new("use_and_return".into(), &declaration).is_err());
+        }
+    }
+
 }

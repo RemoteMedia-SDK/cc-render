@@ -184,7 +184,7 @@ fn legacy_coupling_cannot_reposition_or_freeze_a_body_with_a_permanent_joint() {
     use crate::cc_render::bevy_app::{physics::props::{Prop, PropRegistry}, pose::CC5BindRotations};
     let (mut controller, _) = fridge();
     controller.couplings.push(Coupling { object: "fridge_main_door".into(), anchors: vec![],
-        slide_height: None, release: Some(None), latch: None });
+        slide_height: None, release: Some(None), latch: None, tracking_error_m: None, actual_in_hand: None });
     controller.homes.insert("fridge_main_door".into(), [100., 1., 0., 0., 0., 0., 1.]);
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, TransformPlugin, HierarchyPlugin));

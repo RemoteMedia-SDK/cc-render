@@ -1147,7 +1147,44 @@ audits and validation are retained in
 `artifacts/toronto-condo-captures/shower-caddy-outwards-v2/`; the failed unguided
 return is retained separately under `shower-caddy-outwards-v1/`.
 
-The subsequent generic-bottle wording run also passes at seed 731, with 571
+**Visual acceptance withdrawn:** the generic-bottle recording reaches task
+completion but its opening pickup crosses the wall and leaves the bottle floating.
+The old checks measured task outcomes without checking the entire arm trajectory
+and held attachment. The guided-pour recording below likewise lacks this full-path
+acceptance; its liquid and lifecycle measurements remain historical evidence only.
+Replacement validation must cover the whole reach and continuation.
+
+The replacement `shower-grip-clearance-v4` fixes the reported pickup defect:
+the calibrated grip uses accumulated sampler-error feedback, and complete arm
+trajectories are checked before admission. Return guidance uprights the actual
+held bottle in front of the shelf, then approaches above it; arm and bottle
+collisions reject the candidate. Runtime collision fallback now fails explicitly
+if it separates the bottle more than 2 cm from its hand attachment.
+The [new pickup/pour/return clip](../../artifacts/toronto-condo-captures/shower-grip-clearance-v4/pickup-pour-return.mp4)
+and `validation.json` retain the evidence. The displayed pickup through outward
+turn has no measured arm/scene intersections; 272 held observations stay within
+2 cm. Palm pouring, upright released return and 30.601 seconds of unconstrained
+washing complete. The bottle stays within 1.37 cm of home during washing.
+82 targeted SDK tests and 22 relevant Rust tests pass. Failed v1-v3 attempts remain.
+**Full-sequence acceptance remains open:** the wider offline check finds an arm
+intersecting the shower glass during late washing (native 54-56 seconds).
+These checks do not certify the whole body or detailed finger contact.
+
+The later `shower-single-action-v3` fixes the repeated grab/put-back gestures.
+The [single-action replay](../../artifacts/toronto-condo-captures/shower-single-action-v3/pickup-pour-return.mp4)
+has one initial approach per phase. Progress follows the digest of the accepted
+generated history across blocks; stale observations during prefetch cannot restart
+the approach. Continuation prompts describe holding the bottle, and observed
+release switches to an empty-hand rest state instead of another placement caption.
+The grip uses the upper portion of the existing segment for shelf-lip clearance.
+Recorded attachment/release occur once, palm pouring succeeds, and 30.602 seconds
+of washing complete with zero future conditioning. Pickup, return and outward-turn
+arm paths pass; 86 targeted SDK tests pass. Attempts v1-v2 are retained.
+Full collision acceptance remains open: offline checks still find a brief hand/caddy
+intersection during pouring and arm/glass intersection during washing. See the
+run's `validation.json` and `path-validation.json` for exact blocks and limitations.
+
+The subsequent generic-bottle wording run reaches task completion at seed 731, with 571
 total left-palm impacts and 30.6 displayed seconds of washing. Its
 [clip](../../artifacts/toronto-condo-captures/shower-generic-bottle-v2/pour-and-return.mp4)
 and evidence are in `artifacts/toronto-condo-captures/shower-generic-bottle-v2/`.
@@ -1156,7 +1193,7 @@ retained as `shower-generic-bottle-v1/`. Hand guidance was still needed; this
 combined prompt and handoff change does not isolate the effect of the product
 name. Ten capture tests pass, including attached-but-still-near-shelf handoff.
 
-The guided-pour implementation now passes with the upright pickup. The [latest
+The earlier guided-pour implementation reaches task completion with upright pickup. The [historical
 recording](../../artifacts/toronto-condo/20261019T125839Z-upright-pickup-guided-palm-pour-shelf-return-and-30-second-s/view.mp4)
 (seed 731) visibly tips the bottle over the open left palm, observes 448 total
 left-palm impacts, returns the bottle upright and released, turns outward, and
@@ -1173,7 +1210,7 @@ The latter motivated the explicit upright, forward-looking washing prompt.
 91 targeted SDK tests and 16 renderer context/interaction/capture tests pass.
 The broader renderer Python suite still has its existing ownership source-text
 matcher failure; structural checks retain findings in the larger uncommitted
-work. This establishes one fixed-seed end-to-end pass, not a reliability matrix.
+work. These outcomes do not establish wall clearance or consistent hand attachment.
 
 Before guided dispensing, the upright-reach revision improved pickup posture
 but did **not** pass that full sequence. Two seed-731 captures reduce maximum displayed pickup
@@ -1550,3 +1587,21 @@ report. A renderer-crate optimization trial added no measured benefit and was
 not retained. Release already uses optimization level 3; these measurements
 cover the local development build. Full traces and build/test evidence are in
 `artifacts/toronto-condo-captures/perf184/`.
+
+### Combined bottle prompt with a retained target
+
+`CC_CONDO_CADDY_SEQUENCE=use_and_return` selects a bounded 12-second prompt
+trial after the existing `CC_CONDO_CADDY_TASK=shampoo` pickup has physically
+attached the bottle. The named interaction must be declared on that bottle as
+one semantic phase, without navigation, relations, dispensing guidance, or
+attachment transitions. Its phase prompt supplies the exact animation text.
+The command remains `interact` with `target_id: shampoo`; it is not a targetless
+version-2 prompt. Initial pickup retains calibrated reach guidance, which ends
+in subsequent generations after observed attachment.
+
+The experiment scene and exact sentence are preserved in
+`artifacts/toronto-condo-captures/shower-targeted-sequence-v1/scene.json`.
+`trial_complete` means the requested animation duration was recorded, not that
+the bottle was poured or returned. Physical attachment, liquid contact, and shelf
+placement must be checked independently. This mode does not invoke the guided
+pour/return sequence or release the bottle on a timer.

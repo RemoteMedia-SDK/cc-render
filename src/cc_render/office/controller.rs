@@ -146,6 +146,7 @@ pub struct PalmGeometry {
     pub center: [f32; 3],
     pub normal: [f32; 3],
     pub forward: [f32; 3],
+    pub grip_center: [f32; 3],
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JointTarget {
@@ -560,6 +561,8 @@ pub struct Coupling {
     pub slide_height: Option<f32>,
     /// Pending release: `Some(None)` returns home, `Some(Some(zone))` places onto it.
     pub release: Option<Option<String>>,
+    pub tracking_error_m: Option<f32>,
+    pub actual_in_hand: Option<[f32; 7]>,
     #[serde(skip)]
     pub latch: Option<CouplingLatch>,
 }
@@ -2237,14 +2240,16 @@ impl OfficeController {
                 let slide_height = slide_on.and_then(|reference| self.objects.iter().find(|o| o.id == object)
                     .and_then(|owner| super::interaction::resolve_zone(owner, &reference, &self.objects, &self.homes))
                     .map(|(zone, t)| (t * Vec3::from(zone.center.unwrap_or_default())).y));
-                self.couplings.push(Coupling { object, anchors, slide_height, release: None, latch: None });
+                self.couplings.push(Coupling { object, anchors, slide_height, release: None, latch: None,
+                    tracking_error_m: None, actual_in_hand: None });
             }
             C::Release { object, onto } => match self.couplings.iter_mut().find(|c| c.object == object) {
                 Some(coupling) => coupling.release = Some(onto),
                 // A physically gripped object let go onto a zone: settle it there too.
                 None if onto.is_some() && self.objects.iter().any(|o| o.id == object) =>
                     self.couplings.push(Coupling { object, anchors: Vec::new(), slide_height: None,
-                                                   release: Some(onto), latch: None }),
+                                                   release: Some(onto), latch: None,
+                                                   tracking_error_m: None, actual_in_hand: None }),
                 // A jointed part's grip the hand already slipped off: nothing left to let go.
                 None if onto.is_none() && self.constrained_objects.contains(&object) => {}
                 None => self.motion_error = Some(format!("cannot release {object}: not coupled")),

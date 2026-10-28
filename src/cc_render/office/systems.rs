@@ -318,7 +318,8 @@ fn observe(
     office.observed.palm_geometry = std::array::from_fn(|i| {
         let palm = hand_rigs.as_ref()?.hands[i].as_ref()?.rig.palm;
         Some(super::controller::PalmGeometry { center: palm.palm().to_array(),
-            normal: palm.normal.to_array(), forward: palm.forward.to_array() })
+            normal: palm.normal.to_array(), forward: palm.forward.to_array(),
+            grip_center: palm.grip(0.).to_array() })
     });
     if let Some(p) = bind.entities[0].and_then(|e| globals.get(e).ok()) {
         office.observed.ready = bind.captured && office.motion_ready;

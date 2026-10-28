@@ -244,6 +244,15 @@ pub(crate) fn apply_couplings(
         };
         *velocity = Velocity::zero();
         commands.entity(entity).insert(RigidBody::KinematicPositionBased);
+        let tracking = held_tracking_error(object.half_extents, &desired, &transform);
+        coupling.tracking_error_m = Some(tracking);
+        if coupling.slide_height.is_none() && tracking > 0.02 {
+            error.get_or_insert(format!("held_tracking_lost: {} differs from its hand attachment by {:.3} m; blocked by {:?}",
+                coupling.object, tracking, held_hit(object, &desired, &solids, HELD_CONTACT_M)));
+        }
+        let actual = super::hand::in_hand(&hands[0], &transform);
+        let p = actual.translation; let q = actual.rotation;
+        coupling.actual_in_hand = Some([p.x,p.y,p.z,q.x,q.y,q.z,q.w]);
         for ((hand, ..), w) in coupling.anchors.iter().zip(&hands) {
             held_in_hand.set(*hand, coupling.object.clone(), super::hand::in_hand(w, &*transform));
         }
@@ -269,6 +278,16 @@ pub const HELD_PENETRATION_M: f32 = 0.05;
 /// A held object pressed into a surface may ride up on it by up to this many centimetres.
 pub const HELD_LIFT_STEPS: u32 = 8;
 
+/// Largest displacement of the object's box corners from the actual hand attachment.
+/// A collision fallback must not silently certify a floating or wrongly rotated prop.
+fn held_tracking_error(half: [f32; 3], desired: &Transform, actual: &Transform) -> f32 {
+    (0..8).map(|i| {
+        let p = Vec3::new(if i&1==0 { half[0] } else { -half[0] },
+            if i&2==0 { half[1] } else { -half[1] }, if i&4==0 { half[2] } else { -half[2] });
+        (*desired * p).distance(*actual * p)
+    }).fold(0., f32::max)
+}
+
 /// The other object a held object's solids pass more than `depth` into at `pose`.
 fn held_hit<'a>(object: &super::OfficeObject, pose: &Transform, solids: &'a [super::support::ColliderBox],
                 depth: f32) -> Option<&'a str> {
@@ -289,6 +308,17 @@ fn held_hit<'a>(object: &super::OfficeObject, pose: &Transform, solids: &'a [sup
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn held_tracking_detects_frozen_and_rotated_bottles() {
+        let bottle = [0.033,0.11,0.033];
+        let desired = Transform::from_translation(Vec3::new(-5.88,1.45,-4.2));
+        let floating = desired.with_translation(desired.translation + Vec3::Y * 0.35);
+        assert!(held_tracking_error(bottle,&desired,&floating) > 0.34);
+        let rotated = desired.with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
+        assert!(held_tracking_error(bottle,&desired,&rotated) > 0.1);
+        assert_eq!(held_tracking_error(bottle,&desired,&desired),0.);
+    }
 
     fn latch(object: Quat, hand: Quat) -> CouplingLatch {
         CouplingLatch { object_rotation: object, primary_rotation: hand, previous_primary: hand, object_height: 0.1,

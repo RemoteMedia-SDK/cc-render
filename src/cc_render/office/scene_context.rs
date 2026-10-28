@@ -94,11 +94,7 @@ impl SceneSnapshot {
             c.anchors.iter().filter_map(move |(hand, point, grip)| {
                 let zone = super::hand::grip_zone(object?, *point, (*grip)?)?;
                 Some(HeldObject { joint: joint(*hand), object: c.object.clone(), zone: zone.id,
-                                  in_hand: c.latch.and_then(|l| l.seat).map(|(start,end,_,progress)| {
-                                      let t = super::hand::seat_blend(&start,&end,progress*super::hand::SEAT_BLEND_S);
-                                      let p=t.translation; let q=t.rotation;
-                                      [p.x,p.y,p.z,q.x,q.y,q.z,q.w]
-                                  }) })
+                                  in_hand: c.actual_in_hand })
             })
         }).collect();
         for (hand, id) in &office.occupied_hands {
