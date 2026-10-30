@@ -87,8 +87,9 @@ rayon = "1"
 # Bevy 0.15.3 with 128 morph targets per mesh instead of 64 (CC5 faces carry
 # ~400 morphs; the 52 ARKit channels use 67): `MAX_MORPH_WEIGHTS` in
 # vendor/bevy_mesh/src/morph.rs and `MorphWeights` in
-# vendor/bevy_pbr/src/render/mesh_types.wgsl, otherwise unchanged copies of the
-# crates.io sources. See vendor/README.md.
+# vendor/bevy_pbr/src/render/mesh_types.wgsl; and bevy_pbr's mesh bind group
+# takes 5 dynamic offsets (skinned + morphed + motion vectors panicked with 3).
+# Otherwise unchanged copies of the crates.io sources. See vendor/README.md.
 [patch.crates-io]
 bevy_mesh = { path = "vendor/bevy_mesh" }
 bevy_pbr = { path = "vendor/bevy_pbr" }

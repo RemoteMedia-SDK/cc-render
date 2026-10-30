@@ -2303,7 +2303,10 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMeshBindGroup<I> {
             );
         };
 
-        let mut dynamic_offsets: [u32; 3] = Default::default();
+        // cc-render patch: up to 5 offsets (batch, skin, morph, previous skin,
+        // previous morph) for a skinned + morphed mesh with motion vectors
+        // (TAA); upstream's 3 panics with index out of bounds.
+        let mut dynamic_offsets: [u32; 5] = Default::default();
         let mut offset_count = 0;
         if let Some(dynamic_offset) = item.extra_index().as_dynamic_offset() {
             dynamic_offsets[offset_count] = dynamic_offset.get();

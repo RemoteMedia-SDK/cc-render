@@ -129,6 +129,13 @@ pub fn extract_morphs(
         let weights = morph_weights.weights();
         let legal_weights = weights.iter().take(MAX_MORPH_WEIGHTS).copied();
         uniform.current_buffer.extend(legal_weights);
+        // cc-render patch: the binding reads MAX_MORPH_WEIGHTS weights, so pad
+        // every entry to that. Upstream pads to 256 bytes (64 weights), which
+        // was the binding size there; at 128 a mesh with <= 64 morphs last in
+        // the buffer is bound past its end (a wgpu validation error).
+        let padded = start + MAX_MORPH_WEIGHTS;
+        let fill = padded - uniform.current_buffer.len();
+        uniform.current_buffer.extend(iter::repeat(0.0).take(fill));
         add_to_alignment::<f32>(&mut uniform.current_buffer);
 
         let index = (start * size_of::<f32>()) as u32;
