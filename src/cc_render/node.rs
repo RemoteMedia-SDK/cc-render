@@ -176,6 +176,44 @@ impl AudioBuf {
     }
 }
 
+/// Pose keys carrying the performer's head rotation (radians) from an
+/// envelope's `head_rotation: [yaw, pitch, roll]` (e.g. `LiveLinkFaceNode`).
+/// They ride in the weight map to reach the face-bone system; no morph
+/// mapping uses them. Absent keys leave the head bones alone.
+pub(crate) const HEAD_ROTATION_KEYS: [&str; 3] = ["headYaw", "headPitch", "headRoll"];
+
+fn add_head_rotation(pose: &mut ArkitPose, data: &RuntimeData) {
+    let RuntimeData::Json(v) = data else { return };
+    let Some(rot) = v.get("head_rotation").and_then(|r| r.as_array()) else { return };
+    if rot.len() != 3 {
+        return;
+    }
+    for (key, value) in HEAD_ROTATION_KEYS.iter().zip(rot) {
+        if let Some(r) = value.as_f64().filter(|r| r.is_finite()) {
+            pose.weights.insert((*key).to_string(), r as f32);
+        }
+    }
+}
+
+/// ARKit's `mouthClose` seals the lips over an open jaw, so the visible
+/// lip gap is `jawOpen - mouthClose`. CC5 exports `Mouth_Lips_Together_*`
+/// (its `mouthClose` targets) with no vertex data, so the morphs can't do
+/// it; open the jaw (bone and `Jaw_Open`) by the gap instead.
+/// `CC_FACE_MOUTH_CLOSE_FOLD=0` keeps the raw weights for avatars whose
+/// lips-together morphs are populated.
+fn fold_mouth_close_into_jaw(weights: &mut std::collections::HashMap<String, f32>) {
+    static ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var("CC_FACE_MOUTH_CLOSE_FOLD").map_or(true, |v| v != "0")
+    });
+    if !*ENABLED {
+        return;
+    }
+    let close = weights.get("mouthClose").copied().unwrap_or(0.0);
+    if let Some(jaw) = weights.get_mut("jawOpen") {
+        *jaw = (*jaw - close).max(0.0);
+    }
+}
+
 fn audio_samples_per_tick(frame: u64, rate: u32, fps: u64) -> usize {
     (((frame + 1) as u128 * rate as u128 / fps as u128)
         - (frame as u128 * rate as u128 / fps as u128)) as usize
@@ -541,7 +579,11 @@ impl CcRenderNode {
     }
 
     fn accept_face(&self, pose: ArkitPose, data: &RuntimeData) -> Result<()> {
-        if self.config.realtime_mode {
+        // Live capture (`LiveLinkFaceNode`, `live: true`) has no speech
+        // audio to pace against: queued behind the audio content clock it
+        // would never display. Apply it latest-wins instead.
+        let live = matches!(data, RuntimeData::Json(v) if v["live"].as_bool() == Some(true));
+        if self.config.realtime_mode && !live {
             let epoch = match data {
                 RuntimeData::Json(v) => v["speech_epoch"].as_u64(),
                 _ => None,
@@ -597,6 +639,7 @@ impl CcRenderNode {
             let w = f.arkit_52[i].clamp(0.0, 1.0);
             weights.insert((*name).to_string(), w);
         }
+        fold_mouth_close_into_jaw(&mut weights);
         ArkitPose {
             weights,
             pts_ms: f.pts_ms,
@@ -818,7 +861,9 @@ impl AsyncStreamingNode for CcRenderNode {
                         *slot = Some(std::time::Instant::now());
                     }
                 }
-                self.accept_face(Self::frame_to_pose(&f), &data)?;
+                let mut pose = Self::frame_to_pose(&f);
+                add_head_rotation(&mut pose, &data);
+                self.accept_face(pose, &data)?;
             }
             Some(RendererInput::Skeletal(s)) => {
                 if let Some(stream) = &s.stream {
@@ -1615,6 +1660,41 @@ mod realtime_speech_tests {
         assert!(node.scene_signer.lock().is_some());
         value["scene_sampler"]["server_instance"] = "2".repeat(32).into();
         assert!(node.accept_motion_control(&RuntimeData::Json(value)).is_err());
+    }
+
+    #[test]
+    fn mouth_close_shrinks_the_jaw_to_the_lip_gap() {
+        let mut arkit_52 = [0.0f32; 52];
+        let idx = |n: &str| ARKIT_BLENDSHAPE_NAMES.iter().position(|x| *x == n).unwrap();
+        arkit_52[idx("jawOpen")] = 0.6;
+        arkit_52[idx("mouthClose")] = 0.5;
+        let pose = CcRenderNode::frame_to_pose(&BlendshapeFrame::new(arkit_52, 0, None));
+        assert!((pose.weights["jawOpen"] - 0.1).abs() < 1e-6);
+        arkit_52[idx("mouthClose")] = 0.9;
+        let pose = CcRenderNode::frame_to_pose(&BlendshapeFrame::new(arkit_52, 0, None));
+        assert_eq!(pose.weights["jawOpen"], 0.0);
+    }
+
+    #[tokio::test]
+    async fn live_faces_bypass_the_speech_queue() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig { realtime_mode: true, ..Default::default() },
+            renderer.clone(),
+        );
+        let mut weights = vec![0.0f32; 52];
+        weights[17] = 0.7; // jawOpen
+        for (pts_ms, live) in [(500, true), (16, true), (900, false)] {
+            let face = serde_json::json!({"kind":"blendshapes", "arkit_52":weights,
+                "pts_ms":pts_ms, "live":live});
+            node.process_streaming(RuntimeData::Json(face), None, |_| Ok(())).await.unwrap();
+        }
+        // Live frames apply immediately, even with no audio played and out of pts order...
+        let poses = renderer.poses.lock();
+        assert_eq!(poses.iter().map(|p| p.pts_ms).collect::<Vec<_>>(), [500, 16]);
+        assert_eq!(poses[0].weights["jawOpen"], 0.7);
+        // ...while speech frames still wait for the audio content clock.
+        assert_eq!(node.audio_buf.lock().faces.len(), 1);
     }
 
     #[test]

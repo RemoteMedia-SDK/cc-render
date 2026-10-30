@@ -2363,6 +2363,10 @@ pub(crate) struct FaceBones {
     pub tongue1: Option<Entity>,
     pub tongue2: Option<Entity>,
     pub tongue3: Option<Entity>,
+    pub neck: Option<Entity>,
+    pub head: Option<Entity>,
+    pub neck_rest: Quat,
+    pub head_rest: Quat,
     pub jaw_root_rest: Quat,
     pub jaw_root_rest_t: Vec3,
     pub l_eye_rest: Quat,
@@ -2401,6 +2405,8 @@ pub(crate) fn capture_face_bones(
             "CC_Base_Tongue01" => Some("tongue1"),
             "CC_Base_Tongue02" => Some("tongue2"),
             "CC_Base_Tongue03" => Some("tongue3"),
+            "CC_Base_NeckTwist01" => Some("neck"),
+            "CC_Base_Head" => Some("head"),
             _ => None,
         };
         if let Some(k) = key {
@@ -2451,6 +2457,14 @@ pub(crate) fn capture_face_bones(
         face.tongue3 = Some(e);
         face.tongue3_rest = r;
     }
+    if let Some((e, r)) = grab("neck") {
+        face.neck = Some(e);
+        face.neck_rest = r;
+    }
+    if let Some((e, r)) = grab("head") {
+        face.head = Some(e);
+        face.head_rest = r;
+    }
     face.captured = true;
     tracing::info!(
         target: "cc_render",
@@ -2484,6 +2498,8 @@ pub(crate) fn apply_arkit_face_bones(
     pose_rx: Res<PoseWatchRx>,
     face: Res<FaceBones>,
     mut transforms: Query<&mut Transform>,
+    globals: Query<&GlobalTransform>,
+    parents: Query<&Parent>,
 ) {
     if !face.captured {
         return;
@@ -2493,6 +2509,57 @@ pub(crate) fn apply_arkit_face_bones(
         return;
     }
     let w = |k: &str| pose.weights.get(k).copied().unwrap_or(0.0).clamp(0.0, 1.0);
+
+    // ─── Head + neck (performer head rotation) ──────────────────────
+    //
+    // `headYaw/headPitch/headRoll` (radians, see
+    // `node::HEAD_ROTATION_KEYS`) arrive only from live face capture.
+    // The rotation is built about the *character's* axes — up = world Y,
+    // side = right-eye → left-eye, forward = side × up — so yaw is a turn
+    // about vertical however the CC5 bones are oriented, then expressed
+    // in each bone's parent frame (`P⁻¹ q P`) and composed onto its bind
+    // rotation. Split 40% neck / 60% head so the turn doesn't hinge at
+    // one joint. Positive yaw turns toward the character's left, pitch
+    // nods down, roll tilts toward the character's right; flip any with
+    // CC_FACE_HEAD_SIGNS=1,1,1.
+    if let (Some(&yaw), Some(&pitch), Some(&roll)) = (
+        pose.weights.get("headYaw"),
+        pose.weights.get("headPitch"),
+        pose.weights.get("headRoll"),
+    ) {
+        static SIGNS: std::sync::LazyLock<[f32; 3]> = std::sync::LazyLock::new(|| {
+            let v: Vec<f32> = std::env::var("CC_FACE_HEAD_SIGNS")
+                .unwrap_or_else(|_| "1,1,1".into())
+                .split(',')
+                .map(|s| s.trim().parse().unwrap_or(1.0))
+                .collect();
+            std::array::from_fn(|i| v.get(i).copied().unwrap_or(1.0))
+        });
+        let eye = |e: Option<Entity>| e.and_then(|e| globals.get(e).ok()).map(|g| g.translation());
+        let side = match (eye(face.l_eye), eye(face.r_eye)) {
+            (Some(l), Some(r)) => (l - r).reject_from(Vec3::Y).normalize_or(Vec3::X),
+            _ => Vec3::X,
+        };
+        let forward = side.cross(Vec3::Y);
+        let [sy, sp, sr] = *SIGNS;
+        let world = |share: f32| {
+            Quat::from_axis_angle(Vec3::Y, sy * yaw * share)
+                * Quat::from_axis_angle(side, sp * pitch * share)
+                * Quat::from_axis_angle(forward, sr * roll * share)
+        };
+        for (bone, rest, share) in [(face.neck, face.neck_rest, 0.4), (face.head, face.head_rest, 0.6)] {
+            let Some(bone) = bone else { continue };
+            let parent_rot = parents
+                .get(bone)
+                .ok()
+                .and_then(|p| globals.get(p.get()).ok())
+                .map(|g| g.compute_transform().rotation)
+                .unwrap_or(Quat::IDENTITY);
+            if let Ok(mut t) = transforms.get_mut(bone) {
+                t.rotation = (parent_rot.inverse() * world(share) * parent_rot) * rest;
+            }
+        }
+    }
 
     // ─── Lower jaw (CC_Base_JawRoot) ─────────────────────────────────
     //
