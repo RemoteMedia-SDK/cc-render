@@ -3,7 +3,7 @@
 //! - [`pack`]: load a slider pack (`pack.json` + `pack.bin`, built from a CC5
 //!   capture) and evaluate a slider mix into vertex and joint deltas.
 //! - [`glb`]: write those deltas into a character GLB (bind mesh, joints and
-//!   inverse bind matrices).
+//!   inverse bind matrices), or bake expressions into it as morph targets.
 //! - [`subdiv`]: drive CC5's HD (subdivided) mesh from the level-0 pack.
 //! - [`conform`]: make uncaptured meshes (hair cards, beards from a hair library)
 //!   follow the body's shape from its anchors (scalp / face).
@@ -25,6 +25,6 @@ mod python;
 
 pub use conform::{Conform, ConformOptions};
 pub use expr::{ArkitMap, ExpressionPack};
-pub use glb::{shape_glb, shape_glb_hd};
+pub use glb::{bake_morphs, shape_glb, shape_glb_hd, BakedMorph};
 pub use pack::{ShapeDelta, ShapePack, Slider, StateDeltas};
 pub use subdiv::SubdivMap;
