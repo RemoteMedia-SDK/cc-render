@@ -1,8 +1,8 @@
 //! CC5 facial expressions (morph targets) on the CPU: load an expression pack and
 //! evaluate a weighted mix into per-vertex deltas.
 //!
-//! A CC5 HD character has ~400 facial morphs per face mesh; Bevy loads at most 64
-//! morph targets per mesh, so they are kept out of the GLB (`cc5-fbx` drops
+//! A CC5 HD character has ~400 facial morphs per face mesh; Bevy loads at most 128
+//! morph targets per mesh (cc-render's patched Bevy, upstream 64), so they are kept out of the GLB (`cc5-fbx` drops
 //! them) and applied here instead, like the shaping sliders. The pack is built
 //! from the reference FBX's morph targets by `cc5-fbx expressions`:
 //!

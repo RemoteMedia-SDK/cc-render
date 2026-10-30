@@ -31,7 +31,7 @@
 //! never shown.
 //!
 //! `--expressions` loads the character's facial expression pack
-//! (`cc5-fbx expressions`: CC5's ~400 morph targets, more than Bevy's 64 per
+//! (`cc5-fbx expressions`: CC5's ~400 morph targets, more than Bevy's 128 per
 //! mesh) for an "Expressions" section: 0..1 sliders applied on the CPU on top of
 //! the shape (positions = bind + shape delta + sum of w_i * expression_i).
 //! Expressions are a preview layer: "Save GLB" and recipes hold the shape only.

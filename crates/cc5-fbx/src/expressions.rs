@@ -2,8 +2,9 @@
 //! the reference FBX's facial morphs, for CPU morphing (`cc5_shape::ExpressionPack`);
 //! was build_expression_pack.py (Blender).
 //!
-//! CC5 exports ~400 facial morphs per face mesh; Bevy loads at most 64 morph
-//! targets per mesh, so the editor applies them on the CPU instead.
+//! CC5 exports ~400 facial morphs per face mesh; Bevy loads at most 128 morph
+//! targets per mesh (cc-render's patched Bevy, upstream 64), so the editor
+//! applies them on the CPU instead.
 //!
 //! - expressions.json: `{"version": 1, "vertex_count", "meshes" (as pack.json),
 //!   "expressions": [{name, meshes: [mesh names it moves], verts: [byte_offset, count]}]}`,

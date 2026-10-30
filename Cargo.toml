@@ -10,6 +10,8 @@ publish = false
 [workspace]
 # `cc5-shape`: CC5 shaping sliders (Rust + Python); `cc5-hair`: CC5 hair -> strand parts.
 members = ["crates/cc5-shape", "crates/cc5-hair", "crates/cc5-fbx", "crates/cc5-skin"]
+# patched Bevy crates (see [patch.crates-io]), not members
+exclude = ["vendor"]
 
 [profile.release]
 opt-level = 3
@@ -81,3 +83,12 @@ cc5-hair = { path = "crates/cc5-hair" }
 cc5-skin = { path = "crates/cc5-skin" }
 # avatar editor: GPU-ribbon hair expansion in parallel (already in the tree via cc5-shape)
 rayon = "1"
+
+# Bevy 0.15.3 with 128 morph targets per mesh instead of 64 (CC5 faces carry
+# ~400 morphs; the 52 ARKit channels use 67): `MAX_MORPH_WEIGHTS` in
+# vendor/bevy_mesh/src/morph.rs and `MorphWeights` in
+# vendor/bevy_pbr/src/render/mesh_types.wgsl, otherwise unchanged copies of the
+# crates.io sources. See vendor/README.md.
+[patch.crates-io]
+bevy_mesh = { path = "vendor/bevy_mesh" }
+bevy_pbr = { path = "vendor/bevy_pbr" }
