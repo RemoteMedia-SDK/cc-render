@@ -123,8 +123,38 @@ pub struct RendererConfig {
     ///   portrait rig is the only illumination source. Defaults to
     ///   keeping scene lights.
     pub scene_glb_path: Option<PathBuf>,
+    /// Show the environment map (`env://pisa_specular…`, the map that
+    /// already lights the avatar) as the background instead of the flat
+    /// `CC_AVATAR_CLEAR_COLOR` (or the studio backdrop).
+    pub env_background: bool,
+    /// Its brightness in cd/m². `None`: the map's own values at the
+    /// camera's exposure ([`env_background_brightness`]).
+    pub env_background_brightness: Option<f32>,
+    /// Render materials that carry CC5 shader data (`extras.cc5` + the maps
+    /// in `<name>.cc5maps/`, see `cc5_materials`) with cc-render's CC5
+    /// skin / hair / eye / mouth shaders instead of glTF PBR, as the avatar
+    /// editor does. The camera then anti-aliases with TAA instead of MSAA:
+    /// the CC5 hair shader's dithered strand coverage needs it. GLBs
+    /// without `extras.cc5` render as before.
+    pub cc5_materials: bool,
+    /// Light and grade like the avatar editor (`cc_render::studio`, calibrated
+    /// against CC5's viewport): its portrait light rig, exposure, IBL level,
+    /// SSAO, TAA, sharpening and colour grading, and its grey-blue studio
+    /// backdrop (unless `env_background`). The camera keeps its framing and
+    /// field of view (`CC_AVATAR_CAMERA_FOV_DEG=17.06` matches the editor's
+    /// lens). Calibrated with `cc5_materials` (the CC5 shaders). On by
+    /// default; `false` restores the renderer's earlier 3-light rig, AgX
+    /// camera and flat `CC_AVATAR_CLEAR_COLOR` background.
+    pub studio_lighting: bool,
 
     pub physics: Option<PhysicsConfig>,
+}
+
+/// Default background brightness for [`RendererConfig::env_background`]: the
+/// map's texels shown at their own value under exposure `ev100` (Bevy's
+/// exposure is 1 / (1.2 * 2^ev100)).
+pub fn env_background_brightness(ev100: f32) -> f32 {
+    1.2 * 2f32.powf(ev100)
 }
 
 impl Default for RendererConfig {
@@ -136,6 +166,10 @@ impl Default for RendererConfig {
             height: 1280,
             fps: 30,
             scene_glb_path: None,
+            env_background: false,
+            env_background_brightness: None,
+            cc5_materials: false,
+            studio_lighting: true,
 
             physics: None,
         }

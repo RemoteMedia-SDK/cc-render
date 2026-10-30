@@ -56,7 +56,9 @@ use crate::cc_render::{CcRenderConfig, CcRenderNode};
 /// historical wiring at `streaming_registry::CcRenderNodeFactory`:
 /// `glb_path`, `arkit_map_path`, `framerate`, `video_stream_id`,
 /// `width`, `height`, optional `scene_glb_path`, optional
-/// `realtime_mode`.
+/// `realtime_mode`, optional `env_background` /
+/// `env_background_brightness`, optional `cc5_materials`, optional
+/// `studio_lighting`.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct CcRenderManifestParams {
@@ -75,6 +77,18 @@ pub struct CcRenderManifestParams {
     pub height: u32,
     /// Optional environment-scene GLB loaded alongside the avatar.
     pub scene_glb_path: Option<PathBuf>,
+    /// Show the environment map (the one lighting the avatar) as the
+    /// background instead of a flat colour.
+    pub env_background: bool,
+    /// Its brightness in cd/m² (default: the map's own values at the
+    /// camera's exposure, `cc_render::renderer::env_background_brightness`).
+    pub env_background_brightness: Option<f32>,
+    /// Render materials carrying CC5 shader data (`extras.cc5`) with the
+    /// CC5 shaders, as the avatar editor does.
+    pub cc5_materials: bool,
+    /// Light and grade like the avatar editor (`cc_render::studio`).
+    /// Default true; false = the renderer's earlier lighting.
+    pub studio_lighting: bool,
     /// When true, emit Video continuously once ready (skips A+V pairing
     /// and audio buffer drain). Used by live WebRTC pipelines.
     pub realtime_mode: bool,
@@ -93,6 +107,10 @@ impl Default for CcRenderManifestParams {
             width: 1280,
             height: 1280,
             scene_glb_path: None,
+            env_background: false,
+            env_background_brightness: None,
+            cc5_materials: false,
+            studio_lighting: true,
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
@@ -120,6 +138,10 @@ fn build_node(params: CcRenderManifestParams) -> Result<CcRenderNode, String> {
         fps: params.framerate.max(1),
         video_stream_id: params.video_stream_id,
         scene_glb_path: params.scene_glb_path,
+        env_background: params.env_background,
+        env_background_brightness: params.env_background_brightness,
+        cc5_materials: params.cc5_materials,
+        studio_lighting: params.studio_lighting,
         realtime_mode: params.realtime_mode,
         scene_key_file: params.scene_key_file,
         scene_geometry_file: params.scene_geometry_file,

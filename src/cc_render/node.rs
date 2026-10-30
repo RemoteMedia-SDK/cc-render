@@ -41,6 +41,16 @@ pub struct CcRenderConfig {
     /// doc-comment for the `CC_SCENE_*` env-var tunables (placement,
     /// scale, light stripping).
     pub scene_glb_path: Option<PathBuf>,
+    /// Environment map as the background (and its brightness). Forwarded
+    /// to `RendererConfig::env_background(_brightness)`.
+    pub env_background: bool,
+    pub env_background_brightness: Option<f32>,
+    /// CC5 shaders for materials with `extras.cc5`. Forwarded to
+    /// `RendererConfig::cc5_materials`.
+    pub cc5_materials: bool,
+    /// The avatar editor's lighting and grading. Forwarded to
+    /// `RendererConfig::studio_lighting`.
+    pub studio_lighting: bool,
     /// When true, `tick()` emits `RuntimeData::Video` frames continuously
     /// once the renderer is ready, regardless of upstream audio /
     /// blendshape arrival. Buffered speech drains on that same presentation
@@ -67,6 +77,10 @@ impl Default for CcRenderConfig {
             fps: 30,
             video_stream_id: "avatar.video".to_string(),
             scene_glb_path: None,
+            env_background: false,
+            env_background_brightness: None,
+            cc5_materials: false,
+            studio_lighting: true,
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
@@ -267,6 +281,10 @@ impl CcRenderNode {
             height: config.height,
             fps: config.fps,
             scene_glb_path: config.scene_glb_path.clone(),
+            env_background: config.env_background,
+            env_background_brightness: config.env_background_brightness,
+            cc5_materials: config.cc5_materials,
+            studio_lighting: config.studio_lighting,
             // Physics on by default — needed for hair / breast /
             // skirt / tongue jiggle (see `secondary::auto_detect_chains`).
             // Set `CC_PHYSICS_DISABLE=1` to skip the install for an

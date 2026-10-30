@@ -457,6 +457,10 @@ pub(super) fn run(
         width: config.width,
         height: config.height,
         scene_filename: scene_dir_and_name.as_ref().map(|(_, n)| n.clone()),
+        env_background: config.env_background,
+        env_background_brightness: config.env_background_brightness,
+        cc5_materials: config.cc5_materials,
+        studio_lighting: config.studio_lighting,
     })
     .insert_resource(MaterialNames(parse_material_names_from_glb(&glb_path)))
     .insert_resource(ArkitMapping { map: Arc::new(map) })
@@ -553,6 +557,15 @@ pub(super) fn run(
         (draw_joint_skeleton, update_joint_labels).after(TransformSystem::TransformPropagate),
     );
 
+    // CC5 shaders for materials carrying `extras.cc5`
+    // (`RendererConfig::cc5_materials`); the camera adds TAA for CC5 hair,
+    // as the studio look does.
+    if config.cc5_materials || config.studio_lighting {
+        app.add_plugins(bevy::core_pipeline::experimental::taa::TemporalAntiAliasPlugin);
+    }
+    if config.cc5_materials {
+        app.add_plugins(crate::cc_render::cc5_materials::Cc5MaterialsPlugin);
+    }
     app.init_resource::<super::office::timeline::PoseTimeline>();
     if let Some(mut phys) = config.physics.clone() {
         let office_enabled = std::env::var("CC_OFFICE").as_deref() == Ok("1");

@@ -4,11 +4,11 @@
 //! prototype's tuned values (see `examples/avatar-render-proto`).
 
 use bevy::{
-    core_pipeline::{bloom::Bloom, tonemapping::Tonemapping},
+    core_pipeline::{bloom::Bloom, experimental::taa::TemporalAntiAliasing, tonemapping::Tonemapping, Skybox},
     pbr::{light_consts::lux, prelude::EnvironmentMapLight, CascadeShadowConfigBuilder},
     prelude::*,
     render::{
-        camera::RenderTarget,
+        camera::{Exposure, RenderTarget},
         render_asset::RenderAssetUsages,
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -18,6 +18,8 @@ use bevy::{
 };
 
 use super::capture::CaptureTarget;
+use crate::cc_render::renderer::env_background_brightness;
+use crate::cc_render::studio;
 use super::pose::{CC5BindRotations, PoseAnimation};
 
 /// Tuned camera defaults (sitting CC5 avatar, head world ≈ (0, 1.10, 0.887)).
@@ -671,6 +673,13 @@ pub(crate) struct GlbAsset {
     pub width: u32,
     pub height: u32,
     pub scene_filename: Option<String>,
+    /// `RendererConfig::env_background(_brightness)`.
+    pub env_background: bool,
+    pub env_background_brightness: Option<f32>,
+    /// `RendererConfig::cc5_materials`: the camera uses TAA, not MSAA.
+    pub cc5_materials: bool,
+    /// `RendererConfig::studio_lighting`: the avatar editor's lights and look.
+    pub studio_lighting: bool,
 }
 
 /// Marker for the avatar's `SceneRoot` entity. Lets systems that
@@ -795,7 +804,8 @@ pub(crate) fn setup_scene(
     });
 
     // ─── Camera ────────────────────────────────────────────────────────
-    commands
+    let specular_map: Handle<Image> = asset_server.load("env://pisa_specular_rgb9e5_zstd.ktx2");
+    let camera = commands
         .spawn((
             Camera3d::default(),
             Camera {
@@ -821,7 +831,7 @@ pub(crate) fn setup_scene(
                 // bevy_app/mod.rs so KTX2 maps load from a fixed location
                 // regardless of the GLB's directory.
                 diffuse_map: asset_server.load("env://pisa_diffuse_rgb9e5_zstd.ktx2"),
-                specular_map: asset_server.load("env://pisa_specular_rgb9e5_zstd.ktx2"),
+                specular_map: specular_map.clone(),
                 intensity: 8.0,
                 rotation: Quat::IDENTITY,
             },
@@ -834,8 +844,90 @@ pub(crate) fn setup_scene(
         .insert(Projection::Perspective(PerspectiveProjection {
             fov: camera_fov_deg().to_radians(),
             ..default()
-        }));
+        }))
+        .id();
+    // CC5 hair covers its strands with a dither pattern that TAA resolves
+    // (as in the avatar editor); TAA needs MSAA off.
+    if glb.cc5_materials {
+        commands.entity(camera).insert((Msaa::Off, TemporalAntiAliasing::default()));
+    }
+    // The avatar editor's look (exposure, TAA, SSAO, grading, ...) replaces
+    // the camera's own; its IBL runs at its calibrated level.
+    let ev100 = if glb.studio_lighting { studio::DEFAULT_EV100 } else { Exposure::default().ev100 };
+    if glb.studio_lighting {
+        commands.entity(camera).insert(studio::studio_look(ev100));
+        commands.entity(camera).insert(EnvironmentMapLight {
+            diffuse_map: asset_server.load("env://pisa_diffuse_rgb9e5_zstd.ktx2"),
+            specular_map: specular_map.clone(),
+            intensity: 1.0,
+            rotation: Quat::IDENTITY,
+        });
+    }
+    // The environment as the background (where nothing else is drawn, so
+    // the clear colour no longer shows): the map that lights the avatar,
+    // so background and reflections agree. Else, with the studio look, its
+    // grey-blue backdrop.
+    if glb.env_background {
+        let brightness = glb.env_background_brightness.unwrap_or_else(|| env_background_brightness(ev100));
+        commands.entity(camera).insert(Skybox { image: specular_map, brightness, rotation: Quat::IDENTITY });
+    } else if glb.studio_lighting {
+        let image = studio::studio_backdrop(&mut images);
+        commands.entity(camera).insert(Skybox { image, brightness: studio::backdrop_brightness(ev100), rotation: Quat::IDENTITY });
+    }
 
+    // ─── Lights ────────────────────────────────────────────────────────
+    if glb.studio_lighting {
+        studio::spawn_studio_lights(&mut commands);
+    } else {
+        portrait_lights(&mut commands);
+    }
+
+    // ─── Avatar scene ──────────────────────────────────────────────────
+    let scene: Handle<Scene> = asset_server.load(format!("{}#Scene0", glb.filename));
+    commands.spawn((SceneRoot(scene), Transform::IDENTITY, AvatarRoot));
+
+    // ─── Optional environment scene ────────────────────────────────────
+    // Loaded through the `scene://` asset source registered in
+    // `bevy_app::run` so the scene GLB can live anywhere on disk.
+    //
+    // Placement env-var tunables (all optional, applied to the scene's
+    // SceneRoot Transform — they don't affect the avatar):
+    //   CC_SCENE_POS=x,y,z         — translation, default 0,0,0
+    //   CC_SCENE_ROT_DEG_Y=<deg>   — rotation around Y, default 0
+    //   CC_SCENE_SCALE=<f>         — uniform scale, default 1
+    if let Some(scene_filename) = glb.scene_filename.as_deref() {
+        let env_scene: Handle<Scene> =
+            asset_server.load(format!("scene://{}#Scene0", scene_filename));
+        let scene_pos = env_vec3_opt("CC_SCENE_POS").unwrap_or(Vec3::ZERO);
+        let scene_rot_deg_y = env_f32("CC_SCENE_ROT_DEG_Y", 0.0);
+        let scene_scale = env_f32("CC_SCENE_SCALE", 1.0).max(1e-6);
+        let scene_transform = Transform {
+            translation: scene_pos,
+            rotation: Quat::from_rotation_y(scene_rot_deg_y.to_radians()),
+            scale: Vec3::splat(scene_scale),
+        };
+        commands.spawn((SceneRoot(env_scene), scene_transform, EnvironmentSceneRoot));
+        tracing::info!(
+            target: "cc_render",
+            "scene: spawned environment SceneRoot from scene://{}#Scene0 \
+             (pos={:?} rot_deg_y={:.1} scale={:.3})",
+            scene_filename, scene_pos, scene_rot_deg_y, scene_scale,
+        );
+    }
+
+    // FBX-exported pose animation. Bevy 0.15 doesn't auto-play; we
+    // build the graph here, and `start_pose_animation` wires it onto
+    // the AnimationPlayer once SceneSpawner spawns the entity.
+    let clip: Handle<AnimationClip> = asset_server.load(format!("{}#Animation0", glb.filename));
+    let (graph, node) = AnimationGraph::from_clip(clip);
+    let graph_handle = graphs.add(graph);
+    pose_anim.graph = Some(graph_handle);
+    pose_anim.node = Some(node);
+}
+
+/// The renderer's own 3-light portrait rig and ambient light (without
+/// `RendererConfig::studio_lighting`).
+fn portrait_lights(commands: &mut Commands) {
     // ─── 3-light portrait setup ────────────────────────────────────────
     // Key — pushed hard to upper-right so glossy visors/goggles reflect
     // a single highlight in the top-right of the lens, not dead-center.
@@ -901,48 +993,6 @@ pub(crate) fn setup_scene(
             },
         ),
     });
-
-    // ─── Avatar scene ──────────────────────────────────────────────────
-    let scene: Handle<Scene> = asset_server.load(format!("{}#Scene0", glb.filename));
-    commands.spawn((SceneRoot(scene), Transform::IDENTITY, AvatarRoot));
-
-    // ─── Optional environment scene ────────────────────────────────────
-    // Loaded through the `scene://` asset source registered in
-    // `bevy_app::run` so the scene GLB can live anywhere on disk.
-    //
-    // Placement env-var tunables (all optional, applied to the scene's
-    // SceneRoot Transform — they don't affect the avatar):
-    //   CC_SCENE_POS=x,y,z         — translation, default 0,0,0
-    //   CC_SCENE_ROT_DEG_Y=<deg>   — rotation around Y, default 0
-    //   CC_SCENE_SCALE=<f>         — uniform scale, default 1
-    if let Some(scene_filename) = glb.scene_filename.as_deref() {
-        let env_scene: Handle<Scene> =
-            asset_server.load(format!("scene://{}#Scene0", scene_filename));
-        let scene_pos = env_vec3_opt("CC_SCENE_POS").unwrap_or(Vec3::ZERO);
-        let scene_rot_deg_y = env_f32("CC_SCENE_ROT_DEG_Y", 0.0);
-        let scene_scale = env_f32("CC_SCENE_SCALE", 1.0).max(1e-6);
-        let scene_transform = Transform {
-            translation: scene_pos,
-            rotation: Quat::from_rotation_y(scene_rot_deg_y.to_radians()),
-            scale: Vec3::splat(scene_scale),
-        };
-        commands.spawn((SceneRoot(env_scene), scene_transform, EnvironmentSceneRoot));
-        tracing::info!(
-            target: "cc_render",
-            "scene: spawned environment SceneRoot from scene://{}#Scene0 \
-             (pos={:?} rot_deg_y={:.1} scale={:.3})",
-            scene_filename, scene_pos, scene_rot_deg_y, scene_scale,
-        );
-    }
-
-    // FBX-exported pose animation. Bevy 0.15 doesn't auto-play; we
-    // build the graph here, and `start_pose_animation` wires it onto
-    // the AnimationPlayer once SceneSpawner spawns the entity.
-    let clip: Handle<AnimationClip> = asset_server.load(format!("{}#Animation0", glb.filename));
-    let (graph, node) = AnimationGraph::from_clip(clip);
-    let graph_handle = graphs.add(graph);
-    pose_anim.graph = Some(graph_handle);
-    pose_anim.node = Some(node);
 }
 
 /// Per-frame camera tracker — translates the camera so the avatar's

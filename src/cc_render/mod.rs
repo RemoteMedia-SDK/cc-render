@@ -26,6 +26,7 @@ pub mod bevy_app;
 pub mod cc5_materials;
 pub mod node;
 pub mod renderer;
+pub mod studio;
 // CC5 shaping sliders live in the `cc5-shape` crate (also a Python module).
 pub use cc5_shape::{glb as shape_glb, pack as shape};
 
