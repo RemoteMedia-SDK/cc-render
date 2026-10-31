@@ -89,8 +89,11 @@ pub(crate) fn camera_pos() -> Vec3 {
 pub(crate) fn camera_look_at() -> Vec3 {
     env_vec3("CC_AVATAR_CAMERA_LOOK_AT", camera_defaults().1)
 }
-pub(crate) fn camera_fov_deg() -> f32 {
-    env_f32("CC_AVATAR_CAMERA_FOV_DEG", camera_defaults().2)
+/// With the studio look, the avatar editor's lens (`studio::FOV_DEG`) is the
+/// default, so faces keep its perspective.
+pub(crate) fn camera_fov_deg(studio_lighting: bool) -> f32 {
+    let default = if studio_lighting { studio::FOV_DEG } else { camera_defaults().2 };
+    env_f32("CC_AVATAR_CAMERA_FOV_DEG", default)
 }
 
 fn camera_defaults() -> (Vec3, Vec3, f32) {
@@ -163,10 +166,12 @@ fn focus_spec() -> Option<FocusPreset> {
             pad_horiz: 0.20,
             ..FRONT_DEFAULT
         },
+        // Chin to crown: the chin sits ~0.07m below the Head joint and the
+        // hair ~0.18m above (measured on Valen at the editor's lens).
         "face" => FocusPreset {
             joints: &[15],
-            pad_below_y: 0.05,
-            pad_above_y: 0.28,
+            pad_below_y: 0.10,
+            pad_above_y: 0.20,
             pad_horiz: 0.16,
             ..FRONT_DEFAULT
         },
@@ -842,7 +847,9 @@ pub(crate) fn setup_scene(
             IsDefaultUiCamera,
         ))
         .insert(Projection::Perspective(PerspectiveProjection {
-            fov: camera_fov_deg().to_radians(),
+            fov: camera_fov_deg(glb.studio_lighting).to_radians(),
+            // The editor's 5 mm near plane: face close-ups must not clip.
+            near: if glb.studio_lighting { 0.005 } else { PerspectiveProjection::default().near },
             ..default()
         }))
         .id();
