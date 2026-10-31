@@ -201,8 +201,8 @@ print('wrote', args.glb_out, total // 1_000_000, 'MB')
 # smplx_to_glb.py --arkit-map's map follows the GLB (the renderer loads it with it)
 map_in = os.path.splitext(args.glb_in)[0] + '.arkit_map.json'
 if os.path.exists(map_in):
-    amap = json.load(open(map_in))
+    amap = json.load(open(map_in, encoding='utf-8'))
     amap['_glb_path'] = os.path.basename(args.glb_out)
     map_out = os.path.splitext(args.glb_out)[0] + '.arkit_map.json'
-    json.dump(amap, open(map_out, 'w'), indent=2)
+    json.dump(amap, open(map_out, 'w', encoding='utf-8'), indent=2)
     print('wrote', map_out)

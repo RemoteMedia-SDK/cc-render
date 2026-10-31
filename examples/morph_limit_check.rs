@@ -1,10 +1,10 @@
 //! GPU check for the patched morph target limit (vendor/README.md): a quad with
-//! 128 morph targets where only the last one moves it, rendered with that
+//! 256 morph targets where only the last one moves it, rendered with that
 //! target's weight at `w`, saved to `out.png`.
 //!
 //! Usage: morph_limit_check out.png w
 //!
-//! At w = 0 the red quad covers the left half of the frame; at w = 1 target 127
+//! At w = 0 the red quad covers the left half of the frame; at w = 1 target 255
 //! has moved it to the right half (0.5: the middle). With upstream Bevy (64)
 //! the patch check at startup fails.
 use bevy::asset::RenderAssetUsages;
@@ -13,7 +13,7 @@ use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::prelude::*;
 
-const TARGETS: usize = 128;
+const TARGETS: usize = 256;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -55,7 +55,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut images: R
         let dx = if t == TARGETS - 1 { 1.0 } else { 0.0 };
         (0..4).map(move |_| MorphAttributes { position: Vec3::new(dx, 0.0, 0.0), normal: Vec3::ZERO, tangent: Vec3::ZERO })
     });
-    let image = MorphTargetImage::new(targets, 4, RenderAssetUsages::RENDER_WORLD).expect("128 targets");
+    let image = MorphTargetImage::new(targets, 4, RenderAssetUsages::RENDER_WORLD).expect("256 targets");
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; 4])

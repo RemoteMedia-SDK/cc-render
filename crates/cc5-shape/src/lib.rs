@@ -7,7 +7,7 @@
 //! - [`subdiv`]: drive CC5's HD (subdivided) mesh from the level-0 pack.
 //! - [`conform`]: make uncaptured meshes (hair cards, beards from a hair library)
 //!   follow the body's shape from its anchors (scalp / face).
-//! - [`expr`]: facial expressions (CC5's ~400 morph targets, more than Bevy's 128
+//! - [`expr`]: facial expressions (CC5's ~400 morph targets, more than Bevy's 256
 //!   per mesh) as sparse vertex deltas in the same space, for CPU morphing.
 //! - [`normals`]: turn the character's normals with a reshaped surface.
 //!

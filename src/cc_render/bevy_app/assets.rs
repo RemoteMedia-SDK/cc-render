@@ -17,6 +17,21 @@ pub(crate) struct MaterialNames(pub Vec<String>);
 #[derive(Debug, Deserialize, Clone)]
 pub(crate) struct ArkitMap {
     pub mapping: HashMap<String, Vec<MorphRef>>,
+    /// CC5's combination shapes (`C_StretchL_StretchR`, ...), each driven at
+    /// the product of its drivers' morph weights; absent in older maps.
+    #[serde(default)]
+    pub correctives: Vec<Corrective>,
+    /// Jaw bone rotation (degrees) at `jawOpen` 1 for this avatar: CC5's rig
+    /// 28; a rig hinged further back less (the bakers write it). Its
+    /// `Jaw_Open` morph only reshapes the skin around that rotation.
+    #[serde(default)]
+    pub jaw_open_deg: Option<f32>,
+    /// Where the jaw hinges, `[up, forward]` metres from the jaw bone along
+    /// the character's axes, for rigs whose jaw bone isn't at the hinge (the
+    /// Saluki operators' sits level with the lips, so turning it only drops
+    /// them); absent: the bone itself.
+    #[serde(default)]
+    pub jaw_pivot_m: Option<[f32; 2]>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -24,6 +39,45 @@ pub(crate) struct MorphRef {
     pub morph: String,
     pub weight: f32,
     pub meshes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub(crate) struct Corrective {
+    pub morph: String,
+    /// Morph names (not ARKit channels).
+    pub drivers: Vec<String>,
+    pub meshes: Vec<String>,
+}
+
+impl ArkitMap {
+    /// Each corrective's weight (in `correctives` order): the product of its
+    /// drivers' morph weights, each the sum over the ARKit channels that drive
+    /// that morph, times `amp`, clamped to `0..=amp.max(1)` as the morphs
+    /// themselves are.
+    pub fn corrective_weights(&self, arkit: &HashMap<String, f32>, amp: f32) -> Vec<f32> {
+        if self.correctives.is_empty() {
+            return Vec::new();
+        }
+        let upper = amp.max(1.0);
+        let mut morph: HashMap<&str, f32> = HashMap::new();
+        for (channel, &w) in arkit {
+            if !w.is_finite() || w == 0.0 {
+                continue;
+            }
+            for r in self.mapping.get(channel).into_iter().flatten() {
+                *morph.entry(r.morph.as_str()).or_default() += w * r.weight * amp;
+            }
+        }
+        self.correctives
+            .iter()
+            .map(|c| {
+                c.drivers
+                    .iter()
+                    .map(|d| morph.get(d.as_str()).map_or(0.0, |w| w.clamp(0.0, upper)))
+                    .product()
+            })
+            .collect()
+    }
 }
 
 #[derive(Resource, Clone)]
@@ -80,4 +134,54 @@ pub(crate) fn load_arkit_map(path: &std::path::Path) -> anyhow::Result<ArkitMap>
     let map: ArkitMap = serde_json::from_str(&text)
         .map_err(|e| anyhow::anyhow!("parse mapping {:?}: {e}", path))?;
     Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn map() -> ArkitMap {
+        serde_json::from_value(serde_json::json!({
+            "mapping": {
+                "mouthStretchLeft": [{"morph": "Mouth_Stretch_L", "weight": 1.0, "meshes": ["Body"]}],
+                "mouthStretchRight": [{"morph": "Mouth_Stretch_R", "weight": 1.0, "meshes": ["Body"]}],
+                "jawOpen": [{"morph": "Jaw_Open", "weight": 1.0, "meshes": ["Body"]}],
+                "mouthSmileLeft": [{"morph": "Mouth_Corner_Pull_L", "weight": 0.5, "meshes": ["Body"]}],
+                "cheekSquintLeft": [{"morph": "Mouth_Corner_Pull_L", "weight": 0.5, "meshes": ["Body"]}]
+            },
+            "correctives": [
+                {"morph": "C_StretchL_StretchR", "drivers": ["Mouth_Stretch_L", "Mouth_Stretch_R"], "meshes": ["Body"]},
+                {"morph": "C_StretchL_JawOpen", "drivers": ["Mouth_Stretch_L", "Jaw_Open"], "meshes": ["Body"]},
+                {"morph": "C_CornerPullL_JawOpen", "drivers": ["Mouth_Corner_Pull_L", "Jaw_Open"], "meshes": ["Body"]}
+            ]
+        }))
+        .unwrap()
+    }
+
+    fn pose(kv: &[(&str, f32)]) -> HashMap<String, f32> {
+        kv.iter().map(|&(k, v)| (k.to_string(), v)).collect()
+    }
+
+    #[test]
+    fn correctives_follow_the_product_of_their_drivers() {
+        let m = map();
+        let w = m.corrective_weights(&pose(&[("mouthStretchLeft", 0.5), ("mouthStretchRight", 0.8), ("jawOpen", 0.0)]), 1.0);
+        assert_eq!(w.len(), 3);
+        assert!((w[0] - 0.4).abs() < 1e-6, "{w:?}");
+        assert_eq!(w[1], 0.0, "a driver at rest keeps it off");
+        // A morph driven by two channels sums them (clamped) before the product.
+        let w = m.corrective_weights(&pose(&[("mouthSmileLeft", 1.6), ("cheekSquintLeft", 1.6), ("jawOpen", 0.5)]), 1.0);
+        assert!((w[2] - 0.5).abs() < 1e-6, "{w:?}");
+    }
+
+    #[test]
+    fn maps_without_correctives_still_load() {
+        let m: ArkitMap = serde_json::from_str(r#"{"mapping": {}}"#).unwrap();
+        assert!(m.correctives.is_empty());
+        assert_eq!(m.jaw_open_deg, None);
+        assert_eq!(m.jaw_pivot_m, None);
+        let m: ArkitMap = serde_json::from_str(r#"{"mapping": {}, "jaw_open_deg": 25.4, "jaw_pivot_m": [0.025, 0.014]}"#).unwrap();
+        assert_eq!((m.jaw_open_deg, m.jaw_pivot_m), (Some(25.4), Some([0.025, 0.014])));
+        assert!(m.corrective_weights(&pose(&[("jawOpen", 1.0)]), 1.0).is_empty());
+    }
 }

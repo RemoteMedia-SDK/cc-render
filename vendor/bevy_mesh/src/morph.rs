@@ -16,9 +16,9 @@ const MAX_COMPONENTS: u32 = MAX_TEXTURE_WIDTH * MAX_TEXTURE_WIDTH;
 
 /// Max target count available for [morph targets](MorphWeights).
 ///
-/// cc-render: 128 (upstream 64), for CC5 characters' facial morphs; must match
-/// `MorphWeights` in `bevy_pbr`'s `mesh_types.wgsl`.
-pub const MAX_MORPH_WEIGHTS: usize = 128;
+/// cc-render: 256 (upstream 64), for CC5 characters' facial morphs and their
+/// correctives; must match `MorphWeights` in `bevy_pbr`'s `mesh_types.wgsl`.
+pub const MAX_MORPH_WEIGHTS: usize = 256;
 
 #[derive(Error, Display, Clone, Debug)]
 pub enum MorphBuildError {

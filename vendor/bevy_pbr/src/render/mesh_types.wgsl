@@ -30,7 +30,7 @@ struct SkinnedMesh {
 
 #ifdef MORPH_TARGETS
 struct MorphWeights {
-    weights: array<vec4<f32>, 32u>, // 32 = 128 / 4 (128 = MAX_MORPH_WEIGHTS; cc-render, upstream 64)
+    weights: array<vec4<f32>, 64u>, // 64 = 256 / 4 (256 = MAX_MORPH_WEIGHTS; cc-render, upstream 64)
 };
 #endif
 

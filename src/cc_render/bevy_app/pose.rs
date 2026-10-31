@@ -1166,6 +1166,12 @@ pub(crate) fn apply_arkit_pose(
     if pose.weights.is_empty() {
         return;
     }
+    // CC5's correctives, at the product of their drivers' morph weights.
+    let fix_amp = std::env::var("CC_RENDER_DEBUG_AMP")
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(1.0);
+    let fix_w = mapping.map.corrective_weights(&pose.weights, fix_amp);
 
     // Restrict morph application to the avatar SceneRoot subtree so a
     // separately-loaded environment scene with same-named meshes can't
@@ -1246,6 +1252,15 @@ pub(crate) fn apply_arkit_pose(
                         new_w[idx] = (new_w[idx] + w * r.weight * amp).clamp(0.0, upper);
                         hits += 1;
                     }
+                }
+            }
+            for (c, &cw) in mapping.map.correctives.iter().zip(&fix_w) {
+                if cw <= 0.0 || !c.meshes.iter().any(|m| m == &mesh_name) {
+                    continue;
+                }
+                if let Some(&idx) = name_to_idx.get(c.morph.as_str()) {
+                    new_w[idx] = cw;
+                    hits += 1;
                 }
             }
 
@@ -2505,8 +2520,9 @@ pub(crate) fn capture_face_bones(
 ///
 /// CC5 ARKit retargeting rules of thumb (these match what RL exports
 /// when you use the Live Link / iPhone profile in Character Creator):
-/// - `jawOpen` rotates `CC_Base_JawRoot` ~28° around the bone's local
-///   X-axis (chin drops). Without this, the open-mouth visemes are
+/// - `jawOpen` rotates `CC_Base_JawRoot` around the character's side
+///   axis (chin drops) by the ARKit map's `jaw_open_deg` (CC5's rig 28°;
+///   45° for maps without it). Without this, the open-mouth visemes are
 ///   visually flat — the V_Open / Mouth_Open morphs deform the lips
 ///   around a closed jaw, not a hanging one.
 /// - `eyeLookUp/Down/In/Out` (left/right pairs) rotate the per-eye
@@ -2519,6 +2535,7 @@ pub(crate) fn capture_face_bones(
 pub(crate) fn apply_arkit_face_bones(
     pose_rx: Res<PoseWatchRx>,
     face: Res<FaceBones>,
+    mapping: Res<ArkitMapping>,
     mut transforms: Query<&mut Transform>,
     globals: Query<&GlobalTransform>,
     parents: Query<&Parent>,
@@ -2593,8 +2610,12 @@ pub(crate) fn apply_arkit_face_bones(
     // ARKit channels driven:
     //   jawOpen  → rotate around the character's side axis (right eye →
     //              left eye; head +Z on CC5 rigs, head +X on the Saluki
-    //              SMPL-X operators). Default max = 45° at weight=1.
-    //              `CC_FACE_JAW_AXIS=x|y|z` forces a head-frame axis.
+    //              SMPL-X operators). Max at weight=1: the map's
+    //              `jaw_open_deg` (CC5 28°; Valen 23.6°, its hinge sits
+    //              ~11 cm behind the lips), else 45°; `CC_FACE_JAW_OPEN_DEG`
+    //              overrides. `CC_FACE_JAW_AXIS=x|y|z` forces a head-frame axis.
+    //              It turns about the map's `jaw_pivot_m` (up, forward from
+    //              the bone) when the rig's jaw bone isn't at the hinge.
     //   jawForward → translate the jaw bone forward in head Z by a
     //                small amount (≈8 mm at weight=1; CC5/iClone uses
     //                a Y-translation but on this 90°-Z-bound rig the
@@ -2615,6 +2636,7 @@ pub(crate) fn apply_arkit_face_bones(
             let max_open = std::env::var("CC_FACE_JAW_OPEN_DEG")
                 .ok()
                 .and_then(|s| s.parse::<f32>().ok())
+                .or(mapping.map.jaw_open_deg)
                 .unwrap_or(45.0)
                 .to_radians();
             let sign: f32 = std::env::var("CC_FACE_JAW_SIGN")
@@ -2631,14 +2653,37 @@ pub(crate) fn apply_arkit_face_bones(
             let jaw_lr_max = 10.0_f32.to_radians();
             let q_open = Quat::from_axis_angle(open_axis, sign * jaw_open * max_open);
             let q_lr = Quat::from_axis_angle(up_axis, jaw_lr * jaw_lr_max);
-            t.rotation = q_open * q_lr * face.jaw_root_rest;
+            let q = q_open * q_lr;
+            t.rotation = q * face.jaw_root_rest;
 
             let jaw_fwd = w("jawForward");
             let jaw_fwd_amt = std::env::var("CC_FACE_JAW_FORWARD_M")
                 .ok()
                 .and_then(|s| s.parse::<f32>().ok())
                 .unwrap_or(0.008);
-            t.translation = face.jaw_root_rest_t + Vec3::Z * (jaw_fwd * jaw_fwd_amt);
+            // Turning about a hinge away from the bone (`jaw_pivot_m`, or
+            // CC_FACE_JAW_PIVOT=up,forward) moves the bone along the arc too:
+            // with d = hinge - bone, the bone ends at hinge - q d.
+            let pivot = std::env::var("CC_FACE_JAW_PIVOT")
+                .ok()
+                .and_then(|s| {
+                    let v: Vec<f32> = s.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                    (v.len() == 2).then(|| [v[0], v[1]])
+                })
+                .or(mapping.map.jaw_pivot_m);
+            let hinge = match (pivot, eye_side) {
+                (Some([up, fwd]), Some(side)) => {
+                    let scale = parents
+                        .get(jaw_e)
+                        .ok()
+                        .and_then(|p| globals.get(p.get()).ok())
+                        .map_or(1.0, |g| g.compute_transform().scale.x);
+                    let d = to_parent * (Vec3::Y * up + side.cross(Vec3::Y) * fwd) / scale;
+                    d - q * d
+                }
+                _ => Vec3::ZERO,
+            };
+            t.translation = face.jaw_root_rest_t + hinge + Vec3::Z * (jaw_fwd * jaw_fwd_amt);
         }
     }
 

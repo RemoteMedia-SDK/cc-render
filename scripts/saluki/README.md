@@ -33,15 +33,21 @@ the avatar editor's studio look and its CC5 skin shader.
    Without `--cc5-skin`, pass `--skin-gloss 0.7`. Bevy's StandardMaterial has no subsurface scattering,
    so at full gloss the skin reads oily.
 
+The SMPL-X FBX itself comes from the operator pipeline in `smplx_pipeline/` (`run_operator.py <op>`; see its
+README).
+
 Facial expressions: the operator pipeline (`smplx_pipeline/scripts/cc5_transfer.py`) writes
 `<op>_smplx_cc5.fbx`, whose `<op>_face` mesh carries the 335 CC5 expression shapes as shape keys.
-Convert that FBX with `--arkit-map` to keep the shapes an ARKit map drives as glTF morph targets
-(cc-render's Bevy takes at most 128 per mesh). This also writes `<out>.arkit_map.json`, with each
-morph's `meshes` set, and `glb_materials.py` carries it to its output name:
+Convert that FBX with `--arkit-map` to keep the shapes an ARKit map drives, and its correctives, as
+glTF morph targets (cc-render's Bevy takes at most 256 per mesh). This also writes
+`<out>.arkit_map.json`, with each morph's `meshes` set, and `glb_materials.py` carries it to its
+output name. Use the CC5 HD map (`crates/cc5-shape/data/cc5_hd.arkit_map.json`, written by
+`scripts/cc5_arkit_map.py`): smiles on CC5's lip corner puller and 93 of its correctives, which the
+renderer drives at the product of their drivers' weights.
 
 ```
 blender ... --python smplx_to_glb.py -- valen_smplx_cc5.fbx valen_cc5.glb \
-    --arkit-map beautiful_assistant.arkit_map.resolved.json
+    --arkit-map ../../crates/cc5-shape/data/cc5_hd.arkit_map.json
 python -I glb_materials.py valen_cc5.glb avatars/valen_arkit.glb --models ... --dirs ... --cc5-skin
 ```
 
