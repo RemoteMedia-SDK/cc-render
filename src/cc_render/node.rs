@@ -21,7 +21,7 @@ use remotemedia_plugin_sdk::types::{AudioSamples, Error, PixelFormat, RuntimeDat
 use crate::arkit::{BlendshapeFrame, ARKIT_BLENDSHAPE_NAMES};
 use crate::session_control::{aux_port_of, BARGE_IN_PORT};
 
-use super::renderer::{ArkitPose, CcRenderer, Renderer, RendererConfig, SkeletalPose};
+use super::renderer::{ArkitPose, CcRenderer, Present, RenderQuality, Renderer, RendererConfig, SkeletalPose};
 
 /// Local `Result` alias so the ported source keeps the bare-name
 /// `Result<T>` style from the original module.
@@ -65,6 +65,11 @@ pub struct CcRenderConfig {
     pub scene_key_file: Option<PathBuf>,
     /// Fixed asset data, verified against the registered sampler's content hash.
     pub scene_geometry_file: Option<PathBuf>,
+    /// `RendererConfig::present`: `Overlay` draws on the desktop and emits
+    /// no video.
+    pub present: Present,
+    /// `RendererConfig::quality`; also turns physics off below `High`.
+    pub quality: Option<RenderQuality>,
 }
 
 impl Default for CcRenderConfig {
@@ -84,6 +89,8 @@ impl Default for CcRenderConfig {
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
+            present: Present::Capture,
+            quality: None,
         }
     }
 }
@@ -323,11 +330,15 @@ impl CcRenderNode {
             env_background_brightness: config.env_background_brightness,
             cc5_materials: config.cc5_materials,
             studio_lighting: config.studio_lighting,
+            present: config.present.clone(),
+            quality: config.quality,
             // Physics on by default — needed for hair / breast /
             // skirt / tongue jiggle (see `secondary::auto_detect_chains`).
             // Set `CC_PHYSICS_DISABLE=1` to skip the install for an
             // A/B render without rebuilding.
-            physics: if std::env::var("CC_PHYSICS_DISABLE").as_deref() == Ok("1") {
+            physics: if std::env::var("CC_PHYSICS_DISABLE").as_deref() == Ok("1")
+                || config.quality.is_some_and(|q| !q.physics())
+            {
                 None
             } else {
                 Some(super::renderer::PhysicsConfig::default())

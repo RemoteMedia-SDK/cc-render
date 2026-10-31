@@ -148,6 +148,83 @@ pub struct RendererConfig {
     pub studio_lighting: bool,
 
     pub physics: Option<PhysicsConfig>,
+    /// Where frames go: back to the node (`Capture`, the default) or onto
+    /// the desktop (`Overlay`, see [`super::overlay`]).
+    pub present: Present,
+    /// A cost preset for the studio look; `None` keeps the full look
+    /// (and `CC_AVATAR_MAX_TEXTURE` alone caps textures).
+    pub quality: Option<RenderQuality>,
+}
+
+/// Where the rendered frames go.
+#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Present {
+    /// Read back and returned through [`CcRenderer::drain_frames`] (the
+    /// node emits them as `RuntimeData::Video`).
+    #[default]
+    Capture,
+    /// Drawn on top of the desktop; nothing is returned to the node.
+    Overlay(super::overlay::OverlayConfig),
+}
+
+/// How much of the studio look to render: most of the renderer's GPU time
+/// and memory is here, not in getting pixels to the screen.
+///
+/// | | low | medium | high |
+/// |---|---|---|---|
+/// | shadows | off | 1024² | 4096² |
+/// | SSAO, bloom, sharpening | off | off | on |
+/// | anti-aliasing | MSAA 4× | MSAA 4× | TAA |
+/// | textures (px per side) | 512 | 1024 | full |
+/// | hair / body physics | off | off | on |
+///
+/// The CC5 shaders (`cc5_materials`) are independent of the preset; their
+/// hair's dithered strands need TAA, so with them every preset uses TAA.
+/// `CC_AVATAR_MAX_TEXTURE` still overrides the texture cap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RenderQuality {
+    Low,
+    Medium,
+    High,
+}
+
+impl RenderQuality {
+    /// Shadow map side, or `None` for no shadows.
+    pub fn shadow_map(self) -> Option<usize> {
+        match self {
+            Self::Low => None,
+            Self::Medium => Some(1024),
+            Self::High => Some(4096),
+        }
+    }
+    /// TAA, SSAO, bloom and sharpening (else MSAA 4×).
+    pub fn post_effects(self) -> bool {
+        self == Self::High
+    }
+    pub fn max_texture(self) -> Option<u32> {
+        match self {
+            Self::Low => Some(512),
+            Self::Medium => Some(1024),
+            Self::High => None,
+        }
+    }
+    pub fn physics(self) -> bool {
+        self == Self::High
+    }
+}
+
+impl std::str::FromStr for RenderQuality {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s.to_ascii_lowercase().as_str() {
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
+            _ => Err(format!("{s}: expected low, medium or high")),
+        }
+    }
 }
 
 /// Default background brightness for [`RendererConfig::env_background`]: the
@@ -172,6 +249,8 @@ impl Default for RendererConfig {
             studio_lighting: true,
 
             physics: None,
+            present: Present::Capture,
+            quality: None,
         }
     }
 }
@@ -346,6 +425,17 @@ impl CcRenderer {
             tokio::sync::watch::channel::<SceneState>(SceneState::default());
         let (hud_tx, hud_rx) = watch::channel(None);
 
+        // The overlay window comes up first: it picks the render size
+        // (side x monitor scale), and a failure fails the spawn.
+        let overlay = match &config.present {
+            Present::Overlay(oc) => {
+                let target_px = Arc::new(std::sync::atomic::AtomicU32::new(oc.size));
+                let (tx, _detached) = super::overlay::spawn_presenter(oc.clone(), target_px.clone())?;
+                Some(super::overlay::OverlaySink { tx, target_px })
+            }
+            Present::Capture => None,
+        };
+
         let cfg = Arc::clone(&config);
         let join = thread::Builder::new()
             .name("cc-render-bevy".into())
@@ -363,6 +453,7 @@ impl CcRenderer {
                     grab_cmd_rx,
                     scene_state_tx,
                     hud_rx,
+                    overlay,
                 );
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
@@ -675,6 +766,7 @@ fn run_bevy_app(
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
+    overlay: Option<super::overlay::OverlaySink>,
 ) {
     super::bevy_app::run(
         config,
@@ -688,5 +780,6 @@ fn run_bevy_app(
         grab_cmd_rx,
         scene_state_tx,
         hud_rx,
+        overlay,
     );
 }

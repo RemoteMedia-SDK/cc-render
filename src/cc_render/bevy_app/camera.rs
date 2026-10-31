@@ -685,6 +685,10 @@ pub(crate) struct GlbAsset {
     pub cc5_materials: bool,
     /// `RendererConfig::studio_lighting`: the avatar editor's lights and look.
     pub studio_lighting: bool,
+    /// `Present::Overlay`: transparent clear, no backdrop.
+    pub overlay: bool,
+    /// `RendererConfig::quality`.
+    pub quality: Option<crate::cc_render::renderer::RenderQuality>,
 }
 
 /// Marker for the avatar's `SceneRoot` entity. Lets systems that
@@ -815,7 +819,10 @@ pub(crate) fn setup_scene(
             Camera3d::default(),
             Camera {
                 target: RenderTarget::Image(target_handle),
-                clear_color: ClearColorConfig::Custom({
+                // The overlay shows the desktop where nothing is drawn.
+                clear_color: ClearColorConfig::Custom(if glb.overlay {
+                    Color::NONE
+                } else {
                     let bg = env_vec3_opt("CC_AVATAR_CLEAR_COLOR")
                         .unwrap_or(Vec3::new(0.10, 0.09, 0.08));
                     Color::srgb(bg.x, bg.y, bg.z)
@@ -866,8 +873,24 @@ pub(crate) fn setup_scene(
         tracing::info!(target: "cc_render", "studio levels: {levels:?}");
     }
     let ev100 = if glb.studio_lighting { levels.ev100 } else { Exposure::default().ev100 };
+    let post_effects = glb.quality.map_or(true, |q| q.post_effects());
+    if !post_effects {
+        commands.entity(camera).remove::<Bloom>();
+    }
     if glb.studio_lighting {
-        commands.entity(camera).insert(studio::studio_look_with(&levels));
+        if post_effects {
+            commands.entity(camera).insert(studio::studio_look_with(&levels));
+        } else {
+            commands.entity(camera).insert(studio::studio_look_lean(&levels));
+            // CC5 hair's dithered strands resolve only under TAA.
+            if glb.cc5_materials {
+                commands.entity(camera).insert((
+                    Msaa::Off,
+                    TemporalAntiAliasing::default(),
+                    bevy::pbr::ShadowFilteringMethod::Temporal,
+                ));
+            }
+        }
         commands.entity(camera).insert(EnvironmentMapLight {
             diffuse_map: asset_server.load("env://pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: specular_map.clone(),
@@ -879,7 +902,9 @@ pub(crate) fn setup_scene(
     // the clear colour no longer shows): the map that lights the avatar,
     // so background and reflections agree. Else, with the studio look, its
     // grey-blue backdrop.
-    if glb.env_background {
+    if glb.overlay {
+        // no background: the desktop shows through
+    } else if glb.env_background {
         let brightness = glb.env_background_brightness.unwrap_or_else(|| env_background_brightness(ev100));
         commands.entity(camera).insert(Skybox { image: specular_map, brightness, rotation: Quat::IDENTITY });
     } else if glb.studio_lighting {
@@ -889,7 +914,8 @@ pub(crate) fn setup_scene(
 
     // ─── Lights ────────────────────────────────────────────────────────
     if glb.studio_lighting {
-        studio::spawn_studio_lights_closeup(&mut commands, &levels);
+        let shadows = glb.quality.map_or(true, |q| q.shadow_map().is_some());
+        studio::spawn_studio_lights_closeup_with(&mut commands, &levels, shadows);
     } else {
         portrait_lights(&mut commands);
     }

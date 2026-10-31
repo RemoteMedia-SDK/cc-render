@@ -290,6 +290,7 @@ pub(super) fn run(
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
+    overlay: Option<super::overlay::OverlaySink>,
 ) {
     let glb_path = match config.glb_path.canonicalize() {
         Ok(p) => p,
@@ -347,8 +348,21 @@ pub(super) fn run(
         }
     };
 
-    // RenderApp → main App readback channel.
+    // RenderApp → main App readback channel; for the desktop overlay,
+    // RenderApp → the overlay window directly.
     let (cap_tx, cap_rx) = crossbeam_channel::unbounded::<CapturedFrame>();
+    let (cap_tx, overlay_px) = match overlay {
+        Some(o) => (o.tx, Some(o.target_px)),
+        None => (cap_tx, None),
+    };
+    // The overlay window picked its size (side x monitor scale).
+    let (width, height) = match &overlay_px {
+        Some(px) => {
+            let side = px.load(std::sync::atomic::Ordering::Acquire).max(16);
+            (side, side)
+        }
+        None => (config.width, config.height),
+    };
 
     // Tick rate from config.fps. Bevy uses ScheduleRunnerPlugin to
     // pace itself when there's no winit window driving the loop.
@@ -457,11 +471,15 @@ pub(super) fn run(
     .add_plugins(ScheduleRunnerPlugin::run_loop(tick))
     .add_plugins(ExtractResourcePlugin::<capture::CaptureTarget>::default())
     .add_plugins(ExtractResourcePlugin::<LastAppliedPts>::default())
-    .insert_resource(DirectionalLightShadowMap { size: 4096 })
+    .insert_resource(DirectionalLightShadowMap {
+        size: config.quality.and_then(|q| q.shadow_map()).unwrap_or(4096),
+    })
     .insert_resource(GlbAsset {
         filename: glb_filename,
-        width: config.width,
-        height: config.height,
+        width,
+        height,
+        overlay: overlay_px.is_some(),
+        quality: config.quality,
         scene_filename: scene_dir_and_name.as_ref().map(|(_, n)| n.clone()),
         env_background: config.env_background,
         env_background_brightness: config.env_background_brightness,
@@ -507,7 +525,6 @@ pub(super) fn run(
             // scene so they don't layer on top of the portrait rig.
             // No-op unless `CC_SCENE_KEEP_LIGHTS=0`.
             strip_scene_lights,
-            forward_frames,
             check_shutdown,
             // Joint-debug overlay: spawn labels lazily after bind capture.
             spawn_joint_labels.after(capture_cc5_bind_rotations),
@@ -563,6 +580,17 @@ pub(super) fn run(
         (draw_joint_skeleton, update_joint_labels).after(TransformSystem::TransformPropagate),
     );
 
+    match &overlay_px {
+        // Frames go straight to the overlay window; follow its size.
+        Some(px) => {
+            app.insert_resource(OverlayTargetPx(px.clone()))
+                .add_systems(Update, follow_overlay_size);
+        }
+        None => {
+            app.add_systems(Update, forward_frames);
+        }
+    }
+
     // CC5 shaders for materials carrying `extras.cc5`
     // (`RendererConfig::cc5_materials`); the camera adds TAA for CC5 hair,
     // as the studio look does.
@@ -574,7 +602,9 @@ pub(super) fn run(
     }
     // CC_AVATAR_MAX_TEXTURE: shrink large maps as they load (before the CC5
     // materials build mips from them), to leave a shared GPU's memory free.
-    if let Some(max) = texture_cap::MaxTexture::from_env() {
+    let max_texture = texture_cap::MaxTexture::from_env()
+        .or_else(|| config.quality.and_then(|q| q.max_texture()).map(texture_cap::MaxTexture));
+    if let Some(max) = max_texture {
         tracing::info!(target: "cc_render", "texture cap: {} px per side", max.0);
         app.insert_resource(max).add_systems(
             Update,
@@ -620,9 +650,39 @@ pub(super) fn run(
         frame_count: 0,
         frame_interval_ms: 1000_u64 / config.fps.max(1) as u64,
     });
-    render_app.add_systems(Render, copy_render_target_to_cpu.in_set(RenderSet::Cleanup));
+    if overlay_px.is_some() {
+        render_app
+            .init_resource::<capture::ReadbackRing>()
+            .add_systems(Render, capture::copy_render_target_ring.in_set(RenderSet::Cleanup));
+    } else {
+        render_app.add_systems(Render, copy_render_target_to_cpu.in_set(RenderSet::Cleanup));
+    }
 
     app.run();
+}
+
+/// The overlay window's wanted render size (physical pixels per side).
+#[derive(Resource)]
+struct OverlayTargetPx(Arc<std::sync::atomic::AtomicU32>);
+
+/// Resize the render target when the overlay is scaled or moved to a
+/// monitor of another scale. The camera follows the image's size; the
+/// readback ring follows the GPU image's.
+fn follow_overlay_size(
+    px: Res<OverlayTargetPx>,
+    target: Option<ResMut<capture::CaptureTarget>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(mut target) = target else { return };
+    let side = px.0.load(Ordering::Acquire).clamp(16, 4096);
+    if target.width == side && target.height == side {
+        return;
+    }
+    let Some(image) = images.get_mut(&target.image) else { return };
+    image.resize(bevy::render::render_resource::Extent3d { width: side, height: side, depth_or_array_layers: 1 });
+    tracing::info!(target: "cc_render", "overlay: render target {}x{} -> {side}x{side}", target.width, target.height);
+    target.width = side;
+    target.height = side;
 }
 
 /// Resolve the directory holding KTX2 environment maps (`pisa_diffuse…`,

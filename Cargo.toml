@@ -73,8 +73,20 @@ regex = "1"
 tempfile = "3.27.0"
 # CC5 shaping sliders (avatar editor); also a standalone crate + Python module.
 cc5-shape = { path = "crates/cc5-shape" }
+# Desktop overlay (`Present::Overlay`): a layered Win32 window.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
+# examples/overlay_probe.rs: the probe window's HWND.
+raw-window-handle = "0.6"
 # `examples/avatar_editor.rs` UI; 0.32 is the Bevy 0.15 line.
 bevy_egui = "0.32"
 # live hair editing in the avatar editor (CC5 hair -> strands)

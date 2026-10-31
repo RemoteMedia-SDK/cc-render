@@ -231,6 +231,19 @@ pub fn studio_look_with(levels: &StudioLevels) -> impl Bundle {
     )
 }
 
+/// [`studio_look_with`] without its costly passes (TAA, SSAO, bloom,
+/// sharpening): MSAA and filtered shadows instead, the same exposure,
+/// tonemapping and grading. `RenderQuality::{Low, Medium}`.
+pub fn studio_look_lean(levels: &StudioLevels) -> impl Bundle {
+    (
+        Msaa::Sample4,
+        ShadowFilteringMethod::Gaussian,
+        Tonemapping::AgX,
+        Exposure { ev100: levels.ev100 },
+        ColorGrading { global: ColorGradingGlobal { post_saturation: levels.saturation, ..default() }, ..default() },
+    )
+}
+
 /// The pisa environment map from `env_dir`, if it is there.
 pub fn studio_ibl(assets: &AssetServer, env_dir: &Path) -> Option<EnvironmentMapLight> {
     if !env_dir.join("pisa_diffuse_rgb9e5_zstd.ktx2").is_file() {
@@ -252,6 +265,7 @@ pub fn spawn_studio_lights(commands: &mut Commands) {
         commands,
         &StudioLevels::STUDIO,
         CascadeShadowConfigBuilder { num_cascades: 3, maximum_distance: 8.0, first_cascade_far_bound: 0.8, ..default() },
+        true,
     );
 }
 
@@ -260,14 +274,21 @@ pub fn spawn_studio_lights(commands: &mut Commands) {
 /// instead of three. Each cascade re-renders the skinned, morphed body, so
 /// this cuts the shadow passes from 12 to 4 at the same look.
 pub fn spawn_studio_lights_closeup(commands: &mut Commands, levels: &StudioLevels) {
+    spawn_studio_lights_closeup_with(commands, levels, true);
+}
+
+/// [`spawn_studio_lights_closeup`], with or without shadows (each shadowed
+/// light re-renders the skinned, morphed avatar into its map every frame).
+pub fn spawn_studio_lights_closeup_with(commands: &mut Commands, levels: &StudioLevels, shadows: bool) {
     spawn_studio_lights_with(
         commands,
         levels,
         CascadeShadowConfigBuilder { num_cascades: 1, maximum_distance: 3.0, ..default() },
+        shadows,
     );
 }
 
-fn spawn_studio_lights_with(commands: &mut Commands, l: &StudioLevels, cascades: CascadeShadowConfigBuilder) {
+fn spawn_studio_lights_with(commands: &mut Commands, l: &StudioLevels, cascades: CascadeShadowConfigBuilder, shadows: bool) {
     let aim = Vec3::new(0.0, 1.55, 0.0);
     // CC5-like studio light: a soft key from the front right (the character's left)
     // with soft (PCSS) shadows like a softbox, a weak fill, a back kicker and a top
@@ -287,7 +308,7 @@ fn spawn_studio_lights_with(commands: &mut Commands, l: &StudioLevels, cascades:
             DirectionalLight {
                 color,
                 illuminance: lux::AMBIENT_DAYLIGHT * lux_frac,
-                shadows_enabled: true,
+                shadows_enabled: shadows,
                 shadow_depth_bias: 0.02,
                 shadow_normal_bias: 0.4,
                 soft_shadow_size: soft,

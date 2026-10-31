@@ -95,6 +95,13 @@ pub struct CcRenderManifestParams {
     /// Private deployment binding for authenticated renderer scene jobs.
     pub scene_key_file: Option<PathBuf>,
     pub scene_geometry_file: Option<PathBuf>,
+    /// `{"kind": "capture"}` (default: frames come back as Video) or
+    /// `{"kind": "overlay", "anchor": "bottom-right", "margin": 24,
+    /// "size": 320, "monitor": 0, "position": [x, y], "hotkey": "Ctrl+Alt+O"}`
+    /// (drawn on top of the desktop, no Video emitted).
+    pub present: crate::cc_render::Present,
+    /// `"low" | "medium" | "high"`; absent: the full studio look.
+    pub quality: Option<crate::cc_render::RenderQuality>,
 }
 
 impl Default for CcRenderManifestParams {
@@ -114,6 +121,8 @@ impl Default for CcRenderManifestParams {
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
+            present: Default::default(),
+            quality: None,
         }
     }
 }
@@ -145,6 +154,8 @@ fn build_node(params: CcRenderManifestParams) -> Result<CcRenderNode, String> {
         realtime_mode: params.realtime_mode,
         scene_key_file: params.scene_key_file,
         scene_geometry_file: params.scene_geometry_file,
+        present: params.present,
+        quality: params.quality,
     };
 
     CcRenderNode::new(config).map_err(|e| format!("CcRenderNode spawn failed: {e}"))
@@ -189,3 +200,44 @@ impl FfiNodeFactory for CcRenderNodeFactory {
 }
 
 remotemedia_plugin_sdk::plugin_export!(CcRenderNodeFactory);
+
+#[cfg(test)]
+mod params_tests {
+    use super::*;
+    use crate::cc_render::overlay::Anchor;
+    use crate::cc_render::{Present, RenderQuality};
+
+    #[test]
+    fn capture_and_no_quality_by_default() {
+        let p: CcRenderManifestParams = serde_json::from_str(r#"{"glb_path":"a.glb"}"#).unwrap();
+        assert_eq!(p.present, Present::Capture);
+        assert_eq!(p.quality, None);
+    }
+
+    #[test]
+    fn overlay_and_quality_parse() {
+        let p: CcRenderManifestParams = serde_json::from_str(
+            r#"{"present":{"kind":"overlay","anchor":"top-right","size":256,"position":[10,-20]},"quality":"medium"}"#,
+        )
+        .unwrap();
+        let Present::Overlay(o) = p.present else { panic!("not an overlay: {:?}", p.present) };
+        assert_eq!(o.anchor, Anchor::TopRight);
+        assert_eq!(o.size, 256);
+        assert_eq!(o.position, Some([10, -20]));
+        assert_eq!(o.margin, 24);
+        assert_eq!(p.quality, Some(RenderQuality::Medium));
+        assert!(serde_json::from_str::<CcRenderManifestParams>(r#"{"quality":"ultra"}"#).is_err());
+    }
+
+    #[test]
+    fn quality_presets() {
+        use RenderQuality::*;
+        assert_eq!(Low.shadow_map(), None);
+        assert_eq!(Medium.shadow_map(), Some(1024));
+        assert_eq!(High.shadow_map(), Some(4096));
+        assert_eq!((Low.max_texture(), Medium.max_texture(), High.max_texture()), (Some(512), Some(1024), None));
+        assert!(!Medium.physics() && !Medium.post_effects());
+        assert!(High.physics() && High.post_effects());
+        assert_eq!("HIGH".parse::<RenderQuality>(), Ok(High));
+    }
+}
