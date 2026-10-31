@@ -9,6 +9,7 @@ pub(super) mod joint_debug;
 pub(super) mod overrides;
 pub(super) mod pose;
 mod skinning;
+mod texture_cap;
 mod visibility;
 
 pub(super) mod physics;
@@ -446,7 +447,12 @@ pub(super) fn run(
                 }),
                 ..default()
             })
-            .disable::<WinitPlugin>(),
+            .disable::<WinitPlugin>()
+            // Its process-wide Ctrl+C handler consumes the event, so the
+            // host (which owns shutdown) never sees it: the renderer quits
+            // and the host keeps running. Installed after the host's (the
+            // app builds on the render thread), Windows calls it first.
+            .disable::<bevy::app::TerminalCtrlCHandlerPlugin>(),
     )
     .add_plugins(ScheduleRunnerPlugin::run_loop(tick))
     .add_plugins(ExtractResourcePlugin::<capture::CaptureTarget>::default())
@@ -565,6 +571,15 @@ pub(super) fn run(
     }
     if config.cc5_materials {
         app.add_plugins(crate::cc_render::cc5_materials::Cc5MaterialsPlugin);
+    }
+    // CC_AVATAR_MAX_TEXTURE: shrink large maps as they load (before the CC5
+    // materials build mips from them), to leave a shared GPU's memory free.
+    if let Some(max) = texture_cap::MaxTexture::from_env() {
+        tracing::info!(target: "cc_render", "texture cap: {} px per side", max.0);
+        app.insert_resource(max).add_systems(
+            Update,
+            texture_cap::cap_texture_size.before(crate::cc_render::cc5_materials::Cc5MaterialsSet),
+        );
     }
     app.init_resource::<super::office::timeline::PoseTimeline>();
     if let Some(mut phys) = config.physics.clone() {

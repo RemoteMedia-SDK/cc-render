@@ -1455,6 +1455,7 @@ pub(crate) fn capture_cc5_bind_rotations(
     transform_global_q: Query<&GlobalTransform>,
     mut bind: ResMut<CC5BindRotations>,
     avatar_q: Query<Entity, With<AvatarRoot>>,
+    mut partial: Local<(usize, u32)>,
 ) {
     if bind.captured {
         return;
@@ -1484,24 +1485,44 @@ pub(crate) fn capture_cc5_bind_rotations(
         name_to_entity.insert(s, entity);
     }
 
-    // Need all 22 present before we lock in.
+    // Normally all 22 are needed before we lock in (wait for the GLB to
+    // finish settling). A partial rig, such as a head-only cut (Spine02,
+    // NeckTwist01, Head, eyes), is captured once its bone set has stopped
+    // growing for PARTIAL_SETTLE_FRAMES with the Head among them: the
+    // camera fit, auto-orient and readiness then work, and only the body
+    // pose (bones it lacks) is skipped.
+    const PARTIAL_SETTLE_FRAMES: u32 = 30;
     let mut found: [Option<Entity>; 22] = [None; 22];
     for (i, (_smpl, cc5)) in SMPL22_TO_CC5.iter().enumerate() {
-        if let Some(&e) = name_to_entity.get(cc5) {
-            found[i] = Some(e);
-        } else {
-            return; // wait for the GLB to finish settling
+        found[i] = name_to_entity.get(cc5).copied();
+    }
+    let count = found.iter().flatten().count();
+    if count < 22 {
+        if found[15].is_none() {
+            return;
         }
+        if partial.0 != count {
+            *partial = (count, 0);
+            return;
+        }
+        partial.1 += 1;
+        if partial.1 < PARTIAL_SETTLE_FRAMES {
+            return;
+        }
+        tracing::info!(
+            target: "cc_render",
+            "skeletal: partial rig, {count}/22 SMPL-mapped bones (face and head only; no body pose)"
+        );
     }
 
-    // All 22 present; capture bind-pose local rotations + parent chain
-    // rest world rotations.
+    // Capture bind-pose local rotations + parent chain rest world
+    // rotations (missing bones keep identity).
     let mut own_rest_local: [Quat; 22] = [Quat::IDENTITY; 22];
     let mut parent_chain_rest: [Quat; 22] = [Quat::IDENTITY; 22];
     let mut pelvis_rest_translation = Vec3::ZERO;
 
     for i in 0..22 {
-        let entity = found[i].expect("checked above");
+        let Some(entity) = found[i] else { continue };
         let Ok(t) = transform_q.get(entity) else {
             tracing::warn!(
                 target: "cc_render",
@@ -1545,7 +1566,8 @@ pub(crate) fn capture_cc5_bind_rotations(
     // system passes its "all 22 bones present" gate, that's already
     // happened. If it hasn't (extremely cold-start case), the value is
     // identity and `auto_orient_avatar` simply skips this frame.
-    let pelvis_entity = found[0].expect("pelvis present");
+    // A partial rig without the pelvis anchors on its lowest bone.
+    let pelvis_entity = found.iter().flatten().next().copied().expect("the Head at least");
     let pelvis_world = transform_global_q
         .get(pelvis_entity)
         .ok()
@@ -1589,7 +1611,7 @@ pub(crate) fn capture_cc5_bind_rotations(
     // to the bone's bind world rotation applied to SMPL_BONE_AXES[i].
     let mut bone_world_pos: [Vec3; 22] = [Vec3::ZERO; 22];
     for i in 0..22 {
-        let entity = found[i].expect("checked above");
+        let Some(entity) = found[i] else { continue };
         if let Ok(gt) = transform_global_q.get(entity) {
             bone_world_pos[i] = gt.translation();
         }

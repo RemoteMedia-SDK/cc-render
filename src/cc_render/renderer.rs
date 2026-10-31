@@ -9,7 +9,7 @@
 //! talk to it via channels.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use tokio::sync::watch;
@@ -367,6 +367,7 @@ impl CcRenderer {
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
 
+        LIVE_RENDERERS.fetch_add(1, Ordering::AcqRel);
         Ok(Self {
             pose_tx,
             skeletal_pose_tx,
@@ -645,7 +646,18 @@ impl Drop for CcRenderer {
         // historically flaky around wgpu drops and we don't want
         // the calling thread to hang).
         let _ = self.shutdown_tx.try_send(());
+        LIVE_RENDERERS.fetch_sub(1, Ordering::AcqRel);
     }
+}
+
+/// `CcRenderer`s spawned and not yet dropped in this process.
+static LIVE_RENDERERS: AtomicUsize = AtomicUsize::new(0);
+
+/// How many `CcRenderer`s are alive in this process (each one a Bevy app
+/// rendering on the GPU), e.g. for a host that keeps exactly one session
+/// preloaded: it preloads again once the last viewer's renderer is gone.
+pub fn live_renderers() -> usize {
+    LIVE_RENDERERS.load(Ordering::Acquire)
 }
 
 /// Body of the dedicated render thread. Constructs the Bevy `App`

@@ -859,14 +859,19 @@ pub(crate) fn setup_scene(
         commands.entity(camera).insert((Msaa::Off, TemporalAntiAliasing::default()));
     }
     // The avatar editor's look (exposure, TAA, SSAO, grading, ...) replaces
-    // the camera's own; its IBL runs at its calibrated level.
-    let ev100 = if glb.studio_lighting { studio::DEFAULT_EV100 } else { Exposure::default().ev100 };
+    // the camera's own; its IBL runs at its calibrated level. The levels
+    // (preset and overrides) come from CC_AVATAR_LIGHT.
+    let levels = studio::StudioLevels::from_env();
+    if glb.studio_lighting && levels != studio::StudioLevels::STUDIO {
+        tracing::info!(target: "cc_render", "studio levels: {levels:?}");
+    }
+    let ev100 = if glb.studio_lighting { levels.ev100 } else { Exposure::default().ev100 };
     if glb.studio_lighting {
-        commands.entity(camera).insert(studio::studio_look(ev100));
+        commands.entity(camera).insert(studio::studio_look_with(&levels));
         commands.entity(camera).insert(EnvironmentMapLight {
             diffuse_map: asset_server.load("env://pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: specular_map.clone(),
-            intensity: 1.0,
+            intensity: levels.ibl,
             rotation: Quat::IDENTITY,
         });
     }
@@ -884,7 +889,7 @@ pub(crate) fn setup_scene(
 
     // ─── Lights ────────────────────────────────────────────────────────
     if glb.studio_lighting {
-        studio::spawn_studio_lights(&mut commands);
+        studio::spawn_studio_lights_closeup(&mut commands, &levels);
     } else {
         portrait_lights(&mut commands);
     }

@@ -94,10 +94,120 @@ pub fn studio_camera(images: &mut Assets<Image>, ev100: f32) -> impl Bundle {
     )
 }
 
+/// The levels of the studio look and rig: exposure, each light's strength
+/// (a fraction of `lux::AMBIENT_DAYLIGHT`), the key's position, the IBL and
+/// ambient fill, and saturation. [`Self::STUDIO`] is the editor's look,
+/// calibrated against CC5's viewport; [`Self::DAYLIGHT`] is bright, soft
+/// outdoor light (a high sun, a broad sky fill, little shadow under the brows).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StudioLevels {
+    /// Camera exposure (lower = brighter).
+    pub ev100: f32,
+    pub key: f32,
+    /// Key light position (it aims at the face); the character faces +Z.
+    pub key_pos: Vec3,
+    /// Key light colour (sRGB); warmer for sunlight.
+    pub key_color: Vec3,
+    pub fill: f32,
+    pub back: f32,
+    pub top: f32,
+    /// Environment map (IBL) intensity.
+    pub ibl: f32,
+    /// `AmbientLight` brightness and colour (sRGB).
+    pub ambient: f32,
+    pub ambient_color: Vec3,
+    /// Post-tonemap saturation.
+    pub saturation: f32,
+}
+
+impl StudioLevels {
+    pub const STUDIO: Self = Self {
+        ev100: DEFAULT_EV100,
+        key: 0.042,
+        key_pos: Vec3::new(2.2, 2.5, 1.7),
+        key_color: Vec3::new(1.00, 0.95, 0.88),
+        fill: 0.004,
+        back: 0.020,
+        top: 0.006,
+        ibl: 1.0,
+        ambient: 20.0,
+        ambient_color: Vec3::new(0.86, 0.90, 1.00),
+        saturation: 1.3,
+    };
+    // Matched by eye to outdoor game screenshots of Valen (a golden tan): a
+    // warm sun high on her right, a warm sky fill strong enough that the
+    // brows cast little shadow, half a stop brighter than the studio, and
+    // most of the warmth from the light's colour (saturation alone turns the
+    // skin's reds orange-red rather than golden).
+    pub const DAYLIGHT: Self = Self {
+        ev100: 6.7,
+        key: 0.08,
+        key_pos: Vec3::new(-1.2, 5.0, 1.4),
+        key_color: Vec3::new(1.00, 0.74, 0.50),
+        fill: 0.018,
+        back: 0.020,
+        top: 0.03,
+        ibl: 1.5,
+        ambient: 55.0,
+        ambient_color: Vec3::new(1.00, 0.86, 0.70),
+        saturation: 1.25,
+    };
+
+    /// `CC_AVATAR_LIGHT`: a preset (`studio`, the default, or `daylight`)
+    /// and/or `name=value` overrides, comma-separated, e.g.
+    /// `daylight,fill=0.03,ev=7` (names: ev, key, keyx, keyy, keyz,
+    /// keyr, keyg, keyb, fill, back, top, ibl, ambient, ambr, ambg, ambb, sat).
+    pub fn from_env() -> Self {
+        let Ok(spec) = std::env::var("CC_AVATAR_LIGHT") else { return Self::STUDIO };
+        let mut l = Self::STUDIO;
+        for part in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            let Some((name, value)) = part.split_once('=') else {
+                match part {
+                    "studio" => l = Self::STUDIO,
+                    "daylight" => l = Self::DAYLIGHT,
+                    _ => warn!("CC_AVATAR_LIGHT: unknown preset {part:?}"),
+                }
+                continue;
+            };
+            let Ok(v) = value.trim().parse::<f32>() else {
+                warn!("CC_AVATAR_LIGHT: {part:?} is not a number");
+                continue;
+            };
+            match name.trim() {
+                "ev" => l.ev100 = v,
+                "key" => l.key = v,
+                "keyx" => l.key_pos.x = v,
+                "keyy" => l.key_pos.y = v,
+                "keyz" => l.key_pos.z = v,
+                "keyr" => l.key_color.x = v,
+                "keyg" => l.key_color.y = v,
+                "keyb" => l.key_color.z = v,
+                "ambr" => l.ambient_color.x = v,
+                "ambg" => l.ambient_color.y = v,
+                "ambb" => l.ambient_color.z = v,
+                "fill" => l.fill = v,
+                "back" => l.back = v,
+                "top" => l.top = v,
+                "ibl" => l.ibl = v,
+                "ambient" => l.ambient = v,
+                "sat" => l.saturation = v,
+                other => warn!("CC_AVATAR_LIGHT: unknown level {other:?}"),
+            }
+        }
+        l
+    }
+}
+
 /// The studio camera's look without camera, backdrop or lens: anti-aliasing,
 /// shadow filtering, SSAO, tonemapping, exposure, bloom, sharpening, grading
 /// (for a camera of one's own, e.g. the runtime renderer's).
 pub fn studio_look(ev100: f32) -> impl Bundle {
+    studio_look_with(&StudioLevels { ev100, ..StudioLevels::STUDIO })
+}
+
+/// [`studio_look`] at the given levels (exposure, saturation).
+pub fn studio_look_with(levels: &StudioLevels) -> impl Bundle {
+    let ev100 = levels.ev100;
     (
         // TAA instead of MSAA: it resolves the CC5 hair's dithered strands into a soft
         // mass (hair_types.wgsl) and the soft shadows' noise (temporal filtering).
@@ -117,7 +227,7 @@ pub fn studio_look(ev100: f32) -> impl Bundle {
             denoise: false,
         },
         // AgX desaturates skin and hair against CC5's viewport: restore some saturation
-        ColorGrading { global: ColorGradingGlobal { post_saturation: 1.3, ..default() }, ..default() },
+        ColorGrading { global: ColorGradingGlobal { post_saturation: levels.saturation, ..default() }, ..default() },
     )
 }
 
@@ -138,18 +248,41 @@ pub fn studio_ibl(assets: &AssetServer, env_dir: &Path) -> Option<EnvironmentMap
 
 /// The portrait light rig and the ambient fill.
 pub fn spawn_studio_lights(commands: &mut Commands) {
+    spawn_studio_lights_with(
+        commands,
+        &StudioLevels::STUDIO,
+        CascadeShadowConfigBuilder { num_cascades: 3, maximum_distance: 8.0, first_cascade_far_bound: 0.8, ..default() },
+    );
+}
+
+/// The rig for a fixed close-up (the runtime renderer's camera stays within
+/// ~3 m of the face), at the given levels: one shadow cascade per light
+/// instead of three. Each cascade re-renders the skinned, morphed body, so
+/// this cuts the shadow passes from 12 to 4 at the same look.
+pub fn spawn_studio_lights_closeup(commands: &mut Commands, levels: &StudioLevels) {
+    spawn_studio_lights_with(
+        commands,
+        levels,
+        CascadeShadowConfigBuilder { num_cascades: 1, maximum_distance: 3.0, ..default() },
+    );
+}
+
+fn spawn_studio_lights_with(commands: &mut Commands, l: &StudioLevels, cascades: CascadeShadowConfigBuilder) {
     let aim = Vec3::new(0.0, 1.55, 0.0);
     // CC5-like studio light: a soft key from the front right (the character's left)
     // with soft (PCSS) shadows like a softbox, a weak fill, a back kicker and a top
     // light. Every light casts shadows: unshadowed ones light cavities (nostrils,
     // mouth corners) from inside.
     for (color, lux_frac, pos, soft) in [
-        (Color::srgb(1.00, 0.95, 0.88), 0.042, Vec3::new(2.2, 2.5, 1.7), Some(KEY_SOFT_SHADOW)), // key
-        (Color::srgb(0.95, 0.95, 1.00), 0.004, Vec3::new(-1.0, 2.2, 1.2), None), // fill, above eye level
+        (Color::srgb(l.key_color.x, l.key_color.y, l.key_color.z), l.key, l.key_pos, Some(KEY_SOFT_SHADOW)), // key
+        (Color::srgb(0.95, 0.95, 1.00), l.fill, Vec3::new(-1.0, 2.2, 1.2), None), // fill, above eye level
         // back kicker from the character's right: rims the hair and shines through the ear
-        (Color::srgb(1.00, 0.92, 0.82), 0.020, Vec3::new(-1.6, 2.2, -1.4), None),
-        (Color::srgb(1.00, 0.95, 0.90), 0.006, Vec3::new(1.5, 3.0, 0.3), None), // top fill
+        (Color::srgb(1.00, 0.92, 0.82), l.back, Vec3::new(-1.6, 2.2, -1.4), None),
+        (Color::srgb(1.00, 0.95, 0.90), l.top, Vec3::new(1.5, 3.0, 0.3), None), // top fill
     ] {
+        if lux_frac <= 0.0 {
+            continue;
+        }
         commands.spawn((
             DirectionalLight {
                 color,
@@ -161,10 +294,10 @@ pub fn spawn_studio_lights(commands: &mut Commands) {
                 ..default()
             },
             Transform::from_translation(pos).looking_at(aim, Vec3::Y),
-            CascadeShadowConfigBuilder { num_cascades: 3, maximum_distance: 8.0, first_cascade_far_bound: 0.8, ..default() }
-                .build(),
+            cascades.build(),
         ));
     }
     // cool, soft studio fill (CC5's grey-blue backdrop): shadows stay neutral, not orange
-    commands.insert_resource(AmbientLight { color: Color::srgb(0.86, 0.90, 1.00), brightness: 20.0 });
+    let a = l.ambient_color;
+    commands.insert_resource(AmbientLight { color: Color::srgb(a.x, a.y, a.z), brightness: l.ambient });
 }
