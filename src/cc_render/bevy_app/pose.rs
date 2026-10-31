@@ -2531,6 +2531,20 @@ pub(crate) fn apply_arkit_face_bones(
         return;
     }
     let w = |k: &str| pose.weights.get(k).copied().unwrap_or(0.0).clamp(0.0, 1.0);
+    // The character's side axis, right eye → left eye (horizontal).
+    let eye = |e: Option<Entity>| e.and_then(|e| globals.get(e).ok()).map(|g| g.translation());
+    let eye_side = match (eye(face.l_eye), eye(face.r_eye)) {
+        (Some(l), Some(r)) => (l - r).reject_from(Vec3::Y).try_normalize(),
+        _ => None,
+    };
+    let parent_rot = |bone: Entity| {
+        parents
+            .get(bone)
+            .ok()
+            .and_then(|p| globals.get(p.get()).ok())
+            .map(|g| g.compute_transform().rotation)
+            .unwrap_or(Quat::IDENTITY)
+    };
 
     // ─── Head + neck (performer head rotation) ──────────────────────
     //
@@ -2557,11 +2571,7 @@ pub(crate) fn apply_arkit_face_bones(
                 .collect();
             std::array::from_fn(|i| v.get(i).copied().unwrap_or(1.0))
         });
-        let eye = |e: Option<Entity>| e.and_then(|e| globals.get(e).ok()).map(|g| g.translation());
-        let side = match (eye(face.l_eye), eye(face.r_eye)) {
-            (Some(l), Some(r)) => (l - r).reject_from(Vec3::Y).normalize_or(Vec3::X),
-            _ => Vec3::X,
-        };
+        let side = eye_side.unwrap_or(Vec3::X);
         let forward = side.cross(Vec3::Y);
         let [sy, sp, sr] = *SIGNS;
         let world = |share: f32| {
@@ -2571,12 +2581,7 @@ pub(crate) fn apply_arkit_face_bones(
         };
         for (bone, rest, share) in [(face.neck, face.neck_rest, 0.4), (face.head, face.head_rest, 0.6)] {
             let Some(bone) = bone else { continue };
-            let parent_rot = parents
-                .get(bone)
-                .ok()
-                .and_then(|p| globals.get(p.get()).ok())
-                .map(|g| g.compute_transform().rotation)
-                .unwrap_or(Quat::IDENTITY);
+            let parent_rot = parent_rot(bone);
             if let Ok(mut t) = transforms.get_mut(bone) {
                 t.rotation = (parent_rot.inverse() * world(share) * parent_rot) * rest;
             }
@@ -2586,19 +2591,22 @@ pub(crate) fn apply_arkit_face_bones(
     // ─── Lower jaw (CC_Base_JawRoot) ─────────────────────────────────
     //
     // ARKit channels driven:
-    //   jawOpen  → rotate around head +Z (the hinge axis on this rig,
-    //              verified by pinning to 1.0 and observing the chin
-    //              drop). Default max = 45° at weight=1.
+    //   jawOpen  → rotate around the character's side axis (right eye →
+    //              left eye; head +Z on CC5 rigs, head +X on the Saluki
+    //              SMPL-X operators). Default max = 45° at weight=1.
+    //              `CC_FACE_JAW_AXIS=x|y|z` forces a head-frame axis.
     //   jawForward → translate the jaw bone forward in head Z by a
     //                small amount (≈8 mm at weight=1; CC5/iClone uses
     //                a Y-translation but on this 90°-Z-bound rig the
     //                forward direction on the bone is parent +Z).
-    //   jawLeft / jawRight → small rotation around head +Y (vertical),
+    //   jawLeft / jawRight → small rotation around vertical (world Y),
     //                ±10° at weight=1.
     //
     // Rotation is composed `delta * bind` (parent-frame), since the
-    // bind's 90°-Z rotation scrambles the bone's local axes.
+    // bind's 90°-Z rotation scrambles the bone's local axes; the
+    // character's axes are expressed in that frame.
     if let Some(jaw_e) = face.jaw_root {
+        let to_parent = parent_rot(jaw_e).inverse();
         if let Ok(mut t) = transforms.get_mut(jaw_e) {
             let pinned: Option<f32> = std::env::var("CC_FACE_JAW_PIN")
                 .ok()
@@ -2609,20 +2617,20 @@ pub(crate) fn apply_arkit_face_bones(
                 .and_then(|s| s.parse::<f32>().ok())
                 .unwrap_or(45.0)
                 .to_radians();
-            let axis_str = std::env::var("CC_FACE_JAW_AXIS").unwrap_or_else(|_| "z".to_string());
             let sign: f32 = std::env::var("CC_FACE_JAW_SIGN")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1.0);
-            let open_axis = match axis_str.as_str() {
-                "y" => Vec3::Y,
-                "x" => Vec3::X,
-                _ => Vec3::Z,
+            let (open_axis, up_axis) = match (std::env::var("CC_FACE_JAW_AXIS").ok().as_deref(), eye_side) {
+                (Some("x"), _) => (Vec3::X, Vec3::Y),
+                (Some("y"), _) => (Vec3::Y, Vec3::Y),
+                (None, Some(side)) => ((to_parent * side).normalize(), (to_parent * Vec3::Y).normalize()),
+                _ => (Vec3::Z, Vec3::Y),
             };
             let jaw_lr = w("jawRight") - w("jawLeft");
             let jaw_lr_max = 10.0_f32.to_radians();
             let q_open = Quat::from_axis_angle(open_axis, sign * jaw_open * max_open);
-            let q_lr = Quat::from_rotation_y(jaw_lr * jaw_lr_max);
+            let q_lr = Quat::from_axis_angle(up_axis, jaw_lr * jaw_lr_max);
             t.rotation = q_open * q_lr * face.jaw_root_rest;
 
             let jaw_fwd = w("jawForward");
