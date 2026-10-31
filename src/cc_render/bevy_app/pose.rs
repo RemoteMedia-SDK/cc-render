@@ -2510,9 +2510,9 @@ pub(crate) fn capture_face_bones(
 ///   visually flat — the V_Open / Mouth_Open morphs deform the lips
 ///   around a closed jaw, not a hanging one.
 /// - `eyeLookUp/Down/In/Out` (left/right pairs) rotate the per-eye
-///   bone ~13° max. We compose: `up = +X rotation`, `down = -X`,
-///   `in/out = ±Y` (mirrored for L vs R since `eyeLookInLeft` looks
-///   right relative to the avatar).
+///   bone ~13° max. We compose: up/down about the character's side
+///   axis, `in/out = ±Y` (mirrored for L vs R since `eyeLookInLeft`
+///   looks right relative to the avatar).
 ///
 /// Applied as `T.rotation = bind_rest * delta` so we don't drift if
 /// some other system also writes to these bones.
@@ -2658,11 +2658,19 @@ pub(crate) fn apply_arkit_face_bones(
 
     // ─── Eyes (CC_Base_L_Eye / CC_Base_R_Eye) ────────────────────────
     //
-    // Up/down → rotation around head +X. In/out → head +Y, mirrored
-    // per side ("in" for the left eye looks toward the avatar's right,
-    // i.e. negative head-Y rotation; "in" for the right eye is the
-    // opposite). Composed as `delta * bind` to be axis-independent of
-    // each eye's individual bind.
+    // Up/down → rotation around the character's side axis (right eye →
+    // left eye) expressed in the eye's parent frame, as for the head and
+    // jaw: CC5 eye parents are rotated, so a fixed local axis isn't
+    // sideways (head +X turned "up" into down). Positive about the side
+    // axis looks down, as the head's pitch nods down. In/out → parent
+    // +Y, mirrored per side ("in" for the left eye looks toward the
+    // avatar's right, i.e. negative head-Y rotation; "in" for the right
+    // eye is the opposite). Composed as `delta * bind` to be
+    // axis-independent of each eye's individual bind.
+    let eye_pitch = |bone: Entity, up_dn: f32, max: f32| match eye_side {
+        Some(side) => Quat::from_axis_angle((parent_rot(bone).inverse() * side).normalize(), -up_dn * max),
+        None => Quat::from_rotation_x(up_dn * max),
+    };
     let max_eye = std::env::var("CC_FACE_EYE_DEG")
         .ok()
         .and_then(|s| s.parse::<f32>().ok())
@@ -2685,8 +2693,7 @@ pub(crate) fn apply_arkit_face_bones(
             // (opposite of "look out"). Both eyes share the yaw pin
             // (positive = both eyes look avatar-right).
             let in_out = pin_yaw.unwrap_or_else(|| w("eyeLookInLeft") - w("eyeLookOutLeft"));
-            let delta =
-                Quat::from_rotation_x(up_dn * max_eye) * Quat::from_rotation_y(in_out * max_eye);
+            let delta = eye_pitch(le, up_dn, max_eye) * Quat::from_rotation_y(in_out * max_eye);
             t.rotation = delta * face.l_eye_rest;
         }
     }
@@ -2698,8 +2705,7 @@ pub(crate) fn apply_arkit_face_bones(
             let in_out = pin_yaw
                 .map(|y| -y)
                 .unwrap_or_else(|| w("eyeLookOutRight") - w("eyeLookInRight"));
-            let delta =
-                Quat::from_rotation_x(up_dn * max_eye) * Quat::from_rotation_y(in_out * max_eye);
+            let delta = eye_pitch(re, up_dn, max_eye) * Quat::from_rotation_y(in_out * max_eye);
             t.rotation = delta * face.r_eye_rest;
         }
     }
