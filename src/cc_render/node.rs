@@ -230,6 +230,8 @@ pub struct CcRenderNode {
     config: CcRenderConfig,
     renderer: Arc<dyn Renderer>,
     frame_counter: Arc<AtomicU64>,
+    /// The last frame count logged at info: each milestone once.
+    frames_logged: AtomicU64,
     /// First pts seen (anchor); subsequent frame timestamps are
     /// reported relative to this so y4m playback aligns with audio
     /// captured by the same session anchor.
@@ -357,6 +359,7 @@ impl CcRenderNode {
             config,
             renderer,
             frame_counter: Arc::new(AtomicU64::new(0)),
+            frames_logged: AtomicU64::new(0),
             anchor_pts_ms: Arc::new(tokio::sync::Mutex::new(None)),
             audio_buf: Arc::new(parking_lot::Mutex::new(AudioBuf::new())),
             ready_signaled: Arc::new(AtomicBool::new(false)),
@@ -632,6 +635,14 @@ impl CcRenderNode {
             audio.speech_ends.push_back((end, value.clone()));
         }
         Ok(true)
+    }
+
+    /// Whether to log `total` frames at info: the first frame and every
+    /// 60th, each once. A tick that emits nothing (the desktop overlay never
+    /// does) leaves the count where it was and logs nothing.
+    fn frame_milestone(&self, total: u64) -> bool {
+        (total == 1 || (total > 0 && total % 60 == 0))
+            && self.frames_logged.swap(total, Ordering::Relaxed) != total
     }
 
     pub fn frames_emitted(&self) -> u64 {
@@ -1299,8 +1310,8 @@ impl AsyncStreamingNode for CcRenderNode {
                 }
             }
             let total = self.frame_counter.load(Ordering::Relaxed);
-            if total == 1 || total % 60 == 0 {
-                tracing::info!(
+            if self.frame_milestone(total) {
+                tracing::debug!(
                     target: "cc_render",
                     "CcRenderNode: total Video frames emitted (realtime) = {}",
                     total
@@ -1571,8 +1582,8 @@ impl AsyncStreamingNode for CcRenderNode {
             emitted += 1;
         }
         let total = self.frame_counter.load(Ordering::Relaxed);
-        if total == 1 || total % 60 == 0 {
-            tracing::info!(
+        if self.frame_milestone(total) {
+            tracing::debug!(
                 target: "cc_render",
                 "CcRenderNode: total Video frames emitted = {}",
                 total
