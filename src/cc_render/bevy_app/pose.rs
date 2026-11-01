@@ -2707,14 +2707,20 @@ pub(crate) fn apply_arkit_face_bones(
     // left eye) expressed in the eye's parent frame, as for the head and
     // jaw: CC5 eye parents are rotated, so a fixed local axis isn't
     // sideways (head +X turned "up" into down). Positive about the side
-    // axis looks down, as the head's pitch nods down. In/out → parent
-    // +Y, mirrored per side ("in" for the left eye looks toward the
-    // avatar's right, i.e. negative head-Y rotation; "in" for the right
-    // eye is the opposite). Composed as `delta * bind` to be
-    // axis-independent of each eye's individual bind.
+    // axis looks down, as the head's pitch nods down. In/out → around
+    // world up in the parent frame, likewise (Valen's eye parent has +Y
+    // up, so the old fixed +Y turn ran opposite to the head; Beautiful's
+    // has +Y forward, which rolled the eye). Positive about up looks to
+    // the avatar's left, as the head's yaw does, so a look toward her
+    // right (left eye "in", right eye "out") is negative. Composed as
+    // `delta * bind` to be axis-independent of each eye's bind.
     let eye_pitch = |bone: Entity, up_dn: f32, max: f32| match eye_side {
         Some(side) => Quat::from_axis_angle((parent_rot(bone).inverse() * side).normalize(), -up_dn * max),
         None => Quat::from_rotation_x(up_dn * max),
+    };
+    let eye_yaw = |bone: Entity, right: f32, max: f32| match eye_side {
+        Some(_) => Quat::from_axis_angle((parent_rot(bone).inverse() * Vec3::Y).normalize(), -right * max),
+        None => Quat::from_rotation_y(right * max),
     };
     let max_eye = std::env::var("CC_FACE_EYE_DEG")
         .ok()
@@ -2738,7 +2744,7 @@ pub(crate) fn apply_arkit_face_bones(
             // (opposite of "look out"). Both eyes share the yaw pin
             // (positive = both eyes look avatar-right).
             let in_out = pin_yaw.unwrap_or_else(|| w("eyeLookInLeft") - w("eyeLookOutLeft"));
-            let delta = eye_pitch(le, up_dn, max_eye) * Quat::from_rotation_y(in_out * max_eye);
+            let delta = eye_pitch(le, up_dn, max_eye) * eye_yaw(le, in_out, max_eye);
             t.rotation = delta * face.l_eye_rest;
         }
     }
@@ -2750,7 +2756,7 @@ pub(crate) fn apply_arkit_face_bones(
             let in_out = pin_yaw
                 .map(|y| -y)
                 .unwrap_or_else(|| w("eyeLookOutRight") - w("eyeLookInRight"));
-            let delta = eye_pitch(re, up_dn, max_eye) * Quat::from_rotation_y(in_out * max_eye);
+            let delta = eye_pitch(re, up_dn, max_eye) * eye_yaw(re, in_out, max_eye);
             t.rotation = delta * face.r_eye_rest;
         }
     }
