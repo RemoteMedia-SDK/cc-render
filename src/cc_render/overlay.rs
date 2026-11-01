@@ -22,6 +22,10 @@
 //! window turns solid and tinted; drag it with the left button, scale it
 //! with the wheel, lock it again with a right click or the hotkey. Locking
 //! publishes the new [`OverlayGeometry`] for the host to save.
+//!
+//! A host can also place it ([`OverlayHandle::place`]: size, anchor,
+//! monitor or position), hide and show it, list the monitors, and watch
+//! where it is and whether it is being edited ([`OverlayHandle::state`]).
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -92,16 +96,51 @@ pub struct OverlayGeometry {
     pub size: u32,
 }
 
+/// Where to put the overlay: `size` logical pixels, at `position`
+/// (physical top-left) when it is on a monitor, else at `anchor` on
+/// `monitor`, `margin` logical pixels in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Placement {
+    pub size: u32,
+    pub position: Option<[i32; 2]>,
+    pub anchor: Anchor,
+    pub monitor: usize,
+    pub margin: i32,
+}
+
+impl Default for Placement {
+    fn default() -> Self {
+        let c = OverlayConfig::default();
+        Self { size: c.size, position: None, anchor: c.anchor, monitor: c.monitor, margin: c.margin }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverlayCmd {
     ToggleEdit,
     SetEdit(bool),
+    /// Move and resize; publishes the new geometry like a lock does.
+    Place(Placement),
+    SetVisible(bool),
+}
+
+/// What the overlay is doing, for a host's UI.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct OverlayState {
+    /// A window is up (a renderer in overlay mode is running).
+    pub running: bool,
+    pub visible: bool,
+    pub edit: bool,
+    /// Where it is now.
+    pub geometry: Option<OverlayGeometry>,
 }
 
 struct Shared {
     cmd_tx: Sender<OverlayCmd>,
     cmd_rx: Receiver<OverlayCmd>,
     geometry: tokio::sync::watch::Sender<Option<OverlayGeometry>>,
+    state: tokio::sync::watch::Sender<OverlayState>,
 }
 
 fn shared() -> &'static Shared {
@@ -109,8 +148,22 @@ fn shared() -> &'static Shared {
     SHARED.get_or_init(|| {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
         let (geometry, _) = tokio::sync::watch::channel(None);
-        Shared { cmd_tx, cmd_rx, geometry }
+        let (state, _) = tokio::sync::watch::channel(OverlayState::default());
+        Shared { cmd_tx, cmd_rx, geometry, state }
     })
+}
+
+/// A monitor the overlay can go on (index as in [`OverlayConfig::monitor`]).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MonitorInfo {
+    pub index: usize,
+    pub primary: bool,
+    /// The whole monitor and its work area (no taskbar), physical pixels:
+    /// `[left, top, right, bottom]`.
+    pub rect: [i32; 4],
+    pub work: [i32; 4],
+    /// Display scale, 1.0 = 96 dpi.
+    pub scale: f32,
 }
 
 /// The host's side of the (one, per process) overlay: works before the
@@ -127,10 +180,42 @@ impl OverlayHandle {
     pub fn set_edit(&self, on: bool) {
         let _ = self.cmd_tx.send(OverlayCmd::SetEdit(on));
     }
-    /// The geometry published each time edit mode is locked.
+    /// Move and resize the overlay; the result is published on
+    /// [`Self::geometry`] like a locked edit.
+    pub fn place(&self, placement: Placement) {
+        let _ = self.cmd_tx.send(OverlayCmd::Place(placement));
+    }
+    pub fn set_visible(&self, visible: bool) {
+        let _ = self.cmd_tx.send(OverlayCmd::SetVisible(visible));
+    }
+    /// The geometry published each time edit mode is locked (or the
+    /// overlay is placed).
     pub fn geometry(&self) -> tokio::sync::watch::Receiver<Option<OverlayGeometry>> {
         shared().geometry.subscribe()
     }
+    /// Running, visible, editing, and where it is now.
+    pub fn state(&self) -> tokio::sync::watch::Receiver<OverlayState> {
+        shared().state.subscribe()
+    }
+    /// Commands sent while no overlay runs wait for the next one; drop them.
+    pub fn clear_pending(&self) {
+        while shared().cmd_rx.try_recv().is_ok() {}
+    }
+    pub fn monitors(&self) -> Vec<MonitorInfo> {
+        monitors()
+    }
+}
+
+/// The monitors, primary first (the order [`OverlayConfig::monitor`]
+/// counts in).
+#[cfg(windows)]
+pub fn monitors() -> Vec<MonitorInfo> {
+    win::monitor_infos()
+}
+
+#[cfg(not(windows))]
+pub fn monitors() -> Vec<MonitorInfo> {
+    Vec::new()
 }
 
 pub fn handle() -> OverlayHandle {
@@ -310,6 +395,7 @@ mod win {
 
     struct Monitor {
         handle: HMONITOR,
+        rect: Rect,
         work: Rect,
         primary: bool,
     }
@@ -320,9 +406,10 @@ mod win {
             let mut info: MONITORINFO = std::mem::zeroed();
             info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
             if GetMonitorInfoW(m, &mut info) != 0 {
-                let w = info.rcWork;
+                let (w, r) = (info.rcWork, info.rcMonitor);
                 list.push(Monitor {
                     handle: m,
+                    rect: Rect { l: r.left, t: r.top, r: r.right, b: r.bottom },
                     work: Rect { l: w.left, t: w.top, r: w.right, b: w.bottom },
                     primary: info.dwFlags & MONITORINFOF_PRIMARY != 0,
                 });
@@ -334,6 +421,29 @@ mod win {
         unsafe { EnumDisplayMonitors(std::ptr::null_mut(), std::ptr::null(), Some(each), &mut list as *mut _ as LPARAM) };
         list.sort_by_key(|m| !m.primary); // stable: primary first, then Windows' order
         list
+    }
+
+    /// [`monitors`] for a host, in physical pixels whatever the calling
+    /// thread's DPI awareness.
+    pub(super) fn monitor_infos() -> Vec<MonitorInfo> {
+        // SAFETY: thread-local setting, restored below.
+        let old = unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        let out = monitors()
+            .iter()
+            .enumerate()
+            .map(|(index, m)| MonitorInfo {
+                index,
+                primary: m.primary,
+                rect: [m.rect.l, m.rect.t, m.rect.r, m.rect.b],
+                work: [m.work.l, m.work.t, m.work.r, m.work.b],
+                scale: dpi_of(m.handle) as f32 / 96.0,
+            })
+            .collect();
+        if !old.is_null() {
+            // SAFETY: restores what was set before.
+            unsafe { SetThreadDpiAwarenessContext(old) };
+        }
+        out
     }
 
     fn dpi_of(m: HMONITOR) -> u32 {
@@ -355,6 +465,12 @@ mod win {
     unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
         if msg == WM_MOUSEACTIVATE {
             return MA_NOACTIVATE as LRESULT;
+        }
+        // Only the presenter thread ends the window (when its renderer
+        // stops); a WM_CLOSE from outside (a process manager closing
+        // "the main window") would leave it rendering into nothing.
+        if msg == WM_CLOSE {
+            return 0;
         }
         DefWindowProcW(hwnd, msg, wp, lp)
     }
@@ -416,6 +532,7 @@ mod win {
         dpi: u32,
         target_px: Arc<AtomicU32>,
         edit: bool,
+        visible: bool,
         /// While dragging: the cursor's offset from the window's top-left.
         drag: Option<(i32, i32)>,
         last: Option<(Vec<u8>, u32)>,
@@ -434,7 +551,24 @@ mod win {
             scale(self.logical as i32, self.dpi).clamp(16, 4096) as u32
         }
 
+        fn geometry(&self) -> OverlayGeometry {
+            OverlayGeometry { x: self.x, y: self.y, size: self.logical }
+        }
+
+        /// Tell a host's UI what changed.
+        fn publish_state(&self) {
+            shared().state.send_replace(OverlayState {
+                running: true,
+                visible: self.visible,
+                edit: self.edit,
+                geometry: Some(self.geometry()),
+            });
+        }
+
         fn present(&mut self) {
+            if !self.visible {
+                return;
+            }
             let side = self.side();
             if self.dib.as_ref().map(|d| d.side) != Some(side) {
                 self.dib = Dib::new(side);
@@ -465,7 +599,7 @@ mod win {
         }
 
         fn set_edit(&mut self, on: bool) {
-            if on == self.edit {
+            if on == self.edit || (on && !self.visible) {
                 return;
             }
             self.edit = on;
@@ -483,10 +617,45 @@ mod win {
             if on {
                 tracing::info!(target: "cc_render", "overlay: edit mode (drag to move, wheel to scale, right-click to lock)");
             } else {
-                let g = OverlayGeometry { x: self.x, y: self.y, size: self.logical };
+                let g = self.geometry();
                 tracing::info!(target: "cc_render", "overlay: locked at {g:?}");
                 shared().geometry.send_replace(Some(g));
             }
+            self.publish_state();
+        }
+
+        fn set_visible(&mut self, on: bool) {
+            if on == self.visible {
+                return;
+            }
+            if !on {
+                self.set_edit(false);
+            }
+            self.visible = on;
+            // SAFETY: our window, on its own thread.
+            unsafe { ShowWindow(self.hwnd, if on { SW_SHOWNOACTIVATE } else { SW_HIDE }) };
+            self.present();
+            self.publish_state();
+        }
+
+        /// Move and resize to `p` (see [`Placement`]).
+        fn place(&mut self, p: Placement) {
+            let logical = p.size.clamp(MIN_SIDE, MAX_SIDE);
+            let (x, y, dpi) = match resolve_position(&p, logical) {
+                Some(v) => v,
+                None => return,
+            };
+            (self.x, self.y, self.logical, self.dpi) = (x, y, logical, dpi);
+            // SAFETY: our window.
+            unsafe {
+                SetWindowPos(self.hwnd, std::ptr::null_mut(), x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            self.target_px.store(self.side(), Ordering::Release);
+            self.present();
+            let g = self.geometry();
+            tracing::info!(target: "cc_render", "overlay: placed at {g:?}");
+            shared().geometry.send_replace(Some(g));
+            self.publish_state();
         }
 
         /// Scale around the centre by one wheel notch.
@@ -499,6 +668,7 @@ mod win {
             self.y -= (new - old) / 2;
             self.target_px.store(new as u32, Ordering::Release);
             self.present();
+            self.publish_state();
         }
 
         /// Follow the cursor while dragging.
@@ -513,6 +683,7 @@ mod win {
 
         /// After a drag: its monitor's scale.
         fn moved(&mut self) {
+            self.publish_state();
             let side = self.side() as i32;
             let m = monitor_at(self.x + side / 2, self.y + side / 2);
             if !m.is_null() {
@@ -526,6 +697,29 @@ mod win {
         }
     }
 
+    /// Top-left and monitor dpi for `p` at `logical` size: the saved
+    /// position while it is on a monitor, else the anchor on `p.monitor`
+    /// (the primary if there is no such monitor).
+    fn resolve_position(p: &Placement, logical: u32) -> Option<(i32, i32, u32)> {
+        let saved = p.position.and_then(|[x, y]| {
+            let probe = scale(logical as i32, 96) / 2;
+            let m = monitor_at(x + probe, y + probe);
+            (!m.is_null()).then(|| (x, y, dpi_of(m)))
+        });
+        if saved.is_some() {
+            return saved;
+        }
+        let mons = monitors();
+        if p.monitor >= mons.len() {
+            tracing::warn!(target: "cc_render", "overlay: no monitor {} ({} found); using the primary", p.monitor, mons.len());
+        }
+        let mon = mons.get(p.monitor).or_else(|| mons.first())?;
+        let dpi = dpi_of(mon.handle);
+        let side = scale(logical as i32, dpi);
+        let (x, y) = anchored_position(mon.work, side, p.anchor, scale(p.margin, dpi));
+        Some((x, y, dpi))
+    }
+
     pub(super) fn run(
         config: OverlayConfig,
         target_px: Arc<AtomicU32>,
@@ -534,27 +728,19 @@ mod win {
     ) {
         // SAFETY: affects this thread only; coordinates below are physical.
         unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
-        let mons = monitors();
-        let Some(mon) = mons.get(config.monitor).or_else(|| mons.first()) else {
+        let logical = config.size.clamp(MIN_SIDE, MAX_SIDE);
+        let placement = Placement {
+            size: logical,
+            position: config.position,
+            anchor: config.anchor,
+            monitor: config.monitor,
+            margin: config.margin,
+        };
+        // A saved position wins while it is still on a monitor.
+        let Some((x, y, dpi)) = resolve_position(&placement, logical) else {
             let _ = ready.send(Err("no monitors".into()));
             return;
         };
-        if config.monitor >= mons.len() {
-            tracing::warn!(target: "cc_render", "overlay: no monitor {} ({} found); using the primary", config.monitor, mons.len());
-        }
-        let logical = config.size.clamp(MIN_SIDE, MAX_SIDE);
-        // A saved position wins while it is still on a monitor.
-        let saved = config.position.and_then(|[x, y]| {
-            let probe = scale(logical as i32, 96) / 2;
-            let m = monitor_at(x + probe, y + probe);
-            (!m.is_null()).then(|| (x, y, dpi_of(m)))
-        });
-        let (x, y, dpi) = saved.unwrap_or_else(|| {
-            let dpi = dpi_of(mon.handle);
-            let side = scale(logical as i32, dpi);
-            let (x, y) = anchored_position(mon.work, side, config.anchor, scale(config.margin, dpi));
-            (x, y, dpi)
-        });
 
         // SAFETY: standard window creation on this thread; the class is
         // registered once per process (a second registration fails harmlessly).
@@ -589,7 +775,19 @@ mod win {
             let _ = ready.send(Err(format!("CreateWindowExW failed: {}", std::io::Error::last_os_error())));
             return;
         }
-        let mut ov = Overlay { hwnd, x, y, logical, dpi, target_px, edit: false, drag: None, last: None, dib: None };
+        let mut ov = Overlay {
+            hwnd,
+            x,
+            y,
+            logical,
+            dpi,
+            target_px,
+            edit: false,
+            visible: true,
+            drag: None,
+            last: None,
+            dib: None,
+        };
         ov.target_px.store(ov.side(), Ordering::Release);
         let hotkey = config.hotkey.as_deref().filter(|s| !s.trim().is_empty());
         let mut hotkey_registered = false;
@@ -616,6 +814,7 @@ mod win {
             if hotkey_registered { format!("; {} toggles edit mode", hotkey.unwrap_or_default()) } else { String::new() }
         );
         let _ = ready.send(Ok(()));
+        ov.publish_state();
 
         let cmds = shared().cmd_rx.clone();
         let mut last_topmost = Instant::now();
@@ -658,6 +857,8 @@ mod win {
                 match cmd {
                     OverlayCmd::ToggleEdit => ov.set_edit(!ov.edit),
                     OverlayCmd::SetEdit(on) => ov.set_edit(on),
+                    OverlayCmd::Place(p) => ov.place(p),
+                    OverlayCmd::SetVisible(on) => ov.set_visible(on),
                 }
             }
             let mut newest = match frames.recv_timeout(Duration::from_millis(15)) {
@@ -675,7 +876,7 @@ mod win {
                     ov.present();
                 }
             }
-            if last_topmost.elapsed() > Duration::from_secs(2) {
+            if ov.visible && last_topmost.elapsed() > Duration::from_secs(2) {
                 last_topmost = Instant::now();
                 // SAFETY: our window.
                 unsafe {
@@ -691,6 +892,7 @@ mod win {
             }
             DestroyWindow(hwnd);
         }
+        shared().state.send_replace(OverlayState::default());
         tracing::info!(target: "cc_render", "overlay: closed");
     }
 }
@@ -708,6 +910,14 @@ mod tests {
         assert_eq!(anchored_position(WORK, 300, Anchor::Center, 24), (810, 370));
         let second = Rect { l: 1920, t: -200, r: 3840, b: 880 };
         assert_eq!(anchored_position(second, 100, Anchor::TopRight, 10), (3730, -190));
+    }
+
+    #[test]
+    fn placement_parses_with_defaults() {
+        let p: Placement = serde_json::from_str(r#"{"size":400,"anchor":"top-left"}"#).unwrap();
+        assert_eq!(p, Placement { size: 400, anchor: Anchor::TopLeft, ..Default::default() });
+        assert_eq!(p.margin, 24);
+        assert_eq!(p.position, None);
     }
 
     #[test]

@@ -182,7 +182,7 @@ pub enum Present {
 /// The CC5 shaders (`cc5_materials`) are independent of the preset; their
 /// hair's dithered strands need TAA, so with them every preset uses TAA.
 /// `CC_AVATAR_MAX_TEXTURE` still overrides the texture cap.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RenderQuality {
     Low,
