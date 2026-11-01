@@ -303,7 +303,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let behind = clamp((0.15 - dot(in.world_normal, l.direction_to_light)) / 1.15, 0.0, 1.0);
             let toward = smoothstep(-0.2, 0.6, dot(pbr_input.V, -l.direction_to_light));
             let through = behind * toward;
-            let s = directional_shadow(i, in.world_position - vec4(in.world_normal * 0.004, 0.0), -in.world_normal, z);
+            // Looked up 4 mm under the surface, less the depth bias Bevy adds
+            // toward the light (the studio's 2 cm): with it the sample jumps
+            // past what is close behind (cheek, eyeball) and the nose tip and
+            // eyelids glowed red. A thin ear rim's back face is nearer than 4 mm.
+            let p = in.world_position.xyz - in.world_normal * 0.004 - l.direction_to_light * l.shadow_depth_bias;
+            let s = directional_shadow(i, vec4(p, in.world_position.w), -in.world_normal, z);
             back += l.color.rgb * through * s;
         }
     }
@@ -344,7 +349,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let toward = smoothstep(-0.2, 0.6, dot(pbr_input.V, -L));
             var s = 1.0;
             if shadows {
-                let p = in.world_position - vec4(in.world_normal * 0.004, 0.0);
+                // (as for directional lights: without the depth bias)
+                let p = in.world_position - vec4(in.world_normal * 0.004 + L * (*light).shadow_depth_bias, 0.0);
                 if spot {
                     s = fetch_spot_shadow(id, p, -in.world_normal, (*light).shadow_map_near_z);
                 } else {
