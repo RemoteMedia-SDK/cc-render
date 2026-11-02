@@ -1,8 +1,9 @@
 //! Render one recorded pose without a motion worker, controller or contact IK.
 //! Usage: pose_snapshot avatar.glb arkit-map.json pose.json output.png [width height]
-//!        [--arkit name=weight,...] [--cc5]
+//!        [--arkit name=weight,...] [--cc5] [--no-mask]
 //! `--arkit` holds ARKit blendshape weights on the face (e.g. `jawOpen=0.6`);
-//! `--cc5` renders `extras.cc5` materials with the CC5 shaders.
+//! `--cc5` renders `extras.cc5` materials with the CC5 shaders;
+//! `--no-mask` takes off the avatar's face mask (`extras.face_mask`).
 use cc_render_plugin::cc_render::{ArkitPose, CcRenderNode, CcRenderer, RendererConfig};
 use std::time::{Duration, Instant};
 
@@ -22,6 +23,7 @@ fn main() -> anyhow::Result<()> {
         })
         .collect::<anyhow::Result<std::collections::HashMap<_, _>>>()?;
     let cc5 = args.iter().position(|a| a == "--cc5").map(|i| args.remove(i)).is_some();
+    let no_mask = args.iter().position(|a| a == "--no-mask").map(|i| args.remove(i)).is_some();
     anyhow::ensure!(
         args.len() == 5 || args.len() == 7,
         "avatar.glb arkit-map.json pose.json output.png [width height] required"
@@ -41,6 +43,7 @@ fn main() -> anyhow::Result<()> {
         cc5_materials: cc5,
         ..Default::default()
     })?;
+    renderer.set_face_mask(!no_mask);
     let value = serde_json::from_slice(&std::fs::read(&args[3])?)?;
     let pose = CcRenderNode::skeletal_pose_from_json(&value)
         .ok_or_else(|| anyhow::anyhow!("invalid skeletal pose"))?;

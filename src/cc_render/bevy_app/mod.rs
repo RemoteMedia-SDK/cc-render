@@ -3,6 +3,7 @@
 pub(super) mod assets;
 pub(super) mod camera;
 pub(super) mod capture;
+mod face_mask;
 pub(super) mod gpu_select;
 mod hud;
 pub(super) mod joint_debug;
@@ -319,6 +320,7 @@ pub(super) fn run(
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
+    face_mask_rx: watch::Receiver<bool>,
     overlay: Option<super::overlay::OverlaySink>,
     offline: Option<OfflineGate>,
 ) {
@@ -546,8 +548,9 @@ pub(super) fn run(
     .init_resource::<JointLabelsSpawned>()
     .insert_resource(hud::HomeHudRx(hud_rx))
     .add_systems(Startup, (setup_scene, configure_gizmo_overlay, hud::spawn_home_hud))
-    .add_systems(Update, hud::update_home_hud)
-    .add_systems(
+    .add_systems(Update, hud::update_home_hud);
+    face_mask::plugin(&mut app, face_mask_rx);
+    app.add_systems(
         Update,
         (
             apply_arkit_pose,

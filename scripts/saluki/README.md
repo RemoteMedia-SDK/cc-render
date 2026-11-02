@@ -70,5 +70,17 @@ cargo run --release --example studio_snapshot -- valen.glb head.png --view head 
 ```
 
 What the map ids hold was worked out on Valen (mw7), and the docstring of `glb_materials.py` lists it.
-The material lists for metal, strands and blend there are Valen's. Skin is found by techset on any
-character.
+Removable masks: `glb_materials.py` tags a mask over the face (balaclava, ski mask, hockey or
+ballistic mask) with `extras.face_mask` on its materials. The runtime renderer then takes it off and
+puts it back on a loaded avatar: `CcRenderer::set_face_mask(false)`, the node's
+`{"kind":"face_mask","worn":false}`, or `pose_snapshot --no-mask`. Headwear, glasses and headsets
+stay. A mask is gear that comes within 1.6 cm of the upper lip, or is named as one, plus the clips and
+buckles the game toggles with it (`*_toggle_on`). Of the mw7 operators, 9 have a full face under
+their mask (beta, blackwell_4_1, kofi_2_1, kofi_2_2, milsim_fr_army_sniper, milsim_ksk_amphibious,
+price_vault, uctf, valeria_2_1). The masks of blix, ctsfo, ghost, hunter_killer, milsim_ksk_arctic,
+milsim_us_sf, park_2_1 and reece hide a face that was never modelled.
+
+Skin (three CoD skin techsets: the usual one, the cinematic faces of some `high_fe` heads, and
+luca's and ohji's), eyes, tear lines and hair/brow/lash cards are found by techset on any character. Metal is still Valen's material
+names, so other operators' jewellery and helmet hardware render non-metallic. Images come from the
+folder the material's `Name:` gives (`material_*`, `m/…` or `ma/…`).

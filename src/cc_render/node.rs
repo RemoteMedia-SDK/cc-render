@@ -1,7 +1,7 @@
 //! `CcRenderNode` — streaming-pipeline wrapper around [`super::CcRenderer`].
 //!
 //! Consumes JSON envelopes (`kind = "blendshapes" | "skeletal_pose" |
-//! "barge_in" | "motion_goal" | "home_hud"`) on its reactive input path and emits
+//! "barge_in" | "motion_goal" | "home_hud" | "face_mask"`) on its reactive input path and emits
 //! `RuntimeData::Video` frames from `tick()` —
 //! `pacing_nature() = ClockedToOutboundMedia` with a wall fallback at
 //! `config.fps`. The Bevy thread free-runs and produces frames; the
@@ -570,6 +570,13 @@ impl CcRenderNode {
                 // Display-only producer state; never scheduling or motion input.
                 let hud = super::office::home_hud::parse(value).map_err(Error::Execution)?;
                 self.renderer.home_hud(hud);
+                Ok(true)
+            }
+            Some("face_mask") => {
+                // Display only: shows or hides the avatar's removable mask.
+                let worn = value["worn"].as_bool()
+                    .ok_or_else(|| Error::Execution("face_mask needs a boolean \"worn\"".into()))?;
+                self.renderer.face_mask(worn);
                 Ok(true)
             }
             Some("motion_tick") => {
@@ -1639,10 +1646,14 @@ mod realtime_speech_tests {
         office: parking_lot::Mutex<Option<super::super::office::controller::OfficeSnapshot>>,
         commands: parking_lot::Mutex<Vec<super::super::office::controller::OfficeCommand>>,
         huds: parking_lot::Mutex<Vec<Option<super::super::office::home_hud::HomeHud>>>,
+        masks: parking_lot::Mutex<Vec<bool>>,
     }
     impl Renderer for MockRenderer {
         fn home_hud(&self, hud: Option<super::super::office::home_hud::HomeHud>) {
             self.huds.lock().push(hud);
+        }
+        fn face_mask(&self, worn: bool) {
+            self.masks.lock().push(worn);
         }
         fn scene_state(&self) -> super::super::renderer::SceneState {
             super::super::renderer::SceneState { office: self.office.lock().clone(), ..Default::default() }
@@ -1746,6 +1757,20 @@ mod realtime_speech_tests {
         assert!(node.motion_driver.lock().current_goal().is_none());
         assert!(node.scene_task.lock().is_none() && node.scene_delivery.lock().pending.is_none());
         assert!(renderer.commands.lock().is_empty());
+    }
+
+    #[test]
+    fn face_mask_is_display_only() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(CcRenderConfig::default(), renderer.clone());
+        for worn in [false, true] {
+            let msg = serde_json::json!({"kind":"face_mask","worn":worn});
+            assert!(node.accept_motion_control(&RuntimeData::Json(msg)).unwrap());
+        }
+        assert!(node.accept_motion_control(&RuntimeData::Json(serde_json::json!({"kind":"face_mask"}))).is_err());
+        assert_eq!(*renderer.masks.lock(), [false, true]);
+        assert!(node.motion_driver.lock().current_goal().is_none());
+        assert!(renderer.commands.lock().is_empty() && renderer.skeletal.lock().is_empty());
     }
 
     fn node_with_pending_scene() -> (CcRenderNode, serde_json::Value) {

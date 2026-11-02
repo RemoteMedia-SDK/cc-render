@@ -295,6 +295,9 @@ pub trait Renderer: Send + Sync {
     fn office_command(&self, _cmd: super::office::controller::OfficeCommand) {}
     /// Display-only overlay state; `None` hides the panel.
     fn home_hud(&self, _hud: Option<super::office::home_hud::HomeHud>) {}
+    /// Wear (`true`, the default) or take off the avatar's face mask: its
+    /// primitives whose material carries `extras.face_mask`. Display only.
+    fn face_mask(&self, _worn: bool) {}
     fn spawn_prop(&self, _cmd: PropCmd) {}
     fn despawn_prop(&self, _id: PropId) {}
     fn grab(&self, _cmd: GrabCmd) {}
@@ -333,6 +336,7 @@ pub struct CcRenderer {
     grab_cmd_tx: tokio::sync::mpsc::UnboundedSender<GrabOrRelease>,
     scene_state_rx: tokio::sync::watch::Receiver<SceneState>,
     hud_tx: watch::Sender<Option<super::office::home_hud::HomeHud>>,
+    face_mask_tx: watch::Sender<bool>,
     /// `Present::Offline`: lets one frame render per step; frames come
     /// straight from the render world.
     pub(super) offline: Option<OfflineChannels>,
@@ -379,6 +383,9 @@ impl Renderer for CcRenderer {
     }
     fn home_hud(&self, hud: Option<super::office::home_hud::HomeHud>) {
         Self::home_hud(self, hud);
+    }
+    fn face_mask(&self, worn: bool) {
+        Self::set_face_mask(self, worn);
     }
     fn grab(&self, cmd: GrabCmd) {
         let _ = self.grab_cmd_tx.send(GrabOrRelease::Grab(cmd));
@@ -437,6 +444,7 @@ impl CcRenderer {
         let (scene_state_tx, scene_state_rx) =
             tokio::sync::watch::channel::<SceneState>(SceneState::default());
         let (hud_tx, hud_rx) = watch::channel(None);
+        let (face_mask_tx, face_mask_rx) = watch::channel(true);
 
         // The overlay window comes up first: it picks the render size
         // (side x monitor scale), and a failure fails the spawn.
@@ -476,6 +484,7 @@ impl CcRenderer {
                     grab_cmd_rx,
                     scene_state_tx,
                     hud_rx,
+                    face_mask_rx,
                     overlay,
                     offline_gate,
                 );
@@ -496,6 +505,7 @@ impl CcRenderer {
             grab_cmd_tx,
             scene_state_rx,
             hud_tx,
+            face_mask_tx,
             offline,
         })
     }
@@ -503,6 +513,14 @@ impl CcRenderer {
     /// Replace the display-only home overlay (latest wins); `None` hides it.
     pub fn home_hud(&self, hud: Option<super::office::home_hud::HomeHud>) {
         let _ = self.hud_tx.send(hud);
+    }
+
+    /// Wear (`true`, the default) or take off the avatar's face mask: the
+    /// primitives whose glTF material carries `extras.face_mask` (the Saluki
+    /// operators' balaclavas and masks, see `scripts/saluki/glb_materials.py`).
+    /// Takes effect on the next frame, also before the avatar has loaded.
+    pub fn set_face_mask(&self, worn: bool) {
+        let _ = self.face_mask_tx.send(worn);
     }
 
     /// Has the Bevy app finished spawning the GLB scene, captured
@@ -799,6 +817,7 @@ fn run_bevy_app(
     grab_cmd_rx: tokio::sync::mpsc::UnboundedReceiver<GrabOrRelease>,
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
+    face_mask_rx: watch::Receiver<bool>,
     overlay: Option<super::overlay::OverlaySink>,
     offline: Option<super::bevy_app::OfflineGate>,
 ) {
@@ -814,6 +833,7 @@ fn run_bevy_app(
         grab_cmd_rx,
         scene_state_tx,
         hud_rx,
+        face_mask_rx,
         overlay,
         offline,
     );

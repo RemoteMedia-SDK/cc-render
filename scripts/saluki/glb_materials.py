@@ -18,6 +18,9 @@ CC5 skin shader (src/cc_render/cc5_materials, `skin.wgsl`): it records
 `extras.cc5` = RLSkin with the variables of CC5's default skin and writes the
 0x4e map as its SSS / transmission maps to `<glb_out stem>.cc5maps/`.
 
+A mask over the face (balaclava, ski mask, hockey / ballistic mask, with its clips)
+is tagged `extras.face_mask`: cc-render's `CcRenderer::set_face_mask` takes it off.
+
 Usage: python -I glb_materials.py in.glb out.glb --models <exported_files/mw7/models>
            --dirs rex_body_mp_valen_1_1,rex_head_mp_valen_1_1_high_fe [--cc5-skin]
            [--skin-gloss 0.7] [--micro-normal <CC5 skin micro normal .png>]
@@ -36,8 +39,10 @@ ap.add_argument('--skin-gloss', type=float, default=1.0,
 ap.add_argument('--micro-normal', help='tiled micro normal map for --cc5-skin (e.g. CC5\'s skin micro normal)')
 args = ap.parse_args()
 
-# CoD's skin shader: every Saluki character's face and body skin uses it.
-SKIN_TECHSET = 'techset_41f783882053ba93'
+# CoD's skin shaders: every Saluki character's face and body skin uses the
+# first; the cinematic faces of some high_fe heads (dunn, jae, park, price,
+# valeria, west ...) the second, with the same 0x4e layout.
+SKIN_TECHSETS = {'techset_41f783882053ba93', 'techset_397cfa4fe3a5c3b', 'techset_4e329c14662306e6'}  # 3rd: luca, ohji
 # Valen (mw7): materials the maps cannot tell apart.
 METAL = {'buckle_master_nickel', 'metal_silver', 'mp_western_lynch_diamond_earring_setting',
          'mp_vm_nima_necklace_base_iw9_1_1', 'mp_vm_nima_necklace_top_iw9_1_1',
@@ -48,6 +53,25 @@ NO_OPACITY = {'material_394f3523a7bf967e'}  # eye: 0x4a is an iris mask
 BLEND = {'material_3e715c391e870b93'}  # soft-edged tear line / eye corner
 STRANDS = {'material_6681b7981e3229d5', 'material_7c1b144a43404bd9',
            'head_shared_eyelashes_dark_extrathick_iw9', 'head_shared_eyelashes_dense'}
+# The same by techset, for every operator: Valen's eye (on all 78 eye materials
+# of the mw7 heads, `base_eye_infrared`), tear line, and hair / brow / lash cards.
+EYE_TECHSET = 'techset_36a858705d2a74ea'
+BLEND_TECHSETS = {'techset_4fd4ff109704cae3'}
+STRAND_TECHSETS = {'techset_2043d2cd59ec5686', 'techset_1e68733b68f36e3', 'techset_6b4db11d5bdbbe45'}
+
+# Mask detection (face_masks): what is the head itself, never a mask. Read off the 38 mw7 operator
+# heads: the eye, tear line and meniscus; hair, brow, lash and beard cards; and
+# CoD's generic alpha-card techset only where the face mesh carries it (lashes;
+# elsewhere beanie fuzz shells).
+FACE_TECHSETS = {EYE_TECHSET, 'techset_4fd4ff109704cae3', 'techset_21f8315e3ec56c3a'}
+HAIR_TECHSETS = STRAND_TECHSETS | {'techset_6293e690fa2147d5', 'techset_55bb4d18d2883894',
+                                   'techset_7176105580c94f24', 'techset_7c7d79f426b290b'}
+CARD_TECHSETS = {'techset_2577c4a5eeba838e'}
+GEAR_WORDS = ('lens', 'duct', 'radio', 'beanie', 'helmet', 'goggle', 'glass', 'balaclava', 'mask', 'hood',
+              'strap', 'buckle', 'headset')
+MASK_REACH = 0.016  # m from the upper lip
+MASK_WORDS = ('balaclava', 'skimask', 'face_mask', 'gaiter')
+MASK_HARDWARE_TECHSETS = {'techset_52bc17b9b56ecce'}  # ballistic mask shell clips, buckles, rim
 
 # CC5's default RLSkin settings (a CC5 export's Std_Skin_Body / Std_Skin_Head),
 # without its region masks: the whole material is "unmasked".
@@ -71,10 +95,13 @@ def find_maps(name):
             lines = open(info).read().splitlines()
             rows = dict(l.split(',') for l in lines if l.startswith('unk_semantic'))
             techset = next((l.split(':', 1)[1].strip() for l in lines if l.startswith('Techset:')), '')
-            idir = os.path.join(args.models, d, '_images', name if name.startswith('material_') else os.path.join('m', name))
+            # the images sit under the material's full name: material_*, m/<name> or ma/<name>
+            full = next((l.split(':', 1)[1].strip() for l in lines if l.startswith('Name:')), '')
+            idir = os.path.join(args.models, d, '_images', *(full or (name if name.startswith('material_') else 'm/' + name)).split('/'))
             get = lambda s: (os.path.join(idir, rows[s] + '.png') if rows.get(s) and not rows[s].startswith('$') else None)
             return {'albedo': get('unk_semantic_47'), 'normal': get('unk_semantic_48'), 'opacity': get('unk_semantic_4a'),
-                    'sss': get('unk_semantic_4e'), 'skin': techset == SKIN_TECHSET, 'head': d.startswith('rex_head_')}
+                    'sss': get('unk_semantic_4e'), 'skin': techset in SKIN_TECHSETS, 'head': d.startswith('rex_head_'),
+                    'techset': techset}
     return None
 
 
@@ -139,6 +166,55 @@ def cc5_skin_maps(sss_png):
     return {'SSS Map': maps_rel + '/' + sss_file, 'Transmission Map': maps_rel + '/' + trans_file}
 
 
+def face_part(name, maps, face_mesh_mats):
+    """Is this material the head itself (skin, eyes, mouth, hair cards), never a mask?"""
+    low = name.lower()
+    if any(w in low for w in GEAR_WORDS):
+        return False
+    if 'inside_mouth' in low or maps is None:
+        return True
+    ts = maps['techset']
+    return (ts in SKIN_TECHSETS or ts in FACE_TECHSETS or ts in HAIR_TECHSETS
+            or (ts in CARD_TECHSETS and name in face_mesh_mats))
+
+
+def positions(acc_i):
+    a = gltf['accessors'][acc_i]; bv = gltf['bufferViews'][a['bufferView']]
+    off = bv.get('byteOffset', 0) + a.get('byteOffset', 0)
+    return np.frombuffer(bytes(bin_[off:off + a['count'] * 12]), np.float32).reshape(-1, 3)
+
+
+def face_masks():
+    """The materials of a mask over the face, for cc-render's mask toggle (`extras.face_mask`).
+    A mask covers the mouth: some vertex within MASK_REACH of the upper lip (balaclavas, ski
+    masks, hockey and ballistic masks: 0.4-1.5 cm; goggles, glasses, headsets and helmet
+    straps stay >= 2.2 cm away). The lip sits 3 cm below and 1 cm behind the nose tip, the
+    face skin's most forward point (+Z) above its lower 40 %."""
+    names = [m['name'].split('\\')[-1] for m in gltf['materials']]
+    maps_of = {i: find_maps(n) for i, n in enumerate(names)}
+    face_mesh_mats = {names[p['material']] for m in gltf['meshes'] if m['name'].endswith('_face') for p in m['primitives']}
+    prims = [(p['material'], positions(p['attributes']['POSITION']), m['name'].endswith('_face'))
+             for m in gltf['meshes'] for p in m['primitives']]
+    skin = [v for i, v, face in prims if face and maps_of[i] and maps_of[i]['skin']]
+    if not skin:  # no face mesh (smplx_to_glb.py without --arkit-map)
+        return set()
+    skin = np.concatenate(skin)
+    upper = skin[skin[:, 1] > np.percentile(skin[:, 1], 40)]
+    lip = upper[np.argmax(upper[:, 2])] + np.array([0, -0.03, -0.01], np.float32)
+    mask = {i for i, v, _ in prims if not face_part(names[i], maps_of[i], face_mesh_mats)
+            and np.linalg.norm(v - lip, axis=1).min() < MASK_REACH}
+    mask |= {i for i, n in enumerate(names) if any(w in n.lower() for w in MASK_WORDS)}
+    if mask:  # the mask's clips and buckles, which the game toggles with it
+        mask |= {i for i, n in enumerate(names) if n.endswith('_toggle_on')
+                 or (maps_of[i] and maps_of[i]['techset'] in MASK_HARDWARE_TECHSETS)}
+    return mask
+
+
+masks = face_masks()
+for i in masks:
+    gltf['materials'][i].setdefault('extras', {})['face_mask'] = True
+print('FACE_MASK', sorted(gltf['materials'][i]['name'].split('\\')[-1] for i in masks))
+
 cache = {}
 for mat in gltf['materials']:
     name = mat['name'].split('\\')[-1]
@@ -164,15 +240,17 @@ for mat in gltf['materials']:
         pbr['metallicRoughnessTexture'] = {'index': orm_tex}
         pbr['metallicFactor'] = 1.0
         pbr['roughnessFactor'] = 1.0
-    if maps['opacity'] and maps['albedo'] and name not in NO_OPACITY:
+    ts = maps['techset']
+    if maps['opacity'] and maps['albedo'] and name not in NO_OPACITY and ts != EYE_TECHSET:
         alb = Image.open(maps['albedo']).convert('RGB')
         op = Image.open(maps['opacity']).convert('L').resize(alb.size, Image.BILINEAR)
         rgba = np.dstack([np.asarray(alb), np.asarray(op)])
         pbr['baseColorTexture'] = {'index': add_texture(png(rgba))}
-        if name in BLEND:
+        if name in BLEND or ts in BLEND_TECHSETS:
             mat['alphaMode'] = 'BLEND'; mat.pop('alphaCutoff', None)
         else:
-            mat['alphaMode'] = 'MASK'; mat['alphaCutoff'] = 0.35 if name in STRANDS else 0.5
+            strand = name in STRANDS or ts in STRAND_TECHSETS
+            mat['alphaMode'] = 'MASK'; mat['alphaCutoff'] = 0.35 if strand else 0.5
     cc5 = ''
     if args.cc5_skin and maps['skin']:
         cc5_maps = cc5_skin_maps(maps['sss']) if maps['sss'] else {}
