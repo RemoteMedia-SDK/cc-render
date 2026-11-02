@@ -46,6 +46,11 @@ impl OfflineRenderer {
         self.inner.offline.as_ref().expect("spawned with Present::Offline")
     }
 
+    /// Wear or take off the avatar's face mask ([`CcRenderer::set_face_mask`]).
+    pub fn set_face_mask(&self, worn: bool) {
+        self.inner.set_face_mask(worn);
+    }
+
     /// Wait for the avatar to load (frames rendered meanwhile are dropped).
     pub fn wait_ready(&self, timeout: Duration) -> Result<()> {
         let start = Instant::now();
