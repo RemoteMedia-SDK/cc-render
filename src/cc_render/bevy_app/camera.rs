@@ -685,8 +685,8 @@ pub(crate) struct GlbAsset {
     pub cc5_materials: bool,
     /// `RendererConfig::studio_lighting`: the avatar editor's lights and look.
     pub studio_lighting: bool,
-    /// `Present::Overlay`: transparent clear, no backdrop.
-    pub overlay: bool,
+    /// `Present::Overlay` / `Offline`: transparent clear, no backdrop.
+    pub transparent: bool,
     /// `RendererConfig::quality`.
     pub quality: Option<crate::cc_render::renderer::RenderQuality>,
 }
@@ -819,8 +819,9 @@ pub(crate) fn setup_scene(
             Camera3d::default(),
             Camera {
                 target: RenderTarget::Image(target_handle),
-                // The overlay shows the desktop where nothing is drawn.
-                clear_color: ClearColorConfig::Custom(if glb.overlay {
+                // The overlay shows the desktop where nothing is drawn (an
+                // off-line render, the video it goes over).
+                clear_color: ClearColorConfig::Custom(if glb.transparent {
                     Color::NONE
                 } else {
                     let bg = env_vec3_opt("CC_AVATAR_CLEAR_COLOR")
@@ -880,6 +881,15 @@ pub(crate) fn setup_scene(
     if glb.studio_lighting {
         if post_effects {
             commands.entity(camera).insert(studio::studio_look_with(&levels));
+            // On a transparent background (the overlay, off-line renders)
+            // SSAO and its normal prepass leave the CC5 skin undrawn: the face
+            // comes out empty. Its contact shadows go; the rest of the look stays.
+            if glb.transparent {
+                commands
+                    .entity(camera)
+                    .remove::<bevy::pbr::ScreenSpaceAmbientOcclusion>()
+                    .remove::<bevy::core_pipeline::prepass::NormalPrepass>();
+            }
         } else {
             commands.entity(camera).insert(studio::studio_look_lean(&levels));
             // CC5 hair's dithered strands resolve only under TAA.
@@ -902,8 +912,8 @@ pub(crate) fn setup_scene(
     // the clear colour no longer shows): the map that lights the avatar,
     // so background and reflections agree. Else, with the studio look, its
     // grey-blue backdrop.
-    if glb.overlay {
-        // no background: the desktop shows through
+    if glb.transparent {
+        // no background: the desktop (or video) shows through
     } else if glb.env_background {
         let brightness = glb.env_background_brightness.unwrap_or_else(|| env_background_brightness(ev100));
         commands.entity(camera).insert(Skybox { image: specular_map, brightness, rotation: Quat::IDENTITY });

@@ -25,6 +25,7 @@
 pub mod bevy_app;
 pub mod cc5_materials;
 pub mod node;
+pub mod offline;
 pub mod overlay;
 pub mod renderer;
 pub mod studio;

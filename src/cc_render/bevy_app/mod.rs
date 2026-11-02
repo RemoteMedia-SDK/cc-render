@@ -275,6 +275,35 @@ fn forward_frames(rx: Res<FrameBridgeRx>, sink: Res<FrameSinkTx>, mut count: Loc
 #[derive(Resource)]
 struct FrameSinkTx(crossbeam_channel::Sender<RenderedFrame>);
 
+/// A frame read back for an off-line render (`Present::Offline`).
+pub(crate) type OfflineFrame = CapturedFrame;
+
+/// `Present::Offline` wiring: each step lets one update (one frame) run;
+/// frames go straight from the render world to the renderer, so a frame
+/// never waits on the next step.
+pub(crate) struct OfflineGate {
+    pub step_rx: crossbeam_channel::Receiver<()>,
+    pub frames_tx: crossbeam_channel::Sender<CapturedFrame>,
+}
+
+#[derive(Resource)]
+struct OfflineStepRx(crossbeam_channel::Receiver<()>);
+
+/// Off-line: once the scene is ready, wait for the next step before each
+/// update. Until then the app runs freely to load. Gives up when the
+/// renderer drops its end (shutdown).
+fn offline_gate(step: Res<OfflineStepRx>, ready: Res<ReadySignal>) {
+    if !ready.0.load(Ordering::Acquire) {
+        return;
+    }
+    loop {
+        match step.0.recv_timeout(Duration::from_millis(250)) {
+            Ok(()) | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return,
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 /// Build + run the Bevy app on the calling (dedicated) thread. Returns
 /// when the app exits (either via shutdown signal or fatal error).
 #[allow(clippy::too_many_arguments)]
@@ -291,6 +320,7 @@ pub(super) fn run(
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
     overlay: Option<super::overlay::OverlaySink>,
+    offline: Option<OfflineGate>,
 ) {
     let glb_path = match config.glb_path.canonicalize() {
         Ok(p) => p,
@@ -355,6 +385,10 @@ pub(super) fn run(
         Some(o) => (o.tx, Some(o.target_px)),
         None => (cap_tx, None),
     };
+    let (cap_tx, offline_step) = match offline {
+        Some(o) => (o.frames_tx, Some(o.step_rx)),
+        None => (cap_tx, None),
+    };
     // The overlay window picked its size (side x monitor scale).
     let (width, height) = match &overlay_px {
         Some(px) => {
@@ -373,7 +407,9 @@ pub(super) fn run(
     // collapses a 5s-of-motion render from ~25s wall to ~3s wall
     // (1280×1280 on Mesa-WSL2). NEVER set this for realtime stream
     // pipelines — Bevy will spin a CPU core flat-out.
-    let tick = if std::env::var("CC_RENDER_FAST").ok().as_deref() == Some("1") {
+    let tick = if offline_step.is_some() {
+        Duration::ZERO
+    } else if std::env::var("CC_RENDER_FAST").ok().as_deref() == Some("1") {
         tracing::info!(
             target: "cc_render",
             "fast-render: ScheduleRunnerPlugin tick=0 (uncapped fps)"
@@ -423,8 +459,7 @@ pub(super) fn run(
         );
     }
 
-    app.add_plugins(
-        DefaultPlugins
+    let plugins = DefaultPlugins
             .set(AssetPlugin {
                 file_path: glb_dir.to_string_lossy().into_owned(),
                 ..default()
@@ -466,8 +501,16 @@ pub(super) fn run(
             // host (which owns shutdown) never sees it: the renderer quits
             // and the host keeps running. Installed after the host's (the
             // app builds on the render thread), Windows calls it first.
-            .disable::<bevy::app::TerminalCtrlCHandlerPlugin>(),
-    )
+            .disable::<bevy::app::TerminalCtrlCHandlerPlugin>();
+    // Off-line, each update renders its own frame before the next starts:
+    // with pipelined rendering the frame would render during the next
+    // update, which waits for the next pose, which waits for the frame.
+    let plugins = if offline_step.is_some() {
+        plugins.disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>()
+    } else {
+        plugins
+    };
+    app.add_plugins(plugins)
     .add_plugins(ScheduleRunnerPlugin::run_loop(tick))
     .add_plugins(ExtractResourcePlugin::<capture::CaptureTarget>::default())
     .add_plugins(ExtractResourcePlugin::<LastAppliedPts>::default())
@@ -478,7 +521,7 @@ pub(super) fn run(
         filename: glb_filename,
         width,
         height,
-        overlay: overlay_px.is_some(),
+        transparent: overlay_px.is_some() || offline_step.is_some(),
         quality: config.quality,
         scene_filename: scene_dir_and_name.as_ref().map(|(_, n)| n.clone()),
         env_background: config.env_background,
@@ -580,13 +623,22 @@ pub(super) fn run(
         (draw_joint_skeleton, update_joint_labels).after(TransformSystem::TransformPropagate),
     );
 
-    match &overlay_px {
+    match (&overlay_px, offline_step) {
         // Frames go straight to the overlay window; follow its size.
-        Some(px) => {
+        (Some(px), _) => {
             app.insert_resource(OverlayTargetPx(px.clone()))
                 .add_systems(Update, follow_overlay_size);
         }
-        None => {
+        // One frame per step, each a fixed 1/fps later: physics, the idle
+        // animation and TAA advance exactly one frame per pose.
+        (None, Some(step_rx)) => {
+            app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(
+                1.0 / config.fps.max(1) as f64,
+            )))
+            .insert_resource(OfflineStepRx(step_rx))
+            .add_systems(First, offline_gate);
+        }
+        (None, None) => {
             app.add_systems(Update, forward_frames);
         }
     }

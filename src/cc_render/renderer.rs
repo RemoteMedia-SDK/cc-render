@@ -166,6 +166,10 @@ pub enum Present {
     Capture,
     /// Drawn on top of the desktop; nothing is returned to the node.
     Overlay(super::overlay::OverlayConfig),
+    /// Off-line, for [`super::offline::OfflineRenderer`]: a transparent
+    /// background, a fixed `1/fps` time step, and one frame per pose,
+    /// rendered as fast as the GPU goes.
+    Offline,
 }
 
 /// How much of the studio look to render: most of the renderer's GPU time
@@ -329,6 +333,15 @@ pub struct CcRenderer {
     grab_cmd_tx: tokio::sync::mpsc::UnboundedSender<GrabOrRelease>,
     scene_state_rx: tokio::sync::watch::Receiver<SceneState>,
     hud_tx: watch::Sender<Option<super::office::home_hud::HomeHud>>,
+    /// `Present::Offline`: lets one frame render per step; frames come
+    /// straight from the render world.
+    pub(super) offline: Option<OfflineChannels>,
+}
+
+pub(super) struct OfflineChannels {
+    /// Dropped at shutdown so a waiting frame step gives up.
+    pub step_tx: parking_lot::Mutex<Option<crossbeam_channel::Sender<()>>>,
+    pub frames: crossbeam_channel::Receiver<super::bevy_app::OfflineFrame>,
 }
 
 impl Renderer for CcRenderer {
@@ -433,7 +446,17 @@ impl CcRenderer {
                 let (tx, _detached) = super::overlay::spawn_presenter(oc.clone(), target_px.clone())?;
                 Some(super::overlay::OverlaySink { tx, target_px })
             }
-            Present::Capture => None,
+            Present::Capture | Present::Offline => None,
+        };
+        let (offline, offline_gate) = if config.present == Present::Offline {
+            let (step_tx, step_rx) = crossbeam_channel::bounded::<()>(1);
+            let (frames_tx, frames) = crossbeam_channel::unbounded();
+            (
+                Some(OfflineChannels { step_tx: parking_lot::Mutex::new(Some(step_tx)), frames }),
+                Some(super::bevy_app::OfflineGate { step_rx, frames_tx }),
+            )
+        } else {
+            (None, None)
         };
 
         let cfg = Arc::clone(&config);
@@ -454,6 +477,7 @@ impl CcRenderer {
                     scene_state_tx,
                     hud_rx,
                     overlay,
+                    offline_gate,
                 );
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
@@ -472,6 +496,7 @@ impl CcRenderer {
             grab_cmd_tx,
             scene_state_rx,
             hud_tx,
+            offline,
         })
     }
 
@@ -489,10 +514,18 @@ impl CcRenderer {
         self.ready.load(Ordering::Acquire)
     }
 
+    /// Has the render thread exited (failed to start, or shut down)?
+    pub(super) fn thread_finished(&self) -> bool {
+        self.join.lock().as_ref().map_or(true, |j| j.is_finished())
+    }
+
     /// Finish GPU teardown before the host exits. Ordinary Drop remains
     /// nonblocking for pipeline owners that are not terminating the process.
     pub fn shutdown(&self) -> anyhow::Result<()> {
         let _ = self.shutdown_tx.try_send(());
+        if let Some(o) = &self.offline {
+            o.step_tx.lock().take();
+        }
         if let Some(thread) = self.join.lock().take() {
             thread
                 .join()
@@ -767,6 +800,7 @@ fn run_bevy_app(
     scene_state_tx: tokio::sync::watch::Sender<SceneState>,
     hud_rx: watch::Receiver<Option<super::office::home_hud::HomeHud>>,
     overlay: Option<super::overlay::OverlaySink>,
+    offline: Option<super::bevy_app::OfflineGate>,
 ) {
     super::bevy_app::run(
         config,
@@ -781,5 +815,6 @@ fn run_bevy_app(
         scene_state_tx,
         hud_rx,
         overlay,
+        offline,
     );
 }

@@ -676,6 +676,15 @@ impl CcRenderNode {
             .map(|f| Self::frame_to_pose(&f))
     }
 
+    /// A live face envelope (`LiveLinkFaceNode`, `GameInputFaceNode`,
+    /// `FaceMixNode`) as the node applies it: the weights, plus the head
+    /// rotation in `head_rotation`.
+    pub fn live_pose_from_json(v: &serde_json::Value) -> Option<ArkitPose> {
+        let mut pose = Self::arkit_pose_from_json(v)?;
+        add_head_rotation(&mut pose, &RuntimeData::Json(v.clone()));
+        Some(pose)
+    }
+
     /// Decode an envelope. Same shape as `Live2DRenderNode::decode_envelope`
     /// but we also handle skeletal-pose JSON shipped by `KimodoMotionNode`.
     fn decode_envelope(data: &RuntimeData) -> Option<RendererInput> {
