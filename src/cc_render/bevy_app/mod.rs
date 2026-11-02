@@ -655,6 +655,12 @@ pub(super) fn run(
     if config.cc5_materials {
         app.add_plugins(crate::cc_render::cc5_materials::Cc5MaterialsPlugin);
     }
+    // Mips for alpha-cutout hair cards (with or without the CC5 shaders),
+    // after any texture cap (which runs before this set).
+    app.add_systems(
+        Update,
+        crate::cc_render::cc5_materials::cutout_mipmaps.in_set(crate::cc_render::cc5_materials::Cc5MaterialsSet),
+    );
     // CC_AVATAR_MAX_TEXTURE: shrink large maps as they load (before the CC5
     // materials build mips from them), to leave a shared GPU's memory free.
     let max_texture = texture_cap::MaxTexture::from_env()
