@@ -42,13 +42,20 @@ fn morph_vertex(vertex_in: Vertex) -> Vertex {
 // bother morphing the normals and tangents.
 fn morph_prev_vertex(vertex_in: Vertex) -> Vertex {
     var vertex = vertex_in;
+    // cc-render patch: the morph targets are indexed from the mesh's own first
+    // vertex, as in `morph_vertex`. Upstream 0.15.3 used the raw index here, so
+    // a mesh placed past the start of the shared vertex buffer read another
+    // vertex's deltas for its previous position: wrong motion vectors on all
+    // morph-driven motion, which TAA smears (hair cards "flow").
+    let first_vertex = mesh[vertex.instance_index].first_vertex_index;
+    let vertex_index = vertex.index - first_vertex;
     let weight_count = morph::layer_count();
     for (var i: u32 = 0u; i < weight_count; i ++) {
         let weight = morph::prev_weight_at(i);
         if weight == 0.0 {
             continue;
         }
-        vertex.position += weight * morph::morph(vertex.index, morph::position_offset, i);
+        vertex.position += weight * morph::morph(vertex_index, morph::position_offset, i);
         // Don't bother morphing normals and tangents; we don't need them for
         // motion vector calculation.
     }

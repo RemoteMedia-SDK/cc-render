@@ -18,6 +18,13 @@ mesh no longer panics under TAA (the last).
   5 offsets, not 3. A skinned + morphed mesh drawn with motion vectors (TAA)
   binds batch, skin, morph, previous skin and previous morph offsets, and 0.15.3
   panics with index out of bounds as soon as such a mesh animates.
+- `bevy_pbr/src/prepass/prepass.wgsl` (`morph_prev_vertex`): the previous
+  frame's morph is read at the vertex's index within its mesh
+  (`vertex.index - first_vertex_index`, as `morph_vertex` does). 0.15.3 used
+  the raw index, so a morphed mesh past the start of the shared vertex buffer
+  got another vertex's deltas for its previous position: garbage motion vectors
+  wherever morphs move the surface, which TAA smears (hair cards near the mouth
+  "flow like sand").
 
 Bevy 0.17 still has 64. When upgrading Bevy, re-copy both crates at the new
 version and reapply these changes (or drop the patch if upstream lifts the
