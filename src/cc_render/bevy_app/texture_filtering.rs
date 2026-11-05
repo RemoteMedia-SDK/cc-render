@@ -179,6 +179,12 @@ mod tests {
                 width: 8,
                 height: 4,
                 scene_filename: None,
+                env_background: false,
+                env_background_brightness: None,
+                cc5_materials: false,
+                studio_lighting: false,
+                transparent: false,
+                quality: None,
             });
         install(&mut app);
         app.finish();

@@ -1,7 +1,7 @@
 //! `CcRenderNode` — streaming-pipeline wrapper around [`super::CcRenderer`].
 //!
 //! Consumes JSON envelopes (`kind = "blendshapes" | "skeletal_pose" |
-//! "barge_in" | "motion_goal" | "home_hud"`) on its reactive input path and emits
+//! "barge_in" | "motion_goal" | "home_hud" | "face_mask"`) on its reactive input path and emits
 //! `RuntimeData::Video` frames from `tick()` —
 //! `pacing_nature() = ClockedToOutboundMedia` with a wall fallback at
 //! `config.fps`. The Bevy thread free-runs and produces frames; the
@@ -21,7 +21,7 @@ use remotemedia_plugin_sdk::types::{AudioSamples, Error, PixelFormat, RuntimeDat
 use crate::arkit::{BlendshapeFrame, ARKIT_BLENDSHAPE_NAMES};
 use crate::session_control::{aux_port_of, BARGE_IN_PORT};
 
-use super::renderer::{ArkitPose, CcRenderer, Renderer, RendererConfig, SkeletalPose};
+use super::renderer::{ArkitPose, CcRenderer, Present, RenderQuality, Renderer, RendererConfig, SkeletalPose};
 
 /// Local `Result` alias so the ported source keeps the bare-name
 /// `Result<T>` style from the original module.
@@ -42,6 +42,16 @@ pub struct CcRenderConfig {
     /// scale, light stripping).
     pub scene_glb_path: Option<PathBuf>,
     pub scene_package_path: Option<PathBuf>,
+    /// Environment map as the background (and its brightness). Forwarded
+    /// to `RendererConfig::env_background(_brightness)`.
+    pub env_background: bool,
+    pub env_background_brightness: Option<f32>,
+    /// CC5 shaders for materials with `extras.cc5`. Forwarded to
+    /// `RendererConfig::cc5_materials`.
+    pub cc5_materials: bool,
+    /// The avatar editor's lighting and grading. Forwarded to
+    /// `RendererConfig::studio_lighting`.
+    pub studio_lighting: bool,
     /// When true, `tick()` emits `RuntimeData::Video` frames continuously
     /// once the renderer is ready, regardless of upstream audio /
     /// blendshape arrival. Buffered speech drains on that same presentation
@@ -56,6 +66,11 @@ pub struct CcRenderConfig {
     pub scene_key_file: Option<PathBuf>,
     /// Fixed asset data, verified against the registered sampler's content hash.
     pub scene_geometry_file: Option<PathBuf>,
+    /// `RendererConfig::present`: `Overlay` draws on the desktop and emits
+    /// no video.
+    pub present: Present,
+    /// `RendererConfig::quality`; also turns physics off below `High`.
+    pub quality: Option<RenderQuality>,
 }
 
 impl Default for CcRenderConfig {
@@ -69,9 +84,15 @@ impl Default for CcRenderConfig {
             video_stream_id: "avatar.video".to_string(),
             scene_glb_path: None,
             scene_package_path: None,
+            env_background: false,
+            env_background_brightness: None,
+            cc5_materials: false,
+            studio_lighting: true,
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
+            present: Present::Capture,
+            quality: None,
         }
     }
 }
@@ -164,6 +185,44 @@ impl AudioBuf {
     }
 }
 
+/// Pose keys carrying the performer's head rotation (radians) from an
+/// envelope's `head_rotation: [yaw, pitch, roll]` (e.g. `LiveLinkFaceNode`).
+/// They ride in the weight map to reach the face-bone system; no morph
+/// mapping uses them. Absent keys leave the head bones alone.
+pub(crate) const HEAD_ROTATION_KEYS: [&str; 3] = ["headYaw", "headPitch", "headRoll"];
+
+fn add_head_rotation(pose: &mut ArkitPose, data: &RuntimeData) {
+    let RuntimeData::Json(v) = data else { return };
+    let Some(rot) = v.get("head_rotation").and_then(|r| r.as_array()) else { return };
+    if rot.len() != 3 {
+        return;
+    }
+    for (key, value) in HEAD_ROTATION_KEYS.iter().zip(rot) {
+        if let Some(r) = value.as_f64().filter(|r| r.is_finite()) {
+            pose.weights.insert((*key).to_string(), r as f32);
+        }
+    }
+}
+
+/// ARKit's `mouthClose` seals the lips over an open jaw, so the visible
+/// lip gap is `jawOpen - mouthClose`. CC5 exports `Mouth_Lips_Together_*`
+/// (its `mouthClose` targets) with no vertex data, so the morphs can't do
+/// it; open the jaw (bone and `Jaw_Open`) by the gap instead.
+/// `CC_FACE_MOUTH_CLOSE_FOLD=0` keeps the raw weights for avatars whose
+/// lips-together morphs are populated.
+fn fold_mouth_close_into_jaw(weights: &mut std::collections::HashMap<String, f32>) {
+    static ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var("CC_FACE_MOUTH_CLOSE_FOLD").map_or(true, |v| v != "0")
+    });
+    if !*ENABLED {
+        return;
+    }
+    let close = weights.get("mouthClose").copied().unwrap_or(0.0);
+    if let Some(jaw) = weights.get_mut("jawOpen") {
+        *jaw = (*jaw - close).max(0.0);
+    }
+}
+
 fn audio_samples_per_tick(frame: u64, rate: u32, fps: u64) -> usize {
     (((frame + 1) as u128 * rate as u128 / fps as u128)
         - (frame as u128 * rate as u128 / fps as u128)) as usize
@@ -173,6 +232,8 @@ pub struct CcRenderNode {
     config: CcRenderConfig,
     renderer: Arc<dyn Renderer>,
     frame_counter: Arc<AtomicU64>,
+    /// The last frame count logged at info: each milestone once.
+    frames_logged: AtomicU64,
     /// First pts seen (anchor); subsequent frame timestamps are
     /// reported relative to this so y4m playback aligns with audio
     /// captured by the same session anchor.
@@ -271,11 +332,19 @@ impl CcRenderNode {
             offline_frame_step: None,
             scene_glb_path: config.scene_glb_path.clone(),
             scene_package_path: config.scene_package_path.clone(),
+            env_background: config.env_background,
+            env_background_brightness: config.env_background_brightness,
+            cc5_materials: config.cc5_materials,
+            studio_lighting: config.studio_lighting,
+            present: config.present.clone(),
+            quality: config.quality,
             // Physics on by default — needed for hair / breast /
             // skirt / tongue jiggle (see `secondary::auto_detect_chains`).
             // Set `CC_PHYSICS_DISABLE=1` to skip the install for an
             // A/B render without rebuilding.
-            physics: if std::env::var("CC_PHYSICS_DISABLE").as_deref() == Ok("1") {
+            physics: if std::env::var("CC_PHYSICS_DISABLE").as_deref() == Ok("1")
+                || config.quality.is_some_and(|q| !q.physics())
+            {
                 None
             } else {
                 Some(super::renderer::PhysicsConfig::default())
@@ -294,6 +363,7 @@ impl CcRenderNode {
             config,
             renderer,
             frame_counter: Arc::new(AtomicU64::new(0)),
+            frames_logged: AtomicU64::new(0),
             anchor_pts_ms: Arc::new(tokio::sync::Mutex::new(None)),
             audio_buf: Arc::new(parking_lot::Mutex::new(AudioBuf::new())),
             ready_signaled: Arc::new(AtomicBool::new(false)),
@@ -517,6 +587,13 @@ impl CcRenderNode {
                 self.renderer.home_hud(hud);
                 Ok(true)
             }
+            Some("face_mask") => {
+                // Display only: shows or hides the avatar's removable mask.
+                let worn = value["worn"].as_bool()
+                    .ok_or_else(|| Error::Execution("face_mask needs a boolean \"worn\"".into()))?;
+                self.renderer.face_mask(worn);
+                Ok(true)
+            }
             Some("motion_tick") => {
                 if let (Some(session), Some(revision), Some(pts)) = (
                     value["session_id"].as_str(), value["generation_revision"].as_u64(),
@@ -538,7 +615,11 @@ impl CcRenderNode {
     }
 
     fn accept_face(&self, pose: ArkitPose, data: &RuntimeData) -> Result<()> {
-        if self.config.realtime_mode {
+        // Live capture (`LiveLinkFaceNode`, `live: true`) has no speech
+        // audio to pace against: queued behind the audio content clock it
+        // would never display. Apply it latest-wins instead.
+        let live = matches!(data, RuntimeData::Json(v) if v["live"].as_bool() == Some(true));
+        if self.config.realtime_mode && !live {
             let epoch = match data {
                 RuntimeData::Json(v) => v["speech_epoch"].as_u64(),
                 _ => None,
@@ -578,6 +659,14 @@ impl CcRenderNode {
         Ok(true)
     }
 
+    /// Whether to log `total` frames at info: the first frame and every
+    /// 60th, each once. A tick that emits nothing (the desktop overlay never
+    /// does) leaves the count where it was and logs nothing.
+    fn frame_milestone(&self, total: u64) -> bool {
+        (total == 1 || (total > 0 && total % 60 == 0))
+            && self.frames_logged.swap(total, Ordering::Relaxed) != total
+    }
+
     pub fn frames_emitted(&self) -> u64 {
         self.frame_counter.load(Ordering::Relaxed)
     }
@@ -594,6 +683,7 @@ impl CcRenderNode {
             let w = f.arkit_52[i].clamp(0.0, 1.0);
             weights.insert((*name).to_string(), w);
         }
+        fold_mouth_close_into_jaw(&mut weights);
         ArkitPose {
             weights,
             pts_ms: f.pts_ms,
@@ -606,6 +696,15 @@ impl CcRenderNode {
         BlendshapeFrame::from_json(v)
             .ok()
             .map(|f| Self::frame_to_pose(&f))
+    }
+
+    /// A live face envelope (`LiveLinkFaceNode`, `GameInputFaceNode`,
+    /// `FaceMixNode`) as the node applies it: the weights, plus the head
+    /// rotation in `head_rotation`.
+    pub fn live_pose_from_json(v: &serde_json::Value) -> Option<ArkitPose> {
+        let mut pose = Self::arkit_pose_from_json(v)?;
+        add_head_rotation(&mut pose, &RuntimeData::Json(v.clone()));
+        Some(pose)
     }
 
     /// Decode an envelope. Same shape as `Live2DRenderNode::decode_envelope`
@@ -821,7 +920,9 @@ impl AsyncStreamingNode for CcRenderNode {
                         *slot = Some(std::time::Instant::now());
                     }
                 }
-                self.accept_face(Self::frame_to_pose(&f), &data)?;
+                let mut pose = Self::frame_to_pose(&f);
+                add_head_rotation(&mut pose, &data);
+                self.accept_face(pose, &data)?;
             }
             Some(RendererInput::Skeletal(s)) => {
                 if let Some(stream) = &s.stream {
@@ -1247,8 +1348,8 @@ impl AsyncStreamingNode for CcRenderNode {
                 }
             }
             let total = self.frame_counter.load(Ordering::Relaxed);
-            if total == 1 || total % 60 == 0 {
-                tracing::info!(
+            if self.frame_milestone(total) {
+                tracing::debug!(
                     target: "cc_render",
                     "CcRenderNode: total Video frames emitted (realtime) = {}",
                     total
@@ -1519,8 +1620,8 @@ impl AsyncStreamingNode for CcRenderNode {
             emitted += 1;
         }
         let total = self.frame_counter.load(Ordering::Relaxed);
-        if total == 1 || total % 60 == 0 {
-            tracing::info!(
+        if self.frame_milestone(total) {
+            tracing::debug!(
                 target: "cc_render",
                 "CcRenderNode: total Video frames emitted = {}",
                 total
@@ -1567,10 +1668,14 @@ mod realtime_speech_tests {
         office: parking_lot::Mutex<Option<super::super::office::controller::OfficeSnapshot>>,
         commands: parking_lot::Mutex<Vec<super::super::office::controller::OfficeCommand>>,
         huds: parking_lot::Mutex<Vec<Option<super::super::office::home_hud::HomeHud>>>,
+        masks: parking_lot::Mutex<Vec<bool>>,
     }
     impl Renderer for MockRenderer {
         fn home_hud(&self, hud: Option<super::super::office::home_hud::HomeHud>) {
             self.huds.lock().push(hud);
+        }
+        fn face_mask(&self, worn: bool) {
+            self.masks.lock().push(worn);
         }
         fn scene_state(&self) -> super::super::renderer::SceneState {
             super::super::renderer::SceneState { office: self.office.lock().clone(), ..Default::default() }
@@ -1624,6 +1729,41 @@ mod realtime_speech_tests {
     }
 
     #[test]
+    fn mouth_close_shrinks_the_jaw_to_the_lip_gap() {
+        let mut arkit_52 = [0.0f32; 52];
+        let idx = |n: &str| ARKIT_BLENDSHAPE_NAMES.iter().position(|x| *x == n).unwrap();
+        arkit_52[idx("jawOpen")] = 0.6;
+        arkit_52[idx("mouthClose")] = 0.5;
+        let pose = CcRenderNode::frame_to_pose(&BlendshapeFrame::new(arkit_52, 0, None));
+        assert!((pose.weights["jawOpen"] - 0.1).abs() < 1e-6);
+        arkit_52[idx("mouthClose")] = 0.9;
+        let pose = CcRenderNode::frame_to_pose(&BlendshapeFrame::new(arkit_52, 0, None));
+        assert_eq!(pose.weights["jawOpen"], 0.0);
+    }
+
+    #[tokio::test]
+    async fn live_faces_bypass_the_speech_queue() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig { realtime_mode: true, ..Default::default() },
+            renderer.clone(),
+        );
+        let mut weights = vec![0.0f32; 52];
+        weights[17] = 0.7; // jawOpen
+        for (pts_ms, live) in [(500, true), (16, true), (900, false)] {
+            let face = serde_json::json!({"kind":"blendshapes", "arkit_52":weights,
+                "pts_ms":pts_ms, "live":live});
+            node.process_streaming(RuntimeData::Json(face), None, |_| Ok(())).await.unwrap();
+        }
+        // Live frames apply immediately, even with no audio played and out of pts order...
+        let poses = renderer.poses.lock();
+        assert_eq!(poses.iter().map(|p| p.pts_ms).collect::<Vec<_>>(), [500, 16]);
+        assert_eq!(poses[0].weights["jawOpen"], 0.7);
+        // ...while speech frames still wait for the audio content clock.
+        assert_eq!(node.audio_buf.lock().faces.len(), 1);
+    }
+
+    #[test]
     fn home_hud_is_display_only_and_closed() {
         let renderer = Arc::new(MockRenderer::default());
         let node = CcRenderNode::with_renderer(CcRenderConfig::default(), renderer.clone());
@@ -1641,6 +1781,20 @@ mod realtime_speech_tests {
         assert!(node.motion_driver.lock().current_goal().is_none());
         assert!(node.scene_task.lock().is_none() && node.scene_delivery.lock().pending.is_none());
         assert!(renderer.commands.lock().is_empty());
+    }
+
+    #[test]
+    fn face_mask_is_display_only() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(CcRenderConfig::default(), renderer.clone());
+        for worn in [false, true] {
+            let msg = serde_json::json!({"kind":"face_mask","worn":worn});
+            assert!(node.accept_motion_control(&RuntimeData::Json(msg)).unwrap());
+        }
+        assert!(node.accept_motion_control(&RuntimeData::Json(serde_json::json!({"kind":"face_mask"}))).is_err());
+        assert_eq!(*renderer.masks.lock(), [false, true]);
+        assert!(node.motion_driver.lock().current_goal().is_none());
+        assert!(renderer.commands.lock().is_empty() && renderer.skeletal.lock().is_empty());
     }
 
     fn node_with_pending_scene() -> (CcRenderNode, serde_json::Value) {

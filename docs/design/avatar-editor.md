@@ -118,7 +118,7 @@ For scale, the slider moves vertices up to 12.3 cm and joints up to 11.8 cm.
 
 A CC5 HD character carries ~400 facial morph targets per face mesh (body 349,
 brows/lashes 395, tear line 437...). Bevy 0.15 refuses meshes with more than 64
-(`MAX_MORPH_WEIGHTS`), so the reference GLB has none (`cc5-fbx` drops them)
+(`MAX_MORPH_WEIGHTS`; cc-render patches it to 128, see below), so the reference GLB has none (`cc5-fbx` drops them)
 and the expressions live in a sidecar *expression pack*, applied on the CPU like
 the shaping sliders:
 
@@ -148,10 +148,21 @@ weights (Audio2Face) through a runtime `*.arkit_map*.json` (`{"mapping":
 {arkitName: [{morph, weight, meshes}]}}`; `meshes` is ignored since an expression
 spans all meshes).
 
-### Runtime: meshes with more than 64 morphs (design, not implemented)
+### Morph target limit: 128 (patched Bevy)
+
+cc-render builds against `bevy_mesh` / `bevy_pbr` 0.15.3 copies in `vendor/`
+(`[patch.crates-io]`) whose `MAX_MORPH_WEIGHTS` is 128 instead of 64, with the
+shader's `MorphWeights` array sized to match (`vendor/README.md`), enough for the
+67 CC5 morphs the 52 ARKit channels use. Bevy keeps targets dense (36 bytes per
+vertex per target): ~100 MB of GPU memory for those 67 on Beautiful (level 0),
+~590 MB for all ~400. `examples/morph_limit_check.rs` renders a quad moved only
+by its 128th target. The GLBs still carry no morphs (`cc5-fbx` drops them); baking
+the ARKit set into them is the next step.
+
+### Runtime: meshes with more than 128 morphs (design, not implemented)
 
 cc-render's runtime (`src/cc_render/bevy_app`) drives morph weights per frame
-from Audio2Face ARKit weights. For a character whose GLB exceeds 64 morphs per
+from Audio2Face ARKit weights. For a character whose GLB exceeds 128 morphs per
 mesh it would switch that mesh to the CPU path:
 
 1. Load the GLB without morphs (as now) and the character's expression pack +
@@ -167,10 +178,10 @@ mesh it would switch that mesh to the CPU path:
 3. Normals: morph targets in the GLB carry normal deltas; the CPU path would
    turn the normals of the touched region with `cc5_shape::normals`, as the
    editor does. Bone-driven parts (jaw, eyes) stay on the skeleton as today.
-4. Keep the GPU morph path for characters with ≤ 64 targets; pick per mesh at
+4. Keep the GPU morph path for characters with ≤ 128 targets; pick per mesh at
    load (count targets in the glTF, or the presence of an expression pack).
 
-Alternatives considered: splitting a mesh into ≤64-target primitives breaks
+Alternatives considered: splitting a mesh into ≤128-target primitives breaks
 along seams and still caps per primitive; a custom storage-buffer morph shader
 avoids the CPU upload but needs a forked skinning/morph pipeline in Bevy 0.15.
 
@@ -255,7 +266,7 @@ the base within 0.6 dE (AgX with a saturation boost: 5.1 and 0.9).
 ## Limits
 
 - The reference GLB drops CC5's ~400 facial morph targets (Bevy loads at most
-  64); they are applied on the CPU from the expression pack instead (above).
+  128, patched); they are applied on the CPU from the expression pack instead (above).
 - Joint *rotations* are not captured; sliders are applied as joint translations.
 - Normals are turned with the surface, not re-authored: a twist of the surface
   about its own normal does not turn tangents, and hard edges in CC5's normals

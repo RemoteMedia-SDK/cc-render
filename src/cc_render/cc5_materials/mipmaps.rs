@@ -85,6 +85,89 @@ pub(super) fn skin_mipmaps(
     }
 }
 
+/// Mip chains for alpha-cutout materials' textures (glTF `MASK`: the Saluki
+/// operators' hair, beard, brow and lash cards, which keep Bevy's
+/// StandardMaterial), once. Without them a fur texture drawn a few pixels
+/// across samples different texels every frame, and the strands crawl like
+/// sand whenever the face moves. The base colour's chain keeps the share of
+/// texels that pass the cutoff ([`preserve_coverage`]), so the fur doesn't
+/// thin out with distance.
+pub fn cutout_mipmaps(
+    materials: Res<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    mut done: Local<HashSet<AssetId<Image>>>,
+) {
+    for (_, m) in materials.iter() {
+        let AlphaMode::Mask(cutoff) = m.alpha_mode else { continue };
+        // The texture's alpha is multiplied by the base colour's before the test.
+        let texture_cutoff = (cutoff / m.base_color.alpha().max(1e-3)).clamp(0.0, 1.0);
+        let textures = [
+            (m.base_color_texture.as_ref(), Some(texture_cutoff)),
+            (m.normal_map_texture.as_ref(), None),
+            (m.metallic_roughness_texture.as_ref(), None),
+            (m.occlusion_texture.as_ref(), None),
+        ];
+        for (t, cut) in textures {
+            let Some(t) = t else { continue };
+            if done.contains(&t.id()) || images.get(t).is_none_or(|i| i.data.is_empty()) {
+                continue; // done, or not loaded yet
+            }
+            done.insert(t.id());
+            let Some(img) = images.get_mut(t) else { continue };
+            if generate_mips(img, cut.is_some()) {
+                if let Some(c) = cut {
+                    preserve_coverage(img, c);
+                }
+                debug!("cutout mipmaps: {:?} ({} levels)", t.id(), img.texture_descriptor.mip_level_count);
+            }
+        }
+    }
+}
+
+/// Scale each mip level's alpha so the share of texels at or above `cutoff`
+/// matches the full-size level's (averaged mips of sparse strands fall under
+/// the cutoff and vanish). RGBA8 with a mip chain from [`generate_mips`].
+pub fn preserve_coverage(img: &mut Image, cutoff: f32) {
+    let (w0, h0) = (img.texture_descriptor.size.width as usize, img.texture_descriptor.size.height as usize);
+    let levels = img.texture_descriptor.mip_level_count as usize;
+    let cut = (cutoff * 255.0).ceil().clamp(1.0, 255.0) as usize;
+    let mut offset = 0;
+    let mut target = None;
+    for k in 0..levels {
+        let n = (w0 >> k).max(1) * (h0 >> k).max(1) * 4;
+        let Some(level) = img.data.get_mut(offset..offset + n) else { return };
+        offset += n;
+        let mut hist = [0usize; 256];
+        for p in level.chunks_exact(4) {
+            hist[p[3] as usize] += 1;
+        }
+        let total = n / 4;
+        let covered = hist[cut..].iter().sum::<usize>();
+        let Some(share) = target else {
+            if covered == 0 || covered == total {
+                return; // nothing drawn, or everything: no change with distance
+            }
+            target = Some(covered as f64 / total as f64);
+            continue;
+        };
+        // The alpha at or above which the full-size share of texels lies,
+        // scaled up to the cutoff (never down: denser mips stay as they are).
+        let want = ((share * total as f64).round() as usize).max(1);
+        let (mut above, mut t) = (0, 255);
+        while t > 0 && above + hist[t] < want {
+            above += hist[t];
+            t -= 1;
+        }
+        if t == 0 || t >= cut {
+            continue;
+        }
+        let scale = cut as f32 / t as f32;
+        for p in level.chunks_exact_mut(4) {
+            p[3] = (p[3] as f32 * scale).round().min(255.0) as u8;
+        }
+    }
+}
+
 fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
 }
@@ -181,5 +264,47 @@ mod tests {
         assert_eq!(img.texture_descriptor.mip_level_count, 2);
         assert_eq!(&img.data[16..20], &[255, 0, 0, 64]); // red, a quarter covered
         assert!(!generate_mips(&mut img, true)); // only once
+    }
+
+    #[test]
+    fn cutout_mips_keep_their_coverage() {
+        // 4x4 sparse strands: 4 of 16 texels opaque, one per 2x2 block, so the
+        // averaged mip is a quarter covered everywhere and a 0.5 cutoff would
+        // drop it all.
+        let mut data = vec![0u8; 4 * 4 * 4];
+        for (x, y) in [(0, 0), (2, 0), (1, 3), (3, 2)] {
+            data[(y * 4 + x) * 4..][..4].copy_from_slice(&[40, 30, 20, 255]);
+        }
+        let mut img = Image::new(
+            Extent3d { width: 4, height: 4, depth_or_array_layers: 1 },
+            TextureDimension::D2,
+            data,
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        );
+        assert!(generate_mips(&mut img, true));
+        let mip1: Vec<u8> = img.data[64..80].chunks_exact(4).map(|p| p[3]).collect();
+        assert_eq!(mip1, [64; 4]);
+        preserve_coverage(&mut img, 0.5);
+        // A quarter of the texels drawn at full size; all four mip texels tie,
+        // so all are lifted to the cutoff (the nearest share a 2x2 level has).
+        let mip1: Vec<u8> = img.data[64..80].chunks_exact(4).map(|p| p[3]).collect();
+        assert!(mip1.iter().all(|&a| a >= 128), "{mip1:?}");
+        assert_eq!(&img.data[..64].chunks_exact(4).filter(|p| p[3] == 255).count(), &4, "level 0 untouched");
+    }
+
+    #[test]
+    fn coverage_scaling_leaves_dense_levels_alone() {
+        let mut img = Image::new(
+            Extent3d { width: 2, height: 2, depth_or_array_layers: 1 },
+            TextureDimension::D2,
+            vec![9, 9, 9, 255, 9, 9, 9, 255, 9, 9, 9, 255, 9, 9, 9, 0],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        );
+        assert!(generate_mips(&mut img, true));
+        let before = img.data.clone();
+        preserve_coverage(&mut img, 0.5);
+        assert_eq!(img.data, before, "the 3/4-covered mip is already over the cutoff");
     }
 }

@@ -42,7 +42,7 @@ use serde_json::Value;
 
 mod human_color;
 mod mipmaps;
-pub use mipmaps::generate_mips;
+pub use mipmaps::{cutout_mipmaps, generate_mips, preserve_coverage};
 
 const SKIN_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b804);
 const HAIR_SHADER: Handle<Shader> = Handle::weak_from_u128(0x6c3a_9e1f_5b2d_4c8e_a7f0_3d91_c5e2_b805);

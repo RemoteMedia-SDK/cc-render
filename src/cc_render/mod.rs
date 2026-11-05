@@ -25,6 +25,8 @@
 pub mod bevy_app;
 pub mod cc5_materials;
 pub mod node;
+pub mod offline;
+pub mod overlay;
 pub mod renderer;
 pub mod scene_package;
 pub mod scene_mechanism;
@@ -44,12 +46,13 @@ mod cloth_under_covers_tests;
 mod cloth_gpu_probe_tests;
 pub mod scene_cloth;
 pub mod soft_tissue;
+pub mod studio;
 // CC5 shaping sliders live in the `cc5-shape` crate (also a Python module).
 pub use cc5_shape::{glb as shape_glb, pack as shape};
 
 pub use node::{CcRenderConfig, CcRenderNode};
 #[allow(unused_imports)]
-pub use renderer::{ArkitPose, CcRenderer, RenderedFrame, Renderer, RendererConfig, SkeletalPose};
+pub use renderer::{ArkitPose, CcRenderer, Present, RenderQuality, RenderedFrame, Renderer, RendererConfig, SkeletalPose};
 
 #[allow(unused_imports)]
 pub use renderer::{

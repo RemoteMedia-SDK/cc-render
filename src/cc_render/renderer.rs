@@ -9,7 +9,7 @@
 //! talk to it via channels.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use tokio::sync::watch;
@@ -134,8 +134,119 @@ pub struct RendererConfig {
     pub scene_glb_path: Option<PathBuf>,
     /// Complete authored environment package; supersedes the loose scene GLB.
     pub scene_package_path: Option<PathBuf>,
+    /// Show the environment map (`env://pisa_specular…`, the map that
+    /// already lights the avatar) as the background instead of the flat
+    /// `CC_AVATAR_CLEAR_COLOR` (or the studio backdrop).
+    pub env_background: bool,
+    /// Its brightness in cd/m². `None`: the map's own values at the
+    /// camera's exposure ([`env_background_brightness`]).
+    pub env_background_brightness: Option<f32>,
+    /// Render materials that carry CC5 shader data (`extras.cc5` + the maps
+    /// in `<name>.cc5maps/`, see `cc5_materials`) with cc-render's CC5
+    /// skin / hair / eye / mouth shaders instead of glTF PBR, as the avatar
+    /// editor does. The camera then anti-aliases with TAA instead of MSAA:
+    /// the CC5 hair shader's dithered strand coverage needs it. GLBs
+    /// without `extras.cc5` render as before.
+    pub cc5_materials: bool,
+    /// Light and grade like the avatar editor (`cc_render::studio`, calibrated
+    /// against CC5's viewport): its portrait light rig, exposure, IBL level,
+    /// SSAO, TAA, sharpening and colour grading, and its grey-blue studio
+    /// backdrop (unless `env_background`). The camera keeps its framing and
+    /// field of view (`CC_AVATAR_CAMERA_FOV_DEG=17.06` matches the editor's
+    /// lens). Calibrated with `cc5_materials` (the CC5 shaders). On by
+    /// default; `false` restores the renderer's earlier 3-light rig, AgX
+    /// camera and flat `CC_AVATAR_CLEAR_COLOR` background.
+    pub studio_lighting: bool,
 
     pub physics: Option<PhysicsConfig>,
+    /// Where frames go: back to the node (`Capture`, the default) or onto
+    /// the desktop (`Overlay`, see [`super::overlay`]).
+    pub present: Present,
+    /// A cost preset for the studio look; `None` keeps the full look
+    /// (and `CC_AVATAR_MAX_TEXTURE` alone caps textures).
+    pub quality: Option<RenderQuality>,
+}
+
+/// Where the rendered frames go.
+#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Present {
+    /// Read back and returned through [`CcRenderer::drain_frames`] (the
+    /// node emits them as `RuntimeData::Video`).
+    #[default]
+    Capture,
+    /// Drawn on top of the desktop; nothing is returned to the node.
+    Overlay(super::overlay::OverlayConfig),
+    /// Off-line, for [`super::offline::OfflineRenderer`]: a transparent
+    /// background, a fixed `1/fps` time step, and one frame per pose,
+    /// rendered as fast as the GPU goes.
+    Offline,
+}
+
+/// How much of the studio look to render: most of the renderer's GPU time
+/// and memory is here, not in getting pixels to the screen.
+///
+/// | | low | medium | high |
+/// |---|---|---|---|
+/// | shadows | off | 1024² | 4096² |
+/// | SSAO, bloom, sharpening | off | off | on |
+/// | anti-aliasing | MSAA 4× | MSAA 4× | TAA |
+/// | textures (px per side) | 512 | 1024 | full |
+/// | hair / body physics | off | off | on |
+///
+/// The CC5 shaders (`cc5_materials`) are independent of the preset; their
+/// hair's dithered strands need TAA, so with them every preset uses TAA.
+/// `CC_AVATAR_MAX_TEXTURE` still overrides the texture cap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RenderQuality {
+    Low,
+    Medium,
+    High,
+}
+
+impl RenderQuality {
+    /// Shadow map side, or `None` for no shadows.
+    pub fn shadow_map(self) -> Option<usize> {
+        match self {
+            Self::Low => None,
+            Self::Medium => Some(1024),
+            Self::High => Some(4096),
+        }
+    }
+    /// TAA, SSAO, bloom and sharpening (else MSAA 4×).
+    pub fn post_effects(self) -> bool {
+        self == Self::High
+    }
+    pub fn max_texture(self) -> Option<u32> {
+        match self {
+            Self::Low => Some(512),
+            Self::Medium => Some(1024),
+            Self::High => None,
+        }
+    }
+    pub fn physics(self) -> bool {
+        self == Self::High
+    }
+}
+
+impl std::str::FromStr for RenderQuality {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s.to_ascii_lowercase().as_str() {
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
+            _ => Err(format!("{s}: expected low, medium or high")),
+        }
+    }
+}
+
+/// Default background brightness for [`RendererConfig::env_background`]: the
+/// map's texels shown at their own value under exposure `ev100` (Bevy's
+/// exposure is 1 / (1.2 * 2^ev100)).
+pub fn env_background_brightness(ev100: f32) -> f32 {
+    1.2 * 2f32.powf(ev100)
 }
 
 impl Default for RendererConfig {
@@ -149,8 +260,14 @@ impl Default for RendererConfig {
             offline_frame_step: None,
             scene_glb_path: None,
             scene_package_path: None,
+            env_background: false,
+            env_background_brightness: None,
+            cc5_materials: false,
+            studio_lighting: true,
 
             physics: None,
+            present: Present::Capture,
+            quality: None,
         }
     }
 }
@@ -191,6 +308,9 @@ pub trait Renderer: Send + Sync {
     fn office_command(&self, _cmd: super::office::controller::OfficeCommand) {}
     /// Display-only overlay state; `None` hides the panel.
     fn home_hud(&self, _hud: Option<super::office::home_hud::HomeHud>) {}
+    /// Wear (`true`, the default) or take off the avatar's face mask: its
+    /// primitives whose material carries `extras.face_mask`. Display only.
+    fn face_mask(&self, _worn: bool) {}
     fn spawn_prop(&self, _cmd: PropCmd) {}
     fn despawn_prop(&self, _id: PropId) {}
     fn grab(&self, _cmd: GrabCmd) {}
@@ -235,6 +355,16 @@ pub struct CcRenderer {
     weather_rx: watch::Receiver<Option<super::scene_weather::WeatherSnapshot>>,
     weather_revision: std::sync::atomic::AtomicU64,
     water: super::scene_water::WaterControl,
+    face_mask_tx: watch::Sender<bool>,
+    /// `Present::Offline`: lets one frame render per step; frames come
+    /// straight from the render world.
+    pub(super) offline: Option<OfflineChannels>,
+}
+
+pub(super) struct OfflineChannels {
+    /// Dropped at shutdown so a waiting frame step gives up.
+    pub step_tx: parking_lot::Mutex<Option<crossbeam_channel::Sender<()>>>,
+    pub frames: crossbeam_channel::Receiver<super::bevy_app::OfflineFrame>,
 }
 
 impl Renderer for CcRenderer {
@@ -272,6 +402,9 @@ impl Renderer for CcRenderer {
     }
     fn home_hud(&self, hud: Option<super::office::home_hud::HomeHud>) {
         Self::home_hud(self, hud);
+    }
+    fn face_mask(&self, worn: bool) {
+        Self::set_face_mask(self, worn);
     }
     fn grab(&self, cmd: GrabCmd) {
         let _ = self.grab_cmd_tx.send(GrabOrRelease::Grab(cmd));
@@ -350,6 +483,29 @@ impl CcRenderer {
             requests: weather_requests, snapshots: weather_snapshots,
         };
 
+        let (face_mask_tx, face_mask_rx) = watch::channel(true);
+
+        // The overlay window comes up first: it picks the render size
+        // (side x monitor scale), and a failure fails the spawn.
+        let overlay = match &config.present {
+            Present::Overlay(oc) => {
+                let target_px = Arc::new(std::sync::atomic::AtomicU32::new(oc.size));
+                let (tx, _detached) = super::overlay::spawn_presenter(oc.clone(), target_px.clone())?;
+                Some(super::overlay::OverlaySink { tx, target_px })
+            }
+            Present::Capture | Present::Offline => None,
+        };
+        let (offline, offline_gate) = if config.present == Present::Offline {
+            let (step_tx, step_rx) = crossbeam_channel::bounded::<()>(1);
+            let (frames_tx, frames) = crossbeam_channel::unbounded();
+            (
+                Some(OfflineChannels { step_tx: parking_lot::Mutex::new(Some(step_tx)), frames }),
+                Some(super::bevy_app::OfflineGate { step_rx, frames_tx }),
+            )
+        } else {
+            (None, None)
+        };
+
         let (water, water_bridge) = super::scene_water::WaterControl::new(
             package.as_ref().map_or(&[], |p| p.water_fixtures.as_slice()));
         let cfg = Arc::clone(&config);
@@ -372,10 +528,14 @@ impl CcRenderer {
                     package,
                     weather_bridge,
                     water_bridge,
+                    face_mask_rx,
+                    overlay,
+                    offline_gate,
                 );
                 tracing::warn!(target: "cc_render", "cc-render-bevy thread exited");
             })?;
 
+        LIVE_RENDERERS.fetch_add(1, Ordering::AcqRel);
         Ok(Self {
             pose_tx,
             skeletal_pose_tx,
@@ -393,6 +553,8 @@ impl CcRenderer {
             weather_tx,
             weather_rx,
             weather_revision: std::sync::atomic::AtomicU64::new(0),
+            face_mask_tx,
+            offline,
         })
     }
 
@@ -425,6 +587,14 @@ impl CcRenderer {
         let _ = self.hud_tx.send(hud);
     }
 
+    /// Wear (`true`, the default) or take off the avatar's face mask: the
+    /// primitives whose glTF material carries `extras.face_mask` (the Saluki
+    /// operators' balaclavas and masks, see `scripts/saluki/glb_materials.py`).
+    /// Takes effect on the next frame, also before the avatar has loaded.
+    pub fn set_face_mask(&self, worn: bool) {
+        let _ = self.face_mask_tx.send(worn);
+    }
+
     /// Has the Bevy app finished spawning the GLB scene, captured
     /// bind-pose data, and rendered a few frames after that? Drives
     /// the smoke binary's "start writing the MP4 now" decision —
@@ -434,10 +604,18 @@ impl CcRenderer {
         self.ready.load(Ordering::Acquire)
     }
 
+    /// Has the render thread exited (failed to start, or shut down)?
+    pub(super) fn thread_finished(&self) -> bool {
+        self.join.lock().as_ref().map_or(true, |j| j.is_finished())
+    }
+
     /// Finish GPU teardown before the host exits. Ordinary Drop remains
     /// nonblocking for pipeline owners that are not terminating the process.
     pub fn shutdown(&self) -> anyhow::Result<()> {
         let _ = self.shutdown_tx.try_send(());
+        if let Some(o) = &self.offline {
+            o.step_tx.lock().take();
+        }
         if let Some(thread) = self.join.lock().take() {
             thread
                 .join()
@@ -710,7 +888,18 @@ impl Drop for CcRenderer {
         // historically flaky around wgpu drops and we don't want
         // the calling thread to hang).
         let _ = self.shutdown_tx.try_send(());
+        LIVE_RENDERERS.fetch_sub(1, Ordering::AcqRel);
     }
+}
+
+/// `CcRenderer`s spawned and not yet dropped in this process.
+static LIVE_RENDERERS: AtomicUsize = AtomicUsize::new(0);
+
+/// How many `CcRenderer`s are alive in this process (each one a Bevy app
+/// rendering on the GPU), e.g. for a host that keeps exactly one session
+/// preloaded: it preloads again once the last viewer's renderer is gone.
+pub fn live_renderers() -> usize {
+    LIVE_RENDERERS.load(Ordering::Acquire)
 }
 
 /// Body of the dedicated render thread. Constructs the Bevy `App`
@@ -731,6 +920,9 @@ fn run_bevy_app(
     package: Option<super::scene_package::ScenePackage>,
     weather_bridge: super::scene_weather::WeatherBridge,
     water_bridge: super::scene_water::WaterBridge,
+    face_mask_rx: watch::Receiver<bool>,
+    overlay: Option<super::overlay::OverlaySink>,
+    offline: Option<super::bevy_app::OfflineGate>,
 ) {
     super::bevy_app::run(
         config,
@@ -747,5 +939,8 @@ fn run_bevy_app(
         package,
         weather_bridge,
         water_bridge,
+        face_mask_rx,
+        overlay,
+        offline,
     );
 }

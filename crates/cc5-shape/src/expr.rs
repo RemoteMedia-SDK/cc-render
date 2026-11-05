@@ -1,8 +1,8 @@
 //! CC5 facial expressions (morph targets) on the CPU: load an expression pack and
 //! evaluate a weighted mix into per-vertex deltas.
 //!
-//! A CC5 HD character has ~400 facial morphs per face mesh; Bevy loads at most 64
-//! morph targets per mesh, so they are kept out of the GLB (`cc5-fbx` drops
+//! A CC5 HD character has ~400 facial morphs per face mesh; Bevy loads at most 256
+//! morph targets per mesh (cc-render's patched Bevy, upstream 64), so they are kept out of the GLB (`cc5-fbx` drops
 //! them) and applied here instead, like the shaping sliders. The pack is built
 //! from the reference FBX's morph targets by `cc5-fbx expressions`:
 //!
@@ -143,10 +143,14 @@ impl ExpressionPack {
 /// (`avatars/*.arkit_map*.json`):
 /// `{"mapping": {arkit_name: [{"morph": name, "weight": scale, "meshes": [...]}]}}`.
 /// Each ARKit weight drives every listed morph, scaled; `meshes` is ignored since
-/// an expression already covers every mesh with that morph.
+/// an expression already covers every mesh with that morph. The map's
+/// `correctives` (`[{"morph", "drivers": [morph, ...]}]`) are driven at the
+/// product of their drivers' weights, as the runtime renderer does.
 pub struct ArkitMap {
     /// ARKit name -> `(expression index, scale)`.
     pub mapping: HashMap<String, Vec<(usize, f32)>>,
+    /// `(corrective expression index, driver expression indices)`.
+    pub correctives: Vec<(usize, Vec<usize>)>,
     /// Morph names the map uses that the expression pack does not have.
     pub missing: Vec<String>,
 }
@@ -156,6 +160,12 @@ struct ArkitTarget {
     morph: String,
     #[serde(default = "one")]
     weight: f32,
+}
+
+#[derive(Deserialize)]
+struct ArkitCorrective {
+    morph: String,
+    drivers: Vec<String>,
 }
 
 fn one() -> f32 {
@@ -185,13 +195,26 @@ impl ArkitMap {
             }
             mapping.insert(arkit, resolved);
         }
+        let raw: Vec<ArkitCorrective> = match v.get("correctives") {
+            Some(c) => serde_json::from_value(c.clone())?,
+            None => Vec::new(),
+        };
+        let mut correctives = Vec::new();
+        for c in raw {
+            let drivers: Option<Vec<usize>> = c.drivers.iter().map(|d| pack.find(d)).collect();
+            match (pack.find(&c.morph), drivers) {
+                (Some(i), Some(d)) => correctives.push((i, d)),
+                _ => missing.push(c.morph),
+            }
+        }
         missing.sort();
         missing.dedup();
-        Ok(Self { mapping, missing })
+        Ok(Self { mapping, correctives, missing })
     }
 
-    /// Expression weights for ARKit weights (summed where morphs are shared);
-    /// unknown ARKit names are an error.
+    /// Expression weights for ARKit weights (summed where morphs are shared),
+    /// then each corrective at the product of its drivers' (each clamped to
+    /// 0..=1); unknown ARKit names are an error.
     pub fn weights<'a>(&self, arkit: impl IntoIterator<Item = (&'a str, f32)>) -> Result<Vec<(usize, f32)>> {
         let mut acc: Vec<(usize, f32)> = Vec::new();
         for (name, w) in arkit {
@@ -203,6 +226,14 @@ impl ArkitMap {
                 }
             }
         }
+        let base = |i: usize| acc.iter().find(|(j, _)| *j == i).map_or(0.0, |e| e.1.clamp(0.0, 1.0));
+        let fixes: Vec<(usize, f32)> = self
+            .correctives
+            .iter()
+            .map(|(i, drivers)| (*i, drivers.iter().map(|&d| base(d)).product::<f32>()))
+            .filter(|&(_, w)| w > 0.0)
+            .collect();
+        acc.extend(fixes);
         Ok(acc)
     }
 }
@@ -284,6 +315,34 @@ mod tests {
         let w = map.weights([("eyeBlinkLeft", 0.5), ("jawOpen", 1.0), ("mouthClose", 1.0)]).unwrap();
         assert_eq!(w, vec![(0, 0.75), (1, 0.5)]);
         assert!(map.weights([("tongueOut", 1.0)]).is_err());
+    }
+
+    #[test]
+    fn drives_correctives_at_the_product_of_their_drivers() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack(dir.path());
+        let p = ExpressionPack::load(dir.path()).unwrap();
+        // V_None stands in for a corrective such as C_BlinkL_JawOpen.
+        let map = ArkitMap::from_json(
+            &serde_json::json!({
+                "mapping": {
+                    "eyeBlinkLeft": [{"morph": "Eye_Blink_L", "weight": 1.0}],
+                    "jawOpen": [{"morph": "Jaw_Open", "weight": 1.0}]
+                },
+                "correctives": [
+                    {"morph": "V_None", "drivers": ["Eye_Blink_L", "Jaw_Open"]},
+                    {"morph": "C_Missing", "drivers": ["Eye_Blink_L"]}
+                ]
+            }),
+            &p,
+        )
+        .unwrap();
+        assert_eq!(map.correctives, vec![(2, vec![0, 1])]);
+        assert_eq!(map.missing, ["C_Missing"]);
+        let w = map.weights([("eyeBlinkLeft", 0.5), ("jawOpen", 2.0)]).unwrap();
+        assert_eq!(w, vec![(0, 0.5), (1, 2.0), (2, 0.5)], "drivers clamped to 1 before the product");
+        let w = map.weights([("eyeBlinkLeft", 0.5)]).unwrap();
+        assert_eq!(w, vec![(0, 0.5)], "off while a driver is at rest");
     }
 
     #[test]

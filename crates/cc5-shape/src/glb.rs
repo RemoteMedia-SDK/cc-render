@@ -1,4 +1,5 @@
-//! Write a shaped copy of a GLB: apply a [`ShapeDelta`] to the bind mesh and skeleton.
+//! Write a shaped copy of a GLB: apply a [`ShapeDelta`] to the bind mesh and skeleton
+//! ([`bake_morphs`]: add expressions as glTF morph targets).
 //!
 //! The GLB must carry the `_CCIDX` vertex attribute (CC5 vertex index per glTF
 //! vertex, written by `cc5-fbx`) so seam-split glTF vertices map back to
@@ -20,6 +21,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use glam::{Mat3, Mat4, Quat, Vec3};
 use serde_json::Value;
 
+use crate::expr::ExpressionPack;
 use crate::normals;
 use crate::pack::{ShapeDelta, ShapePack};
 use crate::subdiv::SubdivMap;
@@ -145,9 +147,9 @@ pub fn shape_glb_hd(glb: &[u8], pack: &ShapePack, map: &SubdivMap, hd_delta: &Sh
     shape(glb, &pack.joints, &|n| map.mesh_offset(n), hd_delta)
 }
 
-fn shape(glb: &[u8], joints: &[String], mesh_offset: &dyn Fn(&str) -> Option<u32>, delta: &ShapeDelta) -> Result<Vec<u8>> {
-    let mut g = parse(glb)?;
-    let nodes = g.json["nodes"].as_array().cloned().unwrap_or_default();
+/// Each node's parent, the nodes in hierarchy order (parents first), and their
+/// world matrices.
+fn hierarchy(nodes: &[Value]) -> Result<(Vec<Option<usize>>, Vec<usize>, Vec<Mat4>)> {
     let mut parent = vec![None; nodes.len()];
     for (i, n) in nodes.iter().enumerate() {
         for c in n["children"].as_array().into_iter().flatten() {
@@ -174,6 +176,13 @@ fn shape(glb: &[u8], joints: &[String], mesh_offset: &dyn Fn(&str) -> Option<u32
     for &i in &order {
         world[i] = parent[i].map_or(local[i], |p| world[p] * local[i]);
     }
+    Ok((parent, order, world))
+}
+
+fn shape(glb: &[u8], joints: &[String], mesh_offset: &dyn Fn(&str) -> Option<u32>, delta: &ShapeDelta) -> Result<Vec<u8>> {
+    let mut g = parse(glb)?;
+    let nodes = g.json["nodes"].as_array().cloned().unwrap_or_default();
+    let (parent, order, world) = hierarchy(&nodes)?;
 
     // World translation delta per node: its pack delta, else its parent's.
     let pack_joint: HashMap<&str, usize> = joints.iter().enumerate().map(|(i, n)| (n.as_str(), i)).collect();
@@ -280,6 +289,168 @@ fn shape(glb: &[u8], joints: &[String], mesh_offset: &dyn Fn(&str) -> Option<u32
         }
     }
     write(&g)
+}
+
+/// A morph target [`bake_morphs`] wrote: the expression and the meshes it went on.
+#[derive(Debug, Clone)]
+pub struct BakedMorph {
+    pub name: String,
+    pub meshes: Vec<String>,
+}
+
+/// Copy of `glb` (with `_CCIDX`, in `pack`'s vertex space) with the expressions
+/// `names` as glTF morph targets, for renderers that morph on the GPU instead of
+/// mixing [`ExpressionPack`] deltas on the CPU.
+///
+/// Each mesh gets the expressions that move it, in `names` order
+/// (`extras.targetNames`, default weights 0), on every primitive: POSITION is
+/// the pack's delta at weight 1 in the mesh's bind space; NORMAL is the authored
+/// normal turned with the surface at weight 1 ([`normals`]) minus the authored
+/// one. Meshes no expression moves are unchanged. A mesh that already has morph
+/// targets is an error.
+pub fn bake_morphs(glb: &[u8], pack: &ExpressionPack, names: &[&str]) -> Result<(Vec<u8>, Vec<BakedMorph>)> {
+    let mut g = parse(glb)?;
+    let exprs = names.iter().map(|n| pack.find(n).with_context(|| format!("no expression named {n:?}"))).collect::<Result<Vec<_>>>()?;
+    let nodes = g.json["nodes"].as_array().cloned().unwrap_or_default();
+    let (_, _, world) = hierarchy(&nodes)?;
+
+    // World -> bind space of each skinned mesh (as in `shape`).
+    let skins = g.json["skins"].as_array().cloned().unwrap_or_default();
+    let mut skin_space = HashMap::new();
+    for (s, skin) in skins.iter().enumerate() {
+        let j0 = skin["joints"][0].as_u64().context("skin joints")? as usize;
+        let acc = skin["inverseBindMatrices"].as_u64().context("skin without inverseBindMatrices")? as usize;
+        let ibm0 = Mat4::from_cols_array(read_f32s::<16>(&g, acc)?.first().context("empty inverseBindMatrices")?);
+        skin_space.insert(s, Mat3::from_mat4((world[j0] * ibm0).inverse()));
+    }
+    let mut to_mesh = HashMap::new();
+    for n in &nodes {
+        if let (Some(m), Some(s)) = (n["mesh"].as_u64(), n["skin"].as_u64()) {
+            to_mesh.insert(m as usize, *skin_space.get(&(s as usize)).context("node skin index")?);
+        }
+    }
+
+    let offsets: HashMap<&str, u32> = pack.meshes.iter().map(|m| (m.name.as_str(), m.offset)).collect();
+    let deltas: Vec<Vec<[f32; 3]>> = exprs.iter().map(|&i| pack.evaluate(&[(i, 1.0)])).collect();
+    let mut baked: Vec<BakedMorph> = names.iter().map(|n| BakedMorph { name: n.to_string(), meshes: Vec::new() }).collect();
+    let mut zeros: Option<(usize, usize)> = None; // shared all-zero bufferView and its length
+
+    struct Prim {
+        global: Vec<u32>,
+        bind: Vec<[f32; 3]>,
+        normals: Option<Vec<[f32; 3]>>,
+        tris: Option<Vec<u32>>,
+    }
+    let meshes = g.json["meshes"].as_array().cloned().unwrap_or_default();
+    for (m, mesh) in meshes.iter().enumerate() {
+        let name = mesh["name"].as_str().unwrap_or_default();
+        let on: Vec<usize> = (0..exprs.len()).filter(|&k| pack.expressions[exprs[k]].meshes.iter().any(|x| x == name)).collect();
+        if on.is_empty() {
+            continue;
+        }
+        let offset = *offsets.get(name).with_context(|| format!("{name}: moved by expressions but not in the pack's meshes"))?;
+        let prim_json = mesh["primitives"].as_array().cloned().unwrap_or_default();
+        if prim_json.iter().any(|p| p.get("targets").is_some()) {
+            bail!("{name} already has morph targets");
+        }
+        let rot = to_mesh.get(&m).copied().unwrap_or(Mat3::IDENTITY);
+        let mut prims = Vec::new();
+        for (p, prim) in prim_json.iter().enumerate() {
+            let attrs = &prim["attributes"];
+            let (Some(pos_acc), Some(idx_acc)) = (attrs["POSITION"].as_u64(), attrs["_CCIDX"].as_u64()) else {
+                bail!("mesh {name} primitive {p} lacks POSITION or _CCIDX");
+            };
+            let global = read_f32s::<1>(&g, idx_acc as usize)?.iter().map(|[c]| offset + *c as u32).collect::<Vec<_>>();
+            if let Some(&gi) = global.iter().find(|&&gi| gi as usize >= pack.vertex_count) {
+                bail!("{name}: vertex {gi} past the pack's {}", pack.vertex_count);
+            }
+            let tris = match (prim["mode"].as_u64().unwrap_or(4), prim["indices"].as_u64()) {
+                (4, Some(acc)) => Some(read_indices(&g, acc as usize)?),
+                (4, None) => Some((0..global.len() as u32).collect()),
+                _ => None,
+            };
+            let normals = attrs["NORMAL"].as_u64().map(|a| read_f32s::<3>(&g, a as usize)).transpose()?;
+            prims.push(Prim { global, bind: read_f32s(&g, pos_acc as usize)?, normals, tris });
+        }
+        let surface = |pos: &[Vec<[f32; 3]>]| {
+            normals::welded_normals(pack.vertex_count, prims.iter().zip(pos).filter_map(|(p, x)| Some((&p.global[..], &x[..], &p.tris.as_ref()?[..]))))
+        };
+        let bind_n = surface(&prims.iter().map(|p| p.bind.clone()).collect::<Vec<_>>());
+
+        let mut targets = vec![Vec::new(); prims.len()];
+        for &k in &on {
+            let moved: Vec<Vec<[f32; 3]>> = prims.iter().map(|p| p.global.iter().map(|&gi| (rot * Vec3::from(deltas[k][gi as usize])).into()).collect()).collect();
+            let shaped: Vec<Vec<[f32; 3]>> = prims
+                .iter()
+                .zip(&moved)
+                .map(|(p, d)| p.bind.iter().zip(d).map(|(b, d)| (Vec3::from(*b) + Vec3::from(*d)).into()).collect())
+                .collect();
+            let shaped_n = surface(&shaped);
+            for (pi, p) in prims.iter().enumerate() {
+                let mut t = serde_json::Map::new();
+                t.insert("POSITION".into(), push_vec3s(&mut g, &moved[pi], &mut zeros).into());
+                if let Some(n0) = &p.normals {
+                    let mut n = n0.clone();
+                    normals::reorient(&bind_n, &shaped_n, &p.global, &mut n, None);
+                    let dn: Vec<[f32; 3]> = n.iter().zip(n0).map(|(a, b)| (Vec3::from(*a) - Vec3::from(*b)).into()).collect();
+                    t.insert("NORMAL".into(), push_vec3s(&mut g, &dn, &mut zeros).into());
+                }
+                targets[pi].push(Value::Object(t));
+            }
+            baked[k].meshes.push(name.to_string());
+        }
+        let out = &mut g.json["meshes"][m];
+        for (pi, t) in targets.into_iter().enumerate() {
+            out["primitives"][pi]["targets"] = Value::Array(t);
+        }
+        out["weights"] = serde_json::json!(vec![0.0; on.len()]);
+        if !out["extras"].is_object() {
+            out["extras"] = serde_json::json!({});
+        }
+        out["extras"]["targetNames"] = serde_json::json!(on.iter().map(|&k| names[k]).collect::<Vec<_>>());
+    }
+    let len = g.bin.len();
+    g.json["buffers"][0]["byteLength"] = serde_json::json!(len);
+    Ok((write(&g)?, baked))
+}
+
+/// Append a float VEC3 accessor (with min / max) and return its index. All-zero
+/// data shares one zero-filled bufferView (`zeros`).
+fn push_vec3s(g: &mut Glb, vals: &[[f32; 3]], zeros: &mut Option<(usize, usize)>) -> usize {
+    let bytes = vals.len() * 12;
+    let new_view = |g: &mut Glb, data: Option<&[[f32; 3]]>| -> usize {
+        while g.bin.len() % 4 != 0 {
+            g.bin.push(0);
+        }
+        let start = g.bin.len();
+        match data {
+            Some(d) => d.iter().flatten().for_each(|x| g.bin.extend_from_slice(&x.to_le_bytes())),
+            None => g.bin.resize(start + bytes, 0),
+        }
+        let views = g.json["bufferViews"].as_array_mut().expect("bufferViews");
+        views.push(serde_json::json!({"buffer": 0, "byteOffset": start, "byteLength": bytes}));
+        views.len() - 1
+    };
+    let (view, lo, hi) = if vals.iter().all(|v| *v == [0.0; 3]) {
+        let view = match *zeros {
+            Some((view, len)) if len >= bytes => view,
+            _ => {
+                let view = new_view(g, None);
+                *zeros = Some((view, bytes));
+                view
+            }
+        };
+        (view, Vec3::ZERO, Vec3::ZERO)
+    } else {
+        let (lo, hi) = vals.iter().fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), v| (lo.min(Vec3::from(*v)), hi.max(Vec3::from(*v))));
+        (new_view(g, Some(vals)), lo, hi)
+    };
+    let accessors = g.json["accessors"].as_array_mut().expect("accessors");
+    accessors.push(serde_json::json!({
+        "bufferView": view, "componentType": 5126, "count": vals.len(), "type": "VEC3",
+        "min": [lo.x, lo.y, lo.z], "max": [hi.x, hi.y, hi.z],
+    }));
+    accessors.len() - 1
 }
 
 /// Triangle indices (unsigned byte / short / int accessor).
@@ -449,6 +620,41 @@ mod tests {
             assert!(Vec3::from(n[v]).abs_diff_eq(want.normalize(), 1e-6), "vertex {v}: {:?} vs {:?}", n[v], want.normalize());
         }
         assert_eq!(&n[4..], &[[0.0, 0.0, 1.0]; 3]);
+    }
+
+    /// Expression pack over `tiny_glb`'s 2 CC5 vertices: "Up" lifts vertex 1 by 0.1 (Y).
+    fn expr_pack(dir: &std::path::Path) -> ExpressionPack {
+        let mut bin = Vec::new();
+        bin.extend_from_slice(&1u32.to_le_bytes());
+        for x in [0.0f32, 0.1, 0.0] {
+            bin.extend_from_slice(&x.to_le_bytes());
+        }
+        std::fs::write(dir.join("expressions.bin"), bin).unwrap();
+        let json = serde_json::json!({"version": 1, "vertex_count": 2,
+            "meshes": [{"name": "CC_Base_Body", "offset": 0, "count": 2}],
+            "expressions": [{"name": "Up", "meshes": ["CC_Base_Body"], "verts": [0, 1]}]});
+        std::fs::write(dir.join("expressions.json"), serde_json::to_vec(&json).unwrap()).unwrap();
+        ExpressionPack::load(dir).unwrap()
+    }
+
+    #[test]
+    fn bakes_expressions_as_morph_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let pack = expr_pack(dir.path());
+        let (out, baked) = bake_morphs(&tiny_glb(), &pack, &["Up"]).unwrap();
+        assert_eq!(baked[0].meshes, ["CC_Base_Body"]);
+        let g = parse(&out).unwrap();
+        let mesh = &g.json["meshes"][0];
+        assert_eq!(mesh["extras"]["targetNames"], serde_json::json!(["Up"]));
+        assert_eq!(mesh["weights"], serde_json::json!([0.0]));
+        let acc = mesh["primitives"][0]["targets"][0]["POSITION"].as_u64().unwrap() as usize;
+        // Both seam copies of vertex 1 move; the bind mesh does not.
+        let d: Vec<[f32; 3]> = read_f32s(&g, acc).unwrap();
+        assert_eq!(d, [[0.0, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, 0.1, 0.0]]);
+        assert_eq!(read_f32s::<3>(&g, 0).unwrap(), read_f32s::<3>(&parse(&tiny_glb()).unwrap(), 0).unwrap());
+        assert_eq!(g.json["buffers"][0]["byteLength"].as_u64().unwrap() as usize, g.bin.len());
+        assert!(bake_morphs(&out, &pack, &["Up"]).unwrap_err().to_string().contains("already has morph targets"));
+        assert!(bake_morphs(&tiny_glb(), &pack, &["Down"]).is_err());
     }
 
     #[test]

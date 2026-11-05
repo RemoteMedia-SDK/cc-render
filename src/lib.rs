@@ -56,7 +56,9 @@ use crate::cc_render::{CcRenderConfig, CcRenderNode};
 /// historical wiring at `streaming_registry::CcRenderNodeFactory`:
 /// `glb_path`, `arkit_map_path`, `framerate`, `video_stream_id`,
 /// `width`, `height`, optional `scene_glb_path`, optional
-/// `realtime_mode`.
+/// `realtime_mode`, optional `env_background` /
+/// `env_background_brightness`, optional `cc5_materials`, optional
+/// `studio_lighting`.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct CcRenderManifestParams {
@@ -76,12 +78,31 @@ pub struct CcRenderManifestParams {
     /// Optional environment-scene GLB loaded alongside the avatar.
     pub scene_glb_path: Option<PathBuf>,
     pub scene_package_path: Option<PathBuf>,
+    /// Show the environment map (the one lighting the avatar) as the
+    /// background instead of a flat colour.
+    pub env_background: bool,
+    /// Its brightness in cd/m² (default: the map's own values at the
+    /// camera's exposure, `cc_render::renderer::env_background_brightness`).
+    pub env_background_brightness: Option<f32>,
+    /// Render materials carrying CC5 shader data (`extras.cc5`) with the
+    /// CC5 shaders, as the avatar editor does.
+    pub cc5_materials: bool,
+    /// Light and grade like the avatar editor (`cc_render::studio`).
+    /// Default true; false = the renderer's earlier lighting.
+    pub studio_lighting: bool,
     /// When true, emit Video continuously once ready (skips A+V pairing
     /// and audio buffer drain). Used by live WebRTC pipelines.
     pub realtime_mode: bool,
     /// Private deployment binding for authenticated renderer scene jobs.
     pub scene_key_file: Option<PathBuf>,
     pub scene_geometry_file: Option<PathBuf>,
+    /// `{"kind": "capture"}` (default: frames come back as Video) or
+    /// `{"kind": "overlay", "anchor": "bottom-right", "margin": 24,
+    /// "size": 320, "monitor": 0, "position": [x, y], "hotkey": "Ctrl+Alt+O"}`
+    /// (drawn on top of the desktop, no Video emitted).
+    pub present: crate::cc_render::Present,
+    /// `"low" | "medium" | "high"`; absent: the full studio look.
+    pub quality: Option<crate::cc_render::RenderQuality>,
 }
 
 impl Default for CcRenderManifestParams {
@@ -95,9 +116,15 @@ impl Default for CcRenderManifestParams {
             height: 1280,
             scene_glb_path: None,
             scene_package_path: None,
+            env_background: false,
+            env_background_brightness: None,
+            cc5_materials: false,
+            studio_lighting: true,
             realtime_mode: false,
             scene_key_file: None,
             scene_geometry_file: None,
+            present: Default::default(),
+            quality: None,
         }
     }
 }
@@ -123,9 +150,15 @@ fn build_node(params: CcRenderManifestParams) -> Result<CcRenderNode, String> {
         video_stream_id: params.video_stream_id,
         scene_glb_path: params.scene_glb_path,
         scene_package_path: params.scene_package_path,
+        env_background: params.env_background,
+        env_background_brightness: params.env_background_brightness,
+        cc5_materials: params.cc5_materials,
+        studio_lighting: params.studio_lighting,
         realtime_mode: params.realtime_mode,
         scene_key_file: params.scene_key_file,
         scene_geometry_file: params.scene_geometry_file,
+        present: params.present,
+        quality: params.quality,
     };
 
     CcRenderNode::new(config).map_err(|e| format!("CcRenderNode spawn failed: {e}"))
@@ -170,3 +203,44 @@ impl FfiNodeFactory for CcRenderNodeFactory {
 }
 
 remotemedia_plugin_sdk::plugin_export!(CcRenderNodeFactory);
+
+#[cfg(test)]
+mod params_tests {
+    use super::*;
+    use crate::cc_render::overlay::Anchor;
+    use crate::cc_render::{Present, RenderQuality};
+
+    #[test]
+    fn capture_and_no_quality_by_default() {
+        let p: CcRenderManifestParams = serde_json::from_str(r#"{"glb_path":"a.glb"}"#).unwrap();
+        assert_eq!(p.present, Present::Capture);
+        assert_eq!(p.quality, None);
+    }
+
+    #[test]
+    fn overlay_and_quality_parse() {
+        let p: CcRenderManifestParams = serde_json::from_str(
+            r#"{"present":{"kind":"overlay","anchor":"top-right","size":256,"position":[10,-20]},"quality":"medium"}"#,
+        )
+        .unwrap();
+        let Present::Overlay(o) = p.present else { panic!("not an overlay: {:?}", p.present) };
+        assert_eq!(o.anchor, Anchor::TopRight);
+        assert_eq!(o.size, 256);
+        assert_eq!(o.position, Some([10, -20]));
+        assert_eq!(o.margin, 24);
+        assert_eq!(p.quality, Some(RenderQuality::Medium));
+        assert!(serde_json::from_str::<CcRenderManifestParams>(r#"{"quality":"ultra"}"#).is_err());
+    }
+
+    #[test]
+    fn quality_presets() {
+        use RenderQuality::*;
+        assert_eq!(Low.shadow_map(), None);
+        assert_eq!(Medium.shadow_map(), Some(1024));
+        assert_eq!(High.shadow_map(), Some(4096));
+        assert_eq!((Low.max_texture(), Medium.max_texture(), High.max_texture()), (Some(512), Some(1024), None));
+        assert!(!Medium.physics() && !Medium.post_effects());
+        assert!(High.physics() && High.post_effects());
+        assert_eq!("HIGH".parse::<RenderQuality>(), Ok(High));
+    }
+}

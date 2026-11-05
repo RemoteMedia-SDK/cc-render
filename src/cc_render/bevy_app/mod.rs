@@ -3,6 +3,7 @@
 pub(super) mod assets;
 pub(super) mod camera;
 pub(super) mod capture;
+mod face_mask;
 pub(super) mod gpu_select;
 mod hud;
 pub(super) mod joint_debug;
@@ -18,6 +19,7 @@ mod tissue_motion;
 mod tissue_morph;
 mod tissue_smoothing;
 mod tissue_surface;
+mod texture_cap;
 mod visibility;
 mod environment;
 mod mechanisms;
@@ -331,6 +333,35 @@ fn forward_frames(rx: Res<FrameBridgeRx>, sink: Res<FrameSinkTx>, mut count: Loc
 #[derive(Resource)]
 struct FrameSinkTx(crossbeam_channel::Sender<RenderedFrame>);
 
+/// A frame read back for an off-line render (`Present::Offline`).
+pub(crate) type OfflineFrame = CapturedFrame;
+
+/// `Present::Offline` wiring: each step lets one update (one frame) run;
+/// frames go straight from the render world to the renderer, so a frame
+/// never waits on the next step.
+pub(crate) struct OfflineGate {
+    pub step_rx: crossbeam_channel::Receiver<()>,
+    pub frames_tx: crossbeam_channel::Sender<CapturedFrame>,
+}
+
+#[derive(Resource)]
+struct OfflineStepRx(crossbeam_channel::Receiver<()>);
+
+/// Off-line: once the scene is ready, wait for the next step before each
+/// update. Until then the app runs freely to load. Gives up when the
+/// renderer drops its end (shutdown).
+fn offline_gate(step: Res<OfflineStepRx>, ready: Res<ReadySignal>) {
+    if !ready.0.load(Ordering::Acquire) {
+        return;
+    }
+    loop {
+        match step.0.recv_timeout(Duration::from_millis(250)) {
+            Ok(()) | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return,
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 /// Build + run the Bevy app on the calling (dedicated) thread. Returns
 /// when the app exits (either via shutdown signal or fatal error).
 #[allow(clippy::too_many_arguments)]
@@ -349,6 +380,9 @@ pub(super) fn run(
     package: Option<super::scene_package::ScenePackage>,
     weather_bridge: super::scene_weather::WeatherBridge,
     water_bridge: super::scene_water::WaterBridge,
+    face_mask_rx: watch::Receiver<bool>,
+    overlay: Option<super::overlay::OverlaySink>,
+    offline: Option<OfflineGate>,
 ) {
     let glb_path = match config.glb_path.canonicalize() {
         Ok(p) => p,
@@ -406,8 +440,25 @@ pub(super) fn run(
         }
     };
 
-    // RenderApp → main App readback channel.
+    // RenderApp → main App readback channel; for the desktop overlay,
+    // RenderApp → the overlay window directly.
     let (cap_tx, cap_rx) = crossbeam_channel::unbounded::<CapturedFrame>();
+    let (cap_tx, overlay_px) = match overlay {
+        Some(o) => (o.tx, Some(o.target_px)),
+        None => (cap_tx, None),
+    };
+    let (cap_tx, offline_step) = match offline {
+        Some(o) => (o.frames_tx, Some(o.step_rx)),
+        None => (cap_tx, None),
+    };
+    // The overlay window picked its size (side x monitor scale).
+    let (width, height) = match &overlay_px {
+        Some(px) => {
+            let side = px.load(std::sync::atomic::Ordering::Acquire).max(16);
+            (side, side)
+        }
+        None => (config.width, config.height),
+    };
 
     // Tick rate from config.fps. Bevy uses ScheduleRunnerPlugin to
     // pace itself when there's no winit window driving the loop.
@@ -418,7 +469,9 @@ pub(super) fn run(
     // collapses a 5s-of-motion render from ~25s wall to ~3s wall
     // (1280×1280 on Mesa-WSL2). NEVER set this for realtime stream
     // pipelines — Bevy will spin a CPU core flat-out.
-    let tick = if std::env::var("CC_RENDER_FAST").ok().as_deref() == Some("1") {
+    let tick = if offline_step.is_some() {
+        Duration::ZERO
+    } else if std::env::var("CC_RENDER_FAST").ok().as_deref() == Some("1") {
         tracing::info!(
             target: "cc_render",
             "fast-render: ScheduleRunnerPlugin tick=0 (uncapped fps)"
@@ -471,8 +524,7 @@ pub(super) fn run(
         );
     }
 
-    app.add_plugins(
-        DefaultPlugins
+    let plugins = DefaultPlugins
             .set(AssetPlugin {
                 file_path: glb_dir.to_string_lossy().into_owned(),
                 ..default()
@@ -509,18 +561,40 @@ pub(super) fn run(
                 }),
                 ..default()
             })
-            .disable::<WinitPlugin>(),
-    )
+            .disable::<WinitPlugin>()
+            // Its process-wide Ctrl+C handler consumes the event, so the
+            // host (which owns shutdown) never sees it: the renderer quits
+            // and the host keeps running. Installed after the host's (the
+            // app builds on the render thread), Windows calls it first.
+            .disable::<bevy::app::TerminalCtrlCHandlerPlugin>();
+    // Off-line, each update renders its own frame before the next starts:
+    // with pipelined rendering the frame would render during the next
+    // update, which waits for the next pose, which waits for the frame.
+    let plugins = if offline_step.is_some() {
+        plugins.disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>()
+    } else {
+        plugins
+    };
+    app.add_plugins(plugins)
     .add_plugins(ScheduleRunnerPlugin::run_loop(tick))
     .add_plugins(ExtractResourcePlugin::<capture::CaptureTarget>::default())
     .add_plugins(ExtractResourcePlugin::<LastAppliedPts>::default())
     .add_plugins(ExtractResourcePlugin::<capture::TissueFramePts>::default())
-    .insert_resource(DirectionalLightShadowMap { size: 4096 })
+    .insert_resource(DirectionalLightShadowMap {
+        size: config.quality.and_then(|q| q.shadow_map()).unwrap_or(4096),
+    })
     .insert_resource(GlbAsset {
         filename: glb_filename,
-        width: config.width,
-        height: config.height,
+        width,
+        height,
+        transparent: overlay_px.is_some() || offline_step.is_some(),
+        quality: config.quality,
         scene_filename: scene_dir_and_name.as_ref().map(|(_, n)| n.clone()),
+        env_background: config.env_background,
+        env_background_brightness: config.env_background_brightness,
+        cc5_materials: config.cc5_materials,
+        // A scene package authors its own lights, exposure and fog.
+        studio_lighting: config.studio_lighting && package.is_none(),
     })
     .insert_resource(MaterialNames(parse_material_names_from_glb(&glb_path)))
     .insert_resource(ArkitMapping { map: Arc::new(map) })
@@ -540,8 +614,9 @@ pub(super) fn run(
     .init_resource::<JointLabelsSpawned>()
     .insert_resource(hud::HomeHudRx(hud_rx))
     .add_systems(Startup, (setup_scene, configure_gizmo_overlay, hud::spawn_home_hud))
-    .add_systems(Update, hud::update_home_hud)
-    .add_systems(
+    .add_systems(Update, hud::update_home_hud);
+    face_mask::plugin(&mut app, face_mask_rx);
+    app.add_systems(
         Update,
         (
             apply_arkit_pose,
@@ -563,7 +638,6 @@ pub(super) fn run(
             // scene so they don't layer on top of the portrait rig.
             // No-op unless `CC_SCENE_KEEP_LIGHTS=0`.
             strip_scene_lights,
-            forward_frames,
             check_shutdown,
             // Joint-debug overlay: spawn labels lazily after bind capture.
             spawn_joint_labels.after(capture_cc5_bind_rotations),
@@ -633,6 +707,53 @@ pub(super) fn run(
         app.insert_resource(water_bridge);
         environment::install(&mut app, package);
     }
+
+    match (&overlay_px, offline_step) {
+        // Frames go straight to the overlay window; follow its size.
+        (Some(px), _) => {
+            app.insert_resource(OverlayTargetPx(px.clone()))
+                .add_systems(Update, follow_overlay_size);
+        }
+        // One frame per step, each a fixed 1/fps later: physics, the idle
+        // animation and TAA advance exactly one frame per pose.
+        (None, Some(step_rx)) => {
+            app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(
+                1.0 / config.fps.max(1) as f64,
+            )))
+            .insert_resource(OfflineStepRx(step_rx))
+            .add_systems(First, offline_gate);
+        }
+        (None, None) => {
+            app.add_systems(Update, forward_frames);
+        }
+    }
+
+    // CC5 shaders for materials carrying `extras.cc5`
+    // (`RendererConfig::cc5_materials`); the camera adds TAA for CC5 hair,
+    // as the studio look does.
+    if config.cc5_materials || config.studio_lighting {
+        app.add_plugins(bevy::core_pipeline::experimental::taa::TemporalAntiAliasPlugin);
+    }
+    if config.cc5_materials {
+        app.add_plugins(crate::cc_render::cc5_materials::Cc5MaterialsPlugin);
+    }
+    // Mips for alpha-cutout hair cards (with or without the CC5 shaders),
+    // after any texture cap (which runs before this set).
+    app.add_systems(
+        Update,
+        crate::cc_render::cc5_materials::cutout_mipmaps.in_set(crate::cc_render::cc5_materials::Cc5MaterialsSet),
+    );
+    // CC_AVATAR_MAX_TEXTURE: shrink large maps as they load (before the CC5
+    // materials build mips from them), to leave a shared GPU's memory free.
+    let max_texture = texture_cap::MaxTexture::from_env()
+        .or_else(|| config.quality.and_then(|q| q.max_texture()).map(texture_cap::MaxTexture));
+    if let Some(max) = max_texture {
+        tracing::info!(target: "cc_render", "texture cap: {} px per side", max.0);
+        app.insert_resource(max).add_systems(
+            Update,
+            texture_cap::cap_texture_size.before(crate::cc_render::cc5_materials::Cc5MaterialsSet),
+        );
+    }
     app.init_resource::<super::office::timeline::PoseTimeline>();
     capture::install_body_clock(&mut app, config.offline_frame_step);
     if let Err(error) = tissue::install(&mut app, &config.glb_path) {
@@ -677,9 +798,39 @@ pub(super) fn run(
         frame_count: 0,
         frame_interval_ms: 1000_u64 / config.fps.max(1) as u64,
     });
-    render_app.add_systems(Render, copy_render_target_to_cpu.in_set(RenderSet::Cleanup));
+    if overlay_px.is_some() {
+        render_app
+            .init_resource::<capture::ReadbackRing>()
+            .add_systems(Render, capture::copy_render_target_ring.in_set(RenderSet::Cleanup));
+    } else {
+        render_app.add_systems(Render, copy_render_target_to_cpu.in_set(RenderSet::Cleanup));
+    }
 
     app.run();
+}
+
+/// The overlay window's wanted render size (physical pixels per side).
+#[derive(Resource)]
+struct OverlayTargetPx(Arc<std::sync::atomic::AtomicU32>);
+
+/// Resize the render target when the overlay is scaled or moved to a
+/// monitor of another scale. The camera follows the image's size; the
+/// readback ring follows the GPU image's.
+fn follow_overlay_size(
+    px: Res<OverlayTargetPx>,
+    target: Option<ResMut<capture::CaptureTarget>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(mut target) = target else { return };
+    let side = px.0.load(Ordering::Acquire).clamp(16, 4096);
+    if target.width == side && target.height == side {
+        return;
+    }
+    let Some(image) = images.get_mut(&target.image) else { return };
+    image.resize(bevy::render::render_resource::Extent3d { width: side, height: side, depth_or_array_layers: 1 });
+    tracing::info!(target: "cc_render", "overlay: render target {}x{} -> {side}x{side}", target.width, target.height);
+    target.width = side;
+    target.height = side;
 }
 
 /// Resolve the directory holding KTX2 environment maps (`pisa_diffuse…`,

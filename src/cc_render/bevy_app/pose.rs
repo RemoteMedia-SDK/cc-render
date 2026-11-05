@@ -1170,6 +1170,12 @@ pub(crate) fn apply_arkit_pose(
     if pose.weights.is_empty() {
         return;
     }
+    // CC5's correctives, at the product of their drivers' morph weights.
+    let fix_amp = std::env::var("CC_RENDER_DEBUG_AMP")
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(1.0);
+    let fix_w = mapping.map.corrective_weights(&pose.weights, fix_amp);
 
     // Restrict morph application to the avatar SceneRoot subtree so a
     // separately-loaded environment scene with same-named meshes can't
@@ -1250,6 +1256,15 @@ pub(crate) fn apply_arkit_pose(
                         new_w[idx] = (new_w[idx] + w * r.weight * amp).clamp(0.0, upper);
                         hits += 1;
                     }
+                }
+            }
+            for (c, &cw) in mapping.map.correctives.iter().zip(&fix_w) {
+                if cw <= 0.0 || !c.meshes.iter().any(|m| m == &mesh_name) {
+                    continue;
+                }
+                if let Some(&idx) = name_to_idx.get(c.morph.as_str()) {
+                    new_w[idx] = cw;
+                    hits += 1;
                 }
             }
 
@@ -1459,6 +1474,7 @@ pub(crate) fn capture_cc5_bind_rotations(
     transform_global_q: Query<&GlobalTransform>,
     mut bind: ResMut<CC5BindRotations>,
     avatar_q: Query<Entity, With<AvatarRoot>>,
+    mut partial: Local<(usize, u32)>,
 ) {
     if bind.captured {
         return;
@@ -1488,24 +1504,44 @@ pub(crate) fn capture_cc5_bind_rotations(
         name_to_entity.insert(s, entity);
     }
 
-    // Need all 22 present before we lock in.
+    // Normally all 22 are needed before we lock in (wait for the GLB to
+    // finish settling). A partial rig, such as a head-only cut (Spine02,
+    // NeckTwist01, Head, eyes), is captured once its bone set has stopped
+    // growing for PARTIAL_SETTLE_FRAMES with the Head among them: the
+    // camera fit, auto-orient and readiness then work, and only the body
+    // pose (bones it lacks) is skipped.
+    const PARTIAL_SETTLE_FRAMES: u32 = 30;
     let mut found: [Option<Entity>; 22] = [None; 22];
     for (i, (_smpl, cc5)) in SMPL22_TO_CC5.iter().enumerate() {
-        if let Some(&e) = name_to_entity.get(cc5) {
-            found[i] = Some(e);
-        } else {
-            return; // wait for the GLB to finish settling
+        found[i] = name_to_entity.get(cc5).copied();
+    }
+    let count = found.iter().flatten().count();
+    if count < 22 {
+        if found[15].is_none() {
+            return;
         }
+        if partial.0 != count {
+            *partial = (count, 0);
+            return;
+        }
+        partial.1 += 1;
+        if partial.1 < PARTIAL_SETTLE_FRAMES {
+            return;
+        }
+        tracing::info!(
+            target: "cc_render",
+            "skeletal: partial rig, {count}/22 SMPL-mapped bones (face and head only; no body pose)"
+        );
     }
 
-    // All 22 present; capture bind-pose local rotations + parent chain
-    // rest world rotations.
+    // Capture bind-pose local rotations + parent chain rest world
+    // rotations (missing bones keep identity).
     let mut own_rest_local: [Quat; 22] = [Quat::IDENTITY; 22];
     let mut parent_chain_rest: [Quat; 22] = [Quat::IDENTITY; 22];
     let mut pelvis_rest_translation = Vec3::ZERO;
 
     for i in 0..22 {
-        let entity = found[i].expect("checked above");
+        let Some(entity) = found[i] else { continue };
         let Ok(t) = transform_q.get(entity) else {
             tracing::warn!(
                 target: "cc_render",
@@ -1549,7 +1585,8 @@ pub(crate) fn capture_cc5_bind_rotations(
     // system passes its "all 22 bones present" gate, that's already
     // happened. If it hasn't (extremely cold-start case), the value is
     // identity and `auto_orient_avatar` simply skips this frame.
-    let pelvis_entity = found[0].expect("pelvis present");
+    // A partial rig without the pelvis anchors on its lowest bone.
+    let pelvis_entity = found.iter().flatten().next().copied().expect("the Head at least");
     let pelvis_world = transform_global_q
         .get(pelvis_entity)
         .ok()
@@ -1593,7 +1630,7 @@ pub(crate) fn capture_cc5_bind_rotations(
     // to the bone's bind world rotation applied to SMPL_BONE_AXES[i].
     let mut bone_world_pos: [Vec3; 22] = [Vec3::ZERO; 22];
     for i in 0..22 {
-        let entity = found[i].expect("checked above");
+        let Some(entity) = found[i] else { continue };
         if let Ok(gt) = transform_global_q.get(entity) {
             bone_world_pos[i] = gt.translation();
         }
@@ -2397,6 +2434,10 @@ pub(crate) struct FaceBones {
     pub tongue1: Option<Entity>,
     pub tongue2: Option<Entity>,
     pub tongue3: Option<Entity>,
+    pub neck: Option<Entity>,
+    pub head: Option<Entity>,
+    pub neck_rest: Quat,
+    pub head_rest: Quat,
     pub jaw_root_rest: Quat,
     pub jaw_root_rest_t: Vec3,
     pub l_eye_rest: Quat,
@@ -2435,6 +2476,8 @@ pub(crate) fn capture_face_bones(
             "CC_Base_Tongue01" => Some("tongue1"),
             "CC_Base_Tongue02" => Some("tongue2"),
             "CC_Base_Tongue03" => Some("tongue3"),
+            "CC_Base_NeckTwist01" => Some("neck"),
+            "CC_Base_Head" => Some("head"),
             _ => None,
         };
         if let Some(k) = key {
@@ -2485,6 +2528,14 @@ pub(crate) fn capture_face_bones(
         face.tongue3 = Some(e);
         face.tongue3_rest = r;
     }
+    if let Some((e, r)) = grab("neck") {
+        face.neck = Some(e);
+        face.neck_rest = r;
+    }
+    if let Some((e, r)) = grab("head") {
+        face.head = Some(e);
+        face.head_rest = r;
+    }
     face.captured = true;
     tracing::info!(
         target: "cc_render",
@@ -2503,21 +2554,25 @@ pub(crate) fn capture_face_bones(
 ///
 /// CC5 ARKit retargeting rules of thumb (these match what RL exports
 /// when you use the Live Link / iPhone profile in Character Creator):
-/// - `jawOpen` rotates `CC_Base_JawRoot` ~28° around the bone's local
-///   X-axis (chin drops). Without this, the open-mouth visemes are
+/// - `jawOpen` rotates `CC_Base_JawRoot` around the character's side
+///   axis (chin drops) by the ARKit map's `jaw_open_deg` (CC5's rig 28°;
+///   45° for maps without it). Without this, the open-mouth visemes are
 ///   visually flat — the V_Open / Mouth_Open morphs deform the lips
 ///   around a closed jaw, not a hanging one.
 /// - `eyeLookUp/Down/In/Out` (left/right pairs) rotate the per-eye
-///   bone ~13° max. We compose: `up = +X rotation`, `down = -X`,
-///   `in/out = ±Y` (mirrored for L vs R since `eyeLookInLeft` looks
-///   right relative to the avatar).
+///   bone ~13° max. We compose: up/down about the character's side
+///   axis, `in/out = ±Y` (mirrored for L vs R since `eyeLookInLeft`
+///   looks right relative to the avatar).
 ///
 /// Applied as `T.rotation = bind_rest * delta` so we don't drift if
 /// some other system also writes to these bones.
 pub(crate) fn apply_arkit_face_bones(
     pose_rx: Res<PoseWatchRx>,
     face: Res<FaceBones>,
+    mapping: Res<ArkitMapping>,
     mut transforms: Query<&mut Transform>,
+    globals: Query<&GlobalTransform>,
+    parents: Query<&Parent>,
 ) {
     if !face.captured {
         return;
@@ -2527,23 +2582,86 @@ pub(crate) fn apply_arkit_face_bones(
         return;
     }
     let w = |k: &str| pose.weights.get(k).copied().unwrap_or(0.0).clamp(0.0, 1.0);
+    // The character's side axis, right eye → left eye (horizontal).
+    let eye = |e: Option<Entity>| e.and_then(|e| globals.get(e).ok()).map(|g| g.translation());
+    let eye_side = match (eye(face.l_eye), eye(face.r_eye)) {
+        (Some(l), Some(r)) => (l - r).reject_from(Vec3::Y).try_normalize(),
+        _ => None,
+    };
+    let parent_rot = |bone: Entity| {
+        parents
+            .get(bone)
+            .ok()
+            .and_then(|p| globals.get(p.get()).ok())
+            .map(|g| g.compute_transform().rotation)
+            .unwrap_or(Quat::IDENTITY)
+    };
+
+    // ─── Head + neck (performer head rotation) ──────────────────────
+    //
+    // `headYaw/headPitch/headRoll` (radians, see
+    // `node::HEAD_ROTATION_KEYS`) arrive only from live face capture.
+    // The rotation is built about the *character's* axes — up = world Y,
+    // side = right-eye → left-eye, forward = side × up — so yaw is a turn
+    // about vertical however the CC5 bones are oriented, then expressed
+    // in each bone's parent frame (`P⁻¹ q P`) and composed onto its bind
+    // rotation. Split 40% neck / 60% head so the turn doesn't hinge at
+    // one joint. Positive yaw turns toward the character's left, pitch
+    // nods down, roll tilts toward the character's right; flip any with
+    // CC_FACE_HEAD_SIGNS=1,1,1.
+    if let (Some(&yaw), Some(&pitch), Some(&roll)) = (
+        pose.weights.get("headYaw"),
+        pose.weights.get("headPitch"),
+        pose.weights.get("headRoll"),
+    ) {
+        static SIGNS: std::sync::LazyLock<[f32; 3]> = std::sync::LazyLock::new(|| {
+            let v: Vec<f32> = std::env::var("CC_FACE_HEAD_SIGNS")
+                .unwrap_or_else(|_| "1,1,1".into())
+                .split(',')
+                .map(|s| s.trim().parse().unwrap_or(1.0))
+                .collect();
+            std::array::from_fn(|i| v.get(i).copied().unwrap_or(1.0))
+        });
+        let side = eye_side.unwrap_or(Vec3::X);
+        let forward = side.cross(Vec3::Y);
+        let [sy, sp, sr] = *SIGNS;
+        let world = |share: f32| {
+            Quat::from_axis_angle(Vec3::Y, sy * yaw * share)
+                * Quat::from_axis_angle(side, sp * pitch * share)
+                * Quat::from_axis_angle(forward, sr * roll * share)
+        };
+        for (bone, rest, share) in [(face.neck, face.neck_rest, 0.4), (face.head, face.head_rest, 0.6)] {
+            let Some(bone) = bone else { continue };
+            let parent_rot = parent_rot(bone);
+            if let Ok(mut t) = transforms.get_mut(bone) {
+                t.rotation = (parent_rot.inverse() * world(share) * parent_rot) * rest;
+            }
+        }
+    }
 
     // ─── Lower jaw (CC_Base_JawRoot) ─────────────────────────────────
     //
     // ARKit channels driven:
-    //   jawOpen  → rotate around head +Z (the hinge axis on this rig,
-    //              verified by pinning to 1.0 and observing the chin
-    //              drop). Default max = 45° at weight=1.
+    //   jawOpen  → rotate around the character's side axis (right eye →
+    //              left eye; head +Z on CC5 rigs, head +X on the Saluki
+    //              SMPL-X operators). Max at weight=1: the map's
+    //              `jaw_open_deg` (CC5 28°; Valen 23.6°, its hinge sits
+    //              ~11 cm behind the lips), else 45°; `CC_FACE_JAW_OPEN_DEG`
+    //              overrides. `CC_FACE_JAW_AXIS=x|y|z` forces a head-frame axis.
+    //              It turns about the map's `jaw_pivot_m` (up, forward from
+    //              the bone) when the rig's jaw bone isn't at the hinge.
     //   jawForward → translate the jaw bone forward in head Z by a
     //                small amount (≈8 mm at weight=1; CC5/iClone uses
     //                a Y-translation but on this 90°-Z-bound rig the
     //                forward direction on the bone is parent +Z).
-    //   jawLeft / jawRight → small rotation around head +Y (vertical),
+    //   jawLeft / jawRight → small rotation around vertical (world Y),
     //                ±10° at weight=1.
     //
     // Rotation is composed `delta * bind` (parent-frame), since the
-    // bind's 90°-Z rotation scrambles the bone's local axes.
+    // bind's 90°-Z rotation scrambles the bone's local axes; the
+    // character's axes are expressed in that frame.
     if let Some(jaw_e) = face.jaw_root {
+        let to_parent = parent_rot(jaw_e).inverse();
         if let Ok(mut t) = transforms.get_mut(jaw_e) {
             let pinned: Option<f32> = std::env::var("CC_FACE_JAW_PIN")
                 .ok()
@@ -2552,30 +2670,54 @@ pub(crate) fn apply_arkit_face_bones(
             let max_open = std::env::var("CC_FACE_JAW_OPEN_DEG")
                 .ok()
                 .and_then(|s| s.parse::<f32>().ok())
+                .or(mapping.map.jaw_open_deg)
                 .unwrap_or(45.0)
                 .to_radians();
-            let axis_str = std::env::var("CC_FACE_JAW_AXIS").unwrap_or_else(|_| "z".to_string());
             let sign: f32 = std::env::var("CC_FACE_JAW_SIGN")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1.0);
-            let open_axis = match axis_str.as_str() {
-                "y" => Vec3::Y,
-                "x" => Vec3::X,
-                _ => Vec3::Z,
+            let (open_axis, up_axis) = match (std::env::var("CC_FACE_JAW_AXIS").ok().as_deref(), eye_side) {
+                (Some("x"), _) => (Vec3::X, Vec3::Y),
+                (Some("y"), _) => (Vec3::Y, Vec3::Y),
+                (None, Some(side)) => ((to_parent * side).normalize(), (to_parent * Vec3::Y).normalize()),
+                _ => (Vec3::Z, Vec3::Y),
             };
             let jaw_lr = w("jawRight") - w("jawLeft");
             let jaw_lr_max = 10.0_f32.to_radians();
             let q_open = Quat::from_axis_angle(open_axis, sign * jaw_open * max_open);
-            let q_lr = Quat::from_rotation_y(jaw_lr * jaw_lr_max);
-            t.rotation = q_open * q_lr * face.jaw_root_rest;
+            let q_lr = Quat::from_axis_angle(up_axis, jaw_lr * jaw_lr_max);
+            let q = q_open * q_lr;
+            t.rotation = q * face.jaw_root_rest;
 
             let jaw_fwd = w("jawForward");
             let jaw_fwd_amt = std::env::var("CC_FACE_JAW_FORWARD_M")
                 .ok()
                 .and_then(|s| s.parse::<f32>().ok())
                 .unwrap_or(0.008);
-            t.translation = face.jaw_root_rest_t + Vec3::Z * (jaw_fwd * jaw_fwd_amt);
+            // Turning about a hinge away from the bone (`jaw_pivot_m`, or
+            // CC_FACE_JAW_PIVOT=up,forward) moves the bone along the arc too:
+            // with d = hinge - bone, the bone ends at hinge - q d.
+            let pivot = std::env::var("CC_FACE_JAW_PIVOT")
+                .ok()
+                .and_then(|s| {
+                    let v: Vec<f32> = s.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                    (v.len() == 2).then(|| [v[0], v[1]])
+                })
+                .or(mapping.map.jaw_pivot_m);
+            let hinge = match (pivot, eye_side) {
+                (Some([up, fwd]), Some(side)) => {
+                    let scale = parents
+                        .get(jaw_e)
+                        .ok()
+                        .and_then(|p| globals.get(p.get()).ok())
+                        .map_or(1.0, |g| g.compute_transform().scale.x);
+                    let d = to_parent * (Vec3::Y * up + side.cross(Vec3::Y) * fwd) / scale;
+                    d - q * d
+                }
+                _ => Vec3::ZERO,
+            };
+            t.translation = face.jaw_root_rest_t + hinge + Vec3::Z * (jaw_fwd * jaw_fwd_amt);
         }
     }
 
@@ -2595,11 +2737,25 @@ pub(crate) fn apply_arkit_face_bones(
 
     // ─── Eyes (CC_Base_L_Eye / CC_Base_R_Eye) ────────────────────────
     //
-    // Up/down → rotation around head +X. In/out → head +Y, mirrored
-    // per side ("in" for the left eye looks toward the avatar's right,
-    // i.e. negative head-Y rotation; "in" for the right eye is the
-    // opposite). Composed as `delta * bind` to be axis-independent of
-    // each eye's individual bind.
+    // Up/down → rotation around the character's side axis (right eye →
+    // left eye) expressed in the eye's parent frame, as for the head and
+    // jaw: CC5 eye parents are rotated, so a fixed local axis isn't
+    // sideways (head +X turned "up" into down). Positive about the side
+    // axis looks down, as the head's pitch nods down. In/out → around
+    // world up in the parent frame, likewise (Valen's eye parent has +Y
+    // up, so the old fixed +Y turn ran opposite to the head; Beautiful's
+    // has +Y forward, which rolled the eye). Positive about up looks to
+    // the avatar's left, as the head's yaw does, so a look toward her
+    // right (left eye "in", right eye "out") is negative. Composed as
+    // `delta * bind` to be axis-independent of each eye's bind.
+    let eye_pitch = |bone: Entity, up_dn: f32, max: f32| match eye_side {
+        Some(side) => Quat::from_axis_angle((parent_rot(bone).inverse() * side).normalize(), -up_dn * max),
+        None => Quat::from_rotation_x(up_dn * max),
+    };
+    let eye_yaw = |bone: Entity, right: f32, max: f32| match eye_side {
+        Some(_) => Quat::from_axis_angle((parent_rot(bone).inverse() * Vec3::Y).normalize(), -right * max),
+        None => Quat::from_rotation_y(right * max),
+    };
     let max_eye = std::env::var("CC_FACE_EYE_DEG")
         .ok()
         .and_then(|s| s.parse::<f32>().ok())
@@ -2622,8 +2778,7 @@ pub(crate) fn apply_arkit_face_bones(
             // (opposite of "look out"). Both eyes share the yaw pin
             // (positive = both eyes look avatar-right).
             let in_out = pin_yaw.unwrap_or_else(|| w("eyeLookInLeft") - w("eyeLookOutLeft"));
-            let delta =
-                Quat::from_rotation_x(up_dn * max_eye) * Quat::from_rotation_y(in_out * max_eye);
+            let delta = eye_pitch(le, up_dn, max_eye) * eye_yaw(le, in_out, max_eye);
             t.rotation = delta * face.l_eye_rest;
         }
     }
@@ -2635,8 +2790,7 @@ pub(crate) fn apply_arkit_face_bones(
             let in_out = pin_yaw
                 .map(|y| -y)
                 .unwrap_or_else(|| w("eyeLookOutRight") - w("eyeLookInRight"));
-            let delta =
-                Quat::from_rotation_x(up_dn * max_eye) * Quat::from_rotation_y(in_out * max_eye);
+            let delta = eye_pitch(re, up_dn, max_eye) * eye_yaw(re, in_out, max_eye);
             t.rotation = delta * face.r_eye_rest;
         }
     }
