@@ -282,6 +282,9 @@ pub struct CcRenderNode {
     scene_signer: parking_lot::Mutex<Option<(super::office::scene_signing::SceneSigner,
         super::office::scene_signing::SceneSamplerCapability)>>,
     motion_clock: std::time::Instant,
+    /// Live capture and speech lip-sync composed into one face
+    /// (`face_layers`): speech owns the mouth while it plays.
+    faces: parking_lot::Mutex<super::face_layers::FaceLayers>,
 }
 
 /// Minimum wallclock delay between receiving the first blendshape on
@@ -377,6 +380,7 @@ impl CcRenderNode {
             scene_delivery: parking_lot::Mutex::new(Default::default()),
             scene_context_revision: AtomicU64::new(0),
             motion_clock: std::time::Instant::now(),
+            faces: parking_lot::Mutex::new(Default::default()),
         }
     }
 
@@ -625,6 +629,11 @@ impl CcRenderNode {
                 _ => None,
             };
             self.audio_buf.lock().push_face(pose, epoch)
+        } else if live {
+            // Over any speech that is playing: speech keeps the mouth.
+            let face = self.faces.lock().on_live(pose, std::time::Instant::now());
+            self.renderer.push_pose(face);
+            Ok(())
         } else {
             self.renderer.push_pose(pose);
             Ok(())
@@ -978,7 +987,9 @@ impl AsyncStreamingNode for CcRenderNode {
             }
             Some(RendererInput::Office(cmd)) => self.renderer.office_command(cmd),
             Some(RendererInput::BargeIn) => {
-                self.renderer.push_pose(ArkitPose::default());
+                // The live face (if any) takes the mouth back at once.
+                let face = self.faces.lock().barge();
+                self.renderer.push_pose(face);
                 if self.renderer.scene_state().office.is_none() {
                     self.renderer.push_skeletal_pose(None);
                 }
@@ -1006,7 +1017,10 @@ impl AsyncStreamingNode for CcRenderNode {
             return Ok(true);
         }
         if matches!(aux_port_of(&message), Some(BARGE_IN_PORT)) {
-            self.renderer.push_pose(ArkitPose::default());
+            // As the `kind: "barge_in"` input does: drop the speech layer,
+            // and the live face (if any) takes the mouth back at once.
+            let face = self.faces.lock().barge();
+            self.renderer.push_pose(face);
             // Also drop any active skeletal stream so the avatar
             // snaps back to baked rest on barge-in.
             if self.renderer.scene_state().office.is_none() {
@@ -1248,7 +1262,8 @@ impl AsyncStreamingNode for CcRenderNode {
                     pose = audio.faces.pop_front();
                 }
                 if let Some(pose) = pose {
-                    self.renderer.push_pose(pose);
+                    let face = self.faces.lock().on_speech(pose, std::time::Instant::now());
+                    self.renderer.push_pose(face);
                     audio.face_started = true;
                 }
                 started
@@ -1761,6 +1776,61 @@ mod realtime_speech_tests {
         assert_eq!(poses[0].weights["jawOpen"], 0.7);
         // ...while speech frames still wait for the audio content clock.
         assert_eq!(node.audio_buf.lock().faces.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn live_faces_keep_a_playing_speech_mouth() {
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig { realtime_mode: true, ..Default::default() },
+            renderer.clone(),
+        );
+        let live = |jaw: f32, blink: f32| {
+            let mut w = vec![0.0f32; 52];
+            w[17] = jaw; // jawOpen
+            w[0] = blink; // eyeBlinkLeft
+            RuntimeData::Json(serde_json::json!({"kind":"blendshapes","arkit_52":w,"pts_ms":1,"live":true}))
+        };
+        // Speech is playing: the tick released a speech pose.
+        let speech = ArkitPose { weights: [("jawOpen".to_string(), 0.8)].into(), pts_ms: 400 };
+        node.faces.lock().on_speech(speech, std::time::Instant::now());
+        node.process_streaming(live(0.1, 0.9), None, |_| Ok(())).await.unwrap();
+        {
+            let poses = renderer.poses.lock();
+            let p = poses.last().unwrap();
+            assert_eq!(p.weights["jawOpen"], 0.8, "the live frame doesn't take the speaking mouth");
+            assert_eq!(p.weights["eyeBlinkLeft"], 0.9, "but its blink shows");
+        }
+        // Barge-in: the live face is back at once, not a neutral face.
+        node.process_streaming(RuntimeData::Json(serde_json::json!({"kind":"barge_in"})), None, |_| Ok(())).await.unwrap();
+        let poses = renderer.poses.lock();
+        assert_eq!(poses.last().unwrap().weights["jawOpen"], 0.1);
+        assert_eq!(poses.last().unwrap().weights["eyeBlinkLeft"], 0.9);
+    }
+
+    #[tokio::test]
+    async fn aux_port_barge_drops_the_speaking_mouth() {
+        // The office's coordinator barges cc_render through the
+        // `barge_in` aux port (`barge_in_targets`), not an input envelope.
+        let renderer = Arc::new(MockRenderer::default());
+        let node = CcRenderNode::with_renderer(
+            CcRenderConfig { realtime_mode: true, ..Default::default() },
+            renderer.clone(),
+        );
+        let live = |jaw: f32| {
+            let mut w = vec![0.0f32; 52];
+            w[17] = jaw; // jawOpen
+            RuntimeData::Json(serde_json::json!({"kind":"blendshapes","arkit_52":w,"pts_ms":1,"live":true}))
+        };
+        node.process_streaming(live(0.1), None, |_| Ok(())).await.unwrap();
+        let speech = ArkitPose { weights: [("jawOpen".to_string(), 0.8)].into(), pts_ms: 400 };
+        node.faces.lock().on_speech(speech, std::time::Instant::now());
+        let barge = RuntimeData::Json(serde_json::json!({ crate::session_control::AUX_PORT_ENVELOPE_KEY: BARGE_IN_PORT }));
+        assert!(node.process_control_message(barge, None).await.unwrap());
+        assert_eq!(renderer.poses.lock().last().unwrap().weights["jawOpen"], 0.1, "the live face, not neutral");
+        // The next live frame shows its own mouth: the cancelled speech is gone.
+        node.process_streaming(live(0.2), None, |_| Ok(())).await.unwrap();
+        assert_eq!(renderer.poses.lock().last().unwrap().weights["jawOpen"], 0.2);
     }
 
     #[test]
