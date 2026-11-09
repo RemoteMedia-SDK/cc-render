@@ -15,6 +15,8 @@ jobs:
     with:
       crate-name:   cc-render-plugin
       display-name: cc-render
+      # Bevy audio (alsa-sys) and gamepad input (gilrs -> libudev-sys) need these headers.
+      linux-apt-packages: libasound2-dev libudev-dev
       tag:          ${{ inputs.tag || github.ref_name }}
     permissions:
       contents: write
